@@ -1569,8 +1569,8 @@ NOTIFY pgrst, 'reload schema';`;
                                         <div className="flex-1 overflow-hidden flex flex-col gap-1.5">
                                             {summary.items.length > 0 ? (
                                                 summary.items.map((item, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center text-xs text-[var(--text)]">
-                                                        <span className="truncate max-w-[70%] font-medium">{item.quantity}x {item.product?.name}</span>
+                                                    <div key={idx} className="flex justify-between items-center gap-1.5 text-xs text-[var(--text)]">
+                                                        <span className="truncate min-w-0 flex-1 font-medium">{item.quantity}x {item.product?.name}</span>
                                                         {item.status === 'delivered' && <CheckCircle size={12} className="text-[var(--ok)] flex-shrink-0" />}
                                                         {item.status === 'preparing' && <ChefHat size={12} className="text-[var(--info)] flex-shrink-0" />}
                                                         {(item.status === 'pending' || item.status === 'accepted') && <Clock size={12} className="text-[var(--warn)] flex-shrink-0" />}
