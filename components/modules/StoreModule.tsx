@@ -2526,7 +2526,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 ref={provided.innerRef}
                             >
                                 {categories.map((cat, index) => (
-                                    // @ts-expect-error React 19 key type mismatch with dnd
                                     <Draggable key={cat.id} draggableId={cat.id} index={index}>
                                         {(provided, snapshot) => (
                                             <div
@@ -2574,7 +2573,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                     ref={provided.innerRef}
                                                 >
                                                     {catProducts.map((prod, index) => (
-                                                        // @ts-expect-error React 19 key type mismatch with dnd
                                                         <Draggable key={prod.id} draggableId={prod.id} index={index}>
                                                             {(provided, snapshot) => (
                                                                 <div
