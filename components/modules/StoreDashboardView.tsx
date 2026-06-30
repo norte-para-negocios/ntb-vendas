@@ -10,7 +10,7 @@ import {
 import { subDays, isAfter, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const COLORS = ['#1B3A4B', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ef4444'];
+const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
 export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     const [periodType, setPeriodType] = useState<'custom' | 'today' | 'week' | 'month' | 'year'>('custom');
@@ -106,8 +106,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     const counterSales = periodSales.filter(s => s.order_type === 'counter');
     const counterStats = calcStats(counterSales);
 
-    const StatCard = ({ title, value, subtitle, icon: Icon, accentClass }: any) => (
-        <Card className={`p-4 border-l-4 ${accentClass} shadow-sm`}>
+    const StatCard = ({ title, value, subtitle, icon: Icon, accentColor }: any) => (
+        <Card accentColor={accentColor} className="p-4 pl-5 shadow-sm">
             <div className="flex items-center justify-between">
                 <div>
                     <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">{title}</p>
@@ -178,8 +178,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={20} className="text-[var(--brand)]" /> Faturamento</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                            <StatCard title="Total no Período" value={`R$ ${periodStats.total.toFixed(2)}`} icon={Receipt} accentClass="border-l-[var(--brand)]" />
-                            <StatCard title="Ticket Médio" value={`R$ ${periodStats.ticket.toFixed(2)}`} icon={TrendingUp} accentClass="border-l-[var(--info)]" />
+                            <StatCard title="Total no Período" value={`R$ ${periodStats.total.toFixed(2)}`} icon={Receipt} accentColor="var(--brand)" />
+                            <StatCard title="Ticket Médio" value={`R$ ${periodStats.ticket.toFixed(2)}`} icon={TrendingUp} accentColor="var(--info)" />
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className={`${cardCls} lg:col-span-2`}>
@@ -191,7 +191,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                                             <XAxis dataKey="date" tick={{fontSize: 12}} />
                                             <YAxis tick={{fontSize: 12}} tickFormatter={(v) => `R$${v}`} />
                                             <RechartsTooltip formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Total']} />
-                                            <Line type="monotone" dataKey="total" stroke="#1B3A4B" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                                            <Line type="monotone" dataKey="total" stroke="#484DB5" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
                                         </LineChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -219,8 +219,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={20} className="text-[var(--ok)]" /> Pedidos</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Número de Pedidos" value={periodStats.count} icon={CheckCircle} accentClass="border-l-[var(--ok)]" />
-                            <StatCard title="Tempo Médio de Atendimento" value={`${avgDeliveryTime} min`} subtitle="Criação até entrega" icon={Clock} accentClass="border-l-[var(--info)]" />
+                            <StatCard title="Número de Pedidos" value={periodStats.count} icon={CheckCircle} accentColor="var(--ok)" />
+                            <StatCard title="Tempo Médio de Atendimento" value={`${avgDeliveryTime} min`} subtitle="Criação até entrega" icon={Clock} accentColor="var(--info)" />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Card className={cardCls}>
@@ -254,8 +254,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Users size={20} className="text-[var(--info)]" /> Mesas</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Ocupações" value={tableOccupations} icon={Users} accentClass="border-l-[var(--info)]" />
-                            <StatCard title="Tempo Médio de Ocupação" value={`${avgTableTime} min`} subtitle="Abertura até fechamento" icon={Clock} accentClass="border-l-[var(--warn)]" />
+                            <StatCard title="Ocupações" value={tableOccupations} icon={Users} accentColor="var(--info)" />
+                            <StatCard title="Tempo Médio de Ocupação" value={`${avgTableTime} min`} subtitle="Abertura até fechamento" icon={Clock} accentColor="var(--warn)" />
                         </div>
                         <Card className={cardCls}>
                             <h4 className={h4Cls}>Ocupação por Hora do Dia</h4>
@@ -266,7 +266,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                                         <XAxis dataKey="hour" tick={{fontSize: 12}} />
                                         <YAxis tick={{fontSize: 12}} />
                                         <RechartsTooltip />
-                                        <Bar dataKey="count" fill="#1B3A4B" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="count" fill="#484DB5" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -277,8 +277,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Coffee size={20} className="text-[var(--warn)]" /> Balcão</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard title="Faturamento Balcão" value={`R$ ${counterStats.total.toFixed(2)}`} icon={Receipt} accentClass="border-l-[var(--warn)]" />
-                            <StatCard title="Número de Pedidos" value={counterStats.count} icon={Coffee} accentClass="border-l-[var(--warn)]" />
+                            <StatCard title="Faturamento Balcão" value={`R$ ${counterStats.total.toFixed(2)}`} icon={Receipt} accentColor="var(--warn)" />
+                            <StatCard title="Número de Pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
                         </div>
                     </div>
                 </div>

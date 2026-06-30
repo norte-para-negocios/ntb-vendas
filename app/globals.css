@@ -41,19 +41,19 @@
   --text-muted: #64748b;
   --border: #e6e9ef;
 
-  /* Marca: azul petróleo */
-  --brand: #1B3A4B;
-  --brand-strong: #0D2535;
-  --brand-soft: #E8F0F4;
+  /* Marca: identidade Norte Para Negócios (azul-violeta + coral) */
+  --brand: #484DB5;
+  --brand-strong: #3A3E91;
+  --brand-soft: #EEF0FC;
 
   /* Semânticas */
   --ok: #10b981;
   --warn: #f59e0b;
-  --err: #ef4444;
+  --err: #F43F5E;
   --info: #3b82f6;
 
-  /* Tinta: superfície escura de destaque */
-  --ink: #0d1a22;
+  /* Tinta: superfície escura de destaque (igual ao site institucional) */
+  --ink: #1E1B4B;
 
   /* Raios */
   --r-sm: 0.375rem;

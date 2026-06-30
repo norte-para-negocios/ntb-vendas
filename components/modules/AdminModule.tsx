@@ -445,7 +445,7 @@ export const AdminModule: React.FC = () => {
 
              {/* Stores List */}
              {stores.map(store => (
-                 <Card key={store.id} className="flex flex-col gap-4 border-l-4 border-l-[var(--brand)] relative overflow-hidden group">
+                 <Card key={store.id} accentColor="var(--brand)" className="flex flex-col gap-4 p-5 pl-6 group">
                     <div className="flex items-start justify-between">
                         <div className="flex gap-3">
                             {store.logo_url && <img src={store.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover border border-[var(--border)]" />}
@@ -511,7 +511,7 @@ export const AdminModule: React.FC = () => {
         {view === 'users' && (
             <div className="space-y-4">
                 {users.length === 0 && !isLoadingList ? (
-                     <Card className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
+                     <Card className="flex flex-col items-center justify-center py-20 px-6 text-[var(--text-muted)]">
                         <Users size={48} className="mb-4 opacity-20" />
                         <p>Nenhum usuário cadastrado. Adicione um gestor para uma loja.</p>
                      </Card>

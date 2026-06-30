@@ -520,7 +520,7 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 const { client, observation } = parseItemNote(item.notes || '');
 
                 return (
-                    <Card key={item.id} className={`${getStatusColor(item.status)} border-2 transition-all duration-300 shadow-sm hover:shadow-md`}>
+                    <Card key={item.id} className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md`}>
                         <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                 {item.order?.order_type === 'counter' ? (
@@ -729,7 +729,7 @@ const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 const { client, observation } = parseItemNote(item.notes || '');
 
                 return (
-                    <Card key={item.id} className={`${getStatusColor(item.status)} border-2 transition-all duration-300 shadow-sm hover:shadow-md`}>
+                    <Card key={item.id} className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md`}>
                         <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                 {item.order?.order_type === 'counter' ? (
@@ -1470,7 +1470,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <Card 
                             key={table.id} 
                             onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
-                            className={`relative flex flex-col justify-between transition-all duration-300 border-2 group ${
+                            className={`relative flex flex-col justify-between p-4 transition-all duration-300 border-2 group ${
                                 areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
                             } ${
                                 isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
@@ -2209,7 +2209,7 @@ const CounterView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 const status = order.status;
 
                 return (
-                    <Card key={order.id} className="flex flex-col border-l-4 border-l-[var(--brand)] relative">
+                    <Card key={order.id} accentColor="var(--brand)" className="flex flex-col p-4 pl-5">
                          <div className="flex justify-between items-start mb-2">
                              <div>
                                  <h3 className="font-bold text-lg text-[var(--text)] flex items-center gap-2">
@@ -2581,7 +2581,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                     ref={provided.innerRef}
                                                                     {...provided.draggableProps}
                                                                 >
-                                                                    <Card className={`flex gap-3 relative group ${!prod.available ? 'opacity-60 bg-[var(--surface-2)]' : ''} ${snapshot.isDragging ? 'shadow-xl ring-2 ring-[var(--brand)]' : ''}`}>
+                                                                    <Card className={`flex gap-3 p-3 relative group ${!prod.available ? 'opacity-60 bg-[var(--surface-2)]' : ''} ${snapshot.isDragging ? 'shadow-xl ring-2 ring-[var(--brand)]' : ''}`}>
                                                                         <div {...provided.dragHandleProps} className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center text-[var(--border)] hover:text-[var(--text-muted)] cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--surface-2)]/50 rounded-l-xl z-10">
                                                                             <GripVertical size={20} />
                                                                         </div>
@@ -3040,7 +3040,7 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
             {activeTab === 'sales' && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Card className="p-6 border-l-4 border-l-[var(--brand)] shadow-sm">
+                        <Card accentColor="var(--brand)" className="p-6 pl-7 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Faturamento Total</p>
@@ -3051,7 +3051,7 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 </div>
                             </div>
                         </Card>
-                        <Card className="p-6 border-l-4 border-l-[var(--ok)] shadow-sm">
+                        <Card accentColor="var(--ok)" className="p-6 pl-7 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Vendas Realizadas</p>
@@ -3062,7 +3062,7 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 </div>
                             </div>
                         </Card>
-                        <Card className="p-6 border-l-4 border-l-[var(--info)] shadow-sm">
+                        <Card accentColor="var(--info)" className="p-6 pl-7 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Ticket Médio</p>
