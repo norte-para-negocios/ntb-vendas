@@ -60,21 +60,21 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
     if (needsChange) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+            <div className="min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
                 <Card className="w-full max-w-md p-8 animate-fade-in">
                     <div className="text-center mb-6">
-                        <div className="bg-yellow-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-yellow-600">
+                        <div className="bg-[var(--warn)]/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
                             <Lock size={32} />
                         </div>
-                        <h2 className="text-2xl font-bold text-slate-800">Redefinição Obrigatória</h2>
-                        <p className="text-gray-500 text-sm mt-1">Por segurança, altere sua senha provisória.</p>
+                        <h2 className="text-2xl font-bold text-[var(--text)]">Redefinição Obrigatória</h2>
+                        <p className="text-[var(--text-muted)] text-sm mt-1">Por segurança, altere sua senha provisória.</p>
                     </div>
 
                     <div className="space-y-4">
                         <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
                         <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
 
-                        {error && <p className="text-red-500 text-sm text-center font-medium">{error}</p>}
+                        {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
 
                         <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
                             Atualizar Senha
@@ -86,25 +86,25 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+        <div className="min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
             <Card className="w-full max-w-sm p-8 animate-slide-up">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-primary mb-2">Painel Admin</h1>
-                    <p className="text-gray-400">Acesso Restrito</p>
+                    <h1 className="text-3xl font-bold text-[var(--brand)] mb-2">Painel Admin</h1>
+                    <p className="text-[var(--text-muted)]">Acesso Restrito</p>
                 </div>
 
                 <div className="space-y-4">
                     <div className="relative">
-                        <User className="absolute left-3 top-9 text-gray-400" size={18} />
+                        <User className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
                         <Input label="Usuário" className="pl-10" placeholder="Ex: andrey" value={username} onChange={e => setUsername(e.target.value)} />
                     </div>
                     <div className="relative">
-                        <Lock className="absolute left-3 top-9 text-gray-400" size={18} />
+                        <Lock className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
                         <Input label="Senha" type="password" className="pl-10" placeholder="••••••" value={password} onChange={e => setPassword(e.target.value)} />
                     </div>
 
                     {error && (
-                        <div className="bg-red-50 text-red-600 p-3 rounded text-sm flex items-center gap-2">
+                        <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
                             <AlertCircle size={16} /> {error}
                         </div>
                     )}
@@ -401,15 +401,15 @@ export const AdminModule: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-[var(--bg)] flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white p-6 hidden md:block">
-        <h1 className="text-2xl font-bold mb-8 text-primary-light">Master Admin</h1>
+      <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:block">
+        <h1 className="text-2xl font-bold mb-8 text-white">Master Admin</h1>
         <nav className="space-y-2">
-          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${view === 'stores' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${view === 'stores' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
             <StoreIcon size={20} /> Lojas
           </button>
-          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${view === 'users' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${view === 'users' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
             <Users size={20} /> Usuários (Lojistas)
           </button>
         </nav>
@@ -419,10 +419,10 @@ export const AdminModule: React.FC = () => {
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h2 className="text-3xl font-bold text-slate-800">
+            <h2 className="text-3xl font-bold text-[var(--text)]">
                 {view === 'stores' ? 'Gestão de Lojas' : 'Gestão de Lojistas'}
             </h2>
-            <p className="text-gray-500 mt-1">Gerencie os {view === 'stores' ? 'estabelecimentos' : 'acessos dos clientes'} da plataforma.</p>
+            <p className="text-[var(--text-muted)] mt-1">Gerencie os {view === 'stores' ? 'estabelecimentos' : 'acessos dos clientes'} da plataforma.</p>
           </div>
           <Button onClick={() => {
               if(view === 'stores') { resetForm(); setIsModalOpen(true); }
@@ -436,8 +436,8 @@ export const AdminModule: React.FC = () => {
         {view === 'stores' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
              {/* Add Button Card */}
-             <div onClick={() => { resetForm(); setIsModalOpen(true); }} className="border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center p-8 text-gray-400 cursor-pointer hover:border-primary hover:text-primary hover:bg-primary/5 transition-all group min-h-[220px]">
-                <div className="bg-gray-100 p-4 rounded-full mb-3 group-hover:bg-white group-hover:shadow-md transition-all">
+             <div onClick={() => { resetForm(); setIsModalOpen(true); }} className="border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center p-8 text-[var(--text-muted)] cursor-pointer hover:border-[var(--brand)] hover:text-[var(--brand)] hover:bg-[var(--brand)]/5 transition-all group min-h-[220px]">
+                <div className="bg-[var(--surface-2)] p-4 rounded-full mb-3 group-hover:bg-[var(--surface)] group-hover:shadow-md transition-all">
                     <Plus size={32} />
                 </div>
                 <p className="font-semibold">Adicionar Nova Loja</p>
@@ -445,54 +445,54 @@ export const AdminModule: React.FC = () => {
 
              {/* Stores List */}
              {stores.map(store => (
-                 <Card key={store.id} className="flex flex-col gap-4 border-l-4 border-l-primary relative overflow-hidden group">
+                 <Card key={store.id} className="flex flex-col gap-4 border-l-4 border-l-[var(--brand)] relative overflow-hidden group">
                     <div className="flex items-start justify-between">
                         <div className="flex gap-3">
-                            {store.logo_url && <img src={store.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover border border-gray-100" />}
+                            {store.logo_url && <img src={store.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover border border-[var(--border)]" />}
                             <div>
-                                <h3 className="font-bold text-lg text-slate-800">{store.name}</h3>
-                                <p className="text-sm text-gray-500">{store.cnpj || 'CNPJ não informado'}</p>
+                                <h3 className="font-bold text-lg text-[var(--text)]">{store.name}</h3>
+                                <p className="text-sm text-[var(--text-muted)]">{store.cnpj || 'CNPJ não informado'}</p>
                             </div>
                         </div>
-                        <Badge color={store.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                        <Badge color={store.is_active ? "bg-[var(--ok)]/10 text-[var(--ok)]" : "bg-[var(--err)]/10 text-[var(--err)]"}>
                             {store.is_active ? 'ATIVO' : 'INATIVO'}
                         </Badge>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                        <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                            <span className="block text-xs text-gray-400 uppercase font-bold">Contrato</span>
-                            <div className="flex items-center gap-1 text-slate-700 font-medium">
-                                <LayoutGrid size={14} className="text-primary"/> {store.contract_type === 'balcao_mesas' ? 'Balcão + Mesas' : 'Apenas Balcão'}
+                        <div className="bg-[var(--surface-2)] p-2 rounded border border-[var(--border)]">
+                            <span className="block text-xs text-[var(--text-muted)] uppercase font-bold">Contrato</span>
+                            <div className="flex items-center gap-1 text-[var(--text)] font-medium">
+                                <LayoutGrid size={14} className="text-[var(--brand)]"/> {store.contract_type === 'balcao_mesas' ? 'Balcão + Mesas' : 'Apenas Balcão'}
                             </div>
                         </div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                            <span className="block text-xs text-gray-400 uppercase font-bold">Slug</span>
-                            <div className="flex items-center gap-1 text-slate-700 font-medium">
+                        <div className="bg-[var(--surface-2)] p-2 rounded border border-[var(--border)]">
+                            <span className="block text-xs text-[var(--text-muted)] uppercase font-bold">Slug</span>
+                            <div className="flex items-center gap-1 text-[var(--text)] font-medium">
                                 <span className="truncate">/{store.slug}</span>
                             </div>
                         </div>
                     </div>
-                    <div className="mt-auto pt-4 flex gap-2 border-t border-gray-100">
-                        <a href={`#/c/${store.slug}`} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 text-sm font-medium text-primary hover:bg-primary/5 rounded-lg border border-primary/20 transition-colors">
+                    <div className="mt-auto pt-4 flex gap-2 border-t border-[var(--border)]">
+                        <a href={`#/c/${store.slug}`} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg border border-[var(--brand)]/20 transition-colors">
                             Ver Cardápio
                         </a>
                         <button
                             onClick={() => handleDuplicateStore(store.id, store.name)}
-                            className="px-3 text-gray-400 hover:text-blue-500 transition-colors"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] transition-colors"
                             title="Duplicar"
                         >
                             <Copy size={18} />
                         </button>
                         <button
                             onClick={() => handleEditStore(store)}
-                            className="px-3 text-gray-400 hover:text-slate-800 transition-colors"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
                             title="Editar"
                         >
                             <Edit2 size={18} />
                         </button>
                         <button
                             onClick={() => handleDeleteStore(store.id, store.name)}
-                            className="px-3 text-gray-400 hover:text-red-500 transition-colors"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] transition-colors"
                             title="Excluir"
                         >
                             <Trash2 size={18} />
@@ -502,7 +502,7 @@ export const AdminModule: React.FC = () => {
              ))}
 
              {stores.length === 0 && !isLoadingList && (
-                 <div className="col-span-full text-center py-10 text-gray-500">Nenhuma loja encontrada. Crie a primeira!</div>
+                 <div className="col-span-full text-center py-10 text-[var(--text-muted)]">Nenhuma loja encontrada. Crie a primeira!</div>
              )}
           </div>
         )}
@@ -511,14 +511,14 @@ export const AdminModule: React.FC = () => {
         {view === 'users' && (
             <div className="space-y-4">
                 {users.length === 0 && !isLoadingList ? (
-                     <Card className="flex flex-col items-center justify-center py-20 text-gray-400">
+                     <Card className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
                         <Users size={48} className="mb-4 opacity-20" />
                         <p>Nenhum usuário cadastrado. Adicione um gestor para uma loja.</p>
                      </Card>
                 ) : (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-[var(--surface)] rounded-xl shadow-sm border border-[var(--border)] overflow-hidden">
                         <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
+                            <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] text-xs uppercase font-bold">
                                 <tr>
                                     <th className="p-4">Nome do Responsável</th>
                                     <th className="p-4">Email de Acesso</th>
@@ -528,39 +528,39 @@ export const AdminModule: React.FC = () => {
                                     <th className="p-4 text-right">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-[var(--border)]">
                                 {users.map(user => (
-                                    <tr key={user.id} className="hover:bg-gray-50">
-                                        <td className="p-4 font-medium text-slate-800">{user.name}</td>
-                                        <td className="p-4 text-gray-600">{user.email}</td>
+                                    <tr key={user.id} className="hover:bg-[var(--surface-2)]">
+                                        <td className="p-4 font-medium text-[var(--text)]">{user.name}</td>
+                                        <td className="p-4 text-[var(--text-muted)]">{user.email}</td>
                                         <td className="p-4">
-                                            <Badge color="bg-primary/10 text-primary">{user.store?.name || 'Loja Desconhecida'}</Badge>
+                                            <Badge color="bg-[var(--brand)]/10 text-[var(--brand)]">{user.store?.name || 'Loja Desconhecida'}</Badge>
                                         </td>
                                         <td className="p-4 text-sm capitalize">{user.role === 'owner' ? 'Dono / Gerente' : user.role}</td>
                                         <td className="p-4 text-center">
                                             {user.must_change_password ?
-                                                <Badge color="bg-yellow-100 text-yellow-700">Provisória</Badge> :
-                                                <Badge color="bg-green-100 text-green-700">Definida</Badge>
+                                                <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Provisória</Badge> :
+                                                <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]">Definida</Badge>
                                             }
                                         </td>
                                         <td className="p-4 flex justify-end gap-2">
                                             <button
                                                 onClick={() => handleResetUserPassword(user)}
-                                                className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--warn)] hover:bg-[var(--warn)]/10 rounded-lg transition-colors"
                                                 title="Resetar Senha"
                                             >
                                                 <RefreshCw size={18} />
                                             </button>
                                             <button
                                                 onClick={() => handleEditUser(user)}
-                                                className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg transition-colors"
                                                 title="Editar"
                                             >
                                                 <Edit2 size={18} />
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteUser(user)}
-                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--err)]/10 rounded-lg transition-colors"
                                                 title="Excluir"
                                             >
                                                 <Trash2 size={18} />
@@ -580,33 +580,33 @@ export const AdminModule: React.FC = () => {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Loja" : "Nova Loja"}>
           <div className="space-y-6">
               {/* Form Content */}
-              <div className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-white p-4 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] shadow-sm">
                   <div>
-                      <span className="block font-bold text-slate-800">Status do Contrato</span>
-                      <span className="text-xs text-gray-500">Define se a loja está acessível</span>
+                      <span className="block font-bold text-[var(--text)]">Status do Contrato</span>
+                      <span className="text-xs text-[var(--text-muted)]">Define se a loja está acessível</span>
                   </div>
-                  <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${isActive ? 'bg-green-500 text-white shadow-green-200' : 'bg-red-500 text-white shadow-red-200'}`}>
+                  <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${isActive ? 'bg-[var(--ok)] text-white shadow-[var(--ok)]/20' : 'bg-[var(--err)] text-white shadow-[var(--err)]/20'}`}>
                       {isActive ? <CheckCircle size={16}/> : <XCircle size={16}/>} {isActive ? 'LOJA ATIVA' : 'BLOQUEADA'}
                   </button>
               </div>
 
               {/* Logo Upload */}
               <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-700">Logotipo da Loja</label>
+                  <label className="text-sm font-semibold text-[var(--text)]">Logotipo da Loja</label>
                   <div className="flex items-center gap-4">
-                      <div className={`w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 ${logoPreview ? 'border-primary' : ''}`}>
+                      <div className={`w-20 h-20 rounded-xl border-2 border-dashed border-[var(--border)] flex items-center justify-center overflow-hidden bg-[var(--surface-2)] ${logoPreview ? 'border-[var(--brand)]' : ''}`}>
                           {logoPreview ? (
                               <img src={logoPreview} alt="Logo Preview" className="w-full h-full object-cover" />
                           ) : (
-                              <Image className="text-gray-300" size={24} />
+                              <Image className="text-[var(--border)]" size={24} />
                           )}
                       </div>
                       <div className="flex-1">
-                          <label className="cursor-pointer bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
+                          <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
                               <Upload size={16} /> Escolher Imagem
                               <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
                           </label>
-                          <p className="text-xs text-gray-400 mt-2">Recomendado: 500x500px (PNG ou JPG)</p>
+                          <p className="text-xs text-[var(--text-muted)] mt-2">Recomendado: 500x500px (PNG ou JPG)</p>
                       </div>
                   </div>
               </div>
@@ -618,32 +618,32 @@ export const AdminModule: React.FC = () => {
                      <Input type="number" label="Meses de Contrato" value={periodMonths} onChange={e => setPeriodMonths(parseInt(e.target.value))} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-semibold text-slate-700">Link de Acesso (Slug)</label>
+                    <label className="text-sm font-semibold text-[var(--text)]">Link de Acesso (Slug)</label>
                     <div className="flex items-center group">
-                        <span className="bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg px-3 py-2 text-sm text-gray-500">site.com/#/c/</span>
-                        <input className="w-full rounded-r-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/50 outline-none" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
+                        <span className="bg-[var(--surface-2)] border border-r-0 border-[var(--border)] rounded-l-lg px-3 py-2 text-sm text-[var(--text-muted)]">site.com/#/c/</span>
+                        <input className="w-full rounded-r-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[var(--brand)]/30 outline-none" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
                     </div>
                 </div>
               </div>
-              <hr className="border-gray-100" />
+              <hr className="border-[var(--border)]" />
               <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
-                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 transition-all ${contractType === 'balcao' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-gray-500'}`} onClick={() => setContractType('balcao')}>
+                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 transition-all ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
                           <Coffee size={24} /> <span className="font-bold text-sm">Apenas Balcão</span>
                       </button>
-                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 transition-all ${contractType === 'balcao_mesas' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-gray-500'}`} onClick={() => setContractType('balcao_mesas')}>
+                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 transition-all ${contractType === 'balcao_mesas' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao_mesas')}>
                           <LayoutGrid size={24} /> <span className="font-bold text-sm">Balcão + Mesas</span>
                       </button>
                   </div>
                   {contractType === 'balcao_mesas' && (
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                        <div className="flex justify-between items-center mb-2"><label className="text-sm font-bold text-blue-800">Mesas: {tableCount}</label></div>
-                        <input type="range" min="1" max="100" value={tableCount} onChange={e => setTableCount(parseInt(e.target.value))} className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"/>
-                        {editingId && <p className="text-xs text-blue-600 mt-2">Nota: Reduzir mesas não apaga as existentes automaticamente.</p>}
+                      <div className="bg-[var(--info)]/10 p-4 rounded-xl border border-[var(--info)]/20">
+                        <div className="flex justify-between items-center mb-2"><label className="text-sm font-bold text-[var(--info)]">Mesas: {tableCount}</label></div>
+                        <input type="range" min="1" max="100" value={tableCount} onChange={e => setTableCount(parseInt(e.target.value))} className="w-full h-2 bg-[var(--info)]/30 rounded-lg appearance-none cursor-pointer accent-[var(--info)]"/>
+                        {editingId && <p className="text-xs text-[var(--info)] mt-2">Nota: Reduzir mesas não apaga as existentes automaticamente.</p>}
                       </div>
                   )}
               </div>
-              {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
+              {errorMsg && <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
               <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20" onClick={handleSaveStore} isLoading={isLoading}>
                   <Save className="mr-2" size={20} /> {editingId ? 'Atualizar Loja' : 'Salvar e Ativar Loja'}
               </Button>
@@ -653,9 +653,9 @@ export const AdminModule: React.FC = () => {
       {/* MODAL: NOVO/EDITAR USUÁRIO */}
       <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title={editingUserId ? "Editar Acesso" : "Novo Acesso Lojista"}>
           <div className="space-y-6">
-              <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 flex gap-3">
-                  <Lock className="text-yellow-600 flex-shrink-0" size={20} />
-                  <p className="text-sm text-yellow-800">
+              <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20 flex gap-3">
+                  <Lock className="text-[var(--warn)] flex-shrink-0" size={20} />
+                  <p className="text-sm text-[var(--warn)]">
                       {editingUserId
                           ? "A senha não pode ser alterada aqui. Utilize o botão de Reset de Senha na tabela."
                           : "O usuário precisará redefinir a senha provisória no primeiro acesso ao painel da loja."
@@ -672,9 +672,9 @@ export const AdminModule: React.FC = () => {
                   )}
 
                   <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-semibold text-slate-700">Vincular à Loja</label>
+                      <label className="text-sm font-semibold text-[var(--text)]">Vincular à Loja</label>
                       <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
                         value={userStoreId}
                         onChange={e => setUserStoreId(e.target.value)}
                       >
@@ -686,7 +686,7 @@ export const AdminModule: React.FC = () => {
                   </div>
               </div>
 
-              {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
+              {errorMsg && <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
 
               <Button className="w-full h-12 text-lg" onClick={handleSaveUser} isLoading={isLoading}>
                   {editingUserId ? 'Salvar Alterações' : 'Criar Usuário'}

@@ -21,14 +21,14 @@ export default function HomePage() {
         <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md mb-16">
           <Link
             href="/painel"
-            className="bg-white text-primary px-6 py-4 rounded-xl font-bold hover:bg-gray-100 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 flex-1 flex items-center justify-center gap-2"
+            className="bg-white text-[var(--brand)] px-6 py-4 rounded-xl font-bold hover:bg-[var(--surface-2)] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 flex-1 flex items-center justify-center gap-2"
           >
             <LayoutDashboard className="w-5 h-5" />
             Painel Master
           </Link>
           <Link
             href="/loja"
-            className="bg-primary-light/20 border-2 border-white/30 backdrop-blur-sm px-6 py-4 rounded-xl font-bold hover:bg-white/20 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 flex-1 flex items-center justify-center gap-2"
+            className="bg-white/10 border-2 border-white/30 backdrop-blur-sm px-6 py-4 rounded-xl font-bold hover:bg-white/20 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 flex-1 flex items-center justify-center gap-2"
           >
             <Store className="w-5 h-5" />
             Área do Lojista
@@ -41,7 +41,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/c/bistro"
-            className="text-lg font-medium hover:text-yellow-300 transition-colors border-b border-white/30 hover:border-yellow-300 pb-0.5"
+            className="text-lg font-medium hover:text-[var(--warn)] transition-colors border-b border-white/30 hover:border-[var(--warn)] pb-0.5"
           >
             Acessar Cardápio Demo
           </Link>

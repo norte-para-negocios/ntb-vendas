@@ -13,7 +13,7 @@ export default function NotFound() {
         <p className="text-white/70 mb-8">O cardápio ou recurso que você procura não existe.</p>
         <Link
           href="/"
-          className="bg-white text-primary px-6 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all shadow-lg"
+          className="bg-white text-[var(--brand)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--surface-2)] transition-all shadow-lg"
         >
           Voltar ao início
         </Link>

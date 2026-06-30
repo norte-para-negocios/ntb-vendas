@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTables, updateTableStatus, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem } from '@/types';
@@ -16,15 +16,15 @@ const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onCo
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Atenção ao Pedido">
             <div className="flex flex-col items-center text-center space-y-6 py-2">
-                <div className="bg-yellow-100 p-4 rounded-full text-yellow-600">
+                <div className="bg-[var(--warn)]/10 p-4 rounded-full text-[var(--warn)]">
                     <AlertTriangle size={48} />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">Pedido Único</h3>
-                    <p className="text-gray-600 text-sm leading-relaxed">
-                        Devido à organização da fila do balcão, este pedido será <strong className="text-slate-800">encerrado</strong> assim que confirmado.
+                    <h3 className="text-xl font-bold text-[var(--text)] mb-2">Pedido Único</h3>
+                    <p className="text-[var(--text-muted)] text-sm leading-relaxed">
+                        Devido à organização da fila do balcão, este pedido será <strong className="text-[var(--text)]">encerrado</strong> assim que confirmado.
                     </p>
-                    <p className="text-gray-600 text-sm leading-relaxed mt-2">
+                    <p className="text-[var(--text-muted)] text-sm leading-relaxed mt-2">
                         Verifique se você adicionou <strong>todos</strong> os itens (bebidas, sobremesas) antes de enviar.
                     </p>
                 </div>
@@ -125,16 +125,16 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
 
     const getItemStatusIcon = (status: OrderStatus) => {
         switch (status) {
-            case OrderStatus.PENDING: return <Badge color="bg-yellow-100 text-yellow-700"><Clock size={12} className="mr-1"/> Enviado</Badge>;
-            case OrderStatus.ACCEPTED: return <Badge color="bg-orange-100 text-orange-700"><ChefHat size={12} className="mr-1"/> Aceito</Badge>;
-            case OrderStatus.PREPARING: return <Badge color="bg-blue-100 text-blue-700"><UtensilsCrossed size={12} className="mr-1"/> Preparando</Badge>;
-            case OrderStatus.READY: return <Badge color="bg-green-100 text-green-700"><BellRing size={12} className="mr-1"/> Pronto</Badge>;
-            case OrderStatus.DELIVERED: return <Badge color="bg-gray-100 text-gray-600"><CheckCircle size={12} className="mr-1"/> Entregue</Badge>;
+            case OrderStatus.PENDING: return <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]"><Clock size={12} className="mr-1"/> Enviado</Badge>;
+            case OrderStatus.ACCEPTED: return <Badge color="bg-[var(--warn)]/15 text-[var(--warn)]"><ChefHat size={12} className="mr-1"/> Aceito</Badge>;
+            case OrderStatus.PREPARING: return <Badge color="bg-[var(--info)]/10 text-[var(--info)]"><UtensilsCrossed size={12} className="mr-1"/> Preparando</Badge>;
+            case OrderStatus.READY: return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><BellRing size={12} className="mr-1"/> Pronto</Badge>;
+            case OrderStatus.DELIVERED: return <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]"><CheckCircle size={12} className="mr-1"/> Entregue</Badge>;
             default: return null;
         }
     };
 
-    if (!order) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-pulse text-primary font-bold">Carregando status...</div></div>;
+    if (!order) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><div className="animate-pulse text-[var(--brand)] font-bold">Carregando status...</div></div>;
 
     const steps = [
         { status: OrderStatus.PENDING, label: 'Enviado', icon: CheckCircle },
@@ -152,48 +152,48 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
 
     if (isCanceled) {
         return (
-             <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
-                 <div className="bg-red-100 p-6 rounded-full mb-6">
-                     <AlertCircle size={48} className="text-red-500" />
+             <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg)] p-6 text-center">
+                 <div className="bg-[var(--err)]/10 p-6 rounded-full mb-6">
+                     <AlertCircle size={48} className="text-[var(--err)]" />
                  </div>
-                 <h2 className="text-2xl font-bold text-slate-800 mb-2">Pedido Cancelado</h2>
-                 <p className="text-gray-500 mb-8">Seu pedido foi cancelado pelo estabelecimento.</p>
+                 <h2 className="text-2xl font-bold text-[var(--text)] mb-2">Pedido Cancelado</h2>
+                 <p className="text-[var(--text-muted)] mb-8">Seu pedido foi cancelado pelo estabelecimento.</p>
                  <Button onClick={onReset}>Fazer Novo Pedido</Button>
              </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            <div className="bg-white p-6 shadow-sm border-b text-center">
-                <h1 className="text-xl font-bold text-slate-800">Acompanhamento</h1>
-                <p className="text-sm text-gray-500">Pedido #{orderId.slice(0, 4)}</p>
+        <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+            <div className="bg-[var(--surface)] p-6 shadow-sm border-b text-center">
+                <h1 className="text-xl font-bold text-[var(--text)]">Acompanhamento</h1>
+                <p className="text-sm text-[var(--text-muted)]">Pedido #{orderId.slice(0, 4)}</p>
             </div>
 
             <div className="flex-1 flex flex-col items-center p-6 space-y-6">
                 {/* Banner de Pronto */}
                 {isReady && (
-                    <div className="animate-bounce bg-green-100 text-green-800 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-3 shadow-lg border border-green-200 w-full justify-center max-w-md">
+                    <div className="animate-bounce bg-[var(--ok)]/10 text-[var(--ok)] px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-3 shadow-lg border border-[var(--ok)]/30 w-full justify-center max-w-md">
                         <PartyPopper /> SEU PEDIDO ESTÁ PRONTO!
                     </div>
                 )}
 
                 {isDelivered ? (
                      <div className="text-center py-10 animate-fade-in">
-                         <div className="bg-green-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
+                         <div className="bg-[var(--ok)]/10 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--ok)]">
                              <CheckCircle size={48} />
                          </div>
-                         <h2 className="text-2xl font-bold text-slate-800 mb-2">Pedido Finalizado</h2>
-                         <p className="text-gray-500 mb-2">Obrigado pela preferência!</p>
-                         <p className="text-primary font-bold text-sm bg-primary/10 py-2 px-4 rounded-full inline-block">
+                         <h2 className="text-2xl font-bold text-[var(--text)] mb-2">Pedido Finalizado</h2>
+                         <p className="text-[var(--text-muted)] mb-2">Obrigado pela preferência!</p>
+                         <p className="text-[var(--brand)] font-bold text-sm bg-[var(--brand)]/8 py-2 px-4 rounded-full inline-block">
                              Reiniciando em {secondsToRedirect}s...
                          </p>
                      </div>
                 ) : (
                     <>
                         {/* Linha do Tempo */}
-                        <div className="w-full max-w-md space-y-6 relative pb-6 border-b border-gray-200">
-                             <div className="absolute left-6 top-6 bottom-6 w-1 bg-gray-200 -z-10"></div>
+                        <div className="w-full max-w-md space-y-6 relative pb-6 border-b border-[var(--border)]">
+                             <div className="absolute left-6 top-6 bottom-6 w-1 bg-[var(--border)] -z-10"></div>
 
                              {steps.map((step, idx) => {
                                  const isCompleted = currentStepIndex >= idx;
@@ -202,13 +202,13 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                                  return (
                                      <div key={idx} className={`flex items-center gap-4 transition-all duration-500 ${isCompleted ? 'opacity-100' : 'opacity-40'}`}>
                                          <div className={`w-12 h-12 rounded-full flex items-center justify-center border-4 transition-all z-10 ${
-                                             isCompleted ? (step.status === OrderStatus.READY ? 'bg-green-500 border-green-200 text-white' : 'bg-primary border-blue-200 text-white') : 'bg-white border-gray-200 text-gray-300'
+                                             isCompleted ? (step.status === OrderStatus.READY ? 'bg-[var(--ok)] border-[var(--ok)]/30 text-white' : 'bg-[var(--brand)] border-[var(--brand)]/30 text-white') : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
                                          } ${isCurrent && !isReady ? 'animate-pulse' : ''}`}>
                                              <step.icon size={20} />
                                          </div>
                                          <div>
-                                             <h3 className={`font-bold text-lg ${isCompleted ? 'text-slate-800' : 'text-gray-400'}`}>{step.label}</h3>
-                                             {isCurrent && <p className="text-xs text-primary font-medium animate-pulse">Em andamento...</p>}
+                                             <h3 className={`font-bold text-lg ${isCompleted ? 'text-[var(--text)]' : 'text-[var(--text-muted)]'}`}>{step.label}</h3>
+                                             {isCurrent && <p className="text-xs text-[var(--brand)] font-medium animate-pulse">Em andamento...</p>}
                                          </div>
                                      </div>
                                  );
@@ -216,26 +216,26 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                         </div>
 
                         {/* Lista de Itens Detalhada */}
-                        <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
-                                <h3 className="font-bold text-slate-700 text-sm">Status dos Itens</h3>
+                        <div className="w-full max-w-md bg-[var(--surface)] rounded-[var(--r-lg)] shadow-sm border border-[var(--border)] overflow-hidden">
+                            <div className="bg-[var(--surface-2)] px-4 py-3 border-b border-[var(--border)]">
+                                <h3 className="font-bold text-[var(--text)] text-sm">Status dos Itens</h3>
                             </div>
-                            <div className="divide-y divide-gray-100">
+                            <div className="divide-y divide-[var(--border)]">
                                 {items.map(item => (
                                     <div key={item.id} className="p-3 flex items-center justify-between">
                                         <div className="text-sm">
-                                            <span className="font-bold text-gray-900">{item.quantity}x</span> {item.product?.name || 'Item'}
+                                            <span className="font-bold text-[var(--text)]">{item.quantity}x</span> {item.product?.name || 'Item'}
                                         </div>
                                         <div className="flex-shrink-0 ml-2">
                                             {getItemStatusIcon(item.status)}
                                         </div>
                                     </div>
                                 ))}
-                                {items.length === 0 && <p className="p-4 text-center text-gray-400 text-sm">Carregando itens...</p>}
+                                {items.length === 0 && <p className="p-4 text-center text-[var(--text-muted)] text-sm">Carregando itens...</p>}
                             </div>
                         </div>
 
-                        <div className="p-2 text-center text-xs text-gray-400">
+                        <div className="p-2 text-center text-xs text-[var(--text-muted)]">
                              Aguarde chamar seu nome ou número no painel.
                         </div>
                     </>
@@ -311,33 +311,35 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
         }
     };
 
-    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-primary text-white"><span className="animate-pulse">Carregando...</span></div>;
+    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><span className="text-[var(--text-muted)] text-sm animate-pulse">Carregando...</span></div>;
 
     return (
-        <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-6">
-            <div className="mb-8 text-center text-white">
+        <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-6">
+            <div className="mb-8 text-center">
                 {store?.logo_url ? (
-                    <img src={store.logo_url} alt="Logo" className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white/20" />
+                    <img src={store.logo_url} alt="Logo" className="w-20 h-20 rounded-[var(--r-lg)] mx-auto mb-4 object-cover" style={{boxShadow:'var(--shadow-md)'}} />
                 ) : (
-                    <div className="bg-white/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"><Coffee size={32}/></div>
+                    <div className="bg-[var(--brand)] w-16 h-16 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-white" style={{boxShadow:'0 4px 14px rgba(27,58,75,0.3)'}}>
+                        <Coffee size={24}/>
+                    </div>
                 )}
-                <h1 className="text-3xl font-bold mb-2">{store?.name || 'Cardápio Digital'}</h1>
-                <p className="opacity-80">Faça seu pedido direto pelo celular</p>
+                <h1 className="text-xl font-semibold text-[var(--text)] mb-1">{store?.name || 'Cardápio Digital'}</h1>
+                <p className="text-[var(--text-muted)] text-sm">Faça seu pedido direto pelo celular</p>
             </div>
-            <Card className="w-full max-w-sm p-8 space-y-6 shadow-2xl animate-slide-up">
+            <Card className="w-full max-w-sm p-6 space-y-5 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
                 {store?.contract_type === 'balcao_mesas' && (
-                    <div className="flex p-1 bg-gray-100 rounded-lg">
+                    <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <button
-                            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'table' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}
+                            className={`flex-1 py-2 text-[13px] font-medium rounded-[var(--r-sm)] u-motion ${mode === 'table' ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}
                             onClick={() => setMode('table')}
                         >
-                            <span className="flex items-center justify-center gap-2"><LayoutGrid size={16}/> Mesa</span>
+                            <span className="flex items-center justify-center gap-2"><LayoutGrid size={14}/> Mesa</span>
                         </button>
                         <button
-                            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'counter' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}
+                            className={`flex-1 py-2 text-[13px] font-medium rounded-[var(--r-sm)] u-motion ${mode === 'counter' ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}
                             onClick={() => setMode('counter')}
                         >
-                            <span className="flex items-center justify-center gap-2"><Coffee size={16}/> Balcão</span>
+                            <span className="flex items-center justify-center gap-2"><Coffee size={14}/> Balcão</span>
                         </button>
                     </div>
                 )}
@@ -351,11 +353,11 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                     />
 
                     {mode === 'table' && (
-                        <div className="animate-fade-in space-y-4">
+                        <div className="animate-[fadeIn_0.2s_ease-out] space-y-4">
                             <div>
-                                <label className="text-sm font-semibold text-slate-700 mb-1 block">Onde você está?</label>
+                                <label className="text-[13px] font-medium text-[var(--text-muted)] mb-1 block">Onde você está?</label>
                                 <select
-                                    className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-primary/50 outline-none transition-all"
+                                    className="w-full px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-sm focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] outline-none u-motion"
                                     value={tableId}
                                     onChange={e => setTableId(e.target.value)}
                                 >
@@ -389,8 +391,8 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                                 if (!isPinRequired) return null;
 
                                 return (
-                                    <div className="animate-fade-in bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-                                        <p className="text-xs text-yellow-700 mb-2 font-bold text-center">
+                                    <div className="animate-[fadeIn_0.2s_ease-out] bg-[var(--warn)]/8 p-3 rounded-[var(--r-md)] border border-[var(--warn)]/25">
+                                        <p className="text-xs text-[var(--text-muted)] mb-2 text-center">
                                             {isOccupied
                                                 ? "Mesa ocupada. Digite o PIN para entrar ou recuperar seu acesso."
                                                 : "Digite o PIN fornecido pelo estabelecimento para abrir a mesa."
@@ -412,13 +414,13 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                     )}
 
                     {mode === 'counter' && (
-                         <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-700 animate-fade-in">
-                             <p><strong>Pedido no Balcão:</strong> Você fará o pedido e aguardará ser chamado pelo nome ou painel.</p>
+                         <div className="bg-[var(--info)]/8 p-3 rounded-[var(--r-md)] text-sm text-[var(--text-muted)] animate-[fadeIn_0.2s_ease-out]">
+                             <p><strong className="text-[var(--text)]">Pedido no Balcão:</strong> Você fará o pedido e aguardará ser chamado pelo nome ou painel.</p>
                          </div>
                     )}
                 </div>
 
-                <Button className="w-full text-lg shadow-lg shadow-primary/30" onClick={handleEnter} disabled={isLoading}>
+                <Button className="w-full" onClick={handleEnter} disabled={isLoading}>
                     <LogIn className="mr-2" size={20} />
                     {tables.find(t => t.id === tableId)?.status === 'occupied'
                         ? 'Entrar / Recuperar'
@@ -445,14 +447,14 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                 {product.image_url && (
                     <img src={product.image_url} alt={product.name} className="w-full h-56 object-cover rounded-xl shadow-sm" />
                 )}
-                <p className="text-gray-600 leading-relaxed">{product.description}</p>
+                <p className="text-[var(--text-muted)] leading-relaxed">{product.description}</p>
 
-                <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100">
-                    <span className="text-2xl font-bold text-primary">R$ {product.price.toFixed(2)}</span>
-                    <div className="flex items-center gap-4 bg-white px-2 py-1 rounded-lg shadow-sm border">
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-2 text-primary hover:bg-gray-50 rounded-md"><Minus size={18} /></button>
-                        <span className="font-bold text-lg w-8 text-center">{qty}</span>
-                        <button onClick={() => setQty(qty + 1)} className="p-2 text-primary hover:bg-gray-50 rounded-md"><Plus size={18} /></button>
+                <div className="flex items-center justify-between bg-[var(--surface-2)] px-4 py-3 rounded-[var(--r-md)] border border-[var(--border)]">
+                    <span className="text-xl font-semibold text-[var(--brand)] num">R$ {product.price.toFixed(2)}</span>
+                    <div className="flex items-center gap-3 bg-[var(--surface)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
+                        <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
+                        <button onClick={() => setQty(qty + 1)} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
                     </div>
                 </div>
 
@@ -484,49 +486,49 @@ const CartModal: React.FC<{
     if(!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-            <div className="w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
-                <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-                    <div className="flex items-center gap-2">
-                        <ShoppingBag className="text-primary" />
-                        <h3 className="text-lg font-bold text-slate-900">Seu Pedido</h3>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-[fadeIn_0.2s_ease-out]">
+            <div className="w-full max-w-md bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)] flex flex-col max-h-[90vh]" style={{boxShadow:'var(--shadow-md), 0 0 0 1px var(--border)'}}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+                    <div className="flex items-center gap-2.5">
+                        <ShoppingBag size={18} className="text-[var(--brand)]" />
+                        <h3 className="text-[15px] font-semibold text-[var(--text)]">Seu Pedido</h3>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                        <span className="text-2xl">&times;</span>
+                    <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-1.5 rounded-[var(--r-sm)] u-motion">
+                        <X size={16} />
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {cart.length === 0 ? (
-                        <div className="text-center py-10 text-gray-400">
-                            <ShoppingBag size={48} className="mx-auto mb-2 opacity-20"/>
-                            <p>Seu carrinho está vazio.</p>
+                        <div className="text-center py-12 text-[var(--text-muted)] u-fade-in">
+                            <ShoppingBag size={36} className="mx-auto mb-3 opacity-20"/>
+                            <p className="text-sm">Seu carrinho está vazio.</p>
                         </div>
                     ) : (
                         cart.map((item, idx) => (
-                            <div key={`${item.product.id}-${idx}`} className="flex gap-3 bg-white border border-gray-100 p-3 rounded-xl shadow-sm">
+                            <div key={`${item.product.id}-${idx}`} className="flex gap-3 border border-[var(--border)] p-3 rounded-[var(--r-md)]" style={{boxShadow:'var(--shadow-sm)'}}>
                                 {item.product.image_url ? (
-                                    <img src={item.product.image_url} alt="" className="w-16 h-16 rounded-lg object-cover bg-gray-100" />
+                                    <img src={item.product.image_url} alt="" className="w-14 h-14 rounded-[var(--r-sm)] object-cover bg-[var(--surface-2)] flex-shrink-0" />
                                 ) : (
-                                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300">
-                                        <Coffee size={20}/>
+                                    <div className="w-14 h-14 rounded-[var(--r-sm)] bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-muted)]/40 flex-shrink-0">
+                                        <Coffee size={18}/>
                                     </div>
                                 )}
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="font-bold text-slate-800 text-sm">{item.product.name}</h4>
-                                        <span className="font-bold text-slate-900 text-sm">R$ {(item.product.price * item.quantity).toFixed(2)}</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-start gap-2">
+                                        <h4 className="font-medium text-[var(--text)] text-sm truncate">{item.product.name}</h4>
+                                        <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(item.product.price * item.quantity).toFixed(2)}</span>
                                     </div>
-                                    {item.notes && <p className="text-xs text-gray-500 mt-1 italic">"{item.notes}"</p>}
+                                    {item.notes && <p className="text-[12px] text-[var(--text-muted)] mt-0.5 italic">"{item.notes}"</p>}
 
-                                    <div className="flex justify-between items-end mt-2">
-                                        <button onClick={() => onRemove(item)} className="text-red-400 hover:text-red-600 p-1">
-                                            <Trash2 size={16}/>
+                                    <div className="flex justify-between items-center mt-2">
+                                        <button onClick={() => onRemove(item)} className="text-[var(--err)]/60 hover:text-[var(--err)] p-1 u-motion rounded-[var(--r-sm)]">
+                                            <Trash2 size={14}/>
                                         </button>
-                                        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-2 py-1 border border-gray-200">
-                                            <button onClick={() => onUpdateQty(item, -1)} className="text-primary hover:bg-gray-200 rounded p-0.5"><Minus size={14}/></button>
-                                            <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
-                                            <button onClick={() => onUpdateQty(item, 1)} className="text-primary hover:bg-gray-200 rounded p-0.5"><Plus size={14}/></button>
+                                        <div className="flex items-center gap-2 bg-[var(--surface-2)] rounded-[var(--r-sm)] px-1.5 py-0.5 border border-[var(--border)]">
+                                            <button onClick={() => onUpdateQty(item, -1)} className="text-[var(--text-muted)] hover:text-[var(--text)] p-0.5 u-motion"><Minus size={13}/></button>
+                                            <span className="text-[13px] font-semibold text-[var(--text)] w-4 text-center num">{item.quantity}</span>
+                                            <button onClick={() => onUpdateQty(item, 1)} className="text-[var(--text-muted)] hover:text-[var(--text)] p-0.5 u-motion"><Plus size={13}/></button>
                                         </div>
                                     </div>
                                 </div>
@@ -535,16 +537,16 @@ const CartModal: React.FC<{
                     )}
                 </div>
 
-                <div className="p-4 border-t bg-gray-50 space-y-3">
-                    <div className="flex justify-between items-center text-lg font-bold text-slate-800">
+                <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-2)] space-y-3">
+                    <div className="flex justify-between items-center font-semibold text-[var(--text)]">
                         <span>Total</span>
-                        <span>R$ {total.toFixed(2)}</span>
+                        <span className="num">R$ {total.toFixed(2)}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <Button variant="secondary" onClick={onClose} className="h-12">
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button variant="secondary" onClick={onClose}>
                             Adicionar Mais
                         </Button>
-                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0} className="h-12 shadow-lg shadow-primary/20">
+                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0}>
                             Confirmar Pedido
                         </Button>
                     </div>
@@ -644,11 +646,11 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
 
     const getItemStatusBadge = (status: string) => {
         switch (status) {
-            case 'pending': return <span className="flex items-center gap-1 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200"><Clock size={10}/> Enviado</span>;
-            case 'accepted': return <span className="flex items-center gap-1 text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200"><ChefHat size={10}/> Aceito</span>;
-            case 'preparing': return <span className="flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200"><UtensilsCrossed size={10}/> Prep.</span>;
-            case 'ready': return <span className="flex items-center gap-1 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200"><BellRing size={10}/> Pronto</span>;
-            case 'delivered': return <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200"><CheckCircle size={10}/> Entregue</span>;
+            case 'pending': return <span className="flex items-center gap-1 text-[10px] bg-[var(--warn)]/10 text-[var(--warn)] px-1.5 py-0.5 rounded border border-[var(--warn)]/20"><Clock size={10}/> Enviado</span>;
+            case 'accepted': return <span className="flex items-center gap-1 text-[10px] bg-[var(--warn)]/15 text-[var(--warn)] px-1.5 py-0.5 rounded border border-[var(--warn)]/25"><ChefHat size={10}/> Aceito</span>;
+            case 'preparing': return <span className="flex items-center gap-1 text-[10px] bg-[var(--info)]/10 text-[var(--info)] px-1.5 py-0.5 rounded border border-[var(--info)]/20"><UtensilsCrossed size={10}/> Prep.</span>;
+            case 'ready': return <span className="flex items-center gap-1 text-[10px] bg-[var(--ok)]/10 text-[var(--ok)] px-1.5 py-0.5 rounded border border-[var(--ok)]/20"><BellRing size={10}/> Pronto</span>;
+            case 'delivered': return <span className="flex items-center gap-1 text-[10px] bg-[var(--surface-2)] text-[var(--text-muted)] px-1.5 py-0.5 rounded border border-[var(--border)]"><CheckCircle size={10}/> Entregue</span>;
             default: return null;
         }
     };
@@ -729,19 +731,19 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
         return (
              <Modal isOpen={true} onClose={() => setShowCloseConfirmation(false)} title="Encerrar Mesa">
                  <div className="space-y-6 text-center">
-                     <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 flex flex-col items-center">
-                         <AlertCircle className="text-yellow-600 mb-2" size={32}/>
-                         <p className="font-bold text-yellow-800">Deseja realmente pedir a conta?</p>
-                         <p className="text-sm text-yellow-700 mt-1">Ao solicitar o fechamento, não será possível adicionar novos itens.</p>
+                     <div className="bg-[var(--warn)]/8 p-4 rounded-[var(--r-lg)] border border-[var(--warn)]/20 flex flex-col items-center">
+                         <AlertCircle className="text-[var(--warn)] mb-2" size={32}/>
+                         <p className="font-bold text-[var(--text)]">Deseja realmente pedir a conta?</p>
+                         <p className="text-sm text-[var(--text-muted)] mt-1">Ao solicitar o fechamento, não será possível adicionar novos itens.</p>
                      </div>
 
                      {hasPendingItems && (
-                         <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-left">
+                         <div className="bg-[var(--err)]/8 p-4 rounded-[var(--r-lg)] border border-[var(--err)]/20 text-left">
                              <div className="flex items-start gap-2">
-                                 <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={20}/>
+                                 <AlertTriangle className="text-[var(--err)] flex-shrink-0 mt-0.5" size={20}/>
                                  <div>
-                                     <p className="font-bold text-red-700">Itens Pendentes</p>
-                                     <p className="text-sm text-red-600 mt-1">
+                                     <p className="font-bold text-[var(--err)]">Itens Pendentes</p>
+                                     <p className="text-sm text-[var(--text-muted)] mt-1">
                                          Existem pedidos que ainda não começaram a ser preparados pela cozinha.
                                      </p>
                                  </div>
@@ -753,14 +755,15 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                          {hasPendingItems ? (
                              <>
                                 <Button
-                                    className="w-full bg-red-600 hover:bg-red-700 text-white"
+                                    variant="danger"
+                                    className="w-full"
                                     onClick={() => handleRequestBill(true)}
                                     isLoading={isClosing}
                                 >
                                     Cancelar Pendentes e Fechar
                                 </Button>
                                 <Button
-                                    className="w-full bg-slate-700 hover:bg-slate-800 text-white"
+                                    className="w-full"
                                     onClick={() => handleRequestBill(false)}
                                     isLoading={isClosing}
                                 >
@@ -789,18 +792,18 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
         <Modal isOpen={true} onClose={onClose} title="Conta da Mesa">
             <div className="space-y-4">
                 {isLoading ? (
-                    <div className="py-10 animate-pulse text-center text-primary">Carregando conta...</div>
+                    <div className="py-10 animate-pulse text-center text-[var(--brand)]">Carregando conta...</div>
                 ) : (
                     <>
                         {/* Tabs */}
-                        <div className="flex p-1 bg-gray-100 rounded-lg">
-                            <button onClick={() => setTab('split')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${tab === 'split' ? 'bg-white text-primary shadow-sm' : 'text-gray-400'}`}>
+                        <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
+                            <button onClick={() => setTab('split')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] transition-all flex flex-col items-center gap-1 ${tab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                                 <Users size={16}/> Divisão
                             </button>
-                            <button onClick={() => setTab('users')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${tab === 'users' ? 'bg-white text-primary shadow-sm' : 'text-gray-400'}`}>
+                            <button onClick={() => setTab('users')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] transition-all flex flex-col items-center gap-1 ${tab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                                 <List size={16}/> Por Cliente
                             </button>
-                            <button onClick={() => setTab('calculator')} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${tab === 'calculator' ? 'bg-white text-primary shadow-sm' : 'text-gray-400'}`}>
+                            <button onClick={() => setTab('calculator')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] transition-all flex flex-col items-center gap-1 ${tab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                                 <Calculator size={16}/> Calculadora
                             </button>
                         </div>
@@ -811,29 +814,29 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                             {/* TAB 1: SPLIT BY PEOPLE */}
                             {tab === 'split' && (
                                 <div className="space-y-6 animate-fade-in pt-2">
-                                    <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 text-center">
-                                        <p className="text-sm text-gray-500 uppercase font-bold tracking-wider">Total da Mesa</p>
-                                        <p className="text-3xl font-black text-primary mt-1">R$ {total.toFixed(2)}</p>
+                                    <div className="bg-[var(--brand)]/5 p-4 rounded-[var(--r-lg)] border border-[var(--brand)]/10 text-center">
+                                        <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
+                                        <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {total.toFixed(2)}</p>
                                         {isServiceFeeEnabled && (
-                                            <p className="text-xs text-gray-500 mt-1">Inclui R$ {serviceFee.toFixed(2)} de taxa de serviço (10% opcional)</p>
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {serviceFee.toFixed(2)} de taxa de serviço (10% opcional)</p>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
-                                        <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"><Minus size={18} /></button>
+                                        <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] transition-colors u-motion"><Minus size={18} /></button>
                                         <div className="text-center min-w-[80px]">
-                                            <span className="block text-2xl font-bold text-slate-800">{people}</span>
-                                            <span className="text-[10px] text-gray-500 font-bold uppercase">Pessoas</span>
+                                            <span className="block text-2xl font-bold text-[var(--text)]">{people}</span>
+                                            <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">Pessoas</span>
                                         </div>
-                                        <button onClick={() => setPeople(people + 1)} className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"><Plus size={18}/></button>
+                                        <button onClick={() => setPeople(people + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] transition-colors u-motion"><Plus size={18}/></button>
                                     </div>
-                                    <div className="border-t border-dashed border-gray-300 pt-4 text-center">
-                                        <p className="text-gray-500 text-sm mb-1">Valor por pessoa</p>
-                                        <p className="text-2xl font-bold text-slate-800">R$ {(total / people).toFixed(2)}</p>
+                                    <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
+                                        <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
+                                        <p className="text-2xl font-bold text-[var(--text)] num">R$ {(total / people).toFixed(2)}</p>
                                     </div>
                                     {/* List All Items for Context */}
-                                    <div className="mt-4 pt-4 border-t border-gray-100">
-                                        <p className="text-xs text-gray-400 font-bold uppercase mb-2">Itens da Mesa</p>
-                                        <ul className="text-sm space-y-1 text-gray-600">
+                                    <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                                        <p className="text-xs text-[var(--text-muted)] font-bold uppercase mb-2">Itens da Mesa</p>
+                                        <ul className="text-sm space-y-1 text-[var(--text-muted)]">
                                             {items.map((it, idx) => (
                                                 <li key={idx} className="flex justify-between items-center py-1">
                                                     <div className="flex items-center gap-2">
@@ -852,38 +855,38 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                             {tab === 'users' && (
                                 <div className="space-y-4 animate-fade-in pt-2">
                                     {Object.entries(usersBreakdown).map(([name, data]: [string, any]) => (
-                                        <div key={name} className="border border-gray-200 rounded-xl overflow-hidden">
-                                            <div className="bg-gray-50 p-3 flex justify-between items-center border-b border-gray-100">
-                                                <span className="font-bold text-slate-700 flex items-center gap-2"><User size={14}/> {name}</span>
-                                                <span className="font-bold text-primary">R$ {data.total.toFixed(2)}</span>
+                                        <div key={name} className="border border-[var(--border)] rounded-[var(--r-lg)] overflow-hidden">
+                                            <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
+                                                <span className="font-bold text-[var(--text)] flex items-center gap-2"><User size={14}/> {name}</span>
+                                                <span className="font-bold text-[var(--brand)] num">R$ {data.total.toFixed(2)}</span>
                                             </div>
                                             <div className="p-2 space-y-1">
                                                 {data.items.map((it: any) => (
-                                                    <div key={it.id} className="flex justify-between items-center text-xs text-gray-600 px-2 py-1">
+                                                    <div key={it.id} className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1">
                                                         <div className="flex items-center gap-1.5">
                                                             {getItemStatusBadge(it.status)}
                                                             <span>{it.quantity}x {it.product?.name}</span>
                                                         </div>
-                                                        <span>{(it.price_at_time * it.quantity).toFixed(2)}</span>
+                                                        <span className="num">{(it.price_at_time * it.quantity).toFixed(2)}</span>
                                                     </div>
                                                 ))}
                                                 {isServiceFeeEnabled && (
-                                                    <div className="flex justify-between items-center text-xs text-gray-500 px-2 py-1 border-t border-gray-100 mt-1 pt-1">
+                                                    <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
                                                         <span>Taxa de Serviço (10%)</span>
-                                                        <span>{data.serviceFee.toFixed(2)}</span>
+                                                        <span className="num">{data.serviceFee.toFixed(2)}</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     ))}
-                                    {items.length === 0 && <p className="text-center text-gray-400">Nenhum pedido realizado.</p>}
+                                    {items.length === 0 && <p className="text-center text-[var(--text-muted)]">Nenhum pedido realizado.</p>}
                                 </div>
                             )}
 
                             {/* TAB 3: CALCULATOR */}
                             {tab === 'calculator' && (
                                 <div className="space-y-2 animate-fade-in pt-2">
-                                    <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-700 mb-2">
+                                    <div className="bg-[var(--info)]/8 p-3 rounded-[var(--r-md)] text-xs text-[var(--info)] mb-2">
                                         Selecione os itens que você vai pagar para calcular seu subtotal.
                                     </div>
                                     {items.map(item => {
@@ -891,29 +894,29 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                         const selectedQty = selectedItems[item.id] || 0;
 
                                         return (
-                                            <div key={item.id} onClick={() => toggleSelection(item.id, item.quantity)} className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'border-primary bg-primary/5' : 'border-gray-100 bg-white'}`}>
-                                                <div className={`text-primary ${isSelected ? 'opacity-100' : 'opacity-30'}`}>
+                                            <div key={item.id} onClick={() => toggleSelection(item.id, item.quantity)} className={`flex items-center gap-3 p-3 rounded-[var(--r-lg)] border transition-all cursor-pointer u-motion ${isSelected ? 'border-[var(--brand)] bg-[var(--brand)]/5' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+                                                <div className={`text-[var(--brand)] ${isSelected ? 'opacity-100' : 'opacity-30'}`}>
                                                     {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start">
-                                                        <span className={`text-sm font-bold ${isSelected ? 'text-primary' : 'text-gray-600'}`}>
+                                                        <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
                                                             {item.product?.name}
                                                         </span>
-                                                        <span className="text-sm font-medium">R$ {item.price_at_time.toFixed(2)}</span>
+                                                        <span className="text-sm font-medium num">R$ {item.price_at_time.toFixed(2)}</span>
                                                     </div>
 
                                                     {isSelected && item.quantity > 1 && (
                                                         <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
-                                                            <span className="text-xs text-gray-500">Qtd:</span>
-                                                            <button onClick={() => updateSelectionQty(item.id, -1, item.quantity)} className="w-6 h-6 bg-white border rounded flex items-center justify-center text-primary"><Minus size={12}/></button>
+                                                            <span className="text-xs text-[var(--text-muted)]">Qtd:</span>
+                                                            <button onClick={() => updateSelectionQty(item.id, -1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)]"><Minus size={12}/></button>
                                                             <span className="text-sm font-bold w-4 text-center">{selectedQty}</span>
-                                                            <button onClick={() => updateSelectionQty(item.id, 1, item.quantity)} className="w-6 h-6 bg-white border rounded flex items-center justify-center text-primary"><Plus size={12}/></button>
-                                                            <span className="text-xs text-gray-400 ml-1">/ {item.quantity}</span>
+                                                            <button onClick={() => updateSelectionQty(item.id, 1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)]"><Plus size={12}/></button>
+                                                            <span className="text-xs text-[var(--text-muted)] ml-1">/ {item.quantity}</span>
                                                         </div>
                                                     )}
                                                     {!isSelected && item.quantity > 1 && (
-                                                        <span className="text-xs text-gray-400">Quantidade: {item.quantity}</span>
+                                                        <span className="text-xs text-[var(--text-muted)]">Quantidade: {item.quantity}</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -924,15 +927,15 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                         </div>
 
                         {/* FOOTER ACTIONS */}
-                        <div className="pt-2 border-t border-gray-100 space-y-3">
+                        <div className="pt-2 border-t border-[var(--border)] space-y-3">
                             {tab === 'calculator' ? (
-                                <div className="flex flex-col bg-slate-900 text-white p-4 rounded-xl">
+                                <div className="flex flex-col bg-[var(--ink)] text-white p-4 rounded-[var(--r-lg)]">
                                     <div className="flex justify-between items-center">
                                         <span className="font-bold">Total Selecionado</span>
-                                        <span className="font-black text-xl">R$ {calculatorTotal.toFixed(2)}</span>
+                                        <span className="font-black text-xl num">R$ {calculatorTotal.toFixed(2)}</span>
                                     </div>
                                     {isServiceFeeEnabled && (
-                                        <div className="text-xs text-slate-400 mt-1 text-right">
+                                        <div className="text-xs text-white/50 mt-1 text-right">
                                             Inclui R$ {calculatorServiceFee.toFixed(2)} de taxa de serviço
                                         </div>
                                     )}
@@ -940,7 +943,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                             ) : (
                                 !isWaitingBill && (
                                     <Button
-                                        className="w-full bg-slate-800 hover:bg-black text-white gap-2"
+                                        className="w-full gap-2"
                                         onClick={() => setShowCloseConfirmation(true)}
                                     >
                                         <Receipt size={18} /> Pedir Conta (Bloquear Mesa)
@@ -949,7 +952,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                             )}
 
                             {isWaitingBill && (
-                                <div className="bg-orange-100 text-orange-800 p-3 rounded-lg text-center font-bold text-sm flex items-center justify-center gap-2">
+                                <div className="bg-[var(--warn)]/10 text-[var(--warn)] p-3 rounded-[var(--r-md)] text-center font-bold text-sm flex items-center justify-center gap-2">
                                     <Clock size={16}/> Conta Solicitada. Aguarde o garçom.
                                 </div>
                             )}
@@ -957,7 +960,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                             <div className="grid grid-cols-2 gap-3">
                                 <Button
                                     variant="secondary"
-                                    className={`gap-2 ${waiterRequested ? 'text-green-600 bg-green-50 border border-green-200' : ''}`}
+                                    className={`gap-2 ${waiterRequested ? 'text-[var(--ok)] bg-[var(--ok)]/8 border border-[var(--ok)]/20' : ''}`}
                                     onClick={handleCallWaiter}
                                     disabled={waiterRequested}
                                 >
@@ -1203,7 +1206,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return prods;
     }, [products, activeCategory, searchTerm, sortBy]);
 
-    if (!currentStore) return <div className="flex items-center justify-center h-screen bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div></div>;
+    if (!currentStore) return <div className="flex items-center justify-center h-screen bg-[var(--bg)]"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[var(--brand)]"></div></div>;
 
     if (!hasAccess) return <LoginScreen onLogin={handleLogin} storeSlug={slug || ''} store={currentStore} />;
 
@@ -1215,67 +1218,68 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const isWaitingBill = currentTable?.status === TableStatus.WAITING_BILL;
 
     return (
-        <div className="bg-gray-50 min-h-screen pb-32">
+        <div className="bg-[var(--bg)] min-h-screen pb-32">
             {/* Header */}
-            <header className="sticky top-0 bg-white/95 backdrop-blur-sm shadow-sm z-30 px-4 py-3 flex items-center justify-between border-b border-gray-100">
-                <div className="flex flex-col">
-                    <h1 className="font-bold text-primary text-lg leading-tight">{currentStore.name}</h1>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-                        <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded-full">
-                            <User size={10} /> {clientName} {isHost ? '(Host)' : '(Convidado)'}
+            <header className="sticky top-0 bg-[var(--surface)]/95 backdrop-blur-sm z-30 px-4 py-3 flex items-center justify-between border-b border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
+                <div className="flex flex-col min-w-0">
+                    <h1 className="font-semibold text-[var(--text)] text-[16px] leading-tight truncate">{currentStore.name}</h1>
+                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] mt-0.5 flex-wrap">
+                        <span className="flex items-center gap-1 bg-[var(--surface-2)] px-2 py-0.5 rounded-full border border-[var(--border)]">
+                            <User size={9} /> {clientName} {isHost ? '(Host)' : ''}
                         </span>
                         {currentTable ? (
-                            <span className="font-medium">• Mesa {currentTable.number}</span>
+                            <span className="font-medium">Mesa {currentTable.number}</span>
                         ) : (
-                            <span className="font-medium text-orange-600 bg-orange-100 px-2 rounded-full">• Balcão</span>
+                            <span className="font-medium text-[var(--warn)] bg-[var(--warn)]/10 px-2 rounded-full">Balcão</span>
                         )}
 
-                        {/* PIN DISPLAY FOR HOST ONLY */}
                         {isHost && currentTable && currentTable.pin && (
-                            <div className="flex items-center gap-1 ml-1 bg-yellow-50 px-2 py-0.5 rounded-full border border-yellow-100 cursor-pointer" onClick={() => setShowPin(!showPin)}>
-                                <span className="font-mono font-bold text-yellow-700 tracking-wider">
-                                    {showPin ? currentTable.pin : '****'}
+                            <div className="flex items-center gap-1 bg-[var(--warn)]/8 px-2 py-0.5 rounded-full border border-[var(--warn)]/20 cursor-pointer" onClick={() => setShowPin(!showPin)}>
+                                <span className="num font-semibold text-[var(--warn)] tracking-wider">
+                                    {showPin ? currentTable.pin : '••••'}
                                 </span>
-                                {showPin ? <EyeOff size={10} className="text-yellow-600"/> : <Eye size={10} className="text-yellow-600"/>}
+                                {showPin ? <EyeOff size={9} className="text-[var(--warn)]"/> : <Eye size={9} className="text-[var(--warn)]"/>}
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0 ml-2">
                     {currentTable && (
                         <Button
-                            variant="primary"
-                            className={`px-4 py-1.5 text-xs h-auto font-bold rounded-full shadow-sm transition-all ${
+                            size="sm"
+                            className={`rounded-full text-[12px] ${
                                 isWaitingBill
-                                    ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/25'
-                                    : 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/25'
+                                    ? 'bg-[var(--warn)] hover:opacity-90 text-white'
+                                    : 'bg-[var(--ok)] hover:opacity-90 text-white'
                             }`}
                             onClick={() => setShowBill(true)}
                         >
-                            {isWaitingBill ? <><Clock size={12} className="mr-1"/> Conta Pedida</> : <><Receipt size={14} className="mr-1.5"/> Pagar Conta</>}
+                            {isWaitingBill ? <><Clock size={11} /> Conta</> : <><Receipt size={11}/> Conta</>}
                         </Button>
                     )}
-                    <button onClick={() => handleLogout(false)} className="p-2 text-gray-400 hover:text-red-500">
-                        <LogOut size={16} />
+                    <button onClick={() => handleLogout(false)} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion">
+                        <LogOut size={15} />
                     </button>
                 </div>
             </header>
 
             {/* Waiting Bill Banner */}
             {isWaitingBill && (
-                <div className="bg-orange-600 text-white px-4 py-2 text-center text-sm font-bold shadow-md sticky top-[60px] z-30 flex items-center justify-center gap-2">
-                    <Lock size={16}/> Conta Solicitada. Novos pedidos bloqueados.
+                <div className="bg-[var(--warn)] text-white px-4 py-2 text-center text-[13px] font-medium sticky top-[60px] z-30 flex items-center justify-center gap-2">
+                    <Lock size={13}/> Conta Solicitada. Novos pedidos bloqueados.
                 </div>
             )}
 
             {/* Category Nav */}
-            <div className={`sticky ${isWaitingBill ? 'top-[96px]' : 'top-[60px]'} bg-white z-20 border-b border-gray-100 overflow-x-auto flex gap-3 p-3 no-scrollbar shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05)]`}>
+            <div className={`sticky ${isWaitingBill ? 'top-[96px]' : 'top-[60px]'} bg-[var(--surface)] z-20 border-b border-[var(--border)] overflow-x-auto flex gap-2 px-4 py-3 no-scrollbar`}>
                 {categories.map(cat => (
                     <button
                         key={cat.id}
                         onClick={() => setActiveCategory(cat.id)}
-                        className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-bold transition-all transform active:scale-95 ${
-                            activeCategory === cat.id ? 'bg-primary text-white shadow-md shadow-primary/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-medium u-motion u-press-sm ${
+                            activeCategory === cat.id
+                                ? 'bg-[var(--brand)] text-white'
+                                : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)]'
                         }`}
                     >
                         {cat.name}
@@ -1284,13 +1288,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
 
             {/* Search and Sort */}
-            <div className={`p-4 bg-white border-b border-gray-100 sticky ${isWaitingBill ? 'top-[150px]' : 'top-[114px]'} z-10`}>
+            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-[150px]' : 'top-[114px]'} z-10`}>
                 <div className="flex gap-2 mb-2">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+                        <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
                         <Input
                             placeholder="Buscar no cardápio..."
-                            className="pl-10 bg-gray-50 border-gray-200 focus:bg-white h-11"
+                            className="pl-10 bg-[var(--surface-2)] border-[var(--border)] focus:bg-[var(--surface)] h-11"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
@@ -1299,75 +1303,86 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <div className="flex gap-1">
                         <button
                             onClick={() => setSortBy(sortBy === 'price_asc' ? 'default' : 'price_asc')}
-                            className={`p-3 rounded-lg border transition-colors ${sortBy === 'price_asc' ? 'bg-primary text-white border-primary' : 'bg-white border-gray-200 text-gray-500'}`}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion ${sortBy === 'price_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Preço Menor"
                         >
-                            <ArrowDownWideNarrow size={18} />
+                            <ArrowDownWideNarrow size={16} />
                         </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_desc' ? 'default' : 'price_desc')}
-                            className={`p-3 rounded-lg border transition-colors ${sortBy === 'price_desc' ? 'bg-primary text-white border-primary' : 'bg-white border-gray-200 text-gray-500'}`}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion ${sortBy === 'price_desc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Preço Maior"
                         >
-                             <ArrowUpNarrowWide size={18} />
+                             <ArrowUpNarrowWide size={16} />
                         </button>
                         <button
                              onClick={() => setSortBy(sortBy === 'name_asc' ? 'default' : 'name_asc')}
-                             className={`p-3 rounded-lg border transition-colors ${sortBy === 'name_asc' ? 'bg-primary text-white border-primary' : 'bg-white border-gray-200 text-gray-500'}`}
+                             className={`p-2 rounded-[var(--r-md)] border u-motion ${sortBy === 'name_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                              title="Nome A-Z"
                         >
-                             <ArrowDownAZ size={18} />
+                             <ArrowDownAZ size={16} />
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Menu Grid */}
-            <div className={`p-4 grid gap-4 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+            <div className={`p-4 grid gap-3 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                 {filteredProducts.map(product => (
-                    <Card key={product.id} onClick={() => !isWaitingBill && setSelectedProduct(product)} className="flex gap-4 p-3 active:scale-[0.99] transition-transform">
+                    <div
+                        key={product.id}
+                        onClick={() => !isWaitingBill && setSelectedProduct(product)}
+                        className="flex gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-md)] p-3 cursor-pointer u-card"
+                        style={{boxShadow:'var(--shadow-sm)'}}
+                    >
                         {product.image_url ? (
-                             <img src={product.image_url} alt={product.name} className="w-28 h-28 object-cover rounded-lg bg-gray-200 flex-shrink-0" />
+                             <img src={product.image_url} alt={product.name} className="w-20 h-20 object-cover rounded-[var(--r-sm)] bg-[var(--surface-2)] flex-shrink-0" />
                         ) : (
-                             <div className="w-28 h-28 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300 flex-shrink-0">Sem Foto</div>
+                             <div className="w-20 h-20 bg-[var(--brand-soft)] rounded-[var(--r-sm)] flex items-center justify-center flex-shrink-0">
+                                 <UtensilsCrossed size={22} className="text-[var(--brand)]/40" />
+                             </div>
                         )}
-                        <div className="flex-1 flex flex-col justify-between py-1">
+                        <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
                             <div>
                                 <div className="flex justify-between items-start gap-2">
-                                    <h3 className="font-bold text-slate-800 leading-tight">{product.name}</h3>
-                                    <span className="font-bold text-primary whitespace-nowrap">R$ {product.price.toFixed(2)}</span>
+                                    <h3 className="font-medium text-[var(--text)] leading-snug text-[14px]">{product.name}</h3>
+                                    <span className="font-semibold text-[var(--brand)] whitespace-nowrap num text-[14px] flex-shrink-0">R$ {product.price.toFixed(2)}</span>
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
+                                {product.description && (
+                                    <p className="text-[12px] text-[var(--text-muted)] mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
+                                )}
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-2 font-medium">
-                                <Clock size={12} /> {product.prep_time_minutes} min
-                            </div>
+                            {product.prep_time_minutes && (
+                                <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] mt-1.5">
+                                    <Clock size={11} /> {product.prep_time_minutes} min
+                                </div>
+                            )}
                         </div>
-                    </Card>
+                    </div>
                 ))}
                 {filteredProducts.length === 0 && (
-                    <div className="text-center py-10 text-gray-400">Nenhum produto encontrado.</div>
+                    <div className="text-center py-12 text-[var(--text-muted)] text-sm u-fade-in">Nenhum produto encontrado.</div>
                 )}
             </div>
 
-            {/* Floating Cart Button (Opens Modal) */}
+            {/* Floating Cart Button */}
             {cart.length > 0 && !isWaitingBill && (
-                <div className="fixed bottom-4 left-4 right-4 z-40 animate-slide-up">
-                    <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex flex-col gap-3">
-                        <div className="flex justify-between items-center px-1">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-primary p-2 rounded-lg text-white">
-                                    <ShoppingBag size={20} />
+                <div className="fixed bottom-4 left-4 right-4 z-40 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
+                    <div className="bg-[var(--ink)] text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3" style={{boxShadow:'0 8px 30px rgba(0,0,0,0.25)'}}>
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2.5">
+                                <div className="bg-white/10 p-1.5 rounded-[var(--r-sm)]">
+                                    <ShoppingBag size={16} />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-gray-300">Meu Pedido</span>
-                                    <span className="text-xs text-gray-400">{cart.reduce((a,b) => a + b.quantity, 0)} itens selecionados</span>
+                                    <span className="text-[13px] font-medium text-white/80">Meu Pedido</span>
+                                    <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} itens</span>
                                 </div>
                             </div>
-                            <span className="text-xl font-bold">R$ {cartTotal.toFixed(2)}</span>
+                            <span className="text-[18px] font-semibold num">R$ {cartTotal.toFixed(2)}</span>
                         </div>
                         <Button
-                            className="w-full font-bold text-lg bg-primary hover:bg-primary-light h-12 rounded-xl"
+                            className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white"
                             onClick={() => setIsCartOpen(true)}
                         >
                             Ver Sacola
@@ -1378,16 +1393,16 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
             {/* Locked State Footer */}
             {isWaitingBill && (
-                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900 text-white p-4 shadow-2xl animate-slide-up">
+                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--ink)] text-white p-4 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]" style={{boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'}}>
                     <div className="flex justify-between items-center max-w-lg mx-auto">
                         <div className="flex items-center gap-3">
-                            <Lock className="text-orange-500" size={24}/>
+                            <Lock className="text-[var(--warn)]" size={18}/>
                             <div>
-                                <p className="font-bold">Conta Solicitada</p>
-                                <p className="text-xs text-gray-400">Aguarde o garçom para finalizar.</p>
+                                <p className="font-medium text-sm">Conta Solicitada</p>
+                                <p className="text-[11px] text-white/50">Aguarde o garçom para finalizar.</p>
                             </div>
                         </div>
-                        <Button variant="secondary" className="text-sm py-2 px-4 h-auto" onClick={() => setShowBill(true)}>
+                        <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10" onClick={() => setShowBill(true)}>
                             Ver Detalhes
                         </Button>
                     </div>
