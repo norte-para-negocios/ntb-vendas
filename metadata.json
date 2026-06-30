@@ -1,7 +1,0 @@
-{
-  "name": "Cardápio Digital Pro",
-  "description": "Sistema completo de gestão de pedidos, cozinha e cardápio digital com suporte a Supabase e interface Mobile First.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}

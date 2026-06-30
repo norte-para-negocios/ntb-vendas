@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CartItem, Product, Store, Table } from '../types';
+'use client';
+
+import React, { createContext, useContext, useState } from 'react';
+import { CartItem, Product, Store, Table } from '@/types';
 
 interface AppContextType {
   cart: CartItem[];
@@ -26,42 +28,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isHost, setIsHost] = useState<boolean>(false);
 
   const addToCart = (product: Product, quantity: number, notes?: string) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id && item.notes === notes);
+    setCart((prev) => {
+      const existing = prev.find(
+        (item) => item.product.id === product.id && item.notes === notes,
+      );
       if (existing) {
-        // Se a nova quantidade for menor ou igual a zero (caso de decremento), remove o item
         if (existing.quantity + quantity <= 0) {
-            return prev.filter(item => !(item.product.id === product.id && item.notes === notes));
+          return prev.filter(
+            (item) => !(item.product.id === product.id && item.notes === notes),
+          );
         }
-
-        return prev.map(item => 
-          (item.product.id === product.id && item.notes === notes)
+        return prev.map((item) =>
+          item.product.id === product.id && item.notes === notes
             ? { ...item, quantity: item.quantity + quantity }
-            : item
+            : item,
         );
       }
-      // Se for item novo e quantidade positiva
-      if (quantity > 0) {
-          return [...prev, { product, quantity, notes }];
-      }
+      if (quantity > 0) return [...prev, { product, quantity, notes }];
       return prev;
     });
   };
 
   const removeFromCart = (product: Product, notes?: string) => {
-    setCart(prev => prev.filter(item => !(item.product.id === product.id && item.notes === notes)));
+    setCart((prev) =>
+      prev.filter((item) => !(item.product.id === product.id && item.notes === notes)),
+    );
   };
 
   const clearCart = () => setCart([]);
 
   return (
-    <AppContext.Provider value={{
-      cart, addToCart, removeFromCart, clearCart,
-      currentStore, setCurrentStore,
-      currentTable, setCurrentTable,
-      clientName, setClientName,
-      isHost, setIsHost
-    }}>
+    <AppContext.Provider
+      value={{
+        cart, addToCart, removeFromCart, clearCart,
+        currentStore, setCurrentStore,
+        currentTable, setCurrentTable,
+        clientName, setClientName,
+        isHost, setIsHost,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
