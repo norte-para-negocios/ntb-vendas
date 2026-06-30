@@ -7,6 +7,8 @@ import { fetchMenu, fetchStoreBySlug, createOrder, fetchTables, updateTableStatu
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
+import { toast } from '@/components/Toast';
+import { confirm } from '@/components/ConfirmDialog';
 
 // --- COMPONENTS ---
 
@@ -268,7 +270,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
     }, [store, storeSlug]);
 
     const handleEnter = async () => {
-        if (!name || name.length < 3) return alert('Por favor, digite seu nome (mínimo 3 letras)');
+        if (!name || name.length < 3) return toast.error('Por favor, digite seu nome (mínimo 3 letras)');
 
         // Counter Logic
         if (mode === 'counter') {
@@ -276,7 +278,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
         }
 
         // Table Logic
-        if (!tableId) return alert('Selecione onde você está sentado');
+        if (!tableId) return toast.error('Selecione onde você está sentado');
 
         setIsLoading(true);
         try {
@@ -286,7 +288,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
             const selected = freshTables.find(t => t.id === tableId);
 
             if (!selected) {
-                alert('Mesa não encontrada.');
+                toast.error('Mesa não encontrada.');
                 setIsLoading(false);
                 return;
             }
@@ -297,7 +299,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
 
             if (isPinRequired) {
                  if (selected.pin && selected.pin !== pin) {
-                     alert(isOccupied ? 'Mesa já ocupada! Peça o PIN ao anfitrião.' : 'PIN incorreto.');
+                     toast.error(isOccupied ? 'Mesa já ocupada! Peça o PIN ao anfitrião.' : 'PIN incorreto.');
                      setIsLoading(false);
                      return;
                  }
@@ -305,7 +307,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
 
             onLogin(name, tableId);
         } catch (error) {
-            alert('Erro ao tentar acessar a mesa. Tente novamente.');
+            toast.error('Erro ao tentar acessar a mesa. Tente novamente.');
         } finally {
             setIsLoading(false);
         }
@@ -619,7 +621,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             setWaiterRequested(true);
             setTimeout(() => setWaiterRequested(false), 5000);
         } catch (e: any) {
-            alert(e.message || "Erro ao chamar garçom.");
+            toast.error(e.message || "Erro ao chamar garçom.");
         }
     };
 
@@ -634,10 +636,10 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                 await cancelPendingTableItems(tableId);
             }
             await requestTableBill(tableId);
-            alert("Conta solicitada com sucesso! O garçom trará a conta em instantes.");
+            toast.success("Conta solicitada com sucesso! O garçom trará a conta em instantes.");
             onClose();
         } catch (e) {
-            alert("Erro ao solicitar conta.");
+            toast.error("Erro ao solicitar conta.");
             console.error(e);
         } finally {
             setIsClosing(false);
@@ -1031,9 +1033,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
                     // If session closed, force logout
                     if(newTable.status === TableStatus.AVAILABLE) {
-                         alert("A mesa foi fechada pelo restaurante. Obrigado!");
+                         toast.info("A mesa foi fechada pelo restaurante. Obrigado!", 3000);
                          localStorage.removeItem(`session_${slug}`);
-                         window.location.reload();
+                         setTimeout(() => window.location.reload(), 2500);
                     }
                 })
                 .subscribe();
@@ -1131,8 +1133,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }));
     };
 
-    const handleLogout = (force = false) => {
-        if(force || window.confirm("Deseja realmente sair? Se você for o anfitrião, a mesa continuará aberta.")) {
+    const handleLogout = async (force = false) => {
+        if(force || await confirm("Deseja realmente sair? Se você for o anfitrião, a mesa continuará aberta.")) {
             localStorage.removeItem(`session_${slug}`);
             setTrackedOrderId(null);
 
@@ -1170,12 +1172,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                      setTrackedOrderId(result.orderId);
                      setIsCounterConfirmOpen(false); // Close the counter alert
                  } else {
-                     alert('Pedido enviado para a cozinha!');
+                     toast.success('Pedido enviado para a cozinha!');
                  }
             }
         } catch (e: any) {
             console.error(e);
-            alert('Erro ao enviar pedido: ' + (e.message || 'Tente novamente.'));
+            toast.error('Erro ao enviar pedido: ' + (e.message || 'Tente novamente.'));
         } finally {
             setIsLoading(false);
         }

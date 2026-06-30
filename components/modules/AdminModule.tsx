@@ -5,6 +5,8 @@ import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, 
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo } from '@/lib/api';
 import { Store, StoreUser } from '@/types';
+import { toast } from '@/components/Toast';
+import { confirm } from '@/components/ConfirmDialog';
 
 // Admin Login Component
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
@@ -48,7 +50,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         setIsLoading(true);
         try {
             await updateAdminPassword(userId, newPass);
-            alert('Senha alterada com sucesso! Faça login novamente.');
+            toast.success('Senha alterada com sucesso! Faça login novamente.');
             setNeedsChange(false);
             setPassword('');
         } catch (e) {
@@ -224,27 +226,27 @@ export const AdminModule: React.FC = () => {
   };
 
   const handleDeleteStore = async (id: string, storeName: string) => {
-      if(window.confirm(`Tem certeza que deseja excluir a loja "${storeName}"? Todos os dados (pedidos, mesas, cardápio) serão perdidos.`)) {
+      if(await confirm({ message: `Tem certeza que deseja excluir a loja "${storeName}"? Todos os dados (pedidos, mesas, cardápio) serão perdidos.`, variant: 'danger', confirmLabel: 'Excluir' })) {
           setIsLoadingList(true);
           const result = await deleteStore(id);
           if (result.success) {
               await loadStores();
           } else {
-              alert('Erro ao excluir: ' + result.message);
+              toast.error('Erro ao excluir: ' + result.message);
           }
           setIsLoadingList(false);
       }
   };
 
   const handleDuplicateStore = async (id: string, storeName: string) => {
-      if(window.confirm(`Deseja duplicar a loja "${storeName}"? Isso criará uma nova loja com o mesmo cardápio e configurações.`)) {
+      if(await confirm(`Deseja duplicar a loja "${storeName}"? Isso criará uma nova loja com o mesmo cardápio e configurações.`)) {
           setIsLoadingList(true);
           const result = await duplicateStore(id);
           if (result.success) {
               await loadStores();
-              alert('Loja duplicada com sucesso!');
+              toast.success('Loja duplicada com sucesso!');
           } else {
-              alert('Erro ao duplicar: ' + result.message);
+              toast.error('Erro ao duplicar: ' + result.message);
           }
           setIsLoadingList(false);
       }
@@ -293,7 +295,7 @@ export const AdminModule: React.FC = () => {
           }
 
           if(result.success) {
-              alert(editingId ? 'Loja atualizada com sucesso!' : 'Loja criada com sucesso!');
+              toast.success(editingId ? 'Loja atualizada com sucesso!' : 'Loja criada com sucesso!');
               setIsModalOpen(false);
               resetForm();
               loadStores();
@@ -321,13 +323,13 @@ export const AdminModule: React.FC = () => {
   };
 
   const handleDeleteUser = async (user: StoreUser) => {
-      if(window.confirm(`Excluir o acesso de ${user.name}?`)) {
+      if(await confirm({ message: `Excluir o acesso de ${user.name}?`, variant: 'danger', confirmLabel: 'Excluir' })) {
           setIsLoadingList(true);
           const result = await deleteStoreUser(user.id);
           if(result.success) {
               loadUsers();
           } else {
-              alert('Erro ao excluir usuário: ' + result.message);
+              toast.error('Erro ao excluir usuário: ' + result.message);
           }
           setIsLoadingList(false);
       }
@@ -336,7 +338,7 @@ export const AdminModule: React.FC = () => {
   const handleResetUserPassword = async (user: StoreUser) => {
       const newPass = window.prompt(`Digite a nova senha provisória para ${user.name}:`);
       if (newPass) {
-          if (newPass.length < 4) return alert("A senha deve ter pelo menos 4 caracteres.");
+          if (newPass.length < 4) return toast.error("A senha deve ter pelo menos 4 caracteres.");
 
           setIsLoadingList(true);
           const result = await updateStoreUser(user.id, {
@@ -345,10 +347,10 @@ export const AdminModule: React.FC = () => {
           });
 
           if (result.success) {
-              alert(`Senha redefinida com sucesso! O usuário deverá trocá-la no próximo login.`);
+              toast.success(`Senha redefinida com sucesso! O usuário deverá trocá-la no próximo login.`);
               loadUsers();
           } else {
-              alert("Erro ao redefinir senha.");
+              toast.error("Erro ao redefinir senha.");
           }
           setIsLoadingList(false);
       }
@@ -379,7 +381,7 @@ export const AdminModule: React.FC = () => {
       }
 
       if(result.success) {
-          alert(editingUserId ? 'Usuário atualizado!' : 'Usuário criado com sucesso!');
+          toast.success(editingUserId ? 'Usuário atualizado!' : 'Usuário criado com sucesso!');
           setIsUserModalOpen(false);
           resetUserForm();
           loadUsers();
