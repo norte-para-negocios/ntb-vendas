@@ -473,7 +473,7 @@ export const AdminModule: React.FC = () => {
                         </div>
                     </div>
                     <div className="mt-auto pt-4 flex gap-2 border-t border-[var(--border)]">
-                        <a href={`#/c/${store.slug}`} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg border border-[var(--brand)]/20 transition-colors">
+                        <a href={`/c/${store.slug}`} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg border border-[var(--brand)]/20 transition-colors">
                             Ver Cardápio
                         </a>
                         <button
@@ -620,7 +620,7 @@ export const AdminModule: React.FC = () => {
                 <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-semibold text-[var(--text)]">Link de Acesso (Slug)</label>
                     <div className="flex items-center group">
-                        <span className="bg-[var(--surface-2)] border border-r-0 border-[var(--border)] rounded-l-lg px-3 py-2 text-sm text-[var(--text-muted)]">site.com/#/c/</span>
+                        <span className="bg-[var(--surface-2)] border border-r-0 border-[var(--border)] rounded-l-lg px-3 py-2 text-sm text-[var(--text-muted)]">site.com/c/</span>
                         <input className="w-full rounded-r-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[var(--brand)]/30 outline-none" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
                     </div>
                 </div>
