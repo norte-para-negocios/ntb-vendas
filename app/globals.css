@@ -218,6 +218,10 @@
   0% { transform: scale(1); opacity: 0.4; }
   70%, 100% { transform: scale(2.6); opacity: 0; }
 }
+@keyframes u-toast-out {
+  to { opacity: 0; transform: translateY(8px) scale(0.96); }
+}
+.u-toast-out { animation: u-toast-out var(--dur) var(--ease-out) forwards; }
 
 /* Animações legadas (usadas nos componentes existentes) */
 @keyframes fadeIn {
@@ -231,6 +235,49 @@
 @keyframes slideRight {
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
+}
+
+/* === Profundidade: telas de entrada (login/landing/404) === */
+.auth-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.auth-mesh {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% -10%, color-mix(in srgb, var(--brand) 35%, transparent), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 105% 110%, color-mix(in srgb, var(--err) 18%, transparent), transparent 60%);
+}
+.auth-orb {
+  position: absolute;
+  z-index: 0;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.45;
+  pointer-events: none;
+  animation: u-orb-float 14s var(--ease-in-out) infinite alternate;
+}
+.auth-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@keyframes u-orb-float {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(24px, -28px) scale(1.08); }
+}
+.auth-card {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 24px 60px -18px rgba(0,0,0,0.35), 0 0 0 1px var(--border);
 }
 
 /* Acessibilidade: respeita prefers-reduced-motion */

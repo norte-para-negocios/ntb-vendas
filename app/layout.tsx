@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AppProvider } from '@/context/AppContext';
+import { ToastViewport } from '@/components/Toast';
+import { ConfirmDialogRoot } from '@/components/ConfirmDialog';
 
 export const metadata: Metadata = {
   title: 'Cardápio Digital',
@@ -26,6 +28,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full antialiased">
         <AppProvider>{children}</AppProvider>
+        <ToastViewport />
+        <ConfirmDialogRoot />
       </body>
     </html>
   );
