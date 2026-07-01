@@ -12,6 +12,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/labels';
+import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 
 // --- COMPONENTS ---
 
@@ -429,7 +430,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 };
 
 // --- SUB-MODULE: KITCHEN ---
-const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
+const KitchenView: React.FC<{ storeId: string; storeName?: string }> = ({ storeId, storeName }) => {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
@@ -488,59 +489,21 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
   const printOrderTicket = (item: OrderItem) => {
       const { client, observation } = parseItemNote(item.notes || '');
       const orderType = item.order?.order_type === 'counter' ? 'BALCÃO' : 'MESA';
-      const identifier = item.order?.order_type === 'counter' 
-          ? (item.order?.customer_name || 'Balcão') 
+      const identifier = item.order?.order_type === 'counter'
+          ? (item.order?.customer_name || 'Balcão')
           : `MESA ${item.order?.tables?.number || '?'}`;
-      
-      const printWindow = window.open('', '_blank', 'width=300,height=400');
-      if (printWindow) {
-          printWindow.document.write(`
-              <html>
-                  <head>
-                      <title>Ticket Cozinha</title>
-                      <style>
-                          body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 48mm; margin: 0; padding: 0; font-size: 10px; color: #000; font-weight: bold; }
-                          .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 5px; }
-                          .title { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-                          .meta { font-size: 8px; margin-top: 1px; }
-                          .info { margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-                          .big-text { font-size: 12px; font-weight: bold; }
-                          .item { font-size: 12px; font-weight: bold; margin: 5px 0; line-height: 1.1; }
-                          .obs { font-weight: bold; margin-top: 2px; font-size: 10px; text-transform: uppercase; }
-                          .footer { border-top: 1px dashed #000; margin-top: 5px; padding-top: 2px; text-align: center; font-size: 8px; }
-                          @media print {
-                              @page { margin: 0; size: auto; }
-                              body { margin: 0; padding: 0; }
-                          }
-                      </style>
-                  </head>
-                  <body>
-                      <div class="header">
-                          <div class="title">COZINHA</div>
-                          <div class="meta">${new Date().toLocaleString()}</div>
-                      </div>
-                      <div class="info">
-                          <div class="big-text">${orderType}: ${identifier}</div>
-                          ${client ? `<div>Cliente: ${client}</div>` : ''}
-                      </div>
-                      <div class="item">
-                          ${item.quantity}x ${item.product?.name || 'Produto Indisponível'}
-                      </div>
-                      ${observation ? `<div class="obs">OBS: ${observation}</div>` : ''}
-                      <div class="footer">
-                          Pedido #${item.order_id.slice(0, 8)}
-                      </div>
-                      <script>
-                          setTimeout(() => {
-                              window.print();
-                              window.onafterprint = function() { window.close(); }
-                          }, 500);
-                      </script>
-                  </body>
-              </html>
-          `);
-          printWindow.document.close();
-      }
+
+      printKitchenTicket({
+          kind: 'COZINHA',
+          storeName,
+          orderType,
+          identifier,
+          client,
+          quantity: item.quantity,
+          productName: item.product?.name || 'Produto Indisponível',
+          observation,
+          orderIdShort: item.order_id.slice(0, 8),
+      });
   };
 
   return (
@@ -642,7 +605,7 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
 };
 
 // --- SUB-MODULE: BAR ---
-const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
+const BarView: React.FC<{ storeId: string; storeName?: string }> = ({ storeId, storeName }) => {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
@@ -701,59 +664,21 @@ const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
   const printOrderTicket = (item: OrderItem) => {
       const { client, observation } = parseItemNote(item.notes || '');
       const orderType = item.order?.order_type === 'counter' ? 'BALCÃO' : 'MESA';
-      const identifier = item.order?.order_type === 'counter' 
-          ? (item.order?.customer_name || 'Balcão') 
+      const identifier = item.order?.order_type === 'counter'
+          ? (item.order?.customer_name || 'Balcão')
           : `MESA ${item.order?.tables?.number || '?'}`;
-      
-      const printWindow = window.open('', '_blank', 'width=300,height=400');
-      if (printWindow) {
-          printWindow.document.write(`
-              <html>
-                  <head>
-                      <title>Ticket Bar</title>
-                      <style>
-                          body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 48mm; margin: 0; padding: 0; font-size: 10px; color: #000; font-weight: bold; }
-                          .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 5px; }
-                          .title { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-                          .meta { font-size: 8px; margin-top: 1px; }
-                          .info { margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-                          .big-text { font-size: 12px; font-weight: bold; }
-                          .item { font-size: 12px; font-weight: bold; margin: 5px 0; line-height: 1.1; }
-                          .obs { font-weight: bold; margin-top: 2px; font-size: 10px; text-transform: uppercase; }
-                          .footer { border-top: 1px dashed #000; margin-top: 5px; padding-top: 2px; text-align: center; font-size: 8px; }
-                          @media print {
-                              @page { margin: 0; size: auto; }
-                              body { margin: 0; padding: 0; }
-                          }
-                      </style>
-                  </head>
-                  <body>
-                      <div class="header">
-                          <div class="title">BAR</div>
-                          <div class="meta">${new Date().toLocaleString()}</div>
-                      </div>
-                      <div class="info">
-                          <div class="big-text">${orderType}: ${identifier}</div>
-                          ${client ? `<div>Cliente: ${client}</div>` : ''}
-                      </div>
-                      <div class="item">
-                          ${item.quantity}x ${item.product?.name || 'Produto Indisponível'}
-                      </div>
-                      ${observation ? `<div class="obs">OBS: ${observation}</div>` : ''}
-                      <div class="footer">
-                          Pedido #${item.order_id.slice(0, 8)}
-                      </div>
-                      <script>
-                          setTimeout(() => {
-                              window.print();
-                              window.onafterprint = function() { window.close(); }
-                          }, 500);
-                      </script>
-                  </body>
-              </html>
-          `);
-          printWindow.document.close();
-      }
+
+      printKitchenTicket({
+          kind: 'BAR',
+          storeName,
+          orderType,
+          identifier,
+          client,
+          quantity: item.quantity,
+          productName: item.product?.name || 'Produto Indisponível',
+          observation,
+          orderIdShort: item.order_id.slice(0, 8),
+      });
   };
 
   return (
@@ -1213,96 +1138,19 @@ NOTIFY pgrst, 'reload schema';`;
         const table = tables.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
 
-        const printWindow = window.open('', '_blank', 'width=250,height=600');
-        if (printWindow) {
-            printWindow.document.write(`
-                <html>
-                    <head>
-                        <title>Comanda Mesa ${table.number}</title>
-                        <style>
-                            body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 48mm; margin: 0; padding: 0; font-size: 10px; color: #000; font-weight: bold; }
-                            .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 5px; }
-                            .title { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-                            .meta { font-size: 8px; margin-top: 1px; }
-                            .info { margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 5px; text-align: center; }
-                            .big-text { font-size: 12px; font-weight: bold; }
-                            .items-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 2px; }
-                            .items-table th { border-bottom: 1px dashed #000; padding-bottom: 3px; text-align: left; }
-                            .items-table th.right { text-align: right; }
-                            .items-table td { padding: 3px 0; vertical-align: top; }
-                            .items-table td.right { text-align: right; white-space: nowrap; padding-left: 5px; }
-                            .summary-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-                            .summary-table td { padding: 2px 0; }
-                            .summary-table td.right { text-align: right; white-space: nowrap; padding-left: 5px; }
-                            .total { border-top: 1px dashed #000; margin-top: 5px; padding-top: 4px; font-size: 12px; font-weight: bold; text-align: right; }
-                            .footer { border-top: 1px dashed #000; margin-top: 8px; padding-top: 4px; text-align: center; font-size: 10px; white-space: nowrap; overflow: hidden; }
-                            @media print {
-                                @page { margin: 0; size: auto; }
-                                body { margin: 0; padding: 0; }
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="header">
-                            <div class="title">${store.name}</div>
-                            <div class="meta">CNPJ: ${store.cnpj}</div>
-                            <div class="meta">${new Date().toLocaleString()}</div>
-                        </div>
-                        <div class="info">
-                            <div class="big-text">MESA ${table.number}</div>
-                        </div>
-                        
-                        <table class="items-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 15%">QTD</th>
-                                    <th style="width: 55%">ITEM</th>
-                                    <th class="right" style="width: 30%">R$</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${summary.allItems.map(item => `
-                                    <tr>
-                                        <td>${item.quantity}x</td>
-                                        <td style="padding-right: 4px;">${item.product?.name || 'Produto Indisponível'}</td>
-                                        <td class="right">${(item.price_at_time * item.quantity).toFixed(2)}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                        
-                        ${summary.isServiceFeeEnabled ? `
-                            <table class="summary-table">
-                                <tr>
-                                    <td>Subtotal</td>
-                                    <td class="right">R$ ${summary.subtotal.toFixed(2)}</td>
-                                </tr>
-                                <tr>
-                                    <td>Taxa de Serviço (10%)</td>
-                                    <td class="right">R$ ${summary.serviceFee.toFixed(2)}</td>
-                                </tr>
-                            </table>
-                        ` : ''}
-
-                        <div class="total">
-                            TOTAL: R$ ${summary.total.toFixed(2)}
-                        </div>
-                        
-                        <div class="footer">
-                            norteparanegocios.com.br
-                        </div>
-                        
-                        <script>
-                            setTimeout(() => {
-                                window.print();
-                                window.onafterprint = function() { window.close(); }
-                            }, 500);
-                        </script>
-                    </body>
-                </html>
-            `);
-            printWindow.document.close();
-        }
+        printBillReceipt({
+            storeName: store.name,
+            cnpj: store.cnpj,
+            label: `MESA ${table.number}`,
+            items: summary.allItems.map(item => ({
+                quantity: item.quantity,
+                name: item.product?.name || 'Produto Indisponível',
+                total: item.price_at_time * item.quantity,
+            })),
+            subtotal: summary.subtotal,
+            serviceFee: summary.isServiceFeeEnabled ? summary.serviceFee : undefined,
+            total: summary.total,
+        });
     };
 
     const handleMoveTable = async () => {
@@ -2190,7 +2038,8 @@ NOTIFY pgrst, 'reload schema';`;
 
 // --- SUB-MODULE: COUNTER (BALCÃO) ---
 
-const CounterView: React.FC<{ storeId: string }> = ({ storeId }) => {
+const CounterView: React.FC<{ store: Store }> = ({ store }) => {
+    const storeId = store.id;
     const [orders, setOrders] = useState<Order[]>([]);
     
     const load = async () => {
@@ -2241,6 +2090,25 @@ const CounterView: React.FC<{ storeId: string }> = ({ storeId }) => {
         }
     };
 
+    const printCounterReceipt = (order: Order) => {
+        const items = order.order_items || [];
+        if (items.length === 0) return;
+        const total = items.reduce((a, b) => a + (b.quantity * b.price_at_time), 0);
+
+        printBillReceipt({
+            storeName: store.name,
+            cnpj: store.cnpj,
+            label: `BALCÃO - ${order.customer_name || 'Cliente'}`,
+            items: items.map(item => ({
+                quantity: item.quantity,
+                name: item.product?.name || 'Produto Indisponível',
+                total: item.price_at_time * item.quantity,
+            })),
+            subtotal: total,
+            total,
+        });
+    };
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {orders.map(order => {
@@ -2271,12 +2139,19 @@ const CounterView: React.FC<{ storeId: string }> = ({ storeId }) => {
                              ))}
                          </div>
 
-                         <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center">
+                         <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
                              <div>
                                  <p className="text-xs text-[var(--text-muted)] font-bold uppercase">Total</p>
                                  <p className="text-xl font-black text-[var(--text)] num">R$ {total.toFixed(2)}</p>
                              </div>
-                             <Button onClick={() => handleClose(order.id)} variant="primary" className="h-10 text-sm">
+                             <button
+                                 onClick={() => printCounterReceipt(order)}
+                                 className="p-2.5 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] border border-[var(--border)] u-motion u-press shrink-0"
+                                 title="Imprimir Comprovante"
+                             >
+                                 <Printer size={18} />
+                             </button>
+                             <Button onClick={() => handleClose(order.id)} variant="primary" className="h-10 text-sm shrink-0">
                                  <CheckCircle size={16} className="mr-1"/> Entregar
                              </Button>
                          </div>
@@ -2893,7 +2768,8 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
 // --- SUB-MODULE: ADMIN (SALES HISTORY) ---
 
-const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
+const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
+    const storeId = store.id;
     const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
@@ -2916,6 +2792,10 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [sortColumn, setSortColumn] = useState<'date' | 'type' | 'customer' | 'items' | 'total'>('date');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [isClearing, setIsClearing] = useState(false);
+
+    // Paginação da tabela de vendas
+    const SALES_PAGE_SIZE = 25;
+    const [salesPage, setSalesPage] = useState(0);
 
     const loadSales = async () => {
         setIsLoading(true);
@@ -3039,6 +2919,38 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
         return acc + orderTotal;
     }, 0);
 
+    // Volta pra primeira página sempre que filtro ou ordenação mudam, senão o usuário
+    // pode ficar preso numa página que não existe mais no novo resultado filtrado.
+    useEffect(() => {
+        setSalesPage(0);
+    }, [filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, sortColumn, sortDirection]);
+
+    const salesTotalPages = Math.max(1, Math.ceil(filteredAndSortedSales.length / SALES_PAGE_SIZE));
+    const pagedSales = filteredAndSortedSales.slice(salesPage * SALES_PAGE_SIZE, (salesPage + 1) * SALES_PAGE_SIZE);
+
+    const periodLabel = useMemo(() => {
+        if (filterMonth) return `Mês: ${filterMonth}`;
+        if (filterStartDate && filterEndDate) return `De ${new Date(filterStartDate).toLocaleDateString()} até ${new Date(filterEndDate).toLocaleDateString()}`;
+        if (filterStartDate) return `A partir de ${new Date(filterStartDate).toLocaleDateString()}`;
+        if (filterEndDate) return `Até ${new Date(filterEndDate).toLocaleDateString()}`;
+        return 'Todo o histórico';
+    }, [filterMonth, filterStartDate, filterEndDate]);
+
+    const handlePrintReport = () => {
+        printSalesReport({
+            storeName: store.name,
+            periodLabel,
+            rows: filteredAndSortedSales.map(order => ({
+                date: `${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+                type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
+                customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
+                items: order.order_items?.length || 0,
+                total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
+            })),
+            totalRevenue,
+        });
+    };
+
     const SortIcon = ({ column }: { column: string }) => {
         if (sortColumn !== column) return <ArrowRightLeft size={14} className="inline-block ml-1 text-[var(--border)] opacity-0 group-hover:opacity-100 rotate-90" />;
         return <ArrowRightLeft size={14} className={`inline-block ml-1 text-[var(--brand)] rotate-90 ${sortDirection === 'desc' ? 'transform scale-y-[-1]' : ''}`} />;
@@ -3128,13 +3040,18 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <div className="flex justify-between items-center">
                                 <h3 className="font-bold text-lg text-[var(--text)]">Histórico de Vendas</h3>
                                 <div className="flex items-center gap-2">
-                                    <Button variant="outline" className="text-[var(--err)] border-[var(--err)]/20 hover:bg-[var(--err)]/5" onClick={handleClearSales} isLoading={isClearing}>
-                                        <Trash2 size={16} className="mr-2" />
-                                        Zerar Vendas
-                                    </Button>
                                     <Button variant="secondary" onClick={() => setShowFilters(!showFilters)}>
                                         <Search size={16} className="mr-2" />
                                         Filtros
+                                    </Button>
+                                    <Button variant="secondary" onClick={handlePrintReport} disabled={filteredAndSortedSales.length === 0}>
+                                        <Printer size={16} className="mr-2" />
+                                        Imprimir Relatório
+                                    </Button>
+                                    <div className="w-px h-6 bg-[var(--border)] mx-1" />
+                                    <Button variant="outline" className="text-[var(--err)] border-[var(--err)]/20 hover:bg-[var(--err)]/5" onClick={handleClearSales} isLoading={isClearing}>
+                                        <Trash2 size={16} className="mr-2" />
+                                        Zerar Vendas
                                     </Button>
                                     <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</Badge>
                                 </div>
@@ -3235,7 +3152,7 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredAndSortedSales.map((order, orderIdx) => {
+                                        pagedSales.map((order, orderIdx) => {
                                             const orderTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
                                             return (
                                                 <tr
@@ -3257,8 +3174,19 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                                     <td className="px-4 py-3 font-medium text-[var(--text)]">
                                                         {order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão')}
                                                     </td>
-                                                    <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs truncate" title={order.order_items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}>
-                                                        {order.order_items?.length || 0} {(order.order_items?.length || 0) === 1 ? 'item' : 'itens'}
+                                                    <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs">
+                                                        <div className="group/items relative inline-block">
+                                                            <span className="truncate">{order.order_items?.length || 0} {(order.order_items?.length || 0) === 1 ? 'item' : 'itens'}</span>
+                                                            {(order.order_items?.length || 0) > 0 && (
+                                                                <div className="hidden group-hover/items:block absolute z-20 left-0 top-full mt-1 w-56 max-h-48 overflow-y-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-2 text-xs text-[var(--text)] whitespace-normal">
+                                                                    {order.order_items?.map((i, idx) => (
+                                                                        <div key={idx} className="flex justify-between gap-2 py-0.5">
+                                                                            <span>{i.quantity}x {i.product?.name || 'Produto excluído'}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-bold text-[var(--text)]">
                                                         R$ {orderTotal.toFixed(2)}
@@ -3270,6 +3198,21 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 </tbody>
                             </table>
                         </div>
+                        {filteredAndSortedSales.length > 0 && (
+                            <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border)] bg-[var(--surface-2)]">
+                                <span className="text-xs text-[var(--text-muted)]">
+                                    Página {salesPage + 1} de {salesTotalPages}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    <Button variant="secondary" className="h-8 px-3 text-xs" disabled={salesPage === 0} onClick={() => setSalesPage(p => Math.max(0, p - 1))}>
+                                        <ChevronLeft size={14} className="mr-1" /> Anterior
+                                    </Button>
+                                    <Button variant="secondary" className="h-8 px-3 text-xs" disabled={salesPage >= salesTotalPages - 1} onClick={() => setSalesPage(p => Math.min(salesTotalPages - 1, p + 1))}>
+                                        Próxima <ChevronRight size={14} className="ml-1" />
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </Card>
                 </div>
             )}
@@ -3398,11 +3341,11 @@ export const StoreModule: React.FC = () => {
             user={user}
         >
             {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} />}
-            {tab === 'counter' && canAccess('counter') && <CounterView storeId={user.store.id} />}
-            {tab === 'kitchen' && canAccess('kitchen') && <KitchenView storeId={user.store.id} />}
-            {tab === 'bar' && canAccess('bar') && <BarView storeId={user.store.id} />}
+            {tab === 'counter' && canAccess('counter') && <CounterView store={user.store} />}
+            {tab === 'kitchen' && canAccess('kitchen') && <KitchenView storeId={user.store.id} storeName={user.store.name} />}
+            {tab === 'bar' && canAccess('bar') && <BarView storeId={user.store.id} storeName={user.store.name} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
-            {tab === 'admin' && canAccess('admin') && <StoreAdminView storeId={user.store.id} />}
+            {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} />}
             
             {!canAccess(tab) && (
                 <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">
