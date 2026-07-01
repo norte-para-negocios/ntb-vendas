@@ -24,9 +24,14 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     const monthlySales = sales.filter(s => isSameMonth(new Date(s.created_at), now));
 
     const calcStats = (orders: Order[]) => {
-        const total = orders.reduce((sum, o) => sum + (o.total || o.order_items?.reduce((s, i) => s + (i.price_at_time * i.quantity), 0) || 0), 0);
+        // Acumula em centavos inteiros para evitar erro de arredondamento de ponto flutuante somando muitos pedidos.
+        const totalCents = orders.reduce((sum, o) => {
+            const orderTotal = o.total || o.order_items?.reduce((s, i) => s + (i.price_at_time * i.quantity), 0) || 0;
+            return sum + Math.round(orderTotal * 100);
+        }, 0);
+        const total = totalCents / 100;
         const count = orders.length;
-        const ticket = count > 0 ? total / count : 0;
+        const ticket = count > 0 ? Math.round(totalCents / count) / 100 : 0;
         const tableOrders = orders.filter(o => o.order_type === 'table').length;
         return { total, count, ticket, tableOrders };
     };
@@ -47,13 +52,18 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     const periodStats = calcStats(periodSales);
 
     const salesByDay = useMemo(() => {
-        const map = new Map<string, number>();
+        // Agrupa por chave yyyy-MM-dd (nao so dd/MM) para nao colidir datas de anos diferentes.
+        const map = new Map<string, { label: string; total: number }>();
         periodSales.forEach(o => {
-            const dateStr = format(new Date(o.created_at), 'dd/MM');
+            const d = new Date(o.created_at);
+            const key = format(d, 'yyyy-MM-dd');
             const total = o.total || o.order_items?.reduce((s, i) => s + (i.price_at_time * i.quantity), 0) || 0;
-            map.set(dateStr, (map.get(dateStr) || 0) + total);
+            const existing = map.get(key);
+            map.set(key, { label: format(d, 'dd/MM'), total: (existing?.total || 0) + total });
         });
-        return Array.from(map.entries()).map(([date, total]) => ({ date, total })).reverse();
+        return Array.from(map.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([, v]) => ({ date: v.label, total: v.total }));
     }, [periodSales]);
 
     const paymentMethods = useMemo(() => {
@@ -66,30 +76,40 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     }, [periodSales]);
 
     const productStats = useMemo(() => {
-        const map = new Map<string, { name: string, qty: number }>();
+        const map = new Map<string, { id: string, name: string, qty: number }>();
         periodSales.forEach(o => {
             o.order_items?.forEach(i => {
                 if (!i.product) return;
-                const existing = map.get(i.product_id) || { name: i.product.name, qty: 0 };
+                const existing = map.get(i.product_id) || { id: i.product_id, name: i.product.name, qty: 0 };
                 existing.qty += i.quantity;
                 map.set(i.product_id, existing);
             });
         });
         const arr = Array.from(map.values()).sort((a, b) => b.qty - a.qty);
-        return { top: arr.slice(0, 5), bottom: arr.slice(-5).reverse() };
+        const top = arr.slice(0, 5);
+        const topIds = new Set(top.map(p => p.id));
+        // Exclui do "menos vendidos" quem ja aparece no "mais vendidos" (acontecia quando havia <=10 produtos distintos no periodo).
+        const bottom = arr.slice().reverse().filter(p => !topIds.has(p.id)).slice(0, 5);
+        return { top, bottom };
     }, [periodSales]);
 
     const tableSales = periodSales.filter(s => s.order_type === 'table');
     const tableOccupations = tableSales.length;
 
     const tableOccupationsByHour = useMemo(() => {
+        if (tableSales.length === 0) return [];
         const map = new Map<number, number>();
-        for (let i = 0; i < 24; i++) map.set(i, 0);
+        let minHour = 23, maxHour = 0;
         tableSales.forEach(o => {
             const hour = new Date(o.created_at).getHours();
             map.set(hour, (map.get(hour) || 0) + 1);
+            if (hour < minHour) minHour = hour;
+            if (hour > maxHour) maxHour = hour;
         });
-        return Array.from(map.entries()).map(([hour, count]) => ({ hour: `${hour}h`, count }));
+        // Mostra so a faixa de horas com movimento real, em vez de sempre 24 barras fixas.
+        const result: { hour: string; count: number }[] = [];
+        for (let h = minHour; h <= maxHour; h++) result.push({ hour: `${h}h`, count: map.get(h) || 0 });
+        return result;
     }, [tableSales]);
 
     const avgDeliveryTime = useMemo(() => {
