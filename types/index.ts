@@ -138,3 +138,9 @@ export interface TableSession {
   opened_at: string;
   closed_at: string | null;
 }
+
+export interface StoreFiscalCertificateStatus {
+  original_filename: string;
+  uploaded_at: string;
+  expires_at: string | null;
+}

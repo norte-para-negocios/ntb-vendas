@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus } from '@/types';
 
 export const authenticateAdmin = async (username: string, password: string): Promise<{ success: boolean; mustChangePass?: boolean; userId?: string }> => {
   const { data, error } = await supabase
@@ -736,6 +736,55 @@ const uploadToCloudinary = async (file: File): Promise<string> => {
 
 export const uploadStoreLogo = async (file: File): Promise<string> => uploadToCloudinary(file);
 export const uploadProductImage = async (file: File): Promise<string> => uploadToCloudinary(file);
+
+// Certificado digital fiscal: NÃO usa Cloudinary (é público/sem controle de
+// acesso). Vai pro bucket privado `store-certificates` — ver
+// supabase/migrations/006_fiscal_certificado.sql pro porquê.
+const CERT_BUCKET = 'store-certificates';
+
+export const uploadStoreCertificate = async (storeId: string, file: File): Promise<{ success: boolean; message?: string }> => {
+  const path = `${storeId}/certificado.pfx`;
+  const { error } = await supabase.storage.from(CERT_BUCKET).upload(path, file, { upsert: true });
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+};
+
+export const saveStoreCertificateMetadata = async (storeId: string, originalFilename: string, expiresAt: string | null): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('store_fiscal_certificates').upsert({
+    store_id: storeId,
+    file_path: `${storeId}/certificado.pfx`,
+    original_filename: originalFilename,
+    uploaded_at: new Date().toISOString(),
+    expires_at: expiresAt,
+  }, { onConflict: 'store_id' });
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+};
+
+export const saveStoreCertificateSecret = async (storeId: string, password: string): Promise<{ success: boolean; message?: string }> => {
+  // SEM .select() de propósito: a tabela não tem policy de SELECT pra anon
+  // (write-only, ver a migration). supabase-js só pede a linha de volta
+  // (Prefer: return=representation) quando .select() é encadeado — sem
+  // isso, o upsert funciona como INSERT/UPDATE puro mesmo sem permissão
+  // de leitura nenhuma.
+  const { error } = await supabase.from('store_fiscal_certificate_secrets').upsert({
+    store_id: storeId,
+    password,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'store_id' });
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+};
+
+export const fetchStoreCertificateStatus = async (storeId: string): Promise<StoreFiscalCertificateStatus | null> => {
+  const { data, error } = await supabase
+    .from('store_fiscal_certificates')
+    .select('original_filename, uploaded_at, expires_at')
+    .eq('store_id', storeId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data;
+};
 
 export interface CreateStoreParams {
   name: string;
