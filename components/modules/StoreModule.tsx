@@ -11,6 +11,7 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/labels';
 
 // --- COMPONENTS ---
 
@@ -1569,13 +1570,13 @@ NOTIFY pgrst, 'reload schema';`;
                             {/* Status Badge */}
                             <div className="mb-2">
                                 {isBlocked ? (
-                                    <span className="w-full block text-center bg-[var(--surface-2)] text-[var(--text-muted)] text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider">Bloqueada</span>
+                                    <span className="w-full block text-center bg-[var(--surface-2)] text-[var(--text-muted)] text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider">{getTableStatusLabel('blocked')}</span>
                                 ) : isOccupied ? (
                                     <span className={`w-full block text-center text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider ${table.status === 'waiting_bill' ? 'bg-[var(--warn)] text-white' : 'bg-[var(--info)] text-white'}`}>
-                                        {table.status === 'waiting_bill' ? 'Pediu Conta' : 'Ocupada'}
+                                        {getTableStatusLabel(table.status)}
                                     </span>
                                 ) : (
-                                    <span className="w-full block text-center bg-[var(--ok)]/10 text-[var(--ok)] text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider">Livre</span>
+                                    <span className="w-full block text-center bg-[var(--ok)]/10 text-[var(--ok)] text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider">{getTableStatusLabel('available')}</span>
                                 )}
                             </div>
 
@@ -1658,11 +1659,7 @@ NOTIFY pgrst, 'reload schema';`;
                              <span className={`font-bold uppercase px-3 py-1 rounded-full text-xs ${
                                 selectedTable?.status === 'available' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--info)]/10 text-[var(--info)]'
                             }`}>
-                                {selectedTable?.status === 'available' ? 'Livre'
-                                    : selectedTable?.status === 'waiting_bill' ? 'Pediu Conta'
-                                    : selectedTable?.status === 'blocked' ? 'Bloqueada'
-                                    : selectedTable?.status === 'closed' ? 'Fechada'
-                                    : 'Ocupada'}
+                                {getTableStatusLabel(selectedTable?.status || 'occupied')}
                             </span>
                         </div>
                     </div>
@@ -1863,7 +1860,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 }`}
                             >
                                 <span className="text-lg">Mesa {table.number}</span>
-                                <span className="text-xs font-normal opacity-70">Livre</span>
+                                <span className="text-xs font-normal opacity-70">{getTableStatusLabel('available')}</span>
                             </button>
                         ))}
                         {tables.filter(t => t.status === 'available' && t.id !== selectedTable?.id).length === 0 && (
@@ -1966,10 +1963,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <li key={idx} className="flex justify-between items-center text-sm bg-[var(--surface)] p-2 rounded border border-[var(--border)] shadow-sm">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-[var(--text)]">
-                                                            {p.method === 'CREDIT' ? 'Crédito' :
-                                                             p.method === 'DEBIT' ? 'Débito' :
-                                                             p.method === 'PIX' ? 'PIX' :
-                                                             p.method === 'CASH' ? 'Dinheiro' : 'Cortesia'}
+                                                            {getPaymentMethodLabel(p.method)}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-3">
@@ -2724,16 +2718,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
 // --- SUB-MODULE: USER MANAGEMENT ---
 
-const ROLE_LABELS: Record<string, string> = {
-    owner: 'Dono / Gerente',
-    manager: 'Gerente',
-    waiter: 'Garçom',
-    cook: 'Cozinheiro',
-    attendant: 'Atendente',
-    kitchen: 'Cozinha',
-    bar: 'Bar',
-};
-
 const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [users, setUsers] = useState<StoreUser[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -2826,7 +2810,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <h4 className="font-bold text-[var(--text)]">{user.name}</h4>
                                 <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
                             </div>
-                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] border-[var(--info)]/20 uppercase text-[10px]">{ROLE_LABELS[user.role] || user.role}</Badge>
+                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] border-[var(--info)]/20 uppercase text-[10px]">{getRoleLabel(user.role)}</Badge>
                         </div>
 
                         <div className="mt-3 space-y-1">
@@ -3329,13 +3313,13 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 {selectedOrderDetails.payment_details?.methods ? (
                                     selectedOrderDetails.payment_details.methods.map((m: any, i: number) => (
                                         <div key={i} className="flex justify-between">
-                                            <span className="text-[var(--text-muted)] capitalize">{m.method}</span>
+                                            <span className="text-[var(--text-muted)]">{getPaymentMethodLabel(m.method)}</span>
                                             <span className="font-medium text-[var(--text)]">R$ {m.amount.toFixed(2)}</span>
                                         </div>
                                     ))
                                 ) : (
                                     <div className="flex justify-between">
-                                        <span className="text-[var(--text-muted)] capitalize">{selectedOrderDetails.payment_method || 'Não especificado'}</span>
+                                        <span className="text-[var(--text-muted)]">{getPaymentMethodLabel(selectedOrderDetails.payment_method)}</span>
                                         <span className="font-medium text-[var(--text)]">
                                             R$ {(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0).toFixed(2)}
                                         </span>

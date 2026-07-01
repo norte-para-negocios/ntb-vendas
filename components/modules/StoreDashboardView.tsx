@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { subDays, isAfter, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getPaymentMethodLabel } from '@/lib/labels';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -58,7 +59,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     const paymentMethods = useMemo(() => {
         const map = new Map<string, number>();
         periodSales.forEach(o => {
-            const method = o.payment_method || 'Não informado';
+            const method = getPaymentMethodLabel(o.payment_method);
             map.set(method, (map.get(method) || 0) + 1);
         });
         return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);

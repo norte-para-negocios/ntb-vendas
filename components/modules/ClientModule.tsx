@@ -11,6 +11,7 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { getTableStatusLabel } from '@/lib/labels';
 
 // --- COMPONENTS ---
 
@@ -361,15 +362,16 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                                 >
                                     <option value="">Selecione sua mesa...</option>
                                     {tables.map(t => {
-                                        let statusLabel = '(Livre)';
+                                        let statusKey = 'available';
                                         let isDisabled = false;
 
                                         if (t.status === 'occupied' || t.status === 'waiting_bill') {
-                                            statusLabel = '(Ocupada)';
+                                            statusKey = 'occupied';
                                         } else if (t.status === 'blocked') {
-                                            statusLabel = '(Bloqueada)';
+                                            statusKey = 'blocked';
                                             isDisabled = true;
                                         }
+                                        const statusLabel = `(${getTableStatusLabel(statusKey)})`;
 
                                         return (
                                             <option key={t.id} value={t.id} disabled={isDisabled}>
