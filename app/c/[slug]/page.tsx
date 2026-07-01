@@ -2,6 +2,12 @@ import type { Metadata } from 'next';
 import { fetchStoreBySlug } from '@/lib/api';
 import { ClientModule } from '@/components/modules/ClientModule';
 
+// Cardápio é a rota mais visitada do sistema (cada cliente na mesa acessa via QR code).
+// O conteúdo real (menu, mesa, pedidos) é sempre buscado fresco no client via Supabase/
+// realtime, então cachear o HTML da casca por um curto período não atrasa nada visível
+// e evita gastar uma function invocation nova a cada visita.
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
