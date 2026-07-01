@@ -58,7 +58,7 @@ export function ToastViewport() {
             style={{ boxShadow: 'var(--shadow-md)' }}
           >
             <Icon size={18} style={{ color }} className="shrink-0 mt-0.5" />
-            <p className="flex-1 text-[var(--text)]">{t.message}</p>
+            <p className="flex-1 text-[var(--text)] whitespace-pre-line">{t.message}</p>
             <button onClick={() => dismiss(t.id)} className="text-[var(--text-muted)] hover:text-[var(--text)] u-motion shrink-0">
               <X size={14} />
             </button>

@@ -7,6 +7,8 @@ import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStat
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { StoreDashboardView } from '@/components/modules/StoreDashboardView';
+import { toast } from '@/components/Toast';
+import { confirm } from '@/components/ConfirmDialog';
 
 // --- COMPONENTS ---
 
@@ -47,7 +49,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         setIsLoading(true);
         try {
             await updateStoreUserPassword(userId, newPass);
-            alert('Senha atualizada com sucesso! Faça login novamente.');
+            toast.success('Senha atualizada com sucesso! Faça login novamente.');
             setNeedsChange(false);
             setPassword('');
         } catch (e) {
@@ -537,8 +539,8 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => {
-                                        if(window.confirm('Tem certeza que deseja CANCELAR este item?')) {
+                                    onClick={async () => {
+                                        if(await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
                                             cancelSpecificOrderItem(item.id);
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
@@ -746,8 +748,8 @@ const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => {
-                                        if(window.confirm('Tem certeza que deseja CANCELAR este item?')) {
+                                    onClick={async () => {
+                                        if(await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
                                             cancelSpecificOrderItem(item.id);
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
@@ -981,7 +983,7 @@ const TablesView: React.FC<{ store: Store }> = ({ store }) => {
         } catch (e) {
             console.error("Error updating config", e);
             setPinBlockEnabled(!newValue); // Revert on error
-            alert("Erro ao atualizar configuração.");
+            toast.error("Erro ao atualizar configuração.");
         }
     };
 
@@ -1271,16 +1273,16 @@ NOTIFY pgrst, 'reload schema';`;
     const handleMoveTable = async () => {
         if (!selectedTable || !targetTableId) return;
         
-        if (window.confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
+        if (await confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
             const result = await moveTable(selectedTable.id, targetTableId);
             if (result.success) {
-                alert("Mesa trocada com sucesso!");
+                toast.success("Mesa trocada com sucesso!");
                 setShowMoveTableModal(false);
                 setSelectedTable(null);
                 setShowFullBill(false);
                 loadData();
             } else {
-                alert("Erro ao trocar mesa: " + (result.message || 'Erro desconhecido'));
+                toast.error("Erro ao trocar mesa: " + (result.message || 'Erro desconhecido'));
             }
         }
     };
@@ -1322,7 +1324,7 @@ NOTIFY pgrst, 'reload schema';`;
         const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
         
         if (totalPaid < summary.total - 0.01) { // Tolerance for float
-            alert('O valor pago é menor que o total da conta.');
+            toast.error('O valor pago é menor que o total da conta.');
             return;
         }
 
@@ -1338,7 +1340,7 @@ NOTIFY pgrst, 'reload schema';`;
                 if (result.message && result.message.includes("Colunas ausentes")) {
                     setShowFixDbModal(true);
                 } else if (result.message) {
-                    alert(result.message);
+                    toast.info(result.message);
                 }
                 setRemovedServiceFees(prev => {
                     const next = new Set(prev);
@@ -1350,13 +1352,13 @@ NOTIFY pgrst, 'reload schema';`;
                 setShowPaymentModal(false);
                 loadData();
             } else {
-                alert('Não foi possível fechar a mesa:\n' + (result.message || 'Erro desconhecido'));
+                toast.error('Não foi possível fechar a mesa: ' + (result.message || 'Erro desconhecido'));
             }
         } catch (e: any) {
             if (e.message === "schema cache updated_at") {
-                alert("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';");
+                toast.error("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';", 10000);
             } else {
-                alert("Erro ao fechar mesa: " + e.message);
+                toast.error("Erro ao fechar mesa: " + e.message);
             }
         }
     };
@@ -1369,7 +1371,7 @@ NOTIFY pgrst, 'reload schema';`;
             if (result.message && result.message.includes("Colunas ausentes")) {
                 setShowFixDbModal(true);
             } else if (result.message) {
-                alert(result.message);
+                toast.info(result.message);
             }
             setRemovedServiceFees(prev => {
                 const next = new Set(prev);
@@ -1380,7 +1382,7 @@ NOTIFY pgrst, 'reload schema';`;
             setShowFullBill(false);
             loadData();
         } else {
-            alert('Não foi possível fechar a mesa:\n' + (result.message || 'Erro desconhecido'));
+            toast.error('Não foi possível fechar a mesa: ' + (result.message || 'Erro desconhecido'));
         }
     };
 
@@ -1415,22 +1417,22 @@ NOTIFY pgrst, 'reload schema';`;
                 product, quantity: qty, notes: finalNotes
             }], "Lojista");
             
-            alert("Item adicionado com sucesso!");
+            toast.success("Item adicionado com sucesso!");
             // Optional: Close menu to go back to bill, or stay to add more
-            // setShowMenuMode(false); 
+            // setShowMenuMode(false);
         } catch (e) {
-            alert("Erro ao adicionar item.");
+            toast.error("Erro ao adicionar item.");
             console.error(e);
         }
     };
 
     const handleDeleteItem = async (itemId: string) => {
-        if(window.confirm("Deseja cancelar este item da comanda?")) {
+        if(await confirm("Deseja cancelar este item da comanda?")) {
             try {
                 await cancelSpecificOrderItem(itemId);
                 // Realtime will update the list
             } catch(e) {
-                alert("Erro ao cancelar item.");
+                toast.error("Erro ao cancelar item.");
             }
         }
     };
@@ -2131,7 +2133,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <button 
                             onClick={() => {
                                 navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-                                alert("Script copiado!");
+                                toast.success("Script copiado!");
                             }}
                             className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded text-xs transition-colors"
                         >
@@ -2168,14 +2170,14 @@ const CounterView: React.FC<{ storeId: string }> = ({ storeId }) => {
     }, [storeId]);
     
     const handleClose = async (orderId: string) => {
-        if(window.confirm("Confirma a entrega e pagamento deste pedido?")) {
+        if(await confirm("Confirma a entrega e pagamento deste pedido?")) {
             try {
                 await closeCounterOrder(orderId);
             } catch (e: any) {
                 if (e.message === "schema cache updated_at") {
-                    alert("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';");
+                    toast.error("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';", 10000);
                 } else {
-                    alert("Erro ao fechar pedido: " + e.message);
+                    toast.error("Erro ao fechar pedido: " + e.message);
                 }
             }
         }
@@ -2321,9 +2323,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 } catch (e: any) {
                     console.error("Error updating product order", e);
                     if (e.message === "schema cache") {
-                        alert("Para reordenar produtos, execute este script no SQL Editor do Supabase:\n\nALTER TABLE products ADD COLUMN \"order\" INT DEFAULT 0;\nNOTIFY pgrst, 'reload schema';");
+                        toast.error("Para reordenar produtos, execute este script no SQL Editor do Supabase:\n\nALTER TABLE products ADD COLUMN \"order\" INT DEFAULT 0;\nNOTIFY pgrst, 'reload schema';", 10000);
                     } else {
-                        alert("Erro ao reordenar produtos: " + e.message);
+                        toast.error("Erro ao reordenar produtos: " + e.message);
                     }
                     loadMenu();
                 }
@@ -2357,9 +2359,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 } catch (e: any) {
                     console.error("Error moving product", e);
                     if (e.message === "schema cache") {
-                        alert("Para reordenar produtos, execute este script no SQL Editor do Supabase:\n\nALTER TABLE products ADD COLUMN \"order\" INT DEFAULT 0;\nNOTIFY pgrst, 'reload schema';");
+                        toast.error("Para reordenar produtos, execute este script no SQL Editor do Supabase:\n\nALTER TABLE products ADD COLUMN \"order\" INT DEFAULT 0;\nNOTIFY pgrst, 'reload schema';", 10000);
                     } else {
-                        alert("Erro ao mover produto: " + e.message);
+                        toast.error("Erro ao mover produto: " + e.message);
                     }
                     loadMenu();
                 }
@@ -2377,7 +2379,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleDeleteCategory = async (id: string) => {
-        if (window.confirm('Excluir categoria? Produtos nela podem ficar órfãos.')) {
+        if (await confirm({ message: 'Excluir categoria? Produtos nela podem ficar órfãos.', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteCategory(id);
             loadMenu();
         }
@@ -2408,7 +2410,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleSaveProduct = async () => {
-        if (!pName || !pPrice || !pCat) return alert('Preencha os campos obrigatórios');
+        if (!pName || !pPrice || !pCat) return toast.error('Preencha os campos obrigatórios');
         setIsLoading(true);
 
         try {
@@ -2437,9 +2439,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             loadMenu();
         } catch (e: any) {
             if (e.message === "schema cache destination") {
-                alert("Para usar o destino (Cozinha/Bar), execute este script no SQL Editor do Supabase:\n\nALTER TABLE products ADD COLUMN destination TEXT DEFAULT 'kitchen';\nNOTIFY pgrst, 'reload schema';");
+                toast.error("Para usar o destino (Cozinha/Bar), execute este script no SQL Editor do Supabase:\n\nALTER TABLE products ADD COLUMN destination TEXT DEFAULT 'kitchen';\nNOTIFY pgrst, 'reload schema';", 10000);
             } else {
-                alert('Erro ao salvar: ' + e.message);
+                toast.error('Erro ao salvar: ' + e.message);
             }
         } finally {
             setIsLoading(false);
@@ -2447,7 +2449,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleDeleteProduct = async (id: string) => {
-        if (window.confirm('Excluir produto?')) {
+        if (await confirm({ message: 'Excluir produto?', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteProduct(id);
             loadMenu();
         }
@@ -2487,7 +2489,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         } catch (e) {
             console.error("Error updating config", e);
             setServiceFeeEnabled(!newValue); // Revert on error
-            alert("Erro ao atualizar configuração de taxa de serviço.");
+            toast.error("Erro ao atualizar configuração de taxa de serviço.");
         }
     };
 
@@ -2725,11 +2727,11 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     };
 
     const handleSave = async () => {
-        if (!name || !email || (!editingUser && !password)) return alert('Preencha os campos obrigatórios');
+        if (!name || !email || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
         setIsLoading(true);
         try {
             const userData = { name, email, role, permissions, ...(password ? { password } : {}) };
-            
+
             if (editingUser) {
                 await updateStoreTeamMember(editingUser.id, userData);
             } else {
@@ -2738,14 +2740,14 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             setIsModalOpen(false);
             loadUsers();
         } catch (e: any) {
-            alert('Erro ao salvar: ' + e.message);
+            toast.error('Erro ao salvar: ' + e.message);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm('Tem certeza que deseja excluir este usuário?')) {
+        if (await confirm({ message: 'Tem certeza que deseja excluir este usuário?', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteStoreTeamMember(id);
             loadUsers();
         }
@@ -2882,23 +2884,23 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
     }, [storeId, activeTab]);
 
     const handleClearSales = async () => {
-        const confirm1 = window.confirm("ATENÇÃO: Esta ação irá apagar TODAS as vendas e comandas registradas até o momento. O cardápio e os usuários serão mantidos.\n\nDeseja continuar?");
-        if (!confirm1) return;
-        
-        const confirm2 = window.prompt("Para confirmar a exclusão de todo o histórico de vendas, digite 'ZERAR' abaixo:");
-        if (confirm2 !== 'ZERAR') {
-            alert("Ação cancelada.");
-            return;
-        }
+        const ok = await confirm({
+            title: 'Zerar histórico de vendas',
+            message: 'ATENÇÃO: Esta ação irá apagar TODAS as vendas e comandas registradas até o momento. O cardápio e os usuários serão mantidos.',
+            requireText: 'ZERAR',
+            variant: 'danger',
+            confirmLabel: 'Zerar histórico',
+        });
+        if (!ok) return;
 
         setIsClearing(true);
         try {
             await clearSalesHistory(storeId);
-            alert("Histórico de vendas zerado com sucesso!");
+            toast.success("Histórico de vendas zerado com sucesso!");
             await loadSales();
         } catch (error: any) {
             console.error("Error clearing sales", error);
-            alert("Erro ao zerar histórico: " + error.message);
+            toast.error("Erro ao zerar histórico: " + error.message);
         } finally {
             setIsClearing(false);
         }
