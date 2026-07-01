@@ -302,18 +302,12 @@
   from { transform: translate(0, 0) scale(1); }
   to { transform: translate(24px, -28px) scale(1.08); }
 }
-/* Nuvens grandes de fundo (landing page) — deriva mais lenta e generosa que o .auth-orb,
-   pensada pra blobs grandes num hero cheio (não pra cantos discretos de tela de login). */
-.cloud-blob {
-  position: absolute;
-  z-index: 0;
-  border-radius: 9999px;
-  pointer-events: none;
-  animation: cloud-drift 24s var(--ease-in-out) infinite alternate;
-}
-@keyframes cloud-drift {
-  from { transform: translate(0, 0) scale(1); }
-  to { transform: translate(50px, -60px) scale(1.12); }
+/* Flutuação do ícone decorativo da landing page — mesma curva (translateY + rotate)
+   da animação do foguete no hero do site institucional (rocket-float). */
+@keyframes icon-float {
+  0% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-16px) rotate(4deg); }
+  100% { transform: translateY(0) rotate(-4deg); }
 }
 .auth-card {
   position: relative;
