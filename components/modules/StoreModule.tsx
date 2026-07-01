@@ -1599,11 +1599,11 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <p className="text-xs text-[var(--text-muted)] text-center italic mt-2">Sem pedidos</p>
                                             )}
                                             {summary.count > 3 && (
-                                                <p className="text-[10px] text-center text-[var(--text-muted)] mt-auto">+ {summary.count - 3} itens...</p>
+                                                <p className="text-[10px] text-center text-[var(--text-muted)] mt-auto">+ {summary.count - 3} {summary.count - 3 === 1 ? 'item' : 'itens'}...</p>
                                             )}
                                         </div>
                                         <div className="mt-1 pt-1 border-t border-[var(--border)] text-[10px] text-center text-[var(--text-muted)]">
-                                            {summary.count} itens no total
+                                            {summary.count} {summary.count === 1 ? 'item' : 'itens'} no total
                                         </div>
                                     </div>
                                 ) : (
@@ -2697,6 +2697,16 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
 // --- SUB-MODULE: USER MANAGEMENT ---
 
+const ROLE_LABELS: Record<string, string> = {
+    owner: 'Dono / Gerente',
+    manager: 'Gerente',
+    waiter: 'Garçom',
+    cook: 'Cozinheiro',
+    attendant: 'Atendente',
+    kitchen: 'Cozinha',
+    bar: 'Bar',
+};
+
 const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [users, setUsers] = useState<StoreUser[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -2789,7 +2799,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <h4 className="font-bold text-[var(--text)]">{user.name}</h4>
                                 <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
                             </div>
-                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] border-[var(--info)]/20 uppercase text-[10px]">{user.role}</Badge>
+                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] border-[var(--info)]/20 uppercase text-[10px]">{ROLE_LABELS[user.role] || user.role}</Badge>
                         </div>
 
                         <div className="mt-3 space-y-1">
@@ -2798,6 +2808,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 {user.permissions?.tables && <span className="px-1.5 py-0.5 bg-[var(--ok)]/10 text-[var(--ok)] text-[10px] rounded border border-[var(--ok)]/20">Mesas</span>}
                                 {user.permissions?.counter && <span className="px-1.5 py-0.5 bg-[var(--warn)]/10 text-[var(--warn)] text-[10px] rounded border border-[var(--warn)]/20">Balcão</span>}
                                 {user.permissions?.kitchen && <span className="px-1.5 py-0.5 bg-[var(--err)]/10 text-[var(--err)] text-[10px] rounded border border-[var(--err)]/20">Cozinha</span>}
+                                {user.permissions?.bar && <span className="px-1.5 py-0.5 bg-[var(--info)]/10 text-[var(--info)] text-[10px] rounded border border-[var(--info)]/20">Bar</span>}
                                 {user.permissions?.menu && <span className="px-1.5 py-0.5 bg-[var(--brand)]/10 text-[var(--brand)] text-[10px] rounded border border-[var(--brand)]/20">Cardápio</span>}
                                 {user.permissions?.admin && <span className="px-1.5 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[10px] rounded border border-[var(--border)]">Admin</span>}
                             </div>
@@ -3107,7 +3118,7 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                         <Search size={16} className="mr-2" />
                                         Filtros
                                     </Button>
-                                    <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">{filteredAndSortedSales.length} registros</Badge>
+                                    <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</Badge>
                                 </div>
                             </div>
                             
@@ -3229,7 +3240,7 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                                         {order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão')}
                                                     </td>
                                                     <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs truncate" title={order.order_items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}>
-                                                        {order.order_items?.length || 0} itens
+                                                        {order.order_items?.length || 0} {(order.order_items?.length || 0) === 1 ? 'item' : 'itens'}
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-bold text-[var(--text)]">
                                                         R$ {orderTotal.toFixed(2)}

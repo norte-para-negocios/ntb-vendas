@@ -1406,7 +1406,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-[13px] font-medium text-white/80">Meu Pedido</span>
-                                    <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} itens</span>
+                                    <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
                                 </div>
                             </div>
                             <span className="text-[18px] font-semibold num">R$ {cartTotal.toFixed(2)}</span>

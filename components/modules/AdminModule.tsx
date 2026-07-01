@@ -9,6 +9,16 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 
+const ROLE_LABELS: Record<string, string> = {
+    owner: 'Dono / Gerente',
+    manager: 'Gerente',
+    waiter: 'Garçom',
+    cook: 'Cozinheiro',
+    attendant: 'Atendente',
+    kitchen: 'Cozinha',
+    bar: 'Bar',
+};
+
 // Admin Login Component
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     const [username, setUsername] = useState('');
@@ -584,7 +594,7 @@ export const AdminModule: React.FC = () => {
                                         <td className="p-4">
                                             <Badge color="bg-[var(--brand)]/10 text-[var(--brand)]">{user.store?.name || 'Loja Desconhecida'}</Badge>
                                         </td>
-                                        <td className="p-4 text-sm capitalize">{user.role === 'owner' ? 'Dono / Gerente' : user.role}</td>
+                                        <td className="p-4 text-sm capitalize">{ROLE_LABELS[user.role] || user.role}</td>
                                         <td className="p-4 text-center">
                                             {user.must_change_password ?
                                                 <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Provisória</Badge> :
