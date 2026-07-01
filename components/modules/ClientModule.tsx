@@ -134,6 +134,27 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         return order.status; // Fallback to order status (Pending/Accepted)
     }, [order, items]);
 
+    // ALERTA AGREGADO (som + vibração): só na TRANSIÇÃO pra preparing/ready,
+    // nunca no carregamento inicial. prevAggregateStatusRef começa null;
+    // a primeira vez que `order` existe só define a baseline, sem alertar.
+    const prevAggregateStatusRef = useRef<OrderStatus | null>(null);
+    useEffect(() => {
+        if (!order) return;
+        const prev = prevAggregateStatusRef.current;
+        prevAggregateStatusRef.current = derivedStatus;
+        if (prev === null || prev === derivedStatus) return;
+
+        if (derivedStatus === OrderStatus.PREPARING) {
+            playPreparingAlert();
+            vibrateAlert([120]);
+            toast.info('Seu pedido está sendo preparado! 👨‍🍳');
+        } else if (derivedStatus === OrderStatus.READY) {
+            playReadyAlert();
+            vibrateAlert([120, 80, 120]);
+            toast.success('Seu pedido está pronto! 🔔');
+        }
+    }, [derivedStatus, order]);
+
     const isDelivered = derivedStatus === OrderStatus.DELIVERED;
 
     // AUTO LOGOUT EFFECT
