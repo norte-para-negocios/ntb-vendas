@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Loader2, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, fetchStoreById, updateCategoryOrder, updateProductOrder } from '@/lib/api';
@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { StoreDashboardView } from '@/components/modules/StoreDashboardView';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
-import { stagger } from '@/components/Skeleton';
+import { Skeleton, stagger } from '@/components/Skeleton';
 
 // --- COMPONENTS ---
 
@@ -1476,18 +1476,18 @@ NOTIFY pgrst, 'reload schema';`;
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {tables.map(table => {
+                {tables.map((table, tableIdx) => {
                     const summary = getTableSummary(table.id);
                     const isBlocked = table.status === 'blocked';
                     const isOccupied = table.status === 'occupied' || table.status === 'waiting_bill';
                     const isWaiterRequested = table.waiter_requested;
                     const hasOrders = summary.count > 0;
-                    
+
                     return (
-                        <Card 
-                            key={table.id} 
+                        <Card
+                            key={table.id}
                             onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
-                            className={`relative flex flex-col justify-between p-4 transition-all duration-300 border-2 group ${
+                            className={`u-stagger relative flex flex-col justify-between p-4 transition-all duration-300 border-2 group ${
                                 areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
                             } ${
                                 isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
@@ -1496,6 +1496,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 isOccupied ? 'bg-[var(--info)]/5 border-[var(--info)]/25 shadow-lg' :
                                 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30 hover:shadow-lg'
                             }`}
+                            style={stagger(Math.min(tableIdx, 10) * 30)}
                         >
                             {/* Waiter Alert Overlay */}
                             {isWaiterRequested && (
@@ -3188,13 +3189,15 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 </thead>
                                 <tbody className="divide-y divide-[var(--border)]">
                                     {isLoading ? (
-                                        <tr>
-                                            <td colSpan={5} className="px-4 py-8 text-center text-[var(--text-muted)]">
-                                                <div className="flex items-center justify-center gap-2">
-                                                    <Loader2 className="animate-spin" size={16} /> Carregando histórico...
-                                                </div>
-                                            </td>
-                                        </tr>
+                                        Array.from({ length: 6 }).map((_, i) => (
+                                            <tr key={i} className="u-stagger" style={stagger(i * 30)}>
+                                                <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                                                <td className="px-4 py-3"><Skeleton className="h-4 w-14" /></td>
+                                                <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
+                                                <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+                                                <td className="px-4 py-3"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                                            </tr>
+                                        ))
                                     ) : filteredAndSortedSales.length === 0 ? (
                                         <tr>
                                             <td colSpan={5} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
@@ -3202,12 +3205,13 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredAndSortedSales.map((order) => {
+                                        filteredAndSortedSales.map((order, orderIdx) => {
                                             const orderTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
                                             return (
                                                 <tr
                                                     key={order.id}
-                                                    className="hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+                                                    className="u-stagger hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+                                                    style={stagger(Math.min(orderIdx, 10) * 30)}
                                                     onClick={() => setSelectedOrderDetails(order)}
                                                 >
                                                     <td className="px-4 py-3 text-[var(--text-muted)]">

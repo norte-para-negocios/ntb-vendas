@@ -7,7 +7,7 @@ import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmi
 import { Store, StoreUser } from '@/types';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
-import { stagger } from '@/components/Skeleton';
+import { Skeleton, stagger } from '@/components/Skeleton';
 
 // Admin Login Component
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
@@ -463,8 +463,26 @@ export const AdminModule: React.FC = () => {
              </div>
 
              {/* Stores List */}
-             {stores.map(store => (
-                 <Card key={store.id} accentColor="var(--brand)" className="flex flex-col gap-4 p-5 pl-6 group">
+             {isLoadingList && stores.length === 0 && Array.from({ length: 3 }).map((_, i) => (
+                 <Card key={i} className="u-stagger flex flex-col gap-4 p-5 pl-6" style={stagger(i * 30)}>
+                     <div className="flex items-start justify-between">
+                         <div className="flex gap-3">
+                             <Skeleton className="w-12 h-12 rounded-lg" />
+                             <div className="space-y-2">
+                                 <Skeleton className="h-4 w-32" />
+                                 <Skeleton className="h-3 w-24" />
+                             </div>
+                         </div>
+                     </div>
+                     <div className="grid grid-cols-2 gap-2">
+                         <Skeleton className="h-12 w-full" />
+                         <Skeleton className="h-12 w-full" />
+                     </div>
+                 </Card>
+             ))}
+
+             {stores.map((store, storeIdx) => (
+                 <Card key={store.id} accentColor="var(--brand)" className="u-stagger flex flex-col gap-4 p-5 pl-6 group" style={stagger(Math.min(storeIdx, 10) * 30)}>
                     <div className="flex items-start justify-between">
                         <div className="flex gap-3">
                             {store.logo_url && <img src={store.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover border border-[var(--border)]" />}
@@ -548,8 +566,18 @@ export const AdminModule: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[var(--border)]">
-                                {users.map(user => (
-                                    <tr key={user.id} className="hover:bg-[var(--surface-2)]">
+                                {isLoadingList && users.length === 0 && Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i} className="u-stagger" style={stagger(i * 30)}>
+                                        <td className="p-4"><Skeleton className="h-4 w-28" /></td>
+                                        <td className="p-4"><Skeleton className="h-4 w-40" /></td>
+                                        <td className="p-4"><Skeleton className="h-5 w-24 rounded-full" /></td>
+                                        <td className="p-4"><Skeleton className="h-4 w-20" /></td>
+                                        <td className="p-4 flex justify-center"><Skeleton className="h-5 w-20 rounded-full" /></td>
+                                        <td className="p-4"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                                    </tr>
+                                ))}
+                                {users.map((user, userIdx) => (
+                                    <tr key={user.id} className="u-stagger hover:bg-[var(--surface-2)]" style={stagger(Math.min(userIdx, 10) * 30)}>
                                         <td className="p-4 font-medium text-[var(--text)]">{user.name}</td>
                                         <td className="p-4 text-[var(--text-muted)]">{user.email}</td>
                                         <td className="p-4">
