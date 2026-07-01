@@ -560,14 +560,14 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
-                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 transition-colors"
+                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press"
                                     title="Cancelar Item"
                                 >
                                     <X size={18} />
                                 </button>
                                 <button
                                     onClick={() => printOrderTicket(item)}
-                                    className="p-2 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] transition-colors"
+                                    className="p-2 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] u-motion u-press"
                                     title="Imprimir Ticket"
                                 >
                                     <Printer size={18} />
@@ -769,14 +769,14 @@ const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
-                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 transition-colors"
+                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press"
                                     title="Cancelar Item"
                                 >
                                     <X size={18} />
                                 </button>
                                 <button
                                     onClick={() => printOrderTicket(item)}
-                                    className="p-2 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] transition-colors"
+                                    className="p-2 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] u-motion u-press"
                                     title="Imprimir Ticket"
                                 >
                                     <Printer size={18} />
@@ -863,9 +863,9 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                 <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
                     <span className="text-sm font-bold text-[var(--text)]">Quantidade</span>
                     <div className="flex items-center gap-4 bg-[var(--surface)] px-2 py-1 rounded-lg shadow-sm border border-[var(--border)]">
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md"><Minus size={18} /></button>
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Minus size={18} /></button>
                         <span className="font-bold text-lg w-8 text-center">{qty}</span>
-                        <button onClick={() => setQty(qty + 1)} className="p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md"><Plus size={18} /></button>
+                        <button onClick={() => setQty(qty + 1)} className="p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Plus size={18} /></button>
                     </div>
                 </div>
 
@@ -920,7 +920,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         <button
                             key={cat.id}
                             onClick={() => setActiveCategory(cat.id)}
-                            className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold transition-colors border ${
+                            className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold u-motion u-press-sm border ${
                                 activeCategory === cat.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'
                             }`}
                         >
@@ -1526,7 +1526,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             </span>
                                             <button
                                                 onClick={(e) => togglePin(e, table.id)}
-                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] transition-colors"
+                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press"
                                                 title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
                                             >
                                                 {visiblePins.has(table.id) ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1540,7 +1540,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         handleBlockToggle(e, table);
                                     }}
                                     disabled={!isBlocked && hasOrders}
-                                    className={`p-2 rounded-lg transition-colors z-10 ${
+                                    className={`p-2 rounded-lg u-motion u-press z-10 ${
                                         isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
                                         (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
                                         'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
@@ -1712,7 +1712,7 @@ NOTIFY pgrst, 'reload schema';`;
                             {/* VIEW 3: ADICIONAR ITENS (MENU) */}
                             <div className="flex items-center justify-between mb-2">
                                 <h3 className="font-bold text-[var(--text)] flex items-center gap-2"><UtensilsCrossed size={18}/> Cardápio</h3>
-                                <button onClick={() => setShowMenuMode(false)} className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] underline">Voltar</button>
+                                <Button variant="ghost" size="sm" onClick={() => setShowMenuMode(false)} className="underline">Voltar</Button>
                             </div>
                             <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] h-[400px]">
                                 <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
@@ -1761,7 +1761,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                             <span className="font-medium text-[var(--text)]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</span>
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
-                                                                className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1"
+                                                                className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
                                                                 title="Cancelar Item"
                                                             >
                                                                 <Trash2 size={16} />
@@ -1785,7 +1785,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                         return next;
                                                                     });
                                                                 }}
-                                                                className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1"
+                                                                className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
                                                                 title="Remover Taxa"
                                                             >
                                                                 <Trash2 size={16} />
@@ -1835,7 +1835,7 @@ NOTIFY pgrst, 'reload schema';`;
                             <button
                                 key={table.id}
                                 onClick={() => setTargetTableId(table.id)}
-                                className={`p-3 rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
+                                className={`p-3 rounded-lg border-2 flex flex-col items-center justify-center u-motion u-press-sm ${
                                     targetTableId === table.id
                                     ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)] font-bold'
                                     : 'border-[var(--border)] hover:border-[var(--brand)]/50 text-[var(--text-muted)]'
@@ -1870,16 +1870,16 @@ NOTIFY pgrst, 'reload schema';`;
                 <div className="space-y-4">
                     {/* Tabs */}
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-lg">
-                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Wallet size={14}/> Pagamento
                         </button>
-                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Users size={14}/> Divisão
                         </button>
-                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <List size={14}/> Por Cliente
                         </button>
-                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Calculator size={14}/> Calculadora
                         </button>
                     </div>
@@ -1906,7 +1906,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         <button
                                             key={m.id}
                                             onClick={() => setCurrentPaymentMethod(m.id)}
-                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
+                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 u-motion u-press-sm ${
                                                 currentPaymentMethod === m.id
                                                 ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
                                                 : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border)]'
@@ -1951,7 +1951,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <span className="font-mono font-bold">R$ {p.amount.toFixed(2)}</span>
-                                                        <button onClick={() => handleRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)]">
+                                                        <button onClick={() => handleRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
                                                             <Trash2 size={16} />
                                                         </button>
                                                     </div>
@@ -1992,12 +1992,12 @@ NOTIFY pgrst, 'reload schema';`;
                                     )}
                                 </div>
                                 <div className="flex items-center justify-center gap-6 py-2">
-                                    <button onClick={() => setPaymentPeople(Math.max(1, paymentPeople - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] transition-colors"><Minus size={18} /></button>
+                                    <button onClick={() => setPaymentPeople(Math.max(1, paymentPeople - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
                                     <div className="text-center min-w-[80px]">
                                         <span className="block text-2xl font-bold text-[var(--text)]">{paymentPeople}</span>
                                         <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">Pessoas</span>
                                     </div>
-                                    <button onClick={() => setPaymentPeople(paymentPeople + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] transition-colors"><Plus size={18}/></button>
+                                    <button onClick={() => setPaymentPeople(paymentPeople + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Plus size={18}/></button>
                                 </div>
                                 <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
                                     <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
@@ -2083,9 +2083,9 @@ NOTIFY pgrst, 'reload schema';`;
                                                 {isSelected && item.quantity > 1 && (
                                                     <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
                                                         <span className="text-xs text-[var(--text-muted)]">Qtd:</span>
-                                                        <button onClick={() => updateSelectionQty(item.id, -1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)]"><Minus size={12}/></button>
+                                                        <button onClick={() => updateSelectionQty(item.id, -1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)] u-motion u-press-sm"><Minus size={12}/></button>
                                                         <span className="text-sm font-bold w-4 text-center">{selectedQty}</span>
-                                                        <button onClick={() => updateSelectionQty(item.id, 1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)]"><Plus size={12}/></button>
+                                                        <button onClick={() => updateSelectionQty(item.id, 1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)] u-motion u-press-sm"><Plus size={12}/></button>
                                                         <span className="text-xs text-[var(--text-muted)] ml-1">/ {item.quantity}</span>
                                                     </div>
                                                 )}
@@ -2151,7 +2151,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 navigator.clipboard.writeText(SQL_FIX_SCRIPT);
                                 toast.success("Script copiado!");
                             }}
-                            className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded text-xs transition-colors"
+                            className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded text-xs u-motion u-press-sm"
                         >
                             Copiar
                         </button>
@@ -2555,7 +2555,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                     <GripVertical size={16} />
                                                 </div>
                                                 <span className="font-bold text-[var(--text)]">{cat.name}</span>
-                                                <button onClick={() => handleDeleteCategory(cat.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => handleDeleteCategory(cat.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
                                                     <X size={14}/>
                                                 </button>
                                             </div>
@@ -2615,11 +2615,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                             </div>
                                                                             <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-1">{prod.description}</p>
                                                                             <div className="mt-2 flex gap-2">
-                                                                                <button onClick={() => openProductModal(prod)} className="text-xs font-bold text-[var(--brand)] hover:underline">Editar</button>
-                                                                                <button onClick={() => handleToggleAvailability(prod)} className={`text-xs font-bold hover:underline ${prod.available ? 'text-[var(--warn)]' : 'text-[var(--ok)]'}`}>
+                                                                                <button onClick={() => openProductModal(prod)} className="text-xs font-bold text-[var(--brand)] hover:underline u-motion">Editar</button>
+                                                                                <button onClick={() => handleToggleAvailability(prod)} className={`text-xs font-bold hover:underline u-motion ${prod.available ? 'text-[var(--warn)]' : 'text-[var(--ok)]'}`}>
                                                                                     {prod.available ? 'Pausar' : 'Ativar'}
                                                                                 </button>
-                                                                                <button onClick={() => handleDeleteProduct(prod.id)} className="text-xs font-bold text-[var(--err)] hover:underline">Excluir</button>
+                                                                                <button onClick={() => handleDeleteProduct(prod.id)} className="text-xs font-bold text-[var(--err)] hover:underline u-motion">Excluir</button>
                                                                             </div>
                                                                         </div>
                                                                         {!prod.available && (
@@ -3031,19 +3031,19 @@ const StoreAdminView: React.FC<{ storeId: string }> = ({ storeId }) => {
             <div className="flex space-x-4 border-b border-[var(--border)] pb-2">
                 <button
                     onClick={() => setActiveTab('dashboard')}
-                    className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'dashboard' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                 >
                     Dashboard
                 </button>
                 <button
                     onClick={() => setActiveTab('sales')}
-                    className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'sales' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'sales' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                 >
                     Histórico de Vendas
                 </button>
                 <button
                     onClick={() => setActiveTab('users')}
-                    className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'users' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'users' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                 >
                     Gestão de Usuários
                 </button>

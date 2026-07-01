@@ -337,13 +337,13 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                 {store?.contract_type === 'balcao_mesas' && (
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <button
-                            className={`flex-1 py-2 text-[13px] font-medium rounded-[var(--r-sm)] u-motion ${mode === 'table' ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}
+                            className={`flex-1 py-2 text-[13px] font-medium rounded-[var(--r-sm)] u-motion u-press-sm ${mode === 'table' ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}
                             onClick={() => setMode('table')}
                         >
                             <span className="flex items-center justify-center gap-2"><LayoutGrid size={14}/> Mesa</span>
                         </button>
                         <button
-                            className={`flex-1 py-2 text-[13px] font-medium rounded-[var(--r-sm)] u-motion ${mode === 'counter' ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}
+                            className={`flex-1 py-2 text-[13px] font-medium rounded-[var(--r-sm)] u-motion u-press-sm ${mode === 'counter' ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}
                             onClick={() => setMode('counter')}
                         >
                             <span className="flex items-center justify-center gap-2"><Coffee size={14}/> Balcão</span>
@@ -804,13 +804,13 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                     <>
                         {/* Tabs */}
                         <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
-                            <button onClick={() => setTab('split')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] transition-all flex flex-col items-center gap-1 ${tab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                            <button onClick={() => setTab('split')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm flex flex-col items-center gap-1 ${tab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                                 <Users size={16}/> Divisão
                             </button>
-                            <button onClick={() => setTab('users')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] transition-all flex flex-col items-center gap-1 ${tab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                            <button onClick={() => setTab('users')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm flex flex-col items-center gap-1 ${tab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                                 <List size={16}/> Por Cliente
                             </button>
-                            <button onClick={() => setTab('calculator')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] transition-all flex flex-col items-center gap-1 ${tab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                            <button onClick={() => setTab('calculator')} className={`flex-1 py-2 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm flex flex-col items-center gap-1 ${tab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                                 <Calculator size={16}/> Calculadora
                             </button>
                         </div>
@@ -829,12 +829,12 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                         )}
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
-                                        <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] transition-colors u-motion"><Minus size={18} /></button>
+                                        <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
                                         <div className="text-center min-w-[80px]">
                                             <span className="block text-2xl font-bold text-[var(--text)]">{people}</span>
                                             <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">Pessoas</span>
                                         </div>
-                                        <button onClick={() => setPeople(people + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] transition-colors u-motion"><Plus size={18}/></button>
+                                        <button onClick={() => setPeople(people + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Plus size={18}/></button>
                                     </div>
                                     <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
                                         <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
@@ -916,9 +916,9 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                                     {isSelected && item.quantity > 1 && (
                                                         <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
                                                             <span className="text-xs text-[var(--text-muted)]">Qtd:</span>
-                                                            <button onClick={() => updateSelectionQty(item.id, -1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)]"><Minus size={12}/></button>
+                                                            <button onClick={() => updateSelectionQty(item.id, -1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)] u-motion u-press-sm"><Minus size={12}/></button>
                                                             <span className="text-sm font-bold w-4 text-center">{selectedQty}</span>
-                                                            <button onClick={() => updateSelectionQty(item.id, 1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)]"><Plus size={12}/></button>
+                                                            <button onClick={() => updateSelectionQty(item.id, 1, item.quantity)} className="w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded flex items-center justify-center text-[var(--brand)] u-motion u-press-sm"><Plus size={12}/></button>
                                                             <span className="text-xs text-[var(--text-muted)] ml-1">/ {item.quantity}</span>
                                                         </div>
                                                     )}
@@ -1333,21 +1333,21 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <div className="flex gap-1">
                         <button
                             onClick={() => setSortBy(sortBy === 'price_asc' ? 'default' : 'price_asc')}
-                            className={`p-2 rounded-[var(--r-md)] border u-motion ${sortBy === 'price_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Preço Menor"
                         >
                             <ArrowDownWideNarrow size={16} />
                         </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_desc' ? 'default' : 'price_desc')}
-                            className={`p-2 rounded-[var(--r-md)] border u-motion ${sortBy === 'price_desc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_desc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Preço Maior"
                         >
                              <ArrowUpNarrowWide size={16} />
                         </button>
                         <button
                              onClick={() => setSortBy(sortBy === 'name_asc' ? 'default' : 'name_asc')}
-                             className={`p-2 rounded-[var(--r-md)] border u-motion ${sortBy === 'name_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                             className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'name_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                              title="Nome A-Z"
                         >
                              <ArrowDownAZ size={16} />

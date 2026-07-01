@@ -425,10 +425,10 @@ export const AdminModule: React.FC = () => {
       <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:block">
         <h1 className="text-2xl font-bold mb-8 text-white">Master Admin</h1>
         <nav className="space-y-2">
-          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${view === 'stores' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
+          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full p-3 rounded-lg u-motion u-press-sm ${view === 'stores' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
             <StoreIcon size={20} /> Lojas
           </button>
-          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${view === 'users' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
+          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full p-3 rounded-lg u-motion u-press-sm ${view === 'users' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
             <Users size={20} /> Usuários (Lojistas)
           </button>
         </nav>
@@ -515,21 +515,21 @@ export const AdminModule: React.FC = () => {
                         </a>
                         <button
                             onClick={() => handleDuplicateStore(store.id, store.name)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] transition-colors"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] u-motion u-press"
                             title="Duplicar"
                         >
                             <Copy size={18} />
                         </button>
                         <button
                             onClick={() => handleEditStore(store)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] u-motion u-press"
                             title="Editar"
                         >
                             <Edit2 size={18} />
                         </button>
                         <button
                             onClick={() => handleDeleteStore(store.id, store.name)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] transition-colors"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] u-motion u-press"
                             title="Excluir"
                         >
                             <Trash2 size={18} />
@@ -593,21 +593,21 @@ export const AdminModule: React.FC = () => {
                                         <td className="p-4 flex justify-end gap-2">
                                             <button
                                                 onClick={() => handleResetUserPassword(user)}
-                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--warn)] hover:bg-[var(--warn)]/10 rounded-lg transition-colors"
+                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--warn)] hover:bg-[var(--warn)]/10 rounded-lg u-motion u-press"
                                                 title="Resetar Senha"
                                             >
                                                 <RefreshCw size={18} />
                                             </button>
                                             <button
                                                 onClick={() => handleEditUser(user)}
-                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg transition-colors"
+                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg u-motion u-press"
                                                 title="Editar"
                                             >
                                                 <Edit2 size={18} />
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteUser(user)}
-                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--err)]/10 rounded-lg transition-colors"
+                                                className="p-2 text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--err)]/10 rounded-lg u-motion u-press"
                                                 title="Excluir"
                                             >
                                                 <Trash2 size={18} />
@@ -632,7 +632,7 @@ export const AdminModule: React.FC = () => {
                       <span className="block font-bold text-[var(--text)]">Status do Contrato</span>
                       <span className="text-xs text-[var(--text-muted)]">Define se a loja está acessível</span>
                   </div>
-                  <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${isActive ? 'bg-[var(--ok)] text-white shadow-[var(--ok)]/20' : 'bg-[var(--err)] text-white shadow-[var(--err)]/20'}`}>
+                  <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold u-motion u-press-sm shadow-sm ${isActive ? 'bg-[var(--ok)] text-white shadow-[var(--ok)]/20' : 'bg-[var(--err)] text-white shadow-[var(--err)]/20'}`}>
                       {isActive ? <CheckCircle size={16}/> : <XCircle size={16}/>} {isActive ? 'LOJA ATIVA' : 'BLOQUEADA'}
                   </button>
               </div>
@@ -675,10 +675,10 @@ export const AdminModule: React.FC = () => {
               <hr className="border-[var(--border)]" />
               <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
-                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 transition-all ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
+                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
                           <Coffee size={24} /> <span className="font-bold text-sm">Apenas Balcão</span>
                       </button>
-                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 transition-all ${contractType === 'balcao_mesas' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao_mesas')}>
+                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao_mesas' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao_mesas')}>
                           <LayoutGrid size={24} /> <span className="font-bold text-sm">Balcão + Mesas</span>
                       </button>
                   </div>
