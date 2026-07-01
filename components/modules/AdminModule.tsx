@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy } from 'lucide-react';
+import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo } from '@/lib/api';
 import { Store, StoreUser } from '@/types';
@@ -127,8 +127,9 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                     )}
 
                     <div className="u-stagger" style={stagger(140)}>
-                        <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20" onClick={handleLogin} isLoading={isLoading}>
+                        <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20 group" onClick={handleLogin} isLoading={isLoading}>
                             Entrar
+                            {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />}
                         </Button>
                     </div>
                 </div>

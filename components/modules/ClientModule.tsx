@@ -427,8 +427,8 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                     )}
                 </div>
 
-                <Button className="w-full" onClick={handleEnter} disabled={isLoading}>
-                    <LogIn className="mr-2" size={20} />
+                <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
+                    <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
                     {tables.find(t => t.id === tableId)?.status === 'occupied'
                         ? 'Entrar / Recuperar'
                         : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
