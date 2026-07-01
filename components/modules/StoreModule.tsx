@@ -2275,9 +2275,10 @@ const CounterView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 );
             })}
             {orders.length === 0 && (
-                <div className="col-span-full flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
-                    <Coffee size={48} className="mb-4 opacity-20"/>
-                    <p>Nenhum pedido no balcão no momento.</p>
+                <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
+                    <Coffee className="mb-4 h-20 w-20 opacity-20" />
+                    <p className="text-xl font-medium">Tudo tranquilo no balcão!</p>
+                    <p className="text-sm">Aguardando novos pedidos...</p>
                 </div>
             )}
         </div>
