@@ -1,7 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
-import { Order } from '@/types';
+import { Order, TableSession } from '@/types';
 import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -13,7 +13,12 @@ import { getPaymentMethodLabel } from '@/lib/labels';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
-export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
+// Pedidos/sessões acima disso são tratados como outlier (ex.: mesa esquecida aberta, pedido travado)
+// e excluídos da média para não distorcer o número exibido.
+const MAX_REASONABLE_DELIVERY_MINUTES = 240;
+const MAX_REASONABLE_TABLE_MINUTES = 480;
+
+export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: TableSession[] }> = ({ sales, tableSessions }) => {
     const [periodType, setPeriodType] = useState<'custom' | 'today' | 'week' | 'month' | 'year'>('custom');
     const [periodDays, setPeriodDays] = useState<number>(90);
 
@@ -22,6 +27,10 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     const dailySales = sales.filter(s => isSameDay(new Date(s.created_at), now));
     const weeklySales = sales.filter(s => isSameWeek(new Date(s.created_at), now, { locale: ptBR }));
     const monthlySales = sales.filter(s => isSameMonth(new Date(s.created_at), now));
+
+    const dailyTableSessions = tableSessions.filter(s => isSameDay(new Date(s.opened_at), now));
+    const weeklyTableSessions = tableSessions.filter(s => isSameWeek(new Date(s.opened_at), now, { locale: ptBR }));
+    const monthlyTableSessions = tableSessions.filter(s => isSameMonth(new Date(s.opened_at), now));
 
     const calcStats = (orders: Order[]) => {
         // Acumula em centavos inteiros para evitar erro de arredondamento de ponto flutuante somando muitos pedidos.
@@ -50,6 +59,15 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     }, [sales, periodType, periodDays, dailySales, weeklySales, monthlySales, now]);
 
     const periodStats = calcStats(periodSales);
+
+    const periodTableSessions = useMemo(() => {
+        if (periodType === 'today') return dailyTableSessions;
+        if (periodType === 'week') return weeklyTableSessions;
+        if (periodType === 'month') return monthlyTableSessions;
+        if (periodType === 'year') return tableSessions.filter(s => new Date(s.opened_at).getFullYear() === now.getFullYear());
+        const periodStartDate = subDays(now, periodDays);
+        return tableSessions.filter(s => isAfter(new Date(s.opened_at), periodStartDate));
+    }, [tableSessions, periodType, periodDays, dailyTableSessions, weeklyTableSessions, monthlyTableSessions, now]);
 
     const salesByDay = useMemo(() => {
         // Agrupa por chave yyyy-MM-dd (nao so dd/MM) para nao colidir datas de anos diferentes.
@@ -113,16 +131,28 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
     }, [tableSales]);
 
     const avgDeliveryTime = useMemo(() => {
-        let totalMins = 0; let count = 0;
-        periodSales.forEach(o => { if (o.updated_at) { totalMins += differenceInMinutes(new Date(o.updated_at), new Date(o.created_at)); count++; } });
-        return count > 0 ? Math.round(totalMins / count) : 0;
+        let totalMins = 0; let count = 0; let excluded = 0;
+        periodSales.forEach(o => {
+            if (!o.updated_at) return;
+            const mins = differenceInMinutes(new Date(o.updated_at), new Date(o.created_at));
+            if (mins > MAX_REASONABLE_DELIVERY_MINUTES) { excluded++; return; }
+            totalMins += mins; count++;
+        });
+        return { avg: count > 0 ? Math.round(totalMins / count) : 0, excluded };
     }, [periodSales]);
 
+    // Tempo de mesa vem de table_sessions (abertura -> fechamento real), não mais
+    // reaproveitando updated_at/created_at do pedido (que mede o pedido, não a mesa).
     const avgTableTime = useMemo(() => {
-        let totalMins = 0; let count = 0;
-        tableSales.forEach(o => { if (o.updated_at) { totalMins += differenceInMinutes(new Date(o.updated_at), new Date(o.created_at)); count++; } });
-        return count > 0 ? Math.round(totalMins / count) : 0;
-    }, [tableSales]);
+        let totalMins = 0; let count = 0; let excluded = 0;
+        periodTableSessions.forEach(s => {
+            if (!s.closed_at) return;
+            const mins = differenceInMinutes(new Date(s.closed_at), new Date(s.opened_at));
+            if (mins > MAX_REASONABLE_TABLE_MINUTES) { excluded++; return; }
+            totalMins += mins; count++;
+        });
+        return { avg: count > 0 ? Math.round(totalMins / count) : 0, excluded };
+    }, [periodTableSessions]);
 
     const counterSales = periodSales.filter(s => s.order_type === 'counter');
     const counterStats = calcStats(counterSales);
@@ -241,7 +271,13 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={20} className="text-[var(--ok)]" /> Pedidos</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <StatCard title="Número de Pedidos" value={periodStats.count} icon={CheckCircle} accentColor="var(--ok)" />
-                            <StatCard title="Tempo Médio de Atendimento" value={`${avgDeliveryTime} min`} subtitle="Criação até entrega" icon={Clock} accentColor="var(--info)" />
+                            <StatCard
+                                title="Tempo Médio de Atendimento"
+                                value={`${avgDeliveryTime.avg} min`}
+                                subtitle={avgDeliveryTime.excluded > 0 ? `Criação até entrega · ${avgDeliveryTime.excluded} atípico(s) excluído(s)` : 'Criação até entrega'}
+                                icon={Clock}
+                                accentColor="var(--info)"
+                            />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Card className={cardCls}>
@@ -276,7 +312,13 @@ export const StoreDashboardView: React.FC<{ sales: Order[] }> = ({ sales }) => {
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Users size={20} className="text-[var(--info)]" /> Mesas</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <StatCard title="Ocupações" value={tableOccupations} icon={Users} accentColor="var(--info)" />
-                            <StatCard title="Tempo Médio de Ocupação" value={`${avgTableTime} min`} subtitle="Abertura até fechamento" icon={Clock} accentColor="var(--warn)" />
+                            <StatCard
+                                title="Tempo Médio de Ocupação"
+                                value={`${avgTableTime.avg} min`}
+                                subtitle={avgTableTime.excluded > 0 ? `Abertura até fechamento · ${avgTableTime.excluded} atípico(s) excluído(s)` : 'Abertura até fechamento'}
+                                icon={Clock}
+                                accentColor="var(--warn)"
+                            />
                         </div>
                         <Card className={cardCls}>
                             <h4 className={h4Cls}>Ocupação por Hora do Dia</h4>

@@ -129,3 +129,12 @@ export interface CartItem {
   quantity: number;
   notes?: string;
 }
+
+export interface TableSession {
+  id: string;
+  table_id: string;
+  store_id: string;
+  host_name: string | null;
+  opened_at: string;
+  closed_at: string | null;
+}

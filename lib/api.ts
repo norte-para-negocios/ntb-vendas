@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession } from '@/types';
 
 export const authenticateAdmin = async (username: string, password: string): Promise<{ success: boolean; mustChangePass?: boolean; userId?: string }> => {
   const { data, error } = await supabase
@@ -385,6 +385,22 @@ export const fetchSalesHistory = async (storeId: string): Promise<Order[]> => {
   return (data as any) || [];
 };
 
+export const fetchTableSessions = async (storeId: string, sinceDate?: string): Promise<TableSession[]> => {
+  let query = supabase
+    .from('table_sessions')
+    .select('*')
+    .eq('store_id', storeId)
+    .not('closed_at', 'is', null)
+    .order('opened_at', { ascending: false })
+    .limit(2000);
+
+  if (sinceDate) query = query.gte('opened_at', sinceDate);
+
+  const { data, error } = await query;
+  if (error) { console.error('Fetch Table Sessions Error', error); return []; }
+  return (data as any) || [];
+};
+
 export const clearSalesHistory = async (storeId: string) => {
   const { error } = await supabase.from('orders').delete().eq('store_id', storeId);
 
@@ -532,6 +548,22 @@ export const updateTableStatus = async (tableId: string, status: TableStatus, ho
   await supabase.from('tables').update(updateData).eq('id', tableId);
 };
 
+// Fecha a sessão de ocupação em aberto de uma mesa (usada ao fechar conta / mover mesa).
+export const closeOpenTableSession = async (tableId: string) => {
+  await supabase
+    .from('table_sessions')
+    .update({ closed_at: new Date().toISOString() })
+    .eq('table_id', tableId)
+    .is('closed_at', null);
+};
+
+// Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
+// mas ainda grava a sessão para entrar na métrica de tempo médio de ocupação.
+export const openTableManually = async (tableId: string, storeId: string, hostName: string) => {
+  await supabase.from('tables').update({ status: TableStatus.OCCUPIED, current_host_name: hostName }).eq('id', tableId);
+  await supabase.from('table_sessions').insert({ table_id: tableId, store_id: storeId, host_name: hostName });
+};
+
 export const requestTableBill = async (tableId: string) => {
   await supabase.from('tables').update({ status: TableStatus.WAITING_BILL }).eq('id', tableId);
 };
@@ -619,6 +651,8 @@ export const closeTableSession = async (
       }
     }
 
+    await closeOpenTableSession(tableId);
+
     return { success: true, message: warningMessage };
   } catch (e: any) {
     return { success: false, message: e.message || 'Erro desconhecido.' };
@@ -657,6 +691,10 @@ export const moveTable = async (sourceTableId: string, targetTableId: string): P
 
     const newPin = Math.floor(1000 + Math.random() * 9000).toString();
     await supabase.from('tables').update({ status: TableStatus.AVAILABLE, current_host_name: null, waiter_requested: false, guest_count: 0, pin: newPin }).eq('id', sourceTableId);
+
+    // A ocupação continua, só muda de mesa física: transfere a sessão em aberto
+    // (mantém o opened_at real) em vez de fechar e perder o tempo já decorrido.
+    await supabase.from('table_sessions').update({ table_id: targetTableId }).eq('table_id', sourceTableId).is('closed_at', null);
 
     return { success: true };
   } catch (e: any) {
