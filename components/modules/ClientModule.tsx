@@ -989,6 +989,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // New States
     const [showPin, setShowPin] = useState(false);
     const [hostPin, setHostPin] = useState<string | null>(null);
+    const [storeNotFound, setStoreNotFound] = useState(false);
     const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
     const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -1015,6 +1016,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         setProducts(products);
                         if (categories.length > 0) setActiveCategory(categories[0].id);
                     });
+                } else {
+                    setStoreNotFound(true);
                 }
             });
         }
@@ -1201,6 +1204,16 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
         return prods;
     }, [products, activeCategory, searchTerm, sortBy]);
+
+    if (storeNotFound) return (
+        <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <AlertTriangle className="text-[var(--text-muted)]" size={48} />
+            <h1 className="text-lg font-semibold text-[var(--text)]">Loja não encontrada</h1>
+            <p className="text-sm text-[var(--text-muted)] max-w-xs">
+                Este link não corresponde a nenhuma loja ativa. Confira o endereço ou fale com o restaurante.
+            </p>
+        </div>
+    );
 
     if (!currentStore) return (
         <div className="min-h-screen bg-[var(--bg)] p-4 max-w-2xl mx-auto">
