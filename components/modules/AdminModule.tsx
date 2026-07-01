@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo } from '@/lib/api';
-import { Store, StoreUser } from '@/types';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus } from '@/lib/api';
+import { differenceInDays, format, parseISO } from 'date-fns';
+import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -170,6 +171,13 @@ export const AdminModule: React.FC = () => {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
+  // Certificado Digital Fiscal State
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [certPassword, setCertPassword] = useState('');
+  const [certExpiresAt, setCertExpiresAt] = useState('');
+  const [certStatus, setCertStatus] = useState<StoreFiscalCertificateStatus | null>(null);
+  const [isSavingCert, setIsSavingCert] = useState(false);
+
   // User Form State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -218,6 +226,11 @@ export const AdminModule: React.FC = () => {
       setLogoFile(null);
       setLogoPreview(null);
       setErrorMsg(null);
+
+      setCertFile(null);
+      setCertPassword('');
+      setCertExpiresAt('');
+      setCertStatus(null);
   };
 
   const resetUserForm = () => {
@@ -247,6 +260,12 @@ export const AdminModule: React.FC = () => {
       setLogoPreview(store.logo_url);
       setLogoFile(null);
       setErrorMsg(null);
+
+      setCertFile(null);
+      setCertPassword('');
+      setCertExpiresAt('');
+      setCertStatus(await fetchStoreCertificateStatus(store.id));
+
       setIsModalOpen(true);
   };
 
@@ -283,6 +302,56 @@ export const AdminModule: React.FC = () => {
           setLogoFile(file);
           setLogoPreview(URL.createObjectURL(file));
       }
+  };
+
+  const handleCertFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) setCertFile(file);
+  };
+
+  const handleSaveCertificate = async () => {
+      if (!editingId) return; // só disponível editando loja existente
+      if (!certFile && !certPassword && !certExpiresAt) {
+          return toast.error('Escolha um arquivo, senha ou validade pra salvar.');
+      }
+      setIsSavingCert(true);
+      try {
+          if (certFile) {
+              const uploadResult = await uploadStoreCertificate(editingId, certFile);
+              if (!uploadResult.success) throw new Error(uploadResult.message);
+
+              const metaResult = await saveStoreCertificateMetadata(editingId, certFile.name, certExpiresAt || null);
+              if (!metaResult.success) throw new Error(metaResult.message);
+          } else if (certExpiresAt) {
+              // Só atualizando a validade, sem trocar o arquivo
+              const metaResult = await saveStoreCertificateMetadata(editingId, certStatus?.original_filename || 'certificado.pfx', certExpiresAt);
+              if (!metaResult.success) throw new Error(metaResult.message);
+          }
+
+          if (certPassword) {
+              const secretResult = await saveStoreCertificateSecret(editingId, certPassword);
+              if (!secretResult.success) throw new Error(secretResult.message);
+          }
+
+          toast.success('Certificado atualizado com sucesso!');
+          setCertFile(null);
+          setCertPassword('');
+          setCertStatus(await fetchStoreCertificateStatus(editingId));
+      } catch (e: any) {
+          toast.error('Erro ao salvar certificado: ' + e.message);
+      } finally {
+          setIsSavingCert(false);
+      }
+  };
+
+  const certBadge = () => {
+      if (!certStatus) return <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">Nenhum certificado cadastrado</Badge>;
+      if (!certStatus.expires_at) return <Badge color="bg-[var(--info)]/10 text-[var(--info)]">Cadastrado (sem validade informada)</Badge>;
+      const days = differenceInDays(parseISO(certStatus.expires_at), new Date());
+      const label = `Válido até ${format(parseISO(certStatus.expires_at), 'dd/MM/yyyy')}`;
+      if (days < 0) return <Badge color="bg-[var(--err)]/10 text-[var(--err)]"><AlertCircle size={12} className="mr-1"/> Vencido ({label})</Badge>;
+      if (days <= 30) return <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]"><AlertCircle size={12} className="mr-1"/> Vence em breve ({label})</Badge>;
+      return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
   };
 
   const handleSaveStore = async () => {
@@ -697,6 +766,29 @@ export const AdminModule: React.FC = () => {
                 </div>
               </div>
               <hr className="border-[var(--border)]" />
+
+              {editingId && (
+                  <>
+                      <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                              <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
+                              {certBadge()}
+                          </div>
+                          <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
+                              <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
+                              <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
+                          </label>
+                          <div className="grid grid-cols-2 gap-4">
+                              <Input type="date" label="Validade do certificado" value={certExpiresAt} onChange={e => setCertExpiresAt(e.target.value)} />
+                              <Input type="password" label="Senha do certificado" placeholder="Deixe em branco pra manter a atual" value={certPassword} onChange={e => setCertPassword(e.target.value)} />
+                          </div>
+                          <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
+                              Salvar Certificado
+                          </Button>
+                      </div>
+                      <hr className="border-[var(--border)]" />
+                  </>
+              )}
               <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                       <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
