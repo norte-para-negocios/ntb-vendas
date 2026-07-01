@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTables, updateTableStatus, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
@@ -249,7 +249,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
     );
 };
 
-const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) => void, storeSlug: string, store: Store | null }> = ({ onLogin, storeSlug, store }) => {
+const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, isHost?: boolean, table?: Table | null) => void, storeSlug: string, store: Store | null }> = ({ onLogin, storeSlug, store }) => {
     const [name, setName] = useState('');
     const [pin, setPin] = useState('');
     const [tableId, setTableId] = useState('');
@@ -263,7 +263,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                 if (store.contract_type === 'balcao') {
                     setMode('counter');
                 }
-                const t = await fetchTables(store.id);
+                const t = await fetchTablesPublic(store.id);
                 setTables(t);
             }
             setIsLoading(false);
@@ -284,30 +284,19 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
 
         setIsLoading(true);
         try {
-            const freshTables = await fetchTables(store!.id);
-            setTables(freshTables); // Atualiza os dados na tela caso algo mude
+            // PIN é validado no servidor (Postgres function) — o client nunca
+            // recebe o PIN real de mesas que não são a sua.
+            const result = await openTableSession(tableId, name, pin || undefined);
 
-            const selected = freshTables.find(t => t.id === tableId);
-
-            if (!selected) {
-                toast.error('Mesa não encontrada.');
+            if (!result.success) {
+                toast.error(result.message || 'Não foi possível acessar a mesa.');
+                const freshTables = await fetchTablesPublic(store!.id);
+                setTables(freshTables); // Atualiza os dados na tela caso algo mude
                 setIsLoading(false);
                 return;
             }
 
-            // PIN Verification against freshest data!
-            const isOccupied = selected.status !== TableStatus.AVAILABLE;
-            const isPinRequired = isOccupied || (store?.config?.require_pin_for_open);
-
-            if (isPinRequired) {
-                 if (selected.pin && selected.pin !== pin) {
-                     toast.error(isOccupied ? 'Mesa já ocupada! Peça o PIN ao anfitrião.' : 'PIN incorreto.');
-                     setIsLoading(false);
-                     return;
-                 }
-            }
-
-            onLogin(name, tableId);
+            onLogin(name, tableId, result.isHost, result.table ?? null);
         } catch (error) {
             toast.error('Erro ao tentar acessar a mesa. Tente novamente.');
         } finally {
@@ -997,6 +986,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     // New States
     const [showPin, setShowPin] = useState(false);
+    const [hostPin, setHostPin] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
     const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -1034,7 +1024,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             const channel = supabase.channel(`table_status_${currentTable.id}`)
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${currentTable.id}` },
                 (payload) => {
-                    const newTable = payload.new as Table;
+                    // O Realtime manda a linha inteira (incluindo pin) em todo UPDATE;
+                    // removemos aqui como defesa em profundidade para não deixar o PIN
+                    // real acessível no estado React de um convidado (não-host).
+                    const newTable = { ...(payload.new as Table), pin: undefined as any };
                     setGlobalTable(newTable);
 
                     // If session closed, force logout
@@ -1062,7 +1055,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     // Session is valid for 4 hours
                     if (Date.now() - session.timestamp < 4 * 60 * 60 * 1000) {
                         if (session.tableId) {
-                            const tables = await fetchTables(currentStore.id);
+                            const tables = await fetchTablesPublic(currentStore.id);
                             const table = tables.find(t => t.id === session.tableId);
 
                             // Only auto-restore if table is still occupied by the same context
@@ -1073,6 +1066,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 setClientName(session.name);
                                 setGlobalTable(table);
                                 setIsHost(isReturningHost);
+                                setHostPin(isReturningHost ? (session.hostPin ?? null) : null);
                                 setHasAccess(true);
                             } else {
                                 // Table closed or reset, clear session
@@ -1093,34 +1087,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         checkSession();
     }, [slug, currentStore]);
 
-    const handleLogin = async (name: string, tableId: string | null) => {
+    const handleLogin = async (name: string, tableId: string | null, isHostResult?: boolean, table?: Table | null) => {
         setClientName(name);
         if (!currentStore) return;
 
+        // A validação de PIN e a decisão de quem é host já aconteceram no
+        // servidor (LoginScreen.handleEnter -> openTableSession RPC); aqui só
+        // gravamos o resultado no estado.
         let hostStatus = false;
 
         if (tableId) {
-            // Table Login
-            const tables = await fetchTables(currentStore.id);
-            const table = tables.find(t => t.id === tableId);
-
-            if (table) {
-                setGlobalTable(table);
-                if (table.status === TableStatus.AVAILABLE) {
-                    // Start New Session (Host)
-                    await updateTableStatus(table.id, TableStatus.OCCUPIED, name);
-                    hostStatus = true;
-                } else {
-                    // Join Existing Session
-                    // Check if recovering host session
-                    if (table.current_host_name?.toLowerCase() === name.toLowerCase()) {
-                        hostStatus = true;
-                    } else {
-                        // Guest joining
-                        hostStatus = false;
-                    }
-                }
-            }
+            setGlobalTable(table ?? null);
+            hostStatus = !!isHostResult;
         } else {
             // Counter Login
             setGlobalTable(null);
@@ -1128,6 +1106,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
 
         setIsHost(hostStatus);
+        setHostPin(tableId && hostStatus && table ? table.pin : null);
         setHasAccess(true);
 
         // SAVE SESSION
@@ -1135,7 +1114,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             name,
             tableId,
             mode: tableId ? 'table' : 'counter',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            hostPin: tableId && hostStatus && table ? table.pin : null,
         }));
     };
 
@@ -1263,10 +1243,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             <span className="font-medium text-[var(--warn)] bg-[var(--warn)]/10 px-2 rounded-full">Balcão</span>
                         )}
 
-                        {isHost && currentTable && currentTable.pin && (
+                        {isHost && currentTable && hostPin && (
                             <div className="flex items-center gap-1 bg-[var(--warn)]/8 px-2 py-0.5 rounded-full border border-[var(--warn)]/20 cursor-pointer" onClick={() => setShowPin(!showPin)}>
                                 <span className="num font-semibold text-[var(--warn)] tracking-wider">
-                                    {showPin ? currentTable.pin : '••••'}
+                                    {showPin ? hostPin : '••••'}
                                 </span>
                                 {showPin ? <EyeOff size={9} className="text-[var(--warn)]"/> : <Eye size={9} className="text-[var(--warn)]"/>}
                             </div>

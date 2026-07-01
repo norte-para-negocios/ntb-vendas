@@ -266,6 +266,34 @@ export const fetchTables = async (storeId: string): Promise<Table[]> => {
   return data || [];
 };
 
+// Igual a fetchTables, mas sem a coluna `pin` — usada pelo cardápio do cliente
+// (ClientModule), que não deve receber o PIN de mesas que não são as dele.
+export const fetchTablesPublic = async (storeId: string): Promise<Table[]> => {
+  const { data, error } = await supabase
+    .from('tables')
+    .select('id, store_id, number, status, current_host_name, guest_count, waiter_requested, service_fee_removed')
+    .eq('store_id', storeId)
+    .order('number');
+  if (error) console.error(error);
+  return (data as any) || [];
+};
+
+// Abre/entra numa mesa validando o PIN no servidor via Postgres function
+// (security definer) — ver supabase/migrations/003_secure_table_pin.sql.
+export const openTableSession = async (
+  tableId: string,
+  hostName: string,
+  pin?: string
+): Promise<{ success: boolean; message?: string; isHost?: boolean; table?: Table }> => {
+  const { data, error } = await supabase.rpc('open_table_session', {
+    p_table_id: tableId,
+    p_host_name: hostName,
+    p_pin: pin || null,
+  });
+  if (error) return { success: false, message: error.message };
+  return { success: data.success, message: data.message, isHost: data.is_host, table: data.table };
+};
+
 export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order[]> => {
   const { data, error } = await supabase
     .from('orders')
