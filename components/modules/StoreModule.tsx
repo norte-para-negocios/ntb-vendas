@@ -426,6 +426,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 // --- SUB-MODULE: KITCHEN ---
 const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
   const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
   const loadOrders = async () => {
       if(!storeId) return;
@@ -561,13 +562,16 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
+                                    disabled={cancellingIds.has(item.id)}
                                     onClick={async () => {
-                                        if(await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
-                                            cancelSpecificOrderItem(item.id);
+                                        if (cancellingIds.has(item.id)) return;
+                                        if (await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
+                                            setCancellingIds(prev => new Set(prev).add(item.id));
+                                            await cancelSpecificOrderItem(item.id);
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
-                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press"
+                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
                                     title="Cancelar Item"
                                 >
                                     <X size={18} />
@@ -635,6 +639,7 @@ const KitchenView: React.FC<{ storeId: string }> = ({ storeId }) => {
 // --- SUB-MODULE: BAR ---
 const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
   const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
   const loadOrders = async () => {
       if(!storeId) return;
@@ -770,13 +775,16 @@ const BarView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
+                                    disabled={cancellingIds.has(item.id)}
                                     onClick={async () => {
-                                        if(await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
-                                            cancelSpecificOrderItem(item.id);
+                                        if (cancellingIds.has(item.id)) return;
+                                        if (await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
+                                            setCancellingIds(prev => new Set(prev).add(item.id));
+                                            await cancelSpecificOrderItem(item.id);
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
-                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press"
+                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
                                     title="Cancelar Item"
                                 >
                                     <X size={18} />
