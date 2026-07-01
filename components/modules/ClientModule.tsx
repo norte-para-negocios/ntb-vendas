@@ -8,6 +8,7 @@ import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Or
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
+import { playPreparingAlert, playReadyAlert, vibrateAlert } from '@/lib/audioAlert';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -51,6 +52,24 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
     const [order, setOrder] = useState<Order | null>(null);
     const [items, setItems] = useState<OrderItem[]>([]);
     const [secondsToRedirect, setSecondsToRedirect] = useState(5);
+    // Snapshot do fetch anterior — usado só pra diff, nunca renderizado.
+    // null = ainda não carregou nenhuma vez (evita alertar no load inicial).
+    const prevItemsRef = useRef<OrderItem[] | null>(null);
+
+    const notifyItemTransitions = (nextItems: OrderItem[]) => {
+        const prevById = new Map((prevItemsRef.current || []).map(i => [i.id, i.status]));
+        for (const item of nextItems) {
+            const prevStatus = prevById.get(item.id);
+            if (!prevStatus || prevStatus === item.status) continue;
+            const itemName = item.product?.name || 'Item';
+            if (item.status === OrderStatus.PREPARING) {
+                toast.info(`${itemName} entrou em preparo`);
+            } else if (item.status === OrderStatus.READY) {
+                toast.success(`${itemName} ficou pronto`);
+            }
+        }
+        prevItemsRef.current = nextItems;
+    };
 
     useEffect(() => {
         const load = async () => {
@@ -59,7 +78,11 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
 
             // Fetch items immediately to determine detailed status
             const { data: itemsData } = await supabase.from('order_items').select('*, product:products(*)').eq('order_id', orderId);
-            if(itemsData) setItems(itemsData as OrderItem[]);
+            if (itemsData) {
+                // Baseline do load inicial: guarda o snapshot sem disparar toast.
+                prevItemsRef.current = itemsData as OrderItem[];
+                setItems(itemsData as OrderItem[]);
+            }
         };
         load();
 
@@ -74,7 +97,10 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         const itemsChannel = supabase.channel(`tracker_items_${orderId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${orderId}` }, async () => {
                  const { data: itemsData } = await supabase.from('order_items').select('*, product:products(*)').eq('order_id', orderId);
-                 if(itemsData) setItems(itemsData as OrderItem[]);
+                 if (itemsData) {
+                     notifyItemTransitions(itemsData as OrderItem[]);
+                     setItems(itemsData as OrderItem[]);
+                 }
             })
             .subscribe();
 
