@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo } from '@/lib/api';
@@ -160,6 +160,11 @@ export const AdminModule: React.FC = () => {
   const [users, setUsers] = useState<(StoreUser & { store: Store })[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
 
+  // Guards síncronos contra duplo-submit (setIsLoading só reflete no DOM no
+  // próximo render; um duplo clique bem rápido pode passar por essa janela)
+  const isSavingStoreRef = useRef(false);
+  const isSavingUserRef = useRef(false);
+
   // Store Form State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -294,6 +299,8 @@ export const AdminModule: React.FC = () => {
       if(!name) return setErrorMsg('O nome da loja é obrigatório.');
       if(!slug) return setErrorMsg('O slug (URL) é obrigatório.');
       if(contractType === 'balcao_mesas' && tableCount < 1) return setErrorMsg('Defina pelo menos 1 mesa.');
+      if (isSavingStoreRef.current) return;
+      isSavingStoreRef.current = true;
 
       setIsLoading(true);
 
@@ -335,6 +342,7 @@ export const AdminModule: React.FC = () => {
           setErrorMsg('Erro no upload ou salvamento: ' + e.message);
       } finally {
           setIsLoading(false);
+          isSavingStoreRef.current = false;
       }
   };
 
@@ -396,28 +404,34 @@ export const AdminModule: React.FC = () => {
           return setErrorMsg('Defina uma senha provisória.');
       }
 
+      if (isSavingUserRef.current) return;
+      isSavingUserRef.current = true;
       setIsLoading(true);
 
-      let result;
-      if (editingUserId) {
-          result = await updateStoreUser(editingUserId, {
-              name: userName,
-              email: userEmail,
-              store_id: userStoreId
-          });
-      } else {
-          result = await createStoreUser(userStoreId, userName, userEmail, userPassword);
-      }
+      try {
+          let result;
+          if (editingUserId) {
+              result = await updateStoreUser(editingUserId, {
+                  name: userName,
+                  email: userEmail,
+                  store_id: userStoreId
+              });
+          } else {
+              result = await createStoreUser(userStoreId, userName, userEmail, userPassword);
+          }
 
-      if(result.success) {
-          toast.success(editingUserId ? 'Usuário atualizado!' : 'Usuário criado com sucesso!');
-          setIsUserModalOpen(false);
-          resetUserForm();
-          loadUsers();
-      } else {
-          setErrorMsg(result.message || 'Erro ao salvar usuário.');
+          if(result.success) {
+              toast.success(editingUserId ? 'Usuário atualizado!' : 'Usuário criado com sucesso!');
+              setIsUserModalOpen(false);
+              resetUserForm();
+              loadUsers();
+          } else {
+              setErrorMsg(result.message || 'Erro ao salvar usuário.');
+          }
+      } finally {
+          setIsLoading(false);
+          isSavingUserRef.current = false;
       }
-      setIsLoading(false);
   };
 
   const generateSlug = (text: string) => {

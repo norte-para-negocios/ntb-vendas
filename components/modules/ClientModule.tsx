@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
@@ -983,6 +983,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [showBill, setShowBill] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const isSubmittingOrderRef = useRef(false);
 
     // New States
     const [showPin, setShowPin] = useState(false);
@@ -1144,6 +1145,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     const submitOrder = async () => {
         if (!currentStore) return;
+        // Guard síncrono contra duplo clique — setIsLoading só reflete no DOM
+        // no próximo render, então a janela entre 2 cliques rápidos precisa
+        // de um valor checado/setado na hora, não só de estado React.
+        if (isSubmittingOrderRef.current) return;
+        isSubmittingOrderRef.current = true;
         setIsLoading(true);
         try {
             const tableId = currentTable ? currentTable.id : null;
@@ -1166,6 +1172,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             toast.error('Erro ao enviar pedido: ' + (e.message || 'Tente novamente.'));
         } finally {
             setIsLoading(false);
+            isSubmittingOrderRef.current = false;
         }
     };
 
