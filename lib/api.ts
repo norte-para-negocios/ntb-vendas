@@ -238,20 +238,17 @@ export const updateProduct = async (id: string, updates: Partial<Product>) => {
 };
 
 export const updateCategoryOrder = async (updates: { id: string; order: number }[]) => {
-  for (const update of updates) {
-    await supabase.from('categories').update({ order: update.order }).eq('id', update.id);
-  }
+  const { error } = await supabase.rpc('update_categories_order', { p_updates: updates });
+  if (error) throw error;
 };
 
 export const updateProductOrder = async (updates: { id: string; order: number }[]) => {
-  for (const update of updates) {
-    const { error } = await supabase.from('products').update({ order: update.order }).eq('id', update.id);
-    if (error) {
-      if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-        throw new Error('schema cache');
-      }
-      throw error;
+  const { error } = await supabase.rpc('update_products_order', { p_updates: updates });
+  if (error) {
+    if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
+      throw new Error('schema cache');
     }
+    throw error;
   }
 };
 
@@ -412,20 +409,26 @@ export const fetchTableSessions = async (storeId: string, sinceDate?: string): P
 };
 
 export const clearSalesHistory = async (storeId: string) => {
-  const { error } = await supabase.from('orders').delete().eq('store_id', storeId);
+  // order_items.order_id tem "on delete cascade" (001_schema_inicial.sql), entao apagar as
+  // orders ja cuida dos itens - nao precisa (nem precisava) apagar order_items manualmente.
+  // Pagina desde o inicio em vez de tentar um DELETE sem limite pra loja inteira de uma vez.
+  const chunkSize = 200;
+  while (true) {
+    const { data: orders, error: fetchError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('store_id', storeId)
+      .limit(chunkSize);
+    if (fetchError) throw fetchError;
+    if (!orders || orders.length === 0) break;
 
-  if (error) {
-    const { data: orders } = await supabase.from('orders').select('id').eq('store_id', storeId);
-    if (orders && orders.length > 0) {
-      const orderIds = orders.map((o) => o.id);
-      const chunkSize = 100;
-      for (let i = 0; i < orderIds.length; i += chunkSize) {
-        const chunk = orderIds.slice(i, i + chunkSize);
-        await supabase.from('order_items').delete().in('order_id', chunk);
-      }
-      const { error: finalError } = await supabase.from('orders').delete().eq('store_id', storeId);
-      if (finalError) throw finalError;
-    }
+    const { error: deleteError } = await supabase
+      .from('orders')
+      .delete()
+      .in('id', orders.map((o) => o.id));
+    if (deleteError) throw deleteError;
+
+    if (orders.length < chunkSize) break;
   }
 };
 
@@ -798,10 +801,12 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
     const categoryMap: { [oldId: string]: string } = {};
 
     if (categories && categories.length > 0) {
-      for (const cat of categories) {
-        const { data: newCat } = await supabase.from('categories').insert({ store_id: newStore.id, name: cat.name, order: cat.order }).select().single();
-        if (newCat) categoryMap[cat.id] = newCat.id;
-      }
+      // Insert único (era um insert por categoria antes); casa a nova pela posição do array,
+      // já que o Postgrest devolve as linhas de um insert em lote na mesma ordem em que foram enviadas.
+      const categoriesToInsert = categories.map((cat) => ({ store_id: newStore.id, name: cat.name, order: cat.order }));
+      const { data: newCategories, error: categoriesErr } = await supabase.from('categories').insert(categoriesToInsert).select();
+      if (categoriesErr) throw categoriesErr;
+      newCategories?.forEach((newCat, i) => { categoryMap[categories[i].id] = newCat.id; });
     }
 
     const { data: products } = await supabase.from('products').select('*').eq('store_id', storeId);
