@@ -272,11 +272,12 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
     }, [store, storeSlug]);
 
     const handleEnter = async () => {
-        if (!name || name.length < 3) return toast.error('Por favor, digite seu nome (mínimo 3 letras)');
+        const trimmedName = name.trim();
+        if (!trimmedName || trimmedName.length < 3) return toast.error('Por favor, digite seu nome (mínimo 3 letras)');
 
         // Counter Logic
         if (mode === 'counter') {
-            return onLogin(name, null);
+            return onLogin(trimmedName, null);
         }
 
         // Table Logic
@@ -286,7 +287,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
         try {
             // PIN é validado no servidor (Postgres function) — o client nunca
             // recebe o PIN real de mesas que não são a sua.
-            const result = await openTableSession(tableId, name, pin || undefined);
+            const result = await openTableSession(tableId, trimmedName, pin || undefined);
 
             if (!result.success) {
                 toast.error(result.message || 'Não foi possível acessar a mesa.');
@@ -296,7 +297,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                 return;
             }
 
-            onLogin(name, tableId, result.isHost, result.table ?? null);
+            onLogin(trimmedName, tableId, result.isHost, result.table ?? null);
         } catch (error) {
             toast.error('Erro ao tentar acessar a mesa. Tente novamente.');
         } finally {
@@ -451,7 +452,7 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                     <div className="flex items-center gap-3 bg-[var(--surface)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
                         <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
                         <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
-                        <button onClick={() => setQty(qty + 1)} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
+                        <button onClick={() => setQty(q => Math.min(99, q + 1))} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
                     </div>
                 </div>
 

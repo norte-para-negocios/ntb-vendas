@@ -296,8 +296,10 @@ export const AdminModule: React.FC = () => {
 
   const handleSaveStore = async () => {
       setErrorMsg(null);
-      if(!name) return setErrorMsg('O nome da loja é obrigatório.');
-      if(!slug) return setErrorMsg('O slug (URL) é obrigatório.');
+      const trimmedName = name.trim();
+      const trimmedSlug = slug.trim();
+      if(!trimmedName) return setErrorMsg('O nome da loja é obrigatório.');
+      if(!trimmedSlug) return setErrorMsg('O slug (URL) é obrigatório.');
       if(contractType === 'balcao_mesas' && tableCount < 1) return setErrorMsg('Defina pelo menos 1 mesa.');
       if (isSavingStoreRef.current) return;
       isSavingStoreRef.current = true;
@@ -313,9 +315,9 @@ export const AdminModule: React.FC = () => {
           }
 
           const params = {
-              name,
+              name: trimmedName,
               cnpj,
-              slug,
+              slug: trimmedSlug,
               contractType,
               tableCount,
               periodMonths,
@@ -395,7 +397,9 @@ export const AdminModule: React.FC = () => {
 
   const handleSaveUser = async () => {
       setErrorMsg(null);
-      if (!userName || !userEmail || !userStoreId) {
+      const trimmedUserName = userName.trim();
+      const trimmedUserEmail = userEmail.trim();
+      if (!trimmedUserName || !trimmedUserEmail || !userStoreId) {
           return setErrorMsg('Preencha os campos obrigatórios.');
       }
 
@@ -412,12 +416,12 @@ export const AdminModule: React.FC = () => {
           let result;
           if (editingUserId) {
               result = await updateStoreUser(editingUserId, {
-                  name: userName,
-                  email: userEmail,
+                  name: trimmedUserName,
+                  email: trimmedUserEmail,
                   store_id: userStoreId
               });
           } else {
-              result = await createStoreUser(userStoreId, userName, userEmail, userPassword);
+              result = await createStoreUser(userStoreId, trimmedUserName, trimmedUserEmail, userPassword);
           }
 
           if(result.success) {

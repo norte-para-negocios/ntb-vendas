@@ -1945,6 +1945,8 @@ NOTIFY pgrst, 'reload schema';`;
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
                                         <input
                                             type="number"
+                                            min="0"
+                                            step="0.01"
                                             className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
                                             placeholder="0.00"
                                             value={currentPaymentAmount}
@@ -2449,6 +2451,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     const handleSaveProduct = async () => {
         if (!pName || !pPrice || !pCat) return toast.error('Preencha os campos obrigatórios');
+        const priceNum = parseFloat(pPrice);
+        if (isNaN(priceNum) || priceNum < 0) return toast.error('Preço não pode ser negativo.');
+        const prepNum = parseInt(pTime);
+        if (isNaN(prepNum) || prepNum < 0) return toast.error('Tempo de preparo não pode ser negativo.');
         setIsLoading(true);
 
         try {
@@ -2460,9 +2466,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             const productData = {
                 name: pName,
                 description: pDesc,
-                price: parseFloat(pPrice),
+                price: priceNum,
                 category_id: pCat,
-                prep_time_minutes: parseInt(pTime),
+                prep_time_minutes: prepNum,
                 image_url: imageUrl,
                 destination: pDestination
             };
@@ -2687,7 +2693,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
                     <Input label="Descrição" value={pDesc} onChange={e => setPDesc(e.target.value)} />
                     <div className="grid grid-cols-2 gap-4">
-                        <Input label="Preço (R$)" type="number" step="0.01" value={pPrice} onChange={e => setPPrice(e.target.value)} />
+                        <Input label="Preço (R$)" type="number" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Categoria</label>
                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30" value={pCat} onChange={e => setPCat(e.target.value)}>
@@ -2697,7 +2703,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                         <Input label="Tempo Preparo (min)" type="number" value={pTime} onChange={e => setPTime(e.target.value)} />
+                         <Input label="Tempo Preparo (min)" type="number" min="0" value={pTime} onChange={e => setPTime(e.target.value)} />
                          <div className="flex flex-col gap-1.5">
                              <label className="text-sm font-semibold text-[var(--text)]">Destino do Pedido</label>
                              <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30" value={pDestination} onChange={e => setPDestination(e.target.value as 'kitchen' | 'bar')}>
