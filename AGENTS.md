@@ -188,6 +188,30 @@ Três tipos de documento, todos usados em `StoreModule.tsx`:
 - Relatório de vendas filtrado (`printSalesReport`) — **não** é térmico, é A4
   normal (lista de vendas do período com os filtros aplicados na tela).
 
+## Backlog / Próximos passos
+
+Ainda não implementado — nenhum código relacionado existe no repo hoje:
+
+- **Certificado digital por loja + emissão de cupom fiscal (NFC-e) via SEFAZ.**
+  Cada loja precisaria cadastrar seu certificado digital (e-CNPJ, provavelmente
+  A1) pra emitir e transmitir o cupom fiscal eletrônico direto pra SEFAZ a
+  cada venda. Hoje o sistema não emite nenhum documento fiscal — só recibo
+  interno não-fiscal (`printBillReceipt`). Vai exigir: armazenamento seguro do
+  certificado (provavelmente Supabase Storage privado + criptografia, nunca
+  client-side), integração com API de NFC-e (SEFAZ direto ou via
+  intermediário tipo Focus NFe/eNotas), e provavelmente uma tabela nova por
+  loja pra guardar dados fiscais (CNPJ, IE, regime tributário, certificado).
+
+- **Alerta ativo na tela do cliente quando o pedido muda de status
+  (preparando/pronto).** Hoje o `ClientModule.tsx`/`OrderTracker` só atualiza
+  o badge de status passivamente (Enviado → Preparando → Pronto → Entregue,
+  ver `getStatusBadge`) — o cliente só percebe se estiver olhando pra tela.
+  Falta um alerta ativo no momento da transição de status por item
+  (`order_items.status`, via Realtime): som/beep, vibração
+  (`navigator.vibrate`) e/ou toast (`components/Toast.tsx` já existe e é
+  usado em outros fluxos) disparado especificamente quando um item entra em
+  `preparing` ou vira `ready`, não só o badge estático.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users` (sem hash). Login
