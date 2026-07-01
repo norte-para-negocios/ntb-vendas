@@ -44,6 +44,21 @@ real a menos que seja o host). Motivo: antes disso, o PIN vinha cru em qualquer
 dava pra abrir/ocupar mesa de outro pelo console do navegador. Ver
 `supabase/migrations/003_secure_table_pin.sql` e `004_table_sessions.sql`.
 
+**Padrão oficial pra guardar credencial sensível: write-only via ausência de
+policy de SELECT.** Sem Supabase Auth nem API routes, não tem como esconder
+dado de "todo mundo com a anon key" do jeito convencional (checagem por
+usuário logado). A saída usada neste projeto é dar policy de INSERT/UPDATE
+pra `anon` mas **nunca** criar uma policy de SELECT — RLS nega leitura por
+padrão quando não existe policy que bata, então o dado fica gravável mas
+irrecuperável pela anon key (só um processo futuro com service role
+consegue ler). Generaliza o mesmo princípio do PIN de mesa acima. Ver
+`supabase/migrations/006_fiscal_certificado.sql` (bucket de Storage
+`store-certificates` sem policy de SELECT + tabela
+`store_fiscal_certificate_secrets`) pro exemplo mais recente. Ao chamar
+`.upsert()`/`.insert()` numa tabela assim pelo `lib/api.ts`, **nunca
+encadear `.select()`** — isso força o Postgrest a tentar devolver a linha
+gravada, o que falha (ou não retorna nada) sem policy de leitura.
+
 **Filtro de loja em queries com embed do Postgrest precisa de `!inner`.**
 `.select('*, product:products(*)').eq('product.store_id', storeId)` **não**
 restringe as linhas retornadas — só zera o campo embutido de quem não bate,
@@ -190,27 +205,28 @@ Três tipos de documento, todos usados em `StoreModule.tsx`:
 
 ## Backlog / Próximos passos
 
-Ainda não implementado — nenhum código relacionado existe no repo hoje:
+- **Alerta ativo na tela do cliente quando o pedido muda de status —
+  IMPLEMENTADO.** `OrderTracker` em `ClientModule.tsx` dispara toast por
+  item (`preparing`/`ready`) e som (`lib/audioAlert.ts`, Web Audio API,
+  sem arquivo de áudio) + vibração (`navigator.vibrate`) na transição
+  agregada do pedido inteiro. Só funciona com a aba aberta — **não**
+  cobre app fechado/tela bloqueada (isso exigiria Web Push real: Service
+  Worker + VAPID + um jeito de disparar o push a partir de algum backend,
+  que este projeto não tem hoje).
 
-- **Certificado digital por loja + emissão de cupom fiscal (NFC-e) via SEFAZ.**
-  Cada loja precisaria cadastrar seu certificado digital (e-CNPJ, provavelmente
-  A1) pra emitir e transmitir o cupom fiscal eletrônico direto pra SEFAZ a
-  cada venda. Hoje o sistema não emite nenhum documento fiscal — só recibo
-  interno não-fiscal (`printBillReceipt`). Vai exigir: armazenamento seguro do
-  certificado (provavelmente Supabase Storage privado + criptografia, nunca
-  client-side), integração com API de NFC-e (SEFAZ direto ou via
-  intermediário tipo Focus NFe/eNotas), e provavelmente uma tabela nova por
-  loja pra guardar dados fiscais (CNPJ, IE, regime tributário, certificado).
-
-- **Alerta ativo na tela do cliente quando o pedido muda de status
-  (preparando/pronto).** Hoje o `ClientModule.tsx`/`OrderTracker` só atualiza
-  o badge de status passivamente (Enviado → Preparando → Pronto → Entregue,
-  ver `getStatusBadge`) — o cliente só percebe se estiver olhando pra tela.
-  Falta um alerta ativo no momento da transição de status por item
-  (`order_items.status`, via Realtime): som/beep, vibração
-  (`navigator.vibrate`) e/ou toast (`components/Toast.tsx` já existe e é
-  usado em outros fluxos) disparado especificamente quando um item entra em
-  `preparing` ou vira `ready`, não só o badge estático.
+- **Espaço pra cadastrar o certificado digital da loja — código
+  implementado, migration pendente de aplicar no banco.** Bucket privado
+  `store-certificates` + tabelas `store_fiscal_certificates` (metadados
+  legíveis) e `store_fiscal_certificate_secrets` (senha, write-only) em
+  `supabase/migrations/006_fiscal_certificado.sql`, funções em
+  `lib/api.ts`, seção "Certificado Digital (fiscal)" no modal de editar
+  loja em `AdminModule.tsx`. **Antes de usar em qualquer ambiente**: rodar
+  `node scripts/aplicar-migration.mjs 006_fiscal_certificado.sql` (precisa
+  de `.env.local` com `SUPABASE_DB_URL`). Isso ainda é só o *armazenamento*
+  do certificado — a emissão de NFC-e/SEFAZ de verdade é trabalho futuro
+  separado, que vai precisar de um processo com service role pra ler o
+  certificado/senha de volta (a anon key não consegue, de propósito — ver
+  "Decisões de arquitetura" acima).
 
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
