@@ -65,7 +65,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
 
     if (needsChange) {
          return (
-            <div className="auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
                 <div className="auth-mesh" />
                 <div className="auth-orb" style={{ width: 280, height: 280, top: '-8%', left: '-6%', background: 'var(--warn)' }} />
                 <div className="auth-orb" style={{ width: 240, height: 240, bottom: '-10%', right: '-8%', background: 'var(--brand)', animationDelay: '-5s' }} />
@@ -101,7 +101,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     }
 
     return (
-        <div className="auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+        <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
              <div className="auth-mesh" />
              <div className="auth-orb" style={{ width: 300, height: 300, top: '-10%', right: '-6%', background: 'var(--brand)' }} />
              <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-12%', left: '-8%', background: 'var(--err)', animationDelay: '-4s' }} />

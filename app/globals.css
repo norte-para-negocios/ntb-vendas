@@ -88,6 +88,34 @@
   --scrollbar-thumb-hover: #9aa6b8;
 }
 
+/* Trava os tokens de tema nos valores claros, independente da classe .dark herdada
+   do <html> (preferência de tema é salva por navegador, não por usuário/conta - sem
+   isso, quem ligasse o modo escuro dentro do próprio painel deixava as telas de
+   login de TODO MUNDO nesse navegador escuras). Usada nas telas de pré-login
+   (landing, login de lojista, login de master) - o modo escuro só existe DEPOIS
+   de autenticado, dentro do próprio painel do usuário. */
+.force-light {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f4f8;
+  --text: #1f2733;
+  --text-muted: #64748b;
+  --border: #e6e9ef;
+  --brand: #484DB5;
+  --brand-strong: #3A3E91;
+  --brand-soft: #EEF0FC;
+  --ok: #10b981;
+  --warn: #f59e0b;
+  --err: #F43F5E;
+  --info: #3b82f6;
+  --ink: #1E1B4B;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shimmer: rgba(255, 255, 255, 0.55);
+  --scrollbar-thumb: #c4ccd8;
+  --scrollbar-thumb-hover: #9aa6b8;
+}
+
 /* Dark mode: ativado por classe .dark no <html> */
 .dark {
   --bg: #0d0e12;
