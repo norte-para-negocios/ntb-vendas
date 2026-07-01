@@ -67,13 +67,14 @@ export const Card: React.FC<{
   onClick?: () => void;
   hoverable?: boolean;
   accentColor?: string;
-}> = ({ children, className = '', onClick, hoverable, accentColor }) => (
+  style?: React.CSSProperties;
+}> = ({ children, className = '', onClick, hoverable, accentColor, style }) => (
   <div
     onClick={onClick}
     className={`relative overflow-hidden rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface)] ${
       onClick || hoverable ? 'cursor-pointer u-card' : ''
     } ${className}`}
-    style={{ boxShadow: 'var(--shadow-sm)' }}
+    style={{ boxShadow: 'var(--shadow-sm)', ...style }}
   >
     {accentColor && (
       <div className="absolute inset-y-0 left-0 w-1 rounded-l-[var(--r-lg)]" style={{ backgroundColor: accentColor }} />

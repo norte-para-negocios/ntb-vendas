@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { StoreDashboardView } from '@/components/modules/StoreDashboardView';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
+import { stagger } from '@/components/Skeleton';
 
 // --- COMPONENTS ---
 
@@ -61,25 +62,35 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
 
     if (needsChange) {
          return (
-            <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
-                <Card className="w-full max-w-sm p-8 animate-[fadeIn_0.2s_ease-out]">
-                    <div className="text-center mb-6">
+            <div className="auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+                <div className="auth-mesh" />
+                <div className="auth-orb" style={{ width: 280, height: 280, top: '-8%', left: '-6%', background: 'var(--warn)' }} />
+                <div className="auth-orb" style={{ width: 240, height: 240, bottom: '-10%', right: '-8%', background: 'var(--brand)', animationDelay: '-5s' }} />
+                <div className="auth-grain" />
+                <Card className="auth-card w-full max-w-sm p-8">
+                    <div className="u-stagger text-center mb-6" style={stagger(0)}>
                         <div className="bg-[var(--warn)]/10 w-14 h-14 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
                             <Lock size={24} />
                         </div>
                         <h2 className="text-xl font-semibold text-[var(--text)]">Crie sua Senha</h2>
                         <p className="text-[var(--text-muted)] text-sm mt-1">Primeiro acesso. Defina uma senha segura para continuar.</p>
                     </div>
-                    
+
                     <div className="space-y-4">
-                        <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
-                        <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
-                        
+                        <div className="u-stagger" style={stagger(60)}>
+                            <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
+                        </div>
+                        <div className="u-stagger" style={stagger(100)}>
+                            <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+                        </div>
+
                         {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
-                        
-                        <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
-                            Salvar Senha
-                        </Button>
+
+                        <div className="u-stagger" style={stagger(140)}>
+                            <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
+                                Salvar Senha
+                            </Button>
+                        </div>
                     </div>
                 </Card>
             </div>
@@ -87,26 +98,30 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
-             <div className="max-w-sm w-full">
-                 <div className="text-center mb-8">
+        <div className="auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+             <div className="auth-mesh" />
+             <div className="auth-orb" style={{ width: 300, height: 300, top: '-10%', right: '-6%', background: 'var(--brand)' }} />
+             <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-12%', left: '-8%', background: 'var(--err)', animationDelay: '-4s' }} />
+             <div className="auth-grain" />
+             <div className="relative z-[1] max-w-sm w-full">
+                 <div className="u-stagger text-center mb-8" style={stagger(0)}>
                      <div className="bg-[var(--brand)] w-12 h-12 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-5 text-white" style={{boxShadow:'0 4px 14px rgba(27,58,75,0.35)'}}>
                          <StoreIcon size={22} />
                      </div>
                      <h1 className="text-2xl font-semibold text-[var(--text)]">Área do Lojista</h1>
                      <p className="text-[var(--text-muted)] text-sm mt-1">Gerencie seus pedidos e mesas</p>
                  </div>
-                 <Card className="p-6 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
+                 <Card className="auth-card u-stagger p-6" style={stagger(60)}>
                     <div className="space-y-4">
                         <Input label="Email de Acesso" placeholder="seu@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                         <Input label="Senha" placeholder="••••••" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-                        
+
                         {error && (
                             <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
                                 <AlertCircle size={16} /> {error}
                             </div>
                         )}
-                        
+
                         <Button className="w-full" onClick={handleLogin} isLoading={isLoading}>
                             Acessar Painel
                         </Button>

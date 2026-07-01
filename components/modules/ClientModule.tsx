@@ -9,6 +9,7 @@ import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
+import { stagger } from '@/components/Skeleton';
 
 // --- COMPONENTS ---
 
@@ -316,8 +317,12 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><span className="text-[var(--text-muted)] text-sm animate-pulse">Carregando...</span></div>;
 
     return (
-        <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-6">
-            <div className="mb-8 text-center">
+        <div className="auth-shell min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-6">
+            <div className="auth-mesh" />
+            <div className="auth-orb" style={{ width: 300, height: 300, top: '-10%', left: '-6%', background: 'var(--brand)' }} />
+            <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-12%', right: '-8%', background: 'var(--err)', animationDelay: '-6s' }} />
+            <div className="auth-grain" />
+            <div className="u-stagger relative z-[1] mb-8 text-center" style={stagger(0)}>
                 {store?.logo_url ? (
                     <img src={store.logo_url} alt="Logo" className="w-20 h-20 rounded-[var(--r-lg)] mx-auto mb-4 object-cover" style={{boxShadow:'var(--shadow-md)'}} />
                 ) : (
@@ -328,7 +333,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null) =>
                 <h1 className="text-xl font-semibold text-[var(--text)] mb-1">{store?.name || 'Cardápio Digital'}</h1>
                 <p className="text-[var(--text-muted)] text-sm">Faça seu pedido direto pelo celular</p>
             </div>
-            <Card className="w-full max-w-sm p-6 space-y-5 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
+            <Card className="auth-card u-stagger w-full max-w-sm p-6 space-y-5" style={stagger(60)}>
                 {store?.contract_type === 'balcao_mesas' && (
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <button

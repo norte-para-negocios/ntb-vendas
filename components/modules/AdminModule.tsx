@@ -7,6 +7,7 @@ import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmi
 import { Store, StoreUser } from '@/types';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
+import { stagger } from '@/components/Skeleton';
 
 // Admin Login Component
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
@@ -62,9 +63,13 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
     if (needsChange) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
-                <Card className="w-full max-w-md p-8 animate-fade-in">
-                    <div className="text-center mb-6">
+            <div className="auth-shell min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
+                <div className="auth-mesh" />
+                <div className="auth-orb" style={{ width: 300, height: 300, top: '-8%', left: '-6%', background: 'var(--warn)' }} />
+                <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-10%', right: '-8%', background: 'var(--brand)', animationDelay: '-5s' }} />
+                <div className="auth-grain" />
+                <Card className="auth-card w-full max-w-md p-8">
+                    <div className="u-stagger text-center mb-6" style={stagger(0)}>
                         <div className="bg-[var(--warn)]/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
                             <Lock size={32} />
                         </div>
@@ -73,14 +78,20 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                     </div>
 
                     <div className="space-y-4">
-                        <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
-                        <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+                        <div className="u-stagger" style={stagger(60)}>
+                            <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
+                        </div>
+                        <div className="u-stagger" style={stagger(100)}>
+                            <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+                        </div>
 
                         {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
 
-                        <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
-                            Atualizar Senha
-                        </Button>
+                        <div className="u-stagger" style={stagger(140)}>
+                            <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
+                                Atualizar Senha
+                            </Button>
+                        </div>
                     </div>
                 </Card>
             </div>
@@ -88,19 +99,23 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
-            <Card className="w-full max-w-sm p-8 animate-slide-up">
-                <div className="text-center mb-8">
+        <div className="auth-shell min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
+            <div className="auth-mesh" />
+            <div className="auth-orb" style={{ width: 320, height: 320, top: '-10%', right: '-8%', background: 'var(--brand)' }} />
+            <div className="auth-orb" style={{ width: 280, height: 280, bottom: '-12%', left: '-6%', background: 'var(--err)', animationDelay: '-4s' }} />
+            <div className="auth-grain" />
+            <Card className="auth-card w-full max-w-sm p-8">
+                <div className="u-stagger text-center mb-8" style={stagger(0)}>
                     <h1 className="text-3xl font-bold text-[var(--brand)] mb-2">Painel Admin</h1>
                     <p className="text-[var(--text-muted)]">Acesso Restrito</p>
                 </div>
 
                 <div className="space-y-4">
-                    <div className="relative">
+                    <div className="u-stagger relative" style={stagger(60)}>
                         <User className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
                         <Input label="Usuário" className="pl-10" placeholder="Ex: andrey" value={username} onChange={e => setUsername(e.target.value)} />
                     </div>
-                    <div className="relative">
+                    <div className="u-stagger relative" style={stagger(100)}>
                         <Lock className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
                         <Input label="Senha" type="password" className="pl-10" placeholder="••••••" value={password} onChange={e => setPassword(e.target.value)} />
                     </div>
@@ -111,9 +126,11 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                         </div>
                     )}
 
-                    <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20" onClick={handleLogin} isLoading={isLoading}>
-                        Entrar
-                    </Button>
+                    <div className="u-stagger" style={stagger(140)}>
+                        <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20" onClick={handleLogin} isLoading={isLoading}>
+                            Entrar
+                        </Button>
+                    </div>
                 </div>
             </Card>
         </div>
