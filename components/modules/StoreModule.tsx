@@ -1649,7 +1649,13 @@ NOTIFY pgrst, 'reload schema';`;
                              )}
                              <span className={`font-bold uppercase px-3 py-1 rounded-full text-xs ${
                                 selectedTable?.status === 'available' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--info)]/10 text-[var(--info)]'
-                            }`}>{selectedTable?.status}</span>
+                            }`}>
+                                {selectedTable?.status === 'available' ? 'Livre'
+                                    : selectedTable?.status === 'waiting_bill' ? 'Pediu Conta'
+                                    : selectedTable?.status === 'blocked' ? 'Bloqueada'
+                                    : selectedTable?.status === 'closed' ? 'Fechada'
+                                    : 'Ocupada'}
+                            </span>
                         </div>
                     </div>
 
