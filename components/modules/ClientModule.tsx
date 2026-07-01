@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 // --- COMPONENTS ---
 
@@ -1286,6 +1287,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             {isWaitingBill ? <><Clock size={11} /> Conta</> : <><Receipt size={11}/> Conta</>}
                         </Button>
                     )}
+                    <ThemeToggle className="w-8 h-8" />
                     <button onClick={() => handleLogout(false)} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion">
                         <LogOut size={15} />
                     </button>

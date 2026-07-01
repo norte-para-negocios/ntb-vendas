@@ -10,6 +10,7 @@ import { StoreDashboardView } from '@/components/modules/StoreDashboardView';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 // --- COMPONENTS ---
 
@@ -252,6 +253,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              </div>
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
+          <ThemeToggle />
       </header>
 
       {/* Mobile Menu Drawer (Off-canvas) */}
@@ -261,9 +263,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             <div className="absolute left-0 top-0 bottom-0 w-64 bg-[var(--ink)] shadow-2xl flex flex-col animate-[slideRight_0.25s_cubic-bezier(0.22,1,0.36,1)] text-left">
                 <div className="px-4 py-4 border-b border-white/10 flex justify-between items-center">
                     <span className="font-semibold text-white text-[15px]">Menu Lojista</span>
-                    <button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-[var(--r-sm)] u-motion">
-                        <X size={18}/>
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <ThemeToggle variant="sidebar" />
+                        <button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-[var(--r-sm)] u-motion">
+                            <X size={18}/>
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
                     {visibleTabs.map((item) => (
@@ -360,7 +365,8 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           ))}
         </nav>
 
-        <div className="p-3 border-t border-white/8">
+        <div className={`p-3 border-t border-white/8 ${isCollapsed ? 'space-y-1' : 'flex items-center gap-1'}`}>
+          <ThemeToggle variant="sidebar" className={isCollapsed ? 'mx-auto' : ''} />
           <button
             onClick={onLogout}
             className={`flex items-center w-full px-3 py-2.5 text-[var(--err)]/60 hover:text-[var(--err)] hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[13px] ${isCollapsed ? 'justify-center' : 'gap-3'}`}

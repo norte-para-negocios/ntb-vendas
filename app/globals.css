@@ -88,7 +88,7 @@
   --scrollbar-thumb-hover: #9aa6b8;
 }
 
-/* Dark mode: ativado por classe .dark no <html> (painel lojista) */
+/* Dark mode: ativado por classe .dark no <html> */
 .dark {
   --bg: #0d0e12;
   --surface: #15171d;
@@ -96,9 +96,9 @@
   --text: #e6e8ec;
   --text-muted: #8b93a1;
   --border: rgba(255, 255, 255, 0.12);
-  --brand: #4a8fa8;
-  --brand-strong: #5ba3bf;
-  --brand-soft: rgba(27, 58, 75, 0.3);
+  --brand: #8489e0;
+  --brand-strong: #a3a7ea;
+  --brand-soft: rgba(72, 77, 181, 0.25);
   --ok: #34d399;
   --warn: #fbbf24;
   --err: #f87171;

@@ -3,6 +3,7 @@ import './globals.css';
 import { AppProvider } from '@/context/AppContext';
 import { ToastViewport } from '@/components/Toast';
 import { ConfirmDialogRoot } from '@/components/ConfirmDialog';
+import { THEME_INIT_SCRIPT } from '@/components/ThemeToggle';
 
 export const metadata: Metadata = {
   title: 'Cardápio Digital',
@@ -11,8 +12,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className="h-full">
+    <html lang="pt-BR" className="h-full" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

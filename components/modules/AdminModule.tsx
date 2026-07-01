@@ -8,6 +8,7 @@ import { Store, StoreUser } from '@/types';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const ROLE_LABELS: Record<string, string> = {
     owner: 'Dono / Gerente',
@@ -433,8 +434,11 @@ export const AdminModule: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--bg)] flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:block">
-        <h1 className="text-2xl font-bold mb-8 text-white">Master Admin</h1>
+      <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:flex md:flex-col">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-white">Master Admin</h1>
+          <ThemeToggle variant="sidebar" />
+        </div>
         <nav className="space-y-2">
           <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full p-3 rounded-lg u-motion u-press-sm ${view === 'stores' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
             <StoreIcon size={20} /> Lojas
