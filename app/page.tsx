@@ -44,6 +44,38 @@ const FEATURES = [
   },
 ];
 
+function WaveDivider({ from, to, flip = false }: { from: string; to: string; flip?: boolean }) {
+  return (
+    <div className="relative h-14 md:h-20 overflow-hidden" style={{ background: from }}>
+      <svg
+        viewBox="0 0 1440 120"
+        preserveAspectRatio="none"
+        className="absolute inset-0 w-full h-full"
+        style={flip ? { transform: 'scaleY(-1)' } : undefined}
+      >
+        <path
+          d="M0,32 C240,90 480,10 720,46 C960,82 1200,24 1440,58 L1440,120 L0,120 Z"
+          fill={to}
+        />
+      </svg>
+    </div>
+  );
+}
+
+function SectionBadge({ children, tone = 'dark' }: { children: React.ReactNode; tone?: 'dark' | 'light' }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider rounded-full px-3 py-1 mb-4 ${
+        tone === 'dark'
+          ? 'bg-white/10 border border-white/15 text-white'
+          : 'bg-[var(--brand)]/10 border border-[var(--brand)]/20 text-[var(--brand)]'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
 export default function HomePage() {
   return (
     <div className="bg-[var(--ink)] text-white">
@@ -74,7 +106,7 @@ export default function HomePage() {
         <div className="auth-orb" style={{ width: 320, height: 320, top: '20%', right: '-10%', background: 'var(--err)', animationDelay: '-6s' }} />
         <div className="auth-grain" />
 
-        <div className="relative z-[1] max-w-6xl mx-auto px-6 pt-16 pb-24 md:pt-24 md:pb-32 grid md:grid-cols-2 gap-12 items-center">
+        <div className="relative z-[1] max-w-6xl mx-auto px-6 pt-16 pb-24 md:pt-24 md:pb-28 grid md:grid-cols-2 gap-12 items-center">
           <div>
             <span
               className="u-stagger inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider bg-white/10 border border-white/15 rounded-full px-3 py-1 mb-6"
@@ -83,7 +115,7 @@ export default function HomePage() {
               Norte Para Negócios
             </span>
             <h1 className="u-stagger text-4xl md:text-5xl font-bold tracking-tight leading-[1.1] mb-5" style={stagger(50)}>
-              O cardápio do seu restaurante, direto no celular do cliente
+              Damos o norte certo para o cardápio do seu restaurante
             </h1>
             <p className="u-stagger text-lg text-white/70 leading-relaxed mb-8 max-w-md" style={stagger(100)}>
               Pedidos, cozinha, mesas e pagamento em um só sistema. Sem papel, sem retrabalho, sem cliente esperando garçom.
@@ -91,14 +123,14 @@ export default function HomePage() {
             <div className="u-stagger flex flex-col sm:flex-row gap-3" style={stagger(150)}>
               <Link
                 href="/c/bistro"
-                className="u-motion u-press group bg-white text-[var(--brand)] px-6 py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                className="u-motion u-press group bg-[var(--err)] hover:bg-[var(--err)]/90 px-6 py-3.5 rounded-full font-bold shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
               >
                 Ver cardápio de demonstração
                 <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />
               </Link>
               <Link
                 href="/loja"
-                className="u-motion u-press bg-white/10 border border-white/20 px-6 py-3.5 rounded-xl font-bold hover:bg-white/15 flex items-center justify-center gap-2"
+                className="u-motion u-press bg-white/10 border border-white/20 px-6 py-3.5 rounded-full font-bold hover:bg-white/15 flex items-center justify-center gap-2"
               >
                 <Store size={18} />
                 Sou lojista, quero entrar
@@ -147,46 +179,54 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Features */}
-      <section className="max-w-6xl mx-auto px-6 py-20 md:py-28">
-        <div className="max-w-lg mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Tudo que o salão, a cozinha e o caixa precisam</h2>
-          <p className="text-white/60 leading-relaxed">Um sistema só, do QR Code na mesa até o fechamento da conta.</p>
-        </div>
+      <WaveDivider from="var(--ink)" to="var(--surface)" />
 
-        <div className="space-y-16 md:space-y-24">
-          {FEATURES.map((feature, i) => {
-            const Icon = feature.icon;
-            const reversed = i % 2 === 1;
-            return (
-              <div key={feature.title} className={`grid md:grid-cols-2 gap-8 md:gap-16 items-center ${reversed ? 'md:[direction:rtl]' : ''}`}>
-                <div style={{ direction: 'ltr' }}>
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
-                    style={{ backgroundColor: `color-mix(in srgb, ${feature.accent} 18%, transparent)`, color: feature.accent }}
-                  >
-                    <Icon size={22} />
+      {/* Features — fundo claro, mesmo ritmo do site institucional */}
+      <section className="bg-[var(--surface)] text-[var(--text)]">
+        <div className="max-w-6xl mx-auto px-6 py-16 md:py-24">
+          <div className="max-w-lg mb-16 text-center mx-auto">
+            <SectionBadge tone="light">Funcionalidades</SectionBadge>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Tudo que o salão, a cozinha e o caixa precisam</h2>
+            <p className="text-[var(--text-muted)] leading-relaxed">Um sistema só, do QR Code na mesa até o fechamento da conta.</p>
+          </div>
+
+          <div className="space-y-16 md:space-y-24">
+            {FEATURES.map((feature, i) => {
+              const Icon = feature.icon;
+              const reversed = i % 2 === 1;
+              return (
+                <div key={feature.title} className={`grid md:grid-cols-2 gap-8 md:gap-16 items-center ${reversed ? 'md:[direction:rtl]' : ''}`}>
+                  <div style={{ direction: 'ltr' }}>
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
+                      style={{ backgroundColor: `color-mix(in srgb, ${feature.accent} 16%, transparent)`, color: feature.accent }}
+                    >
+                      <Icon size={22} />
+                    </div>
+                    <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
+                    <p className="text-[var(--text-muted)] leading-relaxed max-w-md">{feature.description}</p>
                   </div>
-                  <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
-                  <p className="text-white/60 leading-relaxed max-w-md">{feature.description}</p>
-                </div>
-                <div style={{ direction: 'ltr' }}>
-                  <div
-                    className="rounded-2xl border border-white/10 aspect-[4/3] flex items-center justify-center"
-                    style={{ background: `linear-gradient(160deg, color-mix(in srgb, ${feature.accent} 14%, transparent), transparent)` }}
-                  >
-                    <Icon size={72} strokeWidth={1} style={{ color: feature.accent, opacity: 0.5 }} />
+                  <div style={{ direction: 'ltr' }}>
+                    <div
+                      className="rounded-2xl border border-[var(--border)] aspect-[4/3] flex items-center justify-center"
+                      style={{ background: `linear-gradient(160deg, color-mix(in srgb, ${feature.accent} 12%, transparent), transparent)` }}
+                    >
+                      <Icon size={72} strokeWidth={1} style={{ color: feature.accent, opacity: 0.6 }} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </section>
 
+      <WaveDivider from="var(--surface)" to="var(--ink)" />
+
       {/* CTA banner */}
-      <section className="border-t border-white/10">
+      <section className="bg-[var(--ink)]">
         <div className="max-w-6xl mx-auto px-6 py-20 text-center">
+          <SectionBadge>Comece agora</SectionBadge>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Pronto para digitalizar o atendimento?</h2>
           <p className="text-white/60 mb-8 max-w-md mx-auto">
             Acesse o painel do seu estabelecimento ou explore o cardápio de demonstração.
@@ -194,14 +234,14 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/loja"
-              className="u-motion u-press bg-[var(--brand)] hover:bg-[var(--brand-strong)] px-6 py-3.5 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2"
+              className="u-motion u-press bg-[var(--err)] hover:bg-[var(--err)]/90 px-6 py-3.5 rounded-full font-bold shadow-lg flex items-center justify-center gap-2"
             >
               <LayoutDashboard size={18} />
               Acessar Área do Lojista
             </Link>
             <Link
               href="/c/bistro"
-              className="u-motion u-press bg-white/10 border border-white/20 hover:bg-white/15 px-6 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
+              className="u-motion u-press bg-white/10 border border-white/20 hover:bg-white/15 px-6 py-3.5 rounded-full font-bold flex items-center justify-center gap-2"
             >
               Ver Cardápio Demo
             </Link>
