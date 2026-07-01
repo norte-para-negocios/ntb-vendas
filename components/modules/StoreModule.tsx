@@ -171,12 +171,16 @@ const useStoreNotifications = (storeId: string | undefined) => {
                     }
                 });
 
-                // Fetch kitchen & bar orders
+                // Fetch kitchen & bar orders (filtrado por loja no banco via products!inner, nao so no
+                // client - antes essa query trazia os order_items pendentes de TODAS as lojas da
+                // plataforma; sem o !inner o Postgrest so zera o campo embutido, nao restringe as linhas)
                 const { data: allItems } = await supabase
                     .from('order_items')
-                    .select('*, product:products(*), order:orders(*)')
+                    .select('*, product:products!inner(*), order:orders(*)')
+                    .eq('product.store_id', storeId)
                     .neq('status', 'delivered')
-                    .neq('status', 'canceled');
+                    .neq('status', 'canceled')
+                    .limit(500);
                 
                 let kitchenCount = 0;
                 let barCount = 0;

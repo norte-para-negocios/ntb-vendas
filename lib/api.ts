@@ -301,7 +301,8 @@ export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order
     .eq('store_id', storeId)
     .eq('order_type', 'table')
     .neq('status', OrderStatus.DELIVERED)
-    .neq('status', OrderStatus.CANCELED);
+    .neq('status', OrderStatus.CANCELED)
+    .limit(500);
 
   if (error) { console.error('Fetch Active Table Orders Error', error); return []; }
 
@@ -318,7 +319,8 @@ export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: 
     .select('*, order_items(*, product:products(*))')
     .eq('table_id', tableId)
     .neq('status', OrderStatus.DELIVERED)
-    .neq('status', OrderStatus.CANCELED);
+    .neq('status', OrderStatus.CANCELED)
+    .limit(500);
 
   if (error || !orders) return { total: 0, items: [] };
 
@@ -342,11 +344,17 @@ export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: 
 export const fetchKitchenOrders = async (storeId: string, destination: 'kitchen' | 'bar' = 'kitchen'): Promise<OrderItem[]> => {
   const { data, error } = await supabase
     .from('order_items')
-    .select('*, product:products(*), order:orders(*, tables(number))')
+    // products!inner (não só products) é obrigatório aqui: sem o !inner o Postgrest só
+    // zera o campo embutido de quem não bate o filtro, mas continua lendo/contando as
+    // linhas de order_items de TODAS as lojas da plataforma (confirmado testando direto
+    // na API - sem !inner vinham 179 linhas incluindo de outras lojas, com !inner só 26,
+    // as reais da loja filtrada).
+    .select('*, product:products!inner(*), order:orders(*, tables(number))')
     .eq('product.store_id', storeId)
     .neq('status', OrderStatus.DELIVERED)
     .neq('status', OrderStatus.CANCELED)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .limit(500);
 
   if (error) { console.error('Kitchen fetch error:', error); return []; }
 
@@ -367,7 +375,8 @@ export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
     .eq('store_id', storeId)
     .eq('order_type', 'counter')
     .neq('status', 'delivered')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(500);
 
   if (error) { console.error('Fetch Counter Orders Error', error); return []; }
   return (data as any) || [];
@@ -379,7 +388,8 @@ export const fetchSalesHistory = async (storeId: string): Promise<Order[]> => {
     .select('*, order_items(*, product:products(*)), tables(*)')
     .eq('store_id', storeId)
     .eq('status', OrderStatus.DELIVERED)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(2000);
 
   if (error) { console.error('Fetch Sales History Error', error); return []; }
   return (data as any) || [];
@@ -573,7 +583,8 @@ export const cancelPendingTableItems = async (tableId: string) => {
     .from('orders')
     .select('id')
     .eq('table_id', tableId)
-    .neq('status', OrderStatus.DELIVERED);
+    .neq('status', OrderStatus.DELIVERED)
+    .limit(200);
 
   if (!orders || orders.length === 0) return;
   const orderIds = orders.map((o) => o.id);
@@ -596,7 +607,8 @@ export const closeTableSession = async (
       .select('id')
       .eq('table_id', tableId)
       .neq('status', OrderStatus.DELIVERED)
-      .neq('status', OrderStatus.CANCELED);
+      .neq('status', OrderStatus.CANCELED)
+      .limit(200);
 
     if (orders && orders.length > 0) {
       const orderIds = orders.map((o) => o.id);
