@@ -1,12 +1,13 @@
 'use client';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu } from 'lucide-react';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, fetchStoreById, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
-import { StoreDashboardView } from '@/components/modules/StoreDashboardView';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -15,6 +16,14 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { playPreparingAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem } from '@/lib/calc';
+
+// StoreDashboardView importa recharts (bundle pesado); cozinha/bar/balcão
+// nunca abrem essa aba, então carregamos sob demanda e só no client
+// (achado de performance #6).
+const StoreDashboardView = dynamic(
+    () => import('@/components/modules/StoreDashboardView').then(mod => mod.StoreDashboardView),
+    { ssr: false, loading: () => <Skeleton className="h-64 w-full rounded-xl" /> }
+);
 
 // --- COMPONENTS ---
 
@@ -680,7 +689,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
             <div className="space-y-4">
                 <div className="flex gap-4">
                     {product.image_url && (
-                        <img src={product.image_url} alt={product.name} className="w-24 h-24 object-cover rounded-lg shadow-sm" />
+                        <Image src={product.image_url} alt={product.name} width={96} height={96} className="w-24 h-24 object-cover rounded-lg shadow-sm" />
                     )}
                     <div>
                         <h4 className="font-bold text-lg">{product.name}</h4>
@@ -763,7 +772,9 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 {filteredProducts.map(product => (
                     <Card key={product.id} onClick={() => setSelectedProduct(product)} className="flex flex-col gap-2 p-2 cursor-pointer hover:border-[var(--brand)] transition-colors">
                         {product.image_url ? (
-                             <img src={product.image_url} alt={product.name} className="w-full h-24 object-cover rounded-lg bg-[var(--surface-2)]" />
+                             <div className="relative w-full h-24 rounded-lg overflow-hidden bg-[var(--surface-2)]">
+                                 <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 50vw, 240px" className="object-cover" />
+                             </div>
                         ) : (
                              <div className="w-full h-24 bg-[var(--surface-2)] rounded-lg flex items-center justify-center text-[var(--border)] font-bold text-xs">Sem Foto</div>
                         )}
@@ -832,7 +843,6 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         }
     };
 
-    const [currentStore, setCurrentStore] = useState<Store>(store);
     const [paymentMethods, setPaymentMethods] = useState<{ method: string, amount: number }[]>([]);
     const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
     const [removedServiceFees, setRemovedServiceFees] = useState<Set<string>>(new Set());
@@ -859,11 +869,11 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
             }
         });
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const isServiceFeeEnabled = !!(currentStore.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id));
+        const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id));
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled);
         return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled };
-    }, [selectedTable, activeOrders, currentStore, removedServiceFees]);
+    }, [selectedTable, activeOrders, store, removedServiceFees]);
 
     const usersBreakdown = useMemo(() => {
         if (!currentTableSummary) return {};
@@ -952,14 +962,18 @@ NOTIFY pgrst, 'reload schema';`;
 
     const loadData = async () => {
         if(!storeId) return;
-        const [t, o, s] = await Promise.all([
+        // Nao rebusca `stores` aqui (achado de performance #9): os eventos
+        // Realtime assinados abaixo sao de `tables`/`orders`/`order_items`,
+        // nenhum deles muda dado de `stores` — a config da loja ja vem
+        // atualizada via prop `store` (StoreModule mantem `user.store` em
+        // sincronia sempre que algo em `stores` muda de fato, ex.:
+        // MenuManagementView.handleToggleServiceFee → onStoreUpdate).
+        const [t, o] = await Promise.all([
             fetchTables(storeId),
             fetchActiveOrdersForTables(storeId),
-            fetchStoreById(storeId)
         ]);
         setTables(t);
         setActiveOrders(o);
-        if (s) setCurrentStore(s);
 
         // Update selected table if open to reflect latest service_fee_removed state
         setSelectedTable(prev => {
@@ -1013,7 +1027,7 @@ NOTIFY pgrst, 'reload schema';`;
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
         const table = tables.find(t => t.id === tableId);
-        const isServiceFeeEnabled = !!(currentStore.config?.charge_service_fee && !removedServiceFees.has(tableId));
+        const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(tableId));
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled);
 
@@ -2306,15 +2320,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [serviceFeeEnabled, setServiceFeeEnabled] = useState(store.config?.charge_service_fee ?? false);
     const [currentStoreConfig, setCurrentStoreConfig] = useState(store.config);
 
+    // A `store` recebida via prop ja e a fonte da verdade (StoreModule mantem
+    // `user.store` atualizado via `onStoreUpdate` a cada mudanca real de
+    // config) — nao ha motivo pra rebuscar do banco aqui (achado de
+    // performance #9). So resincroniza o estado local se o proprio prop
+    // `store` mudar (ex.: loja trocada/atualizada por outro componente).
     useEffect(() => {
-        // Fetch fresh store config to ensure we have the latest state
-        fetchStoreById(storeId).then(freshStore => {
-            if (freshStore) {
-                setCurrentStoreConfig(freshStore.config);
-                setServiceFeeEnabled(freshStore.config?.charge_service_fee ?? false);
-            }
-        });
-    }, [storeId]);
+        setCurrentStoreConfig(store.config);
+        setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
+    }, [store]);
 
     const handleToggleServiceFee = async () => {
         const newValue = !serviceFeeEnabled;
@@ -2439,9 +2453,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                         </div>
                                                                         <div className="w-20 h-20 bg-[var(--surface-2)] rounded-lg flex-shrink-0 overflow-hidden ml-4">
                                                                             {prod.image_url ? (
-                                                                                <img src={prod.image_url} alt="" className="w-full h-full object-cover"/>
+                                                                                <Image src={prod.image_url} alt="" width={80} height={80} className="w-full h-full object-cover"/>
                                                                             ) : (
-                                                                                <div className="w-full h-full flex items-center justify-center text-[var(--border)]"><Image size={24}/></div>
+                                                                                <div className="w-full h-full flex items-center justify-center text-[var(--border)]"><ImageIcon size={24}/></div>
                                                                             )}
                                                                         </div>
                                                                         <div className="flex-1">
@@ -2486,7 +2500,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div className="flex gap-4 items-center">
                          <div className="w-24 h-24 bg-[var(--surface-2)] rounded-lg border-2 border-dashed border-[var(--border)] flex items-center justify-center overflow-hidden relative">
                              {pPreview ? (
-                                 <img src={pPreview} alt="" className="w-full h-full object-cover" />
+                                 // pPreview pode ser um blob: local (arquivo recem-selecionado, antes do
+                                 // upload) — o otimizador de imagem do Next não consegue buscar blob:
+                                 // no servidor, entao pulamos a otimizacao so nesse caso.
+                                 <Image src={pPreview} alt="" fill sizes="96px" className="object-cover" unoptimized={pPreview.startsWith('blob:')} />
                              ) : (
                                  <Camera className="text-[var(--border)]"/>
                              )}
