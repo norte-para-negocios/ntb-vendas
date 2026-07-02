@@ -83,7 +83,7 @@ export interface Category {
 
 export interface Product {
   id: string;
-  category_id: string;
+  category_id: string | null; // FK is `on delete set null` — categoria excluida deixa o produto orfao
   store_id: string;
   name: string;
   description: string;

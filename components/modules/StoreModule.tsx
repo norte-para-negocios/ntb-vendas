@@ -2088,6 +2088,13 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
 
 // --- SUB-MODULE: MENU MANAGEMENT ---
 
+// Sentinel usado só na UI pra agrupar produtos órfãos (category_id === null,
+// FK on delete set null quando a categoria é excluída — ver AGENTS.md) numa
+// seção "Sem categoria" que reusa a mesma renderização/drag-and-drop das
+// categorias reais, sem duplicar o JSX.
+const UNCATEGORIZED_ID = '__uncategorized__';
+const groupIdOf = (p: Product) => p.category_id ?? UNCATEGORIZED_ID;
+
 const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
     const storeId = store.id;
     const [categories, setCategories] = useState<Category[]>([]);
@@ -2137,9 +2144,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             const destCategoryId = destination.droppableId;
 
             if (sourceCategoryId === destCategoryId) {
-                // Reordering within the same category
-                const catProducts = products.filter(p => p.category_id === sourceCategoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
-                const otherProducts = products.filter(p => p.category_id !== sourceCategoryId);
+                // Reordering within the same category (ou dentro de "Sem categoria")
+                const catProducts = products.filter(p => groupIdOf(p) === sourceCategoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
+                const otherProducts = products.filter(p => groupIdOf(p) !== sourceCategoryId);
                 
                 const newCatProducts = [...catProducts];
                 const [moved] = newCatProducts.splice(source.index, 1);
@@ -2161,14 +2168,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     loadMenu();
                 }
             } else {
-                // Moving to a different category
-                const sourceCatProducts = products.filter(p => p.category_id === sourceCategoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
-                const destCatProducts = products.filter(p => p.category_id === destCategoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
-                const otherProducts = products.filter(p => p.category_id !== sourceCategoryId && p.category_id !== destCategoryId);
+                // Moving to a different category (origem/destino podem ser "Sem categoria")
+                const sourceCatProducts = products.filter(p => groupIdOf(p) === sourceCategoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
+                const destCatProducts = products.filter(p => groupIdOf(p) === destCategoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
+                const otherProducts = products.filter(p => groupIdOf(p) !== sourceCategoryId && groupIdOf(p) !== destCategoryId);
 
                 const newSourceProducts = [...sourceCatProducts];
                 const [moved] = newSourceProducts.splice(source.index, 1);
-                moved.category_id = destCategoryId; // Update category_id
+                const newCategoryId = destCategoryId === UNCATEGORIZED_ID ? null : destCategoryId;
+                moved.category_id = newCategoryId; // Update category_id
 
                 const newDestProducts = [...destCatProducts];
                 newDestProducts.splice(destination.index, 0, moved);
@@ -2180,8 +2188,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
                 try {
                     // Update category_id for the moved product
-                    await updateProduct(moved.id, { category_id: destCategoryId });
-                    
+                    await updateProduct(moved.id, { category_id: newCategoryId });
+
                     // Update orders for both categories
                     await updateProductOrder([
                         ...updatedSourceProducts.map(p => ({ id: p.id, order: p.order || 0 })),
@@ -2222,7 +2230,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPName(product.name);
             setPDesc(product.description);
             setPPrice(product.price.toString());
-            setPCat(product.category_id);
+            setPCat(product.category_id || ''); // produto orfao (sem categoria): forca escolha no select
             setPTime(product.prep_time_minutes.toString());
             setPPreview(product.image_url);
             setPDestination(product.destination || 'kitchen');
@@ -2328,6 +2336,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         }
     };
 
+    // Produtos órfãos (categoria excluída, FK on delete set null) entram numa
+    // seção sintética "Sem categoria" no final da lista, reusando o mesmo
+    // Droppable/Draggable e os mesmos controles de editar/pausar/excluir das
+    // categorias reais — ver `groupIdOf`/`UNCATEGORIZED_ID` acima.
+    const hasUncategorizedProducts = products.some(p => p.category_id === null);
+    const productGroups: Category[] = hasUncategorizedProducts
+        ? [...categories, { id: UNCATEGORIZED_ID, store_id: storeId, name: 'Sem categoria', order: Number.MAX_SAFE_INTEGER }]
+        : categories;
+
     return (
         <div className="space-y-8">
             {/* STORE SETTINGS */}
@@ -2395,8 +2412,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         </div>
 
                         <div className="space-y-6">
-                            {categories.map(cat => {
-                                const catProducts = products.filter(p => p.category_id === cat.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+                            {productGroups.map(cat => {
+                                const catProducts = products.filter(p => groupIdOf(p) === cat.id).sort((a, b) => (a.order || 0) - (b.order || 0));
                                 if (catProducts.length === 0) return null;
 
                                 return (
