@@ -46,11 +46,13 @@
   --brand-strong: #3A3E91;
   --brand-soft: #EEF0FC;
 
-  /* Semânticas */
-  --ok: #10b981;
-  --warn: #f59e0b;
-  --err: #F43F5E;
-  --info: #3b82f6;
+  /* Semânticas — escurecidas p/ contraste WCAG AA (>=4.5:1) contra fundo
+     branco no tema claro (ver docs/plans/2026-07-02-varredura-correcoes-plan.md,
+     achado de UX #3; valores antigos ficavam entre 2.2:1 e 3.7:1). */
+  --ok: #047857;
+  --warn: #b45309;
+  --err: #be123c;
+  --info: #2563eb;
 
   /* Tinta: superfície escura de destaque (igual ao site institucional) */
   --ink: #1E1B4B;
@@ -104,10 +106,10 @@
   --brand: #484DB5;
   --brand-strong: #3A3E91;
   --brand-soft: #EEF0FC;
-  --ok: #10b981;
-  --warn: #f59e0b;
-  --err: #F43F5E;
-  --info: #3b82f6;
+  --ok: #047857;
+  --warn: #b45309;
+  --err: #be123c;
+  --info: #2563eb;
   --ink: #1E1B4B;
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
