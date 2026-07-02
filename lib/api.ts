@@ -79,6 +79,21 @@ export const updateStoreUserPassword = async (userId: string, newPassword: strin
   if (error) throw error;
 };
 
+// Restaura a sessão do lojista depois de um F5 (achado de bug #6 — antes o
+// login se perdia no meio do turno). Rebusca o store_user pelo id salvo no
+// localStorage no login bem-sucedido e revalida a loja com a mesma checagem
+// de authenticateStoreUser (loja precisa existir e continuar ativa); nunca
+// reautentica por senha, só usada quando já existe uma sessão local salva.
+export const fetchStoreUserById = async (userId: string): Promise<(StoreUser & { store: Store }) | null> => {
+  const { data, error } = await supabase.from('store_users').select('*').eq('id', userId).single();
+  if (error || !data) return null;
+
+  const store = await fetchStoreById(data.store_id);
+  if (!store || !store.is_active) return null;
+
+  return { ...data, store };
+};
+
 export const fetchStoreTeamMembers = async (storeId: string): Promise<StoreUser[]> => {
   const { data, error } = await supabase
     .from('store_users')

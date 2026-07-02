@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, fetchStoreById, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, fetchStoreById, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { StoreDashboardView } from '@/components/modules/StoreDashboardView';
@@ -3225,32 +3225,88 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     );
 };
 
+// Chave do localStorage onde fica { userId, storeId } da sessão do lojista —
+// só o suficiente pra rebuscar o store_user via fetchStoreUserById depois de
+// um F5 (achado de bug #6). Nunca guarda senha nem dado sensível.
+const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
+
+// Mesma regra de "primeira aba visível" usada tanto no login normal quanto na
+// restauração de sessão — extraída pra não duplicar a cascata de permissões.
+const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
+    if (u.role === 'owner') return 'tables';
+    if (u.permissions?.tables !== false) return 'tables';
+    if (u.permissions?.counter !== false) return 'counter';
+    if (u.permissions?.kitchen !== false) return 'kitchen';
+    if (u.permissions?.bar !== false) return 'bar';
+    if (u.permissions?.menu !== false) return 'menu';
+    return 'admin';
+};
+
 export const StoreModule: React.FC = () => {
     const [user, setUser] = useState<(StoreUser & { store: Store }) | null>(null);
     const [tab, setTab] = useState('tables');
+    // true enquanto tenta restaurar a sessão salva no localStorage — evita
+    // piscar a tela de login por um frame antes de saber se há sessão válida.
+    const [isRestoringSession, setIsRestoringSession] = useState(true);
 
-    // Restore session check? Maybe later. For now simple login.
-    
-    if (!user) return <StoreLogin onLogin={(u) => {
-        setUser(u);
-        // Set initial tab based on permissions
-        if (u.role === 'owner') {
-             setTab('tables');
-        } else if (u.permissions?.tables !== false) {
-             setTab('tables');
-        } else if (u.permissions?.counter !== false) {
-             setTab('counter');
-        } else if (u.permissions?.kitchen !== false) {
-             setTab('kitchen');
-        } else if (u.permissions?.bar !== false) {
-             setTab('bar');
-        } else if (u.permissions?.menu !== false) {
-             setTab('menu');
-        } else {
-             setTab('admin');
+    // Restaura a sessão do lojista após F5 (achado de bug #6 — comentário
+    // antigo "Restore session check? Maybe later" reconhecia a lacuna). Se
+    // existir { userId, storeId } salvo no login anterior, rebusca o
+    // store_user (fetchStoreUserById já revalida loja/usuário ativos, mesma
+    // lógica de authenticateStoreUser) e loga sem pedir senha de novo. Se a
+    // sessão salva não for mais válida (loja desativada, usuário removido),
+    // limpa o localStorage e cai na tela de login normalmente.
+    useEffect(() => {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(STORE_SESSION_STORAGE_KEY) : null;
+        if (!raw) {
+            setIsRestoringSession(false);
+            return;
         }
-    }} />;
-    
+
+        (async () => {
+            try {
+                const saved = JSON.parse(raw) as { userId?: string; storeId?: string };
+                const restoredUser = saved?.userId ? await fetchStoreUserById(saved.userId) : null;
+                if (restoredUser) {
+                    setUser(restoredUser);
+                    setTab(pickInitialStoreTab(restoredUser));
+                } else {
+                    localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+                }
+            } catch {
+                localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+            } finally {
+                setIsRestoringSession(false);
+            }
+        })();
+    }, []);
+
+    const handleLogin = (u: StoreUser & { store: Store }) => {
+        setUser(u);
+        setTab(pickInitialStoreTab(u));
+        localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id }));
+    };
+
+    const handleLogout = () => {
+        setUser(null);
+        localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+    };
+
+    if (isRestoringSession) {
+        return (
+            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+                <div className="auth-mesh" />
+                <div className="auth-grain" />
+                <div className="relative z-[1] flex flex-col items-center gap-3 text-[var(--text-muted)]">
+                    <RefreshCw size={28} className="animate-spin text-[var(--brand)]" />
+                    <p className="text-sm">Restaurando sessão...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!user) return <StoreLogin onLogin={handleLogin} />;
+
     // Permission Check
     const canAccess = (t: string) => {
         if (user.role === 'owner') return true;
@@ -3259,19 +3315,19 @@ export const StoreModule: React.FC = () => {
     };
 
     return (
-        <StoreLayout 
+        <StoreLayout
             title={
-                tab === 'tables' ? 'Mesas & Comandas' : 
-                tab === 'counter' ? 'Pedidos Balcão' : 
-                tab === 'kitchen' ? 'Monitor de Cozinha (KDS)' : 
-                tab === 'bar' ? 'Monitor do Bar (KDS)' : 
+                tab === 'tables' ? 'Mesas & Comandas' :
+                tab === 'counter' ? 'Pedidos Balcão' :
+                tab === 'kitchen' ? 'Monitor de Cozinha (KDS)' :
+                tab === 'bar' ? 'Monitor do Bar (KDS)' :
                 tab === 'menu' ? 'Gestão de Cardápio' :
                 'Administração'
             }
-            currentTab={tab} 
-            onTabChange={setTab} 
-            storeName={user.store.name} 
-            onLogout={() => setUser(null)}
+            currentTab={tab}
+            onTabChange={setTab}
+            storeName={user.store.name}
+            onLogout={handleLogout}
             user={user}
         >
             {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} loggedUser={user} />}
