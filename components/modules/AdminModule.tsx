@@ -270,7 +270,7 @@ export const AdminModule: React.FC = () => {
   };
 
   const handleDeleteStore = async (id: string, storeName: string) => {
-      if(await confirm({ message: `Tem certeza que deseja excluir a loja "${storeName}"? Todos os dados (pedidos, mesas, cardápio) serão perdidos.`, variant: 'danger', confirmLabel: 'Excluir' })) {
+      if(await confirm({ message: `Tem certeza que deseja excluir a loja "${storeName}"? Ela será desativada e some da listagem, mas os dados (pedidos, mesas, cardápio) continuam guardados.`, variant: 'danger', confirmLabel: 'Excluir' })) {
           setIsLoadingList(true);
           const result = await deleteStore(id);
           if (result.success) {
