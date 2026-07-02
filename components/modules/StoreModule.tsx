@@ -14,6 +14,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { playPreparingAlert } from '@/lib/audioAlert';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem } from '@/lib/calc';
 
 // --- COMPONENTS ---
 
@@ -787,8 +788,9 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     );
 };
 
-const TablesView: React.FC<{ store: Store }> = ({ store }) => {
+const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
+    const isFinishingRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
@@ -857,33 +859,36 @@ const TablesView: React.FC<{ store: Store }> = ({ store }) => {
             }
         });
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const isServiceFeeEnabled = currentStore.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id);
-        const serviceFee = isServiceFeeEnabled ? subtotal * 0.1 : 0;
-        return { subtotal, serviceFee, total: subtotal + serviceFee, allItems: items, isServiceFeeEnabled };
+        const isServiceFeeEnabled = !!(currentStore.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id));
+        const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal) : 0;
+        const total = calculateOrderTotal(subtotal, isServiceFeeEnabled);
+        return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled };
     }, [selectedTable, activeOrders, currentStore, removedServiceFees]);
 
     const usersBreakdown = useMemo(() => {
         if (!currentTableSummary) return {};
         const breakdown: { [name: string]: { subtotal: number, serviceFee: number, total: number, items: any[] } } = {};
-        
+
         currentTableSummary.allItems.forEach(item => {
             const match = item.notes ? item.notes.match(/^\[(.*?)\]/) : null;
             const userName = match ? match[1] : 'Mesa / Geral';
-            
+
             if (!breakdown[userName]) {
                 breakdown[userName] = { subtotal: 0, serviceFee: 0, total: 0, items: [] };
             }
             breakdown[userName].items.push(item);
             breakdown[userName].subtotal += (item.price_at_time * item.quantity);
         });
-        
+
+        const splitItems: SplitItem[] = Object.entries(breakdown).map(([userName, data]) => ({ userName, subtotal: data.subtotal }));
+        const totalsByUser = calculateSplitByPerson(splitItems, currentTableSummary.isServiceFeeEnabled);
+
         Object.keys(breakdown).forEach(userName => {
             const userSubtotal = breakdown[userName].subtotal;
-            const userServiceFee = currentTableSummary.isServiceFeeEnabled ? userSubtotal * 0.1 : 0;
-            breakdown[userName].serviceFee = userServiceFee;
-            breakdown[userName].total = userSubtotal + userServiceFee;
+            breakdown[userName].serviceFee = currentTableSummary.isServiceFeeEnabled ? calculateServiceFee(userSubtotal) : 0;
+            breakdown[userName].total = totalsByUser.get(userName) ?? userSubtotal;
         });
-        
+
         return breakdown;
     }, [currentTableSummary]);
 
@@ -924,9 +929,8 @@ const TablesView: React.FC<{ store: Store }> = ({ store }) => {
         return sum;
     }, [currentTableSummary, paymentSelectedItems]);
 
-    const calculatorServiceFee = (currentTableSummary?.isServiceFeeEnabled) ? calculatorSubtotal * 0.1 : 0;
-    const calculatorTotal = calculatorSubtotal + calculatorServiceFee;
-
+    const calculatorServiceFee = (currentTableSummary?.isServiceFeeEnabled) ? calculateServiceFee(calculatorSubtotal) : 0;
+    const calculatorTotal = calculateOrderTotal(calculatorSubtotal, !!currentTableSummary?.isServiceFeeEnabled);
 
     const SQL_FIX_SCRIPT = `-- Rode este script no SQL Editor do Supabase
 DO $$
@@ -1009,12 +1013,20 @@ NOTIFY pgrst, 'reload schema';`;
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
         const table = tables.find(t => t.id === tableId);
-        const isServiceFeeEnabled = currentStore.config?.charge_service_fee && !removedServiceFees.has(tableId);
-        const serviceFee = isServiceFeeEnabled ? subtotal * 0.1 : 0;
-        const total = subtotal + serviceFee;
+        const isServiceFeeEnabled = !!(currentStore.config?.charge_service_fee && !removedServiceFees.has(tableId));
+        const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal) : 0;
+        const total = calculateOrderTotal(subtotal, isServiceFeeEnabled);
 
         return { subtotal, serviceFee, total, count: items.length, items: items.slice(0, 3), allItems: items, isServiceFeeEnabled }; // Show top 3
     };
+
+    // Totais da aba de Pagamento: quanto falta pagar e, quando o dinheiro
+    // lançado excede o total, quanto de troco dar (achado de bug #4).
+    const paymentTotalDue = selectedTable ? getTableSummary(selectedTable.id).total : 0;
+    const totalPaidSoFar = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
+    const cashPaidSoFar = paymentMethods.filter(p => p.method === 'CASH').reduce((acc, p) => acc + p.amount, 0);
+    const remainingToPay = Math.max(0, paymentTotalDue - totalPaidSoFar);
+    const changeDue = calculateChange(cashPaidSoFar, paymentTotalDue);
 
     const printTableBill = (tableId: string) => {
         const summary = getTableSummary(tableId);
@@ -1085,23 +1097,25 @@ NOTIFY pgrst, 'reload schema';`;
 
     const handleFinishPayment = async () => {
         if (!selectedTable) return;
-        
-        const summary = getTableSummary(selectedTable.id);
-        const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
-        
-        if (totalPaid < summary.total - 0.01) { // Tolerance for float
-            toast.error('O valor pago é menor que o total da conta.');
-            return;
-        }
-
-        const paymentData = {
-            total: summary.total,
-            methods: paymentMethods
-        };
+        if (isFinishingRef.current) return;
+        isFinishingRef.current = true;
 
         try {
+            const summary = getTableSummary(selectedTable.id);
+            const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
+
+            if (totalPaid < summary.total - 0.01) { // Tolerance for float
+                toast.error('O valor pago é menor que o total da conta.');
+                return;
+            }
+
+            const paymentData = {
+                total: summary.total,
+                methods: paymentMethods
+            };
+
             const result = await closeTableSession(selectedTable.id, paymentData);
-            
+
             if (result.success) {
                 if (result.message && result.message.includes("Colunas ausentes")) {
                     setShowFixDbModal(true);
@@ -1126,6 +1140,8 @@ NOTIFY pgrst, 'reload schema';`;
             } else {
                 toast.error("Erro ao fechar mesa: " + e.message);
             }
+        } finally {
+            isFinishingRef.current = false;
         }
     };
 
@@ -1174,14 +1190,14 @@ NOTIFY pgrst, 'reload schema';`;
     
     const handleAddItem = async (product: Product, qty: number, notes: string) => {
         if (!selectedTable) return;
-        
-        const finalNotes = notes ? `[Lojista] ${notes}` : `[Lojista]`;
-        
+
+        const finalNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
+
         try {
             // Reuses createOrder logic which handles adding to existing orders
             await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes
-            }], "Lojista");
+            }], loggedUser.name);
             
             toast.success("Item adicionado com sucesso!");
             // Optional: Close menu to go back to bill, or stay to add more
@@ -1446,15 +1462,23 @@ NOTIFY pgrst, 'reload schema';`;
                              {selectedTable?.status === 'available' && (
                                 <Button className="w-full text-lg h-14" onClick={async () => {
                                     if(selectedTable) {
+                                        const previousTable = selectedTable;
+
                                         // 1. UPDATE LOCAL STATE IMMEDIATELY (Visual Feedback)
-                                        setSelectedTable({ ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: "Lojista" });
+                                        setSelectedTable({ ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: loggedUser.name });
 
-                                        // 2. CALL API (grava a sessão de ocupação também, senão mesas abertas
-                                        // pelo lojista nunca entram na métrica de tempo médio)
-                                        await openTableManually(selectedTable.id, store.id, "Lojista");
+                                        try {
+                                            // 2. CALL API (grava a sessão de ocupação também, senão mesas abertas
+                                            // pelo lojista nunca entram na métrica de tempo médio)
+                                            await openTableManually(selectedTable.id, store.id, loggedUser.name);
 
-                                        // 3. REFRESH DATA (Optional, but good practice)
-                                        loadData();
+                                            // 3. REFRESH DATA (Optional, but good practice)
+                                            loadData();
+                                        } catch (e) {
+                                            // Reverte o update otimista em caso de falha
+                                            setSelectedTable(previousTable);
+                                            toast.error("Erro ao abrir mesa. Tente novamente.");
+                                        }
                                     }
                                 }}>
                                     Abrir Mesa Manualmente
@@ -1718,16 +1742,26 @@ NOTIFY pgrst, 'reload schema';`;
 
                                 {/* Summary & Action */}
                                 <div className="border-t border-[var(--border)] pt-4">
-                                    <div className="flex justify-between text-sm mb-4 px-2">
-                                        <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
-                                        <span className="font-bold text-[var(--err)]">
-                                            R$ {Math.max(0, (selectedTable ? getTableSummary(selectedTable.id).total : 0) - paymentMethods.reduce((acc, p) => acc + p.amount, 0)).toFixed(2)}
-                                        </span>
+                                    <div className="space-y-1 mb-4 px-2">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
+                                            <span className="font-bold text-[var(--err)]">
+                                                R$ {remainingToPay.toFixed(2)}
+                                            </span>
+                                        </div>
+                                        {changeDue > 0 && (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-[var(--text-muted)]">Troco:</span>
+                                                <span className="font-bold text-[var(--ok)]">
+                                                    R$ {changeDue.toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <Button
                                         onClick={handleFinishPayment}
                                         className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20"
-                                        disabled={Math.max(0, (selectedTable ? getTableSummary(selectedTable.id).total : 0) - paymentMethods.reduce((acc, p) => acc + p.amount, 0)) > 0.01}
+                                        disabled={remainingToPay > 0.01}
                                     >
                                         <CheckCircle size={20} className="mr-2"/> FINALIZAR MESA
                                     </Button>
@@ -3223,7 +3257,7 @@ export const StoreModule: React.FC = () => {
             onLogout={() => setUser(null)}
             user={user}
         >
-            {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} />}
+            {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} loggedUser={user} />}
             {tab === 'counter' && canAccess('counter') && <CounterView store={user.store} />}
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
