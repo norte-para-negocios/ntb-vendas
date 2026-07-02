@@ -2,6 +2,20 @@
 // relatório de vendas). Antes o ticket de cozinha e o de bar eram uma cópia exata um do
 // outro (só o título mudava) e cada função duplicava o mesmo bloco de HTML/CSS inline.
 
+// Nome do cliente e observação do pedido são texto livre digitado pelo cliente final e
+// vão parar aqui sem passar por nenhum framework de render (é document.write puro) — sem
+// escapar, é XSS armazenado (achado de segurança #4 da varredura de 2026-07-02). Aplicada
+// em toda interpolação de string dentro dos templates abaixo, mesmo em valores hoje
+// controlados internamente (nome de produto/loja), porque escapar não tem custo.
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const THERMAL_STYLES = `
   body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 48mm; margin: 0; padding: 0; font-size: 10px; color: #000; }
   .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 6px; }
@@ -26,12 +40,12 @@ const THERMAL_STYLES = `
 `;
 
 function openThermalPrint(title: string, bodyHtml: string) {
-  const printWindow = window.open('', '_blank', 'width=300,height=500');
+  const printWindow = window.open('', '_blank', 'width=300,height=500,noopener');
   if (!printWindow) return;
   printWindow.document.write(`
     <html>
       <head>
-        <title>${title}</title>
+        <title>${escapeHtml(title)}</title>
         <style>${THERMAL_STYLES}</style>
       </head>
       <body>${bodyHtml}</body>
@@ -57,17 +71,17 @@ export function printKitchenTicket(opts: {
 }) {
   const body = `
     <div class="header">
-      ${opts.storeName ? `<div class="store-name">${opts.storeName}</div>` : ''}
-      <div class="doc-title">${opts.kind}</div>
+      ${opts.storeName ? `<div class="store-name">${escapeHtml(opts.storeName)}</div>` : ''}
+      <div class="doc-title">${escapeHtml(opts.kind)}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
     </div>
     <div class="info">
-      <div class="big-text">${opts.orderType}: ${opts.identifier}</div>
-      ${opts.client ? `<div>Cliente: ${opts.client}</div>` : ''}
+      <div class="big-text">${escapeHtml(opts.orderType)}: ${escapeHtml(opts.identifier)}</div>
+      ${opts.client ? `<div>Cliente: ${escapeHtml(opts.client)}</div>` : ''}
     </div>
-    <div class="item-line">${opts.quantity}x ${opts.productName}</div>
-    ${opts.observation ? `<div class="obs">OBS: ${opts.observation}</div>` : ''}
-    <div class="footer">Pedido #${opts.orderIdShort}</div>
+    <div class="item-line">${opts.quantity}x ${escapeHtml(opts.productName)}</div>
+    ${opts.observation ? `<div class="obs">OBS: ${escapeHtml(opts.observation)}</div>` : ''}
+    <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;
   openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body);
 }
@@ -89,11 +103,11 @@ export function printBillReceipt(opts: {
 }) {
   const body = `
     <div class="header">
-      <div class="store-name">${opts.storeName}</div>
-      <div class="meta">CNPJ: ${opts.cnpj || 'não informado'}</div>
+      <div class="store-name">${escapeHtml(opts.storeName)}</div>
+      <div class="meta">CNPJ: ${escapeHtml(opts.cnpj || 'não informado')}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
     </div>
-    <div class="info"><div class="big-text">${opts.label}</div></div>
+    <div class="info"><div class="big-text">${escapeHtml(opts.label)}</div></div>
     <table class="items-table">
       <thead>
         <tr><th style="width:15%">QTD</th><th style="width:55%">ITEM</th><th class="right" style="width:30%">R$</th></tr>
@@ -104,7 +118,7 @@ export function printBillReceipt(opts: {
             (i) => `
           <tr>
             <td>${i.quantity}x</td>
-            <td style="padding-right:4px;">${i.name}</td>
+            <td style="padding-right:4px;">${escapeHtml(i.name)}</td>
             <td class="right">${i.total.toFixed(2)}</td>
           </tr>`
           )
@@ -152,13 +166,13 @@ export function printSalesReport(opts: {
   rows: SalesReportRow[];
   totalRevenue: number;
 }) {
-  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  const printWindow = window.open('', '_blank', 'width=900,height=700,noopener');
   if (!printWindow) return;
   const body = `
     <div class="report-header">
-      <h1>${opts.storeName}</h1>
+      <h1>${escapeHtml(opts.storeName)}</h1>
       <p>Relatório de Vendas</p>
-      <p>${opts.periodLabel} · ${opts.rows.length} ${opts.rows.length === 1 ? 'venda' : 'vendas'}</p>
+      <p>${escapeHtml(opts.periodLabel)} · ${opts.rows.length} ${opts.rows.length === 1 ? 'venda' : 'vendas'}</p>
     </div>
     <table>
       <thead>
@@ -169,9 +183,9 @@ export function printSalesReport(opts: {
           .map(
             (r) => `
           <tr>
-            <td>${r.date}</td>
-            <td>${r.type}</td>
-            <td>${r.customer}</td>
+            <td>${escapeHtml(r.date)}</td>
+            <td>${escapeHtml(r.type)}</td>
+            <td>${escapeHtml(r.customer)}</td>
             <td class="right">${r.items}</td>
             <td class="right">R$ ${r.total.toFixed(2)}</td>
           </tr>`
@@ -186,7 +200,7 @@ export function printSalesReport(opts: {
   printWindow.document.write(`
     <html>
       <head>
-        <title>Relatório de Vendas - ${opts.storeName}</title>
+        <title>${escapeHtml(`Relatório de Vendas - ${opts.storeName}`)}</title>
         <style>${REPORT_STYLES}</style>
       </head>
       <body>${body}</body>
