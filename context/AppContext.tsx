@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
 import { CartItem, Product, Store, Table } from '@/types';
 
 interface AppContextType {
@@ -27,7 +27,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [clientName, setClientName] = useState<string>('');
   const [isHost, setIsHost] = useState<boolean>(false);
 
-  const addToCart = (product: Product, quantity: number, notes?: string) => {
+  const addToCart = useCallback((product: Product, quantity: number, notes?: string) => {
     setCart((prev) => {
       const existing = prev.find(
         (item) => item.product.id === product.id && item.notes === notes,
@@ -47,26 +47,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (quantity > 0) return [...prev, { product, quantity, notes }];
       return prev;
     });
-  };
+  }, []);
 
-  const removeFromCart = (product: Product, notes?: string) => {
+  const removeFromCart = useCallback((product: Product, notes?: string) => {
     setCart((prev) =>
       prev.filter((item) => !(item.product.id === product.id && item.notes === notes)),
     );
-  };
+  }, []);
 
-  const clearCart = () => setCart([]);
+  const clearCart = useCallback(() => setCart([]), []);
+
+  const value = useMemo<AppContextType>(
+    () => ({
+      cart, addToCart, removeFromCart, clearCart,
+      currentStore, setCurrentStore,
+      currentTable, setCurrentTable,
+      clientName, setClientName,
+      isHost, setIsHost,
+    }),
+    [
+      cart, addToCart, removeFromCart, clearCart,
+      currentStore, setCurrentStore,
+      currentTable, setCurrentTable,
+      clientName, setClientName,
+      isHost, setIsHost,
+    ],
+  );
 
   return (
-    <AppContext.Provider
-      value={{
-        cart, addToCart, removeFromCart, clearCart,
-        currentStore, setCurrentStore,
-        currentTable, setCurrentTable,
-        clientName, setClientName,
-        isHost, setIsHost,
-      }}
-    >
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );
