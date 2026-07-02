@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
@@ -364,7 +365,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
             <div className="auth-grain" />
             <div className="u-stagger relative z-[1] mb-8 text-center" style={stagger(0)}>
                 {store?.logo_url ? (
-                    <img src={store.logo_url} alt="Logo" className="w-20 h-20 rounded-[var(--r-lg)] mx-auto mb-4 object-cover" style={{boxShadow:'var(--shadow-md)'}} />
+                    <Image src={store.logo_url} alt="Logo" width={80} height={80} className="w-20 h-20 rounded-[var(--r-lg)] mx-auto mb-4 object-cover" style={{boxShadow:'var(--shadow-md)'}} />
                 ) : (
                     <div className="bg-[var(--brand)] w-16 h-16 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-white" style={{boxShadow:'0 4px 14px rgba(27,58,75,0.3)'}}>
                         <Coffee size={24}/>
@@ -499,7 +500,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, disable
             style={{ boxShadow: 'var(--shadow-sm)', ...style }}
         >
             {product.image_url ? (
-                <img src={product.image_url} alt={product.name} className="w-20 h-20 object-cover rounded-[var(--r-sm)] bg-[var(--surface-2)] flex-shrink-0" />
+                <Image src={product.image_url} alt={product.name} width={80} height={80} className="w-20 h-20 object-cover rounded-[var(--r-sm)] bg-[var(--surface-2)] flex-shrink-0" />
             ) : (
                 <div className="w-20 h-20 bg-[var(--brand-soft)] rounded-[var(--r-sm)] flex items-center justify-center flex-shrink-0">
                     <UtensilsCrossed size={22} className="text-[var(--brand)]/40" />
@@ -540,7 +541,9 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
         <Modal isOpen={!!product} onClose={onClose} title={product.name}>
             <div className="space-y-4">
                 {product.image_url && (
-                    <img src={product.image_url} alt={product.name} className="w-full h-56 object-cover rounded-xl shadow-sm" />
+                    <div className="relative w-full h-56 rounded-xl overflow-hidden shadow-sm">
+                        <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 100vw, 480px" className="object-cover" />
+                    </div>
                 )}
                 <p className="text-[var(--text-muted)] leading-relaxed">{product.description}</p>
 
@@ -603,7 +606,7 @@ const CartModal: React.FC<{
                         cart.map((item, idx) => (
                             <div key={`${item.product.id}-${idx}`} className="flex gap-3 border border-[var(--border)] p-3 rounded-[var(--r-md)]" style={{boxShadow:'var(--shadow-sm)'}}>
                                 {item.product.image_url ? (
-                                    <img src={item.product.image_url} alt="" className="w-14 h-14 rounded-[var(--r-sm)] object-cover bg-[var(--surface-2)] flex-shrink-0" />
+                                    <Image src={item.product.image_url} alt="" width={56} height={56} className="w-14 h-14 rounded-[var(--r-sm)] object-cover bg-[var(--surface-2)] flex-shrink-0" />
                                 ) : (
                                     <div className="w-14 h-14 rounded-[var(--r-sm)] bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-muted)]/40 flex-shrink-0">
                                         <Coffee size={18}/>
