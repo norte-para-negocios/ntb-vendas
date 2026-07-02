@@ -13,6 +13,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel } from '@/lib/labels';
+import { calculateServiceFee, calculateOrderTotal } from '@/lib/calc';
 
 // --- COMPONENTS ---
 
@@ -627,8 +628,10 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             setIsLoading(true);
             const data = await fetchTableOrderSummary(tableId);
 
-            // Fetch fresh table and store data to ensure we have the latest config
-            const { data: tableData } = await supabase.from('tables').select('*').eq('id', tableId).single();
+            // Fetch fresh table and store data to ensure we have the latest config.
+            // Colunas explícitas (SEM `pin`) — select('*') aqui vazava o PIN da mesa
+            // pra qualquer convidado que abrisse "Dividir Conta", não só o anfitrião.
+            const { data: tableData } = await supabase.from('tables').select('id, store_id, number, status, current_host_name, guest_count, waiter_requested, service_fee_removed').eq('id', tableId).single();
             let storeConfig = currentStore?.config;
             if (tableData?.store_id) {
                 const { data: storeData } = await supabase.from('stores').select('config').eq('id', tableData.store_id).single();
@@ -636,14 +639,14 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             }
 
             // Calculate service fee
-            const isFeeEnabled = storeConfig?.charge_service_fee && !tableData?.service_fee_removed;
+            const isFeeEnabled = !!(storeConfig?.charge_service_fee && !tableData?.service_fee_removed);
             const calculatedSubtotal = data.total;
-            const calculatedServiceFee = isFeeEnabled ? calculatedSubtotal * 0.1 : 0;
+            const calculatedServiceFee = isFeeEnabled ? calculateServiceFee(calculatedSubtotal) : 0;
 
             setSubtotal(calculatedSubtotal);
             setServiceFee(calculatedServiceFee);
-            setTotal(calculatedSubtotal + calculatedServiceFee);
-            setIsServiceFeeEnabled(!!isFeeEnabled);
+            setTotal(calculateOrderTotal(calculatedSubtotal, isFeeEnabled));
+            setIsServiceFeeEnabled(isFeeEnabled);
 
             setItems(data.items);
             setIsLoading(false);
@@ -721,9 +724,8 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
 
         Object.keys(breakdown).forEach(userName => {
             const userSubtotal = breakdown[userName].subtotal;
-            const userServiceFee = isServiceFeeEnabled ? userSubtotal * 0.1 : 0;
-            breakdown[userName].serviceFee = userServiceFee;
-            breakdown[userName].total = userSubtotal + userServiceFee;
+            breakdown[userName].serviceFee = isServiceFeeEnabled ? calculateServiceFee(userSubtotal) : 0;
+            breakdown[userName].total = calculateOrderTotal(userSubtotal, isServiceFeeEnabled);
         });
 
         return breakdown;
@@ -769,8 +771,8 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
         return sum;
     }, [items, selectedItems]);
 
-    const calculatorServiceFee = isServiceFeeEnabled ? calculatorSubtotal * 0.1 : 0;
-    const calculatorTotal = calculatorSubtotal + calculatorServiceFee;
+    const calculatorServiceFee = isServiceFeeEnabled ? calculateServiceFee(calculatorSubtotal) : 0;
+    const calculatorTotal = calculateOrderTotal(calculatorSubtotal, isServiceFeeEnabled);
 
     // --- RENDER MODALS ---
 
