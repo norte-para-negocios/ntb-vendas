@@ -380,10 +380,12 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
   return { ...o, order_items: orderItems.filter(i => i.order_id === orderId), tables: tables.find(t => t.id === o.table_id) };
 };
 
-export const updateOrderItemStatus = async (itemId: string, status: OrderStatus) => {
+export const updateOrderItemStatus = async (itemId: string, status: OrderStatus): Promise<{ success: boolean; message?: string }> => {
   await delay();
   const i = orderItems.find(i => i.id === itemId);
-  if (i) i.status = status;
+  if (!i) return { success: false, message: 'Item não encontrado.' };
+  i.status = status;
+  return { success: true };
 };
 
 export const cancelSpecificOrderItem = async (itemId: string) => {

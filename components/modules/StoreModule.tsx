@@ -13,6 +13,7 @@ import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
+import { playPreparingAlert } from '@/lib/audioAlert';
 
 // --- COMPONENTS ---
 
@@ -436,9 +437,37 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
-  const loadOrders = async () => {
+  // Snapshot do fetch anterior — usado só pra diff (detectar item novo em
+  // 'pending' e disparar o alerta sonoro), nunca renderizado. null = ainda
+  // não carregou nenhuma vez (evita alertar no load inicial). Mesmo padrão
+  // do prevItemsRef no OrderTracker (ClientModule.tsx).
+  const prevOrdersRef = useRef<OrderItem[] | null>(null);
+
+  // Relógio "agora" só pra recalcular o indicador de atraso periodicamente
+  // sem precisar de um novo fetch — 30s é granularidade suficiente pra um
+  // indicador medido em minutos.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+      const tick = setInterval(() => setNow(Date.now()), 30000);
+      return () => clearInterval(tick);
+  }, []);
+
+  const notifyNewPendingItems = (nextOrders: OrderItem[]) => {
+      const prevIds = new Set((prevOrdersRef.current || []).map(o => o.id));
+      const hasNewPending = nextOrders.some(o => o.status === OrderStatus.PENDING && !prevIds.has(o.id));
+      if (hasNewPending) playPreparingAlert();
+      prevOrdersRef.current = nextOrders;
+  };
+
+  const loadOrders = async (notify = false) => {
       if(!storeId) return;
       const data = await fetchKitchenOrders(storeId, destination);
+      if (notify) {
+          notifyNewPendingItems(data);
+      } else {
+          // Baseline do load inicial: guarda o snapshot sem disparar som.
+          prevOrdersRef.current = data;
+      }
       setOrders(data);
   };
 
@@ -446,26 +475,47 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
     loadOrders();
     const channel = supabase.channel(`${destination}_updates_${storeId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
-            loadOrders(); // Refresh on any change
+            loadOrders(true); // Refresh on any change + alerta sonoro se surgiu item novo
         })
         .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [storeId, destination]);
 
+  const isItemLate = (item: OrderItem) => {
+      const prepMinutes = item.product?.prep_time_minutes;
+      if (!prepMinutes) return false;
+      const elapsedMinutes = (now - new Date(item.created_at).getTime()) / 60000;
+      return elapsedMinutes > prepMinutes;
+  };
+
   const advanceStatus = async (item: OrderItem) => {
       let nextStatus = OrderStatus.PENDING;
-      
+
       // Order State Machine
       if (item.status === OrderStatus.PENDING) nextStatus = OrderStatus.PREPARING; // Table (Pending -> Preparing)
       else if (item.status === OrderStatus.ACCEPTED) nextStatus = OrderStatus.PREPARING; // Counter (Accepted -> Preparing)
       else if (item.status === OrderStatus.PREPARING) nextStatus = OrderStatus.READY;
       else if (item.status === OrderStatus.READY) nextStatus = OrderStatus.DELIVERED;
-      
+
+      const previousStatus = item.status;
+
       // Optimistic UI
       setOrders(prev => prev.map(o => o.id === item.id ? { ...o, status: nextStatus } : o).filter(o => o.status !== OrderStatus.DELIVERED));
-      
-      await updateOrderItemStatus(item.id, nextStatus);
+
+      const result = await updateOrderItemStatus(item.id, nextStatus);
+      if (!result.success) {
+          // Reverte o update otimista — recoloca o item com o status anterior
+          // (inclusive quando tinha sumido da tela por ter virado DELIVERED).
+          setOrders(prev => {
+              const stillThere = prev.some(o => o.id === item.id);
+              if (stillThere) {
+                  return prev.map(o => o.id === item.id ? { ...o, status: previousStatus } : o);
+              }
+              return [...prev, { ...item, status: previousStatus }];
+          });
+          toast.error('Não foi possível atualizar o status. Tente novamente.');
+      }
   };
 
   const getStatusColor = (status: OrderStatus) => {
@@ -513,9 +563,10 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {orders.map(item => {
                 const { client, observation } = parseItemNote(item.notes || '');
+                const late = isItemLate(item);
 
                 return (
-                    <Card key={item.id} className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md`}>
+                    <Card key={item.id} className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md ${late ? 'border-[var(--err)] ring-2 ring-[var(--err)]/30' : ''}`}>
                         <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                 {item.order?.order_type === 'counter' ? (
@@ -528,6 +579,11 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                         <LayoutGrid size={18} className="text-[var(--info)]"/>
                                         Mesa {item.order?.tables?.number || '?'}
                                     </>
+                                )}
+                                {late && (
+                                    <span className="flex items-center gap-1 text-[10px] font-bold text-white bg-[var(--err)] px-2 py-0.5 rounded-full">
+                                        <AlertCircle size={11}/> Atrasado
+                                    </span>
                                 )}
                             </span>
                             <div className="flex items-center gap-2">
