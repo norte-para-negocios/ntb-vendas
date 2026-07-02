@@ -1,19 +1,20 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus } from '@/types';
 
+// Autentica via function Postgres security definer (nunca compara senha no
+// client) — ver supabase/migrations/008_seguranca_login.sql. A function já
+// cobre rate-limit (5 tentativas / 5min de bloqueio); o client não precisa
+// distinguir "bloqueado" de "senha errada" pra manter a mesma assinatura de
+// retorno de antes.
 export const authenticateAdmin = async (username: string, password: string): Promise<{ success: boolean; mustChangePass?: boolean; userId?: string }> => {
-  const { data, error } = await supabase
-    .from('system_admins')
-    .select('*')
-    .eq('username', username)
-    .single();
+  const { data, error } = await supabase.rpc('authenticate_admin_secure', {
+    p_username: username,
+    p_password: password,
+  });
 
-  if (error || !data) return { success: false };
+  if (error || !data?.success) return { success: false };
 
-  if (data.password === password) {
-    return { success: true, mustChangePass: data.must_change_password, userId: data.id };
-  }
-  return { success: false };
+  return { success: true, mustChangePass: data.mustChangePass, userId: data.userId };
 };
 
 export const updateAdminPassword = async (userId: string, newPassword: string) => {
@@ -32,19 +33,38 @@ export const updateStoreConfig = async (storeId: string, config: any) => {
   if (error) throw error;
 };
 
+// Idem authenticateAdmin: senha comparada dentro da function security definer
+// authenticate_store_user_secure, não mais no client (008_seguranca_login.sql).
+// A function não conhece/retorna a loja (só store_id), então busca à parte pra
+// preservar a mesma checagem de "loja inativa ou bloqueada" que a query direta
+// fazia antes via join. Por não distinguir "não encontrado" de "senha errada"
+// (a function devolve success:false pros dois, de propósito, pra não vazar se o
+// e-mail existe), as duas mensagens antigas viram uma só, genérica.
 export const authenticateStoreUser = async (email: string, password: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string }> => {
   try {
-    const { data, error } = await supabase
-      .from('store_users')
-      .select('*, store:stores(*)')
-      .eq('email', email)
-      .single();
+    const { data, error } = await supabase.rpc('authenticate_store_user_secure', {
+      p_email: email,
+      p_password: password,
+    });
 
-    if (error || !data) return { success: false, message: 'Usuário não encontrado.' };
-    if (data.password !== password) return { success: false, message: 'Senha incorreta.' };
-    if (!data.store || !data.store.is_active) return { success: false, message: 'Esta loja está inativa ou bloqueada.' };
+    if (error) return { success: false, message: 'Erro de conexão.' };
+    if (!data?.success) {
+      return {
+        success: false,
+        message: data?.locked ? 'Muitas tentativas incorretas. Tente novamente em alguns minutos.' : 'Usuário ou senha incorretos.',
+      };
+    }
 
-    return { success: true, user: data as any };
+    const store = await fetchStoreById(data.user.store_id);
+    if (!store || !store.is_active) return { success: false, message: 'Esta loja está inativa ou bloqueada.' };
+
+    const user: StoreUser & { store: Store } = {
+      ...data.user,
+      must_change_password: data.mustChangePass,
+      store,
+    };
+
+    return { success: true, user };
   } catch (error: any) {
     console.error('Auth Store User Error:', error);
     return { success: false, message: 'Erro de conexão.' };
@@ -299,6 +319,7 @@ export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order
     .eq('order_type', 'table')
     .neq('status', OrderStatus.DELIVERED)
     .neq('status', OrderStatus.CANCELED)
+    .order('created_at')
     .limit(500);
 
   if (error) { console.error('Fetch Active Table Orders Error', error); return []; }
@@ -379,8 +400,8 @@ export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
   return (data as any) || [];
 };
 
-export const fetchSalesHistory = async (storeId: string): Promise<Order[]> => {
-  const { data, error } = await supabase
+export const fetchSalesHistory = async (storeId: string, startDate?: string, endDate?: string): Promise<Order[]> => {
+  let query = supabase
     .from('orders')
     .select('*, order_items(*, product:products(*)), tables(*)')
     .eq('store_id', storeId)
@@ -388,6 +409,10 @@ export const fetchSalesHistory = async (storeId: string): Promise<Order[]> => {
     .order('created_at', { ascending: false })
     .limit(2000);
 
+  if (startDate) query = query.gte('created_at', startDate);
+  if (endDate) query = query.lte('created_at', endDate);
+
+  const { data, error } = await query;
   if (error) { console.error('Fetch Sales History Error', error); return []; }
   return (data as any) || [];
 };
@@ -480,6 +505,16 @@ export const toggleTableServiceFee = async (tableId: string, removed: boolean) =
   }
 };
 
+// Pedido criado via function Postgres security definer create_order_secure
+// (supabase/migrations/007_seguranca_pedidos.sql): o client manda só
+// product_id/quantity/notes, NUNCA preço — a function busca o preço real em
+// products e monta orders+order_items server-side. Substitui o insert direto
+// que mandava price_at_time vindo do client (achado de segurança: preço
+// adulterável via console do navegador). Nota: a function sempre cria um
+// pedido novo (não reaproveita mais um pedido 'pending' já aberto na mesma
+// mesa, como o insert direto fazia) — sem efeito perceptível porque toda
+// leitura de pedidos de mesa (fetchActiveOrdersForTables,
+// fetchTableOrderSummary) já soma por table_id através de múltiplos pedidos.
 export const createOrder = async (
   tableId: string | null,
   storeId: string,
@@ -487,44 +522,11 @@ export const createOrder = async (
   customerName?: string,
 ): Promise<{ success: boolean; orderId?: string }> => {
   try {
-    let orderId: string;
     const isCounter = tableId === null;
 
-    if (!isCounter) {
-      const { data: existingOrders } = await supabase
-        .from('orders')
-        .select('id')
-        .eq('table_id', tableId)
-        .eq('status', 'pending')
-        .limit(1);
-
-      if (existingOrders && existingOrders.length > 0) {
-        orderId = existingOrders[0].id;
-      } else {
-        const { data: newOrder, error: orderError } = await supabase
-          .from('orders')
-          .insert({ table_id: tableId, store_id: storeId, status: 'pending', order_type: 'table', total: 0, customer_name: customerName })
-          .select()
-          .single();
-        if (orderError) throw orderError;
-        orderId = newOrder.id;
-      }
-    } else {
-      const { data: newOrder, error: orderError } = await supabase
-        .from('orders')
-        .insert({ table_id: null, store_id: storeId, status: 'pending', order_type: 'counter', total: 0, customer_name: customerName })
-        .select()
-        .single();
-      if (orderError) throw orderError;
-      orderId = newOrder.id;
-    }
-
-    const orderItemsData = items.map((item) => ({
-      order_id: orderId,
+    const pItems = items.map((item) => ({
       product_id: item.product.id,
       quantity: item.quantity,
-      status: OrderStatus.PENDING,
-      price_at_time: item.product.price,
       notes: item.notes
         ? `${customerName ? `[${customerName}] ` : ''}${item.notes}`
         : customerName
@@ -532,9 +534,18 @@ export const createOrder = async (
         : '',
     }));
 
-    const { error: itemsError } = await supabase.from('order_items').insert(orderItemsData);
-    if (itemsError) throw itemsError;
-    return { success: true, orderId };
+    const { data, error } = await supabase.rpc('create_order_secure', {
+      p_table_id: tableId,
+      p_store_id: storeId,
+      p_order_type: isCounter ? 'counter' : 'table',
+      p_customer_name: customerName || null,
+      p_items: pItems,
+    });
+
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
+
+    return { success: true, orderId: data.order_id };
   } catch (error) {
     console.error('Create Order Error', error);
     throw error;
@@ -547,8 +558,13 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
   return data;
 };
 
-export const updateOrderItemStatus = async (itemId: string, status: OrderStatus) => {
-  await supabase.from('order_items').update({ status }).eq('id', itemId);
+export const updateOrderItemStatus = async (itemId: string, status: OrderStatus): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('order_items').update({ status }).eq('id', itemId);
+  if (error) {
+    console.error('Update Order Item Status Error:', error);
+    return { success: false, message: error.message };
+  }
+  return { success: true };
 };
 
 export const cancelSpecificOrderItem = async (itemId: string) => {
@@ -915,32 +931,25 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
   }
 };
 
+// Soft-delete (decisão tomada com o usuário em 2026-07-02, ver
+// docs/plans/2026-07-02-varredura-correcoes-plan.md): "excluir loja" apagava
+// tudo em cascata (pedidos, produtos, mesas, usuários) sem volta. Agora só
+// desativa (`is_active = false`) — histórico de vendas/produtos/mesas fica
+// preservado. Antes de desativar, limpa o certificado fiscal órfão do Storage
+// (a policy de DELETE pro bucket store-certificates foi criada em
+// 009_indices_realtime_e_soft_delete.sql).
 export const deleteStore = async (id: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { data: orders } = await supabase.from('orders').select('id').eq('store_id', id);
-    const orderIds = orders?.map((o) => o.id) || [];
-
-    if (orderIds.length > 0) {
-      for (let i = 0; i < orderIds.length; i += 20) {
-        await supabase.from('order_items').delete().in('order_id', orderIds.slice(i, i + 20));
-      }
+    const { data: certFiles, error: listError } = await supabase.storage.from(CERT_BUCKET).list(id);
+    if (listError) {
+      console.error('Erro ao listar certificado da loja no Storage:', listError);
+    } else if (certFiles && certFiles.length > 0) {
+      const paths = certFiles.map((f) => `${id}/${f.name}`);
+      const { error: removeError } = await supabase.storage.from(CERT_BUCKET).remove(paths);
+      if (removeError) console.error('Erro ao remover certificado órfão da loja:', removeError);
     }
 
-    const { data: products } = await supabase.from('products').select('id').eq('store_id', id);
-    const productIds = products?.map((p) => p.id) || [];
-    if (productIds.length > 0) {
-      for (let i = 0; i < productIds.length; i += 20) {
-        await supabase.from('order_items').delete().in('product_id', productIds.slice(i, i + 20));
-      }
-    }
-
-    await supabase.from('orders').delete().eq('store_id', id);
-    await supabase.from('products').delete().eq('store_id', id);
-    await supabase.from('categories').delete().eq('store_id', id);
-    await supabase.from('tables').delete().eq('store_id', id);
-    await supabase.from('store_users').delete().eq('store_id', id);
-
-    const { error } = await supabase.from('stores').delete().eq('id', id);
+    const { error } = await supabase.from('stores').update({ is_active: false }).eq('id', id);
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
