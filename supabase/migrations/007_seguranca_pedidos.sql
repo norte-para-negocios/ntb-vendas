@@ -104,9 +104,22 @@ begin
     return jsonb_build_object('success', false, 'message', 'Pedido sem itens.');
   end if;
 
-  insert into orders (table_id, store_id, status, order_type, total, customer_name)
-  values (p_table_id, p_store_id, 'pending', p_order_type, 0, p_customer_name)
-  returning id into v_order_id;
+  -- Pedido de mesa reaproveita um pedido 'pending' já aberto na mesma mesa
+  -- (mesmo comportamento do insert direto que isso substitui) — sem isso,
+  -- cada "enviar pedido" na mesma mesa vira uma linha nova em `orders`,
+  -- inflando contagem de vendas/ticket médio no dashboard. Balcão sempre
+  -- cria pedido novo (nunca teve essa reutilização).
+  if p_order_type = 'table' and p_table_id is not null then
+    select id into v_order_id from orders
+    where table_id = p_table_id and status = 'pending'
+    limit 1;
+  end if;
+
+  if v_order_id is null then
+    insert into orders (table_id, store_id, status, order_type, total, customer_name)
+    values (p_table_id, p_store_id, 'pending', p_order_type, 0, p_customer_name)
+    returning id into v_order_id;
+  end if;
 
   for v_item in select * from jsonb_array_elements(p_items)
   loop
@@ -125,7 +138,9 @@ begin
     values (v_order_id, v_product.id, (v_item->>'quantity')::int, 'pending', v_item->>'notes', v_product.price);
   end loop;
 
-  update orders set total = v_total where id = v_order_id;
+  -- Soma ao total existente (não sobrescreve) — o pedido pode já ter itens
+  -- de uma chamada anterior, se foi reaproveitado acima.
+  update orders set total = total + v_total where id = v_order_id;
 
   return jsonb_build_object('success', true, 'order_id', v_order_id, 'total', v_total);
 exception when others then
