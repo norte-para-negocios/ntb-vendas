@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AppProvider } from '@/context/AppContext';
 import { ToastViewport } from '@/components/Toast';
@@ -8,6 +8,18 @@ import { THEME_INIT_SCRIPT } from '@/components/ThemeToggle';
 export const metadata: Metadata = {
   title: 'Cardápio Digital',
   description: 'Sistema completo de cardápio digital, pedidos e cozinha.',
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#484DB5',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
