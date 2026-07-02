@@ -134,10 +134,25 @@ export const fetchAllStores = async (): Promise<Store[]> => {
   return data || [];
 };
 
-export const fetchStoreBySlug = async (slug: string): Promise<Store | null> => {
-  const { data, error } = await supabase.from('stores').select('*').eq('slug', slug).single();
-  if (error) { console.error('Error fetching store:', error); return null; }
-  return data;
+// Distingue "loja não existe" (PGRST116 do .single(), zero linhas) de erro de
+// rede/timeout (achado de UX #4) — antes os dois casos engoliam o erro e
+// devolviam null igualmente, então uma falha de conexão aparecia pro cliente
+// como se a loja simplesmente não existisse. ClientModule usa esse
+// discriminador pra mostrar "Erro de conexão — Tentar de novo" só quando faz
+// sentido (network), e "Loja não encontrada" só quando de fato não existe.
+export const fetchStoreBySlug = async (slug: string): Promise<{ store: Store | null; error?: 'not_found' | 'network' }> => {
+  try {
+    const { data, error } = await supabase.from('stores').select('*').eq('slug', slug).single();
+    if (error) {
+      if (error.code === 'PGRST116') return { store: null, error: 'not_found' };
+      console.error('Error fetching store:', error);
+      return { store: null, error: 'network' };
+    }
+    return { store: data };
+  } catch (error) {
+    console.error('Error fetching store:', error);
+    return { store: null, error: 'network' };
+  }
 };
 
 export const fetchStoreById = async (storeId: string): Promise<Store | null> => {
@@ -194,21 +209,39 @@ export const fetchStoreUsers = async (): Promise<(StoreUser & { store: Store })[
   return data as any;
 };
 
-export const fetchMenu = async (storeId: string, onlyAvailable = true): Promise<{ categories: Category[]; products: Product[] }> => {
-  const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
-  let productsQuery = supabase.from('products').select('*').eq('store_id', storeId).order('order', { ascending: true, nullsFirst: false });
-  if (onlyAvailable) productsQuery = productsQuery.eq('available', true);
+// Idem fetchStoreBySlug: distingue erro de rede/timeout de "cardápio vazio de
+// verdade" (0 categorias/produtos é um estado legítimo, não um erro). Antes,
+// qualquer erro de rede virava silenciosamente `{ categories: [], products:
+// [] }` — indistinguível de uma loja que só ainda não cadastrou nada.
+export const fetchMenu = async (storeId: string, onlyAvailable = true): Promise<{ categories: Category[]; products: Product[]; error?: 'network' }> => {
+  try {
+    const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
+    let productsQuery = supabase.from('products').select('*').eq('store_id', storeId).order('order', { ascending: true, nullsFirst: false });
+    if (onlyAvailable) productsQuery = productsQuery.eq('available', true);
 
-  const [cats, prods] = await Promise.all([categoriesQuery, productsQuery]);
+    const [cats, prods] = await Promise.all([categoriesQuery, productsQuery]);
 
-  if (prods.error && (prods.error.code === '42703' || prods.error.message?.includes('column') || prods.error.message?.includes('does not exist'))) {
-    let fallbackQuery = supabase.from('products').select('*').eq('store_id', storeId);
-    if (onlyAvailable) fallbackQuery = fallbackQuery.eq('available', true);
-    const fallbackProds = await fallbackQuery;
-    return { categories: cats.data || [], products: fallbackProds.data || [] };
+    if (prods.error && (prods.error.code === '42703' || prods.error.message?.includes('column') || prods.error.message?.includes('does not exist'))) {
+      let fallbackQuery = supabase.from('products').select('*').eq('store_id', storeId);
+      if (onlyAvailable) fallbackQuery = fallbackQuery.eq('available', true);
+      const fallbackProds = await fallbackQuery;
+      if (fallbackProds.error || cats.error) {
+        console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
+        return { categories: cats.data || [], products: fallbackProds.data || [], error: 'network' };
+      }
+      return { categories: cats.data || [], products: fallbackProds.data || [] };
+    }
+
+    if (cats.error || prods.error) {
+      console.error('Error fetching menu:', cats.error || prods.error);
+      return { categories: cats.data || [], products: prods.data || [], error: 'network' };
+    }
+
+    return { categories: cats.data || [], products: prods.data || [] };
+  } catch (error) {
+    console.error('Error fetching menu:', error);
+    return { categories: [], products: [], error: 'network' };
   }
-
-  return { categories: cats.data || [], products: prods.data || [] };
 };
 
 export const createCategory = async (storeId: string, name: string) => {

@@ -14,7 +14,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const store = await fetchStoreBySlug(slug);
+  const { store } = await fetchStoreBySlug(slug);
 
   if (!store) {
     return { title: 'Cardápio Digital' };

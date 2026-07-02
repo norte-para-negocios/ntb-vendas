@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
@@ -1087,7 +1087,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // New States
     const [showPin, setShowPin] = useState(false);
     const [hostPin, setHostPin] = useState<string | null>(null);
-    const [storeNotFound, setStoreNotFound] = useState(false);
+    // Discrimina "loja não existe" de "erro de rede/timeout" (achado de UX #4)
+    // — antes um único boolean `storeNotFound` misturava os dois casos.
+    const [loadError, setLoadError] = useState<'not_found' | 'network' | null>(null);
+    // Só vira false depois que fetchMenu resolve (sucesso ou erro) — evita que
+    // "Nenhum produto encontrado" pisque antes do cardápio carregar (achado de
+    // UX #6, race entre `products` ainda vazio e o fetch em andamento).
+    const [isLoadingMenu, setIsLoadingMenu] = useState(true);
     const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
     const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -1103,23 +1109,33 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         setIsHost, isHost
     } = useApp();
 
-    useEffect(() => {
-        if (slug) {
-            fetchStoreBySlug(slug).then(store => {
-                if (store) {
-                    setCurrentStore(store);
-                    // Pass TRUE to fetch only available products
-                    fetchMenu(store.id, true).then(({ categories, products }) => {
-                        setCategories(categories);
-                        setProducts(products);
-                        if (categories.length > 0) setActiveCategory(categories[0].id);
-                    });
-                } else {
-                    setStoreNotFound(true);
-                }
-            });
+    // Carrega loja + cardápio. Extraído do useEffect pra poder ser reusado pelo
+    // botão "Tentar de novo" da tela de erro de conexão (achado de UX #4).
+    const loadStoreAndMenu = useCallback(async () => {
+        if (!slug) return;
+        setLoadError(null);
+        setIsLoadingMenu(true);
+
+        const { store, error: storeError } = await fetchStoreBySlug(slug);
+        if (!store) {
+            setLoadError(storeError === 'network' ? 'network' : 'not_found');
+            setIsLoadingMenu(false);
+            return;
         }
+        setCurrentStore(store);
+
+        // Pass TRUE to fetch only available products
+        const { categories, products, error: menuError } = await fetchMenu(store.id, true);
+        setCategories(categories);
+        setProducts(products);
+        if (categories.length > 0) setActiveCategory(categories[0].id);
+        if (menuError) setLoadError('network');
+        setIsLoadingMenu(false);
     }, [slug, setCurrentStore]);
+
+    useEffect(() => {
+        loadStoreAndMenu();
+    }, [loadStoreAndMenu]);
 
     // Realtime Table Status Listener
     useEffect(() => {
@@ -1303,7 +1319,20 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return prods;
     }, [products, activeCategory, searchTerm, sortBy]);
 
-    if (storeNotFound) return (
+    if (loadError === 'network') return (
+        <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <RefreshCw className="text-[var(--text-muted)]" size={48} />
+            <h1 className="text-lg font-semibold text-[var(--text)]">Erro de conexão</h1>
+            <p className="text-sm text-[var(--text-muted)] max-w-xs">
+                Não foi possível carregar o cardápio. Verifique sua internet e tente novamente.
+            </p>
+            <Button onClick={loadStoreAndMenu} className="mt-2">
+                <RefreshCw size={16} className="mr-2" /> Tentar de novo
+            </Button>
+        </div>
+    );
+
+    if (loadError === 'not_found') return (
         <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertTriangle className="text-[var(--text-muted)]" size={48} />
             <h1 className="text-lg font-semibold text-[var(--text)]">Loja não encontrada</h1>
@@ -1468,9 +1497,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         style={stagger(Math.min(i, 10) * 30)}
                     />
                 ))}
-                {filteredProducts.length === 0 && (
+                {isLoadingMenu ? (
+                    <div className="text-center py-12 text-[var(--text-muted)] text-sm animate-pulse">Carregando cardápio...</div>
+                ) : filteredProducts.length === 0 ? (
                     <div className="text-center py-12 text-[var(--text-muted)] text-sm u-fade-in">Nenhum produto encontrado.</div>
-                )}
+                ) : null}
             </div>
 
             {/* Floating Cart Button */}
@@ -1521,7 +1552,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 product={selectedProduct}
                 onClose={() => setSelectedProduct(null)}
                 onAdd={(qty, notes) => {
-                    if (selectedProduct) addToCart(selectedProduct, qty, notes);
+                    if (selectedProduct) {
+                        addToCart(selectedProduct, qty, notes);
+                        toast.success('Adicionado ao carrinho!');
+                    }
                 }}
             />
 
