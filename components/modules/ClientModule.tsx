@@ -479,6 +479,53 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
     );
 };
 
+// Extraído do .map() de renderização do cardápio — memoizado pra evitar
+// que a lista inteira de produtos re-renderize a cada ação de carrinho
+// (achado de performance #7). Também navegável por teclado: é um
+// <button> de verdade (Tab foca, Enter/Space aciona), em vez do <div
+// onClick> anterior (achado de UX #1).
+const ProductCard = React.memo(function ProductCard({ product, onSelect, disabled, style }: {
+    product: Product,
+    onSelect: (product: Product) => void,
+    disabled?: boolean,
+    style?: React.CSSProperties
+}) {
+    return (
+        <button
+            type="button"
+            onClick={() => onSelect(product)}
+            disabled={disabled}
+            className="u-stagger flex gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-md)] p-3 text-left w-full u-card u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1"
+            style={{ boxShadow: 'var(--shadow-sm)', ...style }}
+        >
+            {product.image_url ? (
+                <img src={product.image_url} alt={product.name} className="w-20 h-20 object-cover rounded-[var(--r-sm)] bg-[var(--surface-2)] flex-shrink-0" />
+            ) : (
+                <div className="w-20 h-20 bg-[var(--brand-soft)] rounded-[var(--r-sm)] flex items-center justify-center flex-shrink-0">
+                    <UtensilsCrossed size={22} className="text-[var(--brand)]/40" />
+                </div>
+            )}
+            <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+                <div>
+                    <div className="flex justify-between items-start gap-2">
+                        <h3 className="font-medium text-[var(--text)] leading-snug text-[14px]">{product.name}</h3>
+                        <span className="font-semibold text-[var(--brand)] whitespace-nowrap num text-[14px] flex-shrink-0">R$ {product.price.toFixed(2)}</span>
+                    </div>
+                    {product.description && (
+                        <p className="text-[12px] text-[var(--text-muted)] mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
+                    )}
+                </div>
+                {product.prep_time_minutes && (
+                    <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] mt-1.5">
+                        <Clock size={11} /> {product.prep_time_minutes} min
+                    </div>
+                )}
+            </div>
+        </button>
+    );
+});
+ProductCard.displayName = 'ProductCard';
+
 const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string) => void }> = ({ product, onClose, onAdd }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
@@ -500,9 +547,9 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                 <div className="flex items-center justify-between bg-[var(--surface-2)] px-4 py-3 rounded-[var(--r-md)] border border-[var(--border)]">
                     <span className="text-xl font-semibold text-[var(--brand)] num">R$ {product.price.toFixed(2)}</span>
                     <div className="flex items-center gap-3 bg-[var(--surface)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
                         <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
-                        <button onClick={() => setQty(q => Math.min(99, q + 1))} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
+                        <button onClick={() => setQty(q => Math.min(99, q + 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
                     </div>
                 </div>
 
@@ -574,9 +621,9 @@ const CartModal: React.FC<{
                                             <Trash2 size={14}/>
                                         </button>
                                         <div className="flex items-center gap-2 bg-[var(--surface-2)] rounded-[var(--r-sm)] px-1.5 py-0.5 border border-[var(--border)]">
-                                            <button onClick={() => onUpdateQty(item, -1)} className="text-[var(--text-muted)] hover:text-[var(--text)] p-0.5 u-motion"><Minus size={13}/></button>
+                                            <button onClick={() => onUpdateQty(item, -1)} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] u-motion"><Minus size={13}/></button>
                                             <span className="text-[13px] font-semibold text-[var(--text)] w-4 text-center num">{item.quantity}</span>
-                                            <button onClick={() => onUpdateQty(item, 1)} className="text-[var(--text-muted)] hover:text-[var(--text)] p-0.5 u-motion"><Plus size={13}/></button>
+                                            <button onClick={() => onUpdateQty(item, 1)} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] u-motion"><Plus size={13}/></button>
                                         </div>
                                     </div>
                                 </div>
@@ -1413,36 +1460,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {/* Menu Grid */}
             <div className={`p-4 grid gap-3 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                 {filteredProducts.map((product, i) => (
-                    <div
+                    <ProductCard
                         key={product.id}
-                        onClick={() => !isWaitingBill && setSelectedProduct(product)}
-                        className="u-stagger flex gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-md)] p-3 cursor-pointer u-card"
-                        style={{boxShadow:'var(--shadow-sm)', ...stagger(Math.min(i, 10) * 30)}}
-                    >
-                        {product.image_url ? (
-                             <img src={product.image_url} alt={product.name} className="w-20 h-20 object-cover rounded-[var(--r-sm)] bg-[var(--surface-2)] flex-shrink-0" />
-                        ) : (
-                             <div className="w-20 h-20 bg-[var(--brand-soft)] rounded-[var(--r-sm)] flex items-center justify-center flex-shrink-0">
-                                 <UtensilsCrossed size={22} className="text-[var(--brand)]/40" />
-                             </div>
-                        )}
-                        <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
-                            <div>
-                                <div className="flex justify-between items-start gap-2">
-                                    <h3 className="font-medium text-[var(--text)] leading-snug text-[14px]">{product.name}</h3>
-                                    <span className="font-semibold text-[var(--brand)] whitespace-nowrap num text-[14px] flex-shrink-0">R$ {product.price.toFixed(2)}</span>
-                                </div>
-                                {product.description && (
-                                    <p className="text-[12px] text-[var(--text-muted)] mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
-                                )}
-                            </div>
-                            {product.prep_time_minutes && (
-                                <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] mt-1.5">
-                                    <Clock size={11} /> {product.prep_time_minutes} min
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                        product={product}
+                        onSelect={setSelectedProduct}
+                        disabled={isWaitingBill}
+                        style={stagger(Math.min(i, 10) * 30)}
+                    />
                 ))}
                 {filteredProducts.length === 0 && (
                     <div className="text-center py-12 text-[var(--text-muted)] text-sm u-fade-in">Nenhum produto encontrado.</div>
