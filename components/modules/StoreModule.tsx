@@ -429,27 +429,29 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 );
 };
 
-// --- SUB-MODULE: KITCHEN ---
-const KitchenView: React.FC<{ storeId: string; storeName?: string }> = ({ storeId, storeName }) => {
+// --- SUB-MODULE: KDS (Kitchen / Bar) ---
+const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ destination, store }) => {
+  const storeId = store.id;
+  const storeName = store.name;
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
   const loadOrders = async () => {
       if(!storeId) return;
-      const data = await fetchKitchenOrders(storeId, 'kitchen');
+      const data = await fetchKitchenOrders(storeId, destination);
       setOrders(data);
   };
 
   useEffect(() => {
     loadOrders();
-    const channel = supabase.channel(`kitchen_updates_${storeId}`)
+    const channel = supabase.channel(`${destination}_updates_${storeId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
             loadOrders(); // Refresh on any change
         })
         .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [storeId]);
+  }, [storeId, destination]);
 
   const advanceStatus = async (item: OrderItem) => {
       let nextStatus = OrderStatus.PENDING;
@@ -494,7 +496,7 @@ const KitchenView: React.FC<{ storeId: string; storeName?: string }> = ({ storeI
           : `MESA ${item.order?.tables?.number || '?'}`;
 
       printKitchenTicket({
-          kind: 'COZINHA',
+          kind: destination === 'kitchen' ? 'COZINHA' : 'BAR',
           storeName,
           orderType,
           identifier,
@@ -595,182 +597,7 @@ const KitchenView: React.FC<{ storeId: string; storeName?: string }> = ({ storeI
             {orders.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
                     <CheckCircle className="mb-4 h-20 w-20 opacity-20 text-[var(--ok)]" />
-                    <p className="text-xl font-medium">Tudo tranquilo na cozinha!</p>
-                    <p className="text-sm">Aguardando novos pedidos...</p>
-                </div>
-            )}
-        </div>
-    </div>
-  );
-};
-
-// --- SUB-MODULE: BAR ---
-const BarView: React.FC<{ storeId: string; storeName?: string }> = ({ storeId, storeName }) => {
-  const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
-
-  const loadOrders = async () => {
-      if(!storeId) return;
-      const data = await fetchKitchenOrders(storeId, 'bar');
-      setOrders(data);
-  };
-
-  useEffect(() => {
-    loadOrders();
-    const channel = supabase.channel(`bar_updates_${storeId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
-            loadOrders(); // Refresh on any change
-        })
-        .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [storeId]);
-
-  const advanceStatus = async (item: OrderItem) => {
-      let nextStatus = OrderStatus.PENDING;
-      
-      // Order State Machine
-      if (item.status === OrderStatus.PENDING) nextStatus = OrderStatus.PREPARING; // Table (Pending -> Preparing)
-      else if (item.status === OrderStatus.ACCEPTED) nextStatus = OrderStatus.PREPARING; // Counter (Accepted -> Preparing)
-      else if (item.status === OrderStatus.PREPARING) nextStatus = OrderStatus.READY;
-      else if (item.status === OrderStatus.READY) nextStatus = OrderStatus.DELIVERED;
-      
-      // Optimistic UI
-      setOrders(prev => prev.map(o => o.id === item.id ? { ...o, status: nextStatus } : o).filter(o => o.status !== OrderStatus.DELIVERED));
-      
-      await updateOrderItemStatus(item.id, nextStatus);
-  };
-
-  const getStatusColor = (status: OrderStatus) => {
-      switch(status) {
-          case OrderStatus.PENDING: return 'bg-[var(--warn)]/8 border-[var(--warn)]/35';
-          case OrderStatus.ACCEPTED: return 'bg-[var(--warn)]/8 border-[var(--warn)]/35';
-          case OrderStatus.PREPARING: return 'bg-[var(--info)]/8 border-[var(--info)]/35';
-          case OrderStatus.READY: return 'bg-[var(--ok)]/8 border-[var(--ok)]/40';
-          default: return 'bg-[var(--surface-2)] border-[var(--border)]';
-      }
-  };
-
-  // Helper function to extract name from notes: "[Name] Notes..."
-  const parseItemNote = (fullNote: string) => {
-      if (!fullNote) return { client: null, observation: '' };
-      const match = fullNote.match(/^\[(.*?)\]\s*(.*)$/);
-      if (match) {
-          return { client: match[1], observation: match[2].trim() };
-      }
-      return { client: null, observation: fullNote.trim() };
-  };
-
-  const printOrderTicket = (item: OrderItem) => {
-      const { client, observation } = parseItemNote(item.notes || '');
-      const orderType = item.order?.order_type === 'counter' ? 'BALCÃO' : 'MESA';
-      const identifier = item.order?.order_type === 'counter'
-          ? (item.order?.customer_name || 'Balcão')
-          : `MESA ${item.order?.tables?.number || '?'}`;
-
-      printKitchenTicket({
-          kind: 'BAR',
-          storeName,
-          orderType,
-          identifier,
-          client,
-          quantity: item.quantity,
-          productName: item.product?.name || 'Produto Indisponível',
-          observation,
-          orderIdShort: item.order_id.slice(0, 8),
-      });
-  };
-
-  return (
-    <div>
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {orders.map(item => {
-                const { client, observation } = parseItemNote(item.notes || '');
-
-                return (
-                    <Card key={item.id} className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md`}>
-                        <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
-                            <span className="font-bold text-[var(--text)] flex items-center gap-2">
-                                {item.order?.order_type === 'counter' ? (
-                                    <>
-                                        <Coffee size={18} className="text-[var(--warn)]"/>
-                                        <span className="truncate max-w-[150px]">{item.order?.customer_name || 'Balcão'}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <LayoutGrid size={18} className="text-[var(--info)]"/>
-                                        Mesa {item.order?.tables?.number || '?'}
-                                    </>
-                                )}
-                            </span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    disabled={cancellingIds.has(item.id)}
-                                    onClick={async () => {
-                                        if (cancellingIds.has(item.id)) return;
-                                        if (await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
-                                            setCancellingIds(prev => new Set(prev).add(item.id));
-                                            await cancelSpecificOrderItem(item.id);
-                                            setOrders(prev => prev.filter(o => o.id !== item.id));
-                                        }
-                                    }}
-                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
-                                    title="Cancelar Item"
-                                >
-                                    <X size={18} />
-                                </button>
-                                <button
-                                    onClick={() => printOrderTicket(item)}
-                                    className="p-2 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] u-motion u-press"
-                                    title="Imprimir Ticket"
-                                >
-                                    <Printer size={18} />
-                                </button>
-                                <div className="flex items-center gap-1 text-xs font-mono text-[var(--text-muted)] bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)]">
-                                    <Clock size={12}/>
-                                    {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </div>
-                            </div>
-                        </div>
-                        <h3 className="font-black text-[var(--text)] leading-tight mb-2 text-lg">
-                            {item.quantity}x {item.product?.name || 'Produto Indisponível'}
-                        </h3>
-
-                        {/* Customer Name Badge (Neutral) */}
-                        {client && (
-                            <div className="mb-2">
-                                <span className="text-xs font-bold text-[var(--text-muted)] bg-[var(--surface)]/60 px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] flex items-center gap-1 w-fit">
-                                    <User size={12}/> {client}
-                                </span>
-                            </div>
-                        )}
-
-                        {/* Actual Warning Notes */}
-                        {observation && (
-                            <div className="bg-[var(--warn)]/8 text-[var(--warn)] p-2 rounded-[var(--r-md)] text-sm font-bold border border-[var(--warn)]/20 mb-4 animate-pulse">
-                                ⚠️ {observation}
-                            </div>
-                        )}
-
-                        <div className="mt-auto pt-2">
-                            <Button onClick={() => advanceStatus(item)} className={`w-full shadow-sm font-bold ${
-                                item.status === 'pending' ? 'bg-[var(--warn)] hover:opacity-90 text-white' :
-                                item.status === 'accepted' ? 'bg-[var(--warn)] hover:opacity-90 text-white' :
-                                item.status === 'preparing' ? 'bg-[var(--info)] hover:opacity-90 text-white' :
-                                'bg-[var(--ok)] hover:opacity-90 text-white'
-                            }`}>
-                                {(item.status === 'pending' || item.status === 'accepted') && 'Iniciar Preparo'}
-                                {item.status === 'preparing' && 'Marcar Pronto'}
-                                {item.status === 'ready' && 'Entregar'}
-                            </Button>
-                        </div>
-                    </Card>
-                );
-            })}
-            {orders.length === 0 && (
-                <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
-                    <CheckCircle className="mb-4 h-20 w-20 opacity-20 text-[var(--ok)]" />
-                    <p className="text-xl font-medium">Tudo tranquilo no bar!</p>
+                    <p className="text-xl font-medium">{destination === 'kitchen' ? 'Tudo tranquilo na cozinha!' : 'Tudo tranquilo no bar!'}</p>
                     <p className="text-sm">Aguardando novos pedidos...</p>
                 </div>
             )}
@@ -3342,8 +3169,8 @@ export const StoreModule: React.FC = () => {
         >
             {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} />}
             {tab === 'counter' && canAccess('counter') && <CounterView store={user.store} />}
-            {tab === 'kitchen' && canAccess('kitchen') && <KitchenView storeId={user.store.id} storeName={user.store.name} />}
-            {tab === 'bar' && canAccess('bar') && <BarView storeId={user.store.id} storeName={user.store.name} />}
+            {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
+            {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
             {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} />}
             
