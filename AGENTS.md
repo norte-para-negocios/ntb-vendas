@@ -27,9 +27,12 @@ Três públicos:
 
 ## Decisões de arquitetura (o porquê, não só o quê)
 
-**Não existem API routes.** Todo acesso a dado é `@supabase/supabase-js` chamado
-direto do client (`lib/api.ts`), incluindo de dentro de Server Components (ex.:
-`generateMetadata`). Não há camada de backend própria.
+**Quase não existem API routes.** Todo acesso a dado é `@supabase/supabase-js`
+chamado direto do client (`lib/api.ts`), incluindo de dentro de Server
+Components (ex.: `generateMetadata`). A única exceção é `app/api/certificado`
+(ver "Certificado digital fiscal" abaixo): existe só porque aquele fluxo
+específico não tem como funcionar com a chave anônima sem abrir uma
+brecha de segurança real. Não há camada de backend própria além disso.
 
 **Não existe Supabase Auth.** Login de lojista/master autentica contra tabelas
 próprias (`store_users`, `system_admins`) comparando senha em texto puro (sem
@@ -89,6 +92,28 @@ consegue ler). Generaliza o mesmo princípio do PIN de mesa acima. Ver
 encadear `.select()`** — isso força o Postgrest a tentar devolver a linha
 gravada, o que falha (ou não retorna nada) sem policy de leitura.
 
+**RLS write-only (INSERT/UPDATE sem SELECT) só funciona pra INSERT cego,
+nunca pra atualizar uma linha específica já existente.** Achado real ao
+testar de verdade o certificado fiscal (2026-07-03): um `.upsert()` (que
+vira `INSERT ... ON CONFLICT DO UPDATE`) numa tabela sem NENHUMA policy de
+SELECT falha com "new row violates row-level security policy" mesmo com
+policies de INSERT e UPDATE corretas, porque o Postgres precisa enxergar
+a linha conflitante pra decidir se atualiza, e isso exige a mesma
+visibilidade que uma policy de SELECT daria. Tentei contornar trocando por
+`UPDATE ... WHERE coluna = valor` (achando que evitaria o ON CONFLICT) e
+**também falhou**: qualquer `WHERE` que precise LER uma coluna pra comparar
+(não só `WHERE true`) passa pelo mesmo problema, confirmado com
+`EXPLAIN`: o plano vira um `One-Time Filter: false` sem policy de SELECT.
+Ou seja: esse padrão (usado em `store_fiscal_certificate_secrets`) só serve
+pra gravar uma linha nova às cegas; pra atualizar uma linha existente por
+qualquer critério, é obrigatório ou (a) ter uma policy de SELECT (perdendo
+a garantia de "nunca lê de volta"), ou (b) rodar com privilégio elevado
+(function `security definer` ou, como foi feito aqui, uma rota de servidor
+com a service role key, ver "Certificado digital fiscal" abaixo). Vale
+generalizar: qualquer tabela write-only nova neste projeto só pode receber
+`INSERT` puro do client; qualquer atualização de linha existente precisa
+de um desses dois mecanismos.
+
 **Filtro de loja em queries com embed do Postgrest precisa de `!inner`.**
 `.select('*, product:products(*)').eq('product.store_id', storeId)` **não**
 restringe as linhas retornadas — só zera o campo embutido de quem não bate,
@@ -106,6 +131,7 @@ em `lib/api.ts`/`StoreModule.tsx`).
 | `/painel` | estática | Master Admin (login + CRUD de lojas/usuários) |
 | `/loja` | estática | Lojista (login + painel completo da loja) |
 | `/c/[slug]` | ISR, `revalidate = 60` | Cardápio do cliente final |
+| `/api/certificado` | Route Handler (POST/DELETE) | Única rota de API do projeto, ver "Certificado digital fiscal" abaixo |
 
 `/c/[slug]` é de longe a rota mais visitada (todo cliente na mesa acessa via QR
 code) e a única dinâmica — por isso ganhou ISR: o conteúdo real (menu, mesa,
@@ -174,6 +200,11 @@ consumo de free tier na Vercel).
   do banco vazando pra tela) antes de existir esse arquivo.
 - **`supabaseClient.ts`** — client único (`createClient`), usa
   `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- **`supabaseAdmin.ts`**: client com a service role key, ignora RLS por
+  completo. Só pode ser importado de código de servidor (`app/api/**`),
+  nunca de um Client Component nem de `lib/api.ts`. Sem fallback hardcoded
+  (ao contrário de `supabaseClient.ts`), essa chave nunca pode ir pro
+  repositório nem ser exposta no bundle do client.
 
 ## Banco de dados (`supabase/migrations/`)
 
@@ -224,12 +255,65 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   em qualquer loja da plataforma acordava todo cliente conectado); policy
   de DELETE pro bucket `store-certificates` (limpa certificado órfão
   quando a loja é desativada).
+- **`010_fix_storage_buckets_rls.sql`**: tentativa inicial de corrigir o
+  upload do certificado (policy de SELECT em `storage.buckets`). Insuficiente
+  sozinha (ver 011) e depois **revertida** pela própria 011, já que a rota de
+  servidor tornou essa policy desnecessária. Mantida no histórico por
+  transparência, não por efeito prático hoje.
+- **`011_certificado_via_api.sql`**: remove as policies de INSERT/UPDATE/
+  DELETE de `anon` em `storage.objects` pro bucket `store-certificates`
+  (e reverte a 010). Todo upload/remoção do certificado passou a rodar via
+  `app/api/certificado` (service role key). Ver "Certificado digital
+  fiscal" abaixo pro porquê completo.
+- **`012_certificado_metadata_readonly.sql`**: troca a policy `ALL` de
+  `store_fiscal_certificates` por uma de `SELECT` só. A escrita também
+  passou pra rota de servidor, o client só precisa continuar lendo pra
+  mostrar o badge de status do certificado.
 
-Todas as migrations (001 a 009) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 012) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
 `create_order_secure`, `open_table_session`, rate-limit de login e de PIN,
-bucket `store-certificates`, `order_items.store_id` — todos testados via RPC
-direto em 2026-07-03).
+bucket `store-certificates` com upload/leitura de status/remoção
+funcionando de ponta a ponta via `/api/certificado`, `order_items.store_id`,
+todos testados via RPC/upload real em 2026-07-03).
+
+## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
+
+Cadastro do certificado (`.pfx`/`.p12` + senha + validade) na loja, feito
+pelo Master Admin em "Editar Loja". Continua sendo só *armazenamento*:
+emissão de NFC-e/SEFAZ é trabalho futuro separado (ver "Backlog" abaixo).
+
+Testando de verdade (upload real, não só leitura de código) em
+2026-07-03, esse fluxo nunca tinha funcionado desde a 006, por dois
+motivos, ambos ligados ao mesmo princípio de RLS (ver "RLS write-only..."
+na seção de Decisões de arquitetura acima):
+
+1. A API de Storage do Supabase lê a linha de volta depois de gravar (tipo
+   um `INSERT ... RETURNING`) pra montar a resposta, e o `.list()` usado na
+   limpeza de certificado órfão (`deleteStore`) também exige leitura.
+2. `saveStoreCertificateSecret` usava `.upsert()` numa tabela write-only
+   (sem policy de SELECT), e um upsert com `ON CONFLICT DO UPDATE` também
+   exige poder enxergar a linha conflitante.
+
+Em ambos os casos, dar a policy de SELECT que resolveria o problema
+também deixaria o `.pfx` (caso 1) ou a senha em texto puro (caso 2)
+legíveis por qualquer um com a chave anônima, exatamente o que essas duas
+tabelas/bucket existem pra evitar.
+
+**Solução:** `app/api/certificado/route.ts`, a única rota de API deste
+projeto. `POST` faz upload do arquivo (se enviado) + upsert de metadados
+(se `originalFilename` enviado) + upsert da senha (se `password` enviado),
+tudo com `supabaseAdmin` (service role key, ignora RLS). `DELETE` lista e
+remove o(s) arquivo(s) da loja (usado por `deleteStore`). `lib/api.ts`
+(`uploadStoreCertificate`, `saveStoreCertificateMetadata`,
+`saveStoreCertificateSecret`) viraram só chamadas HTTP pra essa rota: a
+chave anônima nunca mais toca `storage.objects`/`storage.buckets` nem
+`store_fiscal_certificate_secrets` diretamente (ver migrations 010-012).
+
+**Atenção ao subir pra produção:** `SUPABASE_SERVICE_ROLE_KEY` precisa
+estar configurada nas env vars do projeto na Vercel (não só no
+`.env.local` local), sem ela `/api/certificado` falha em produção com
+credencial ausente. Não verificado nesta sessão se já está configurada lá.
 
 Tabelas principais: `stores`, `store_users`, `system_admins`, `categories`,
 `products`, `tables` (tem o PIN — nunca expor via `select('*')` num contexto
@@ -305,10 +389,12 @@ Três tipos de documento, todos usados em `StoreModule.tsx`:
   cozinha/bar (som em pedido novo). Só funciona com a aba aberta — **não**
   cobre app fechado/tela bloqueada (exigiria Web Push real: Service Worker
   + VAPID + backend pra disparar, que este projeto não tem).
-- Espaço pra cadastrar o certificado digital da loja (bucket
-  `store-certificates` + tabelas + UI no `AdminModule.tsx`) — migrations
-  aplicadas e testadas (ver seção "Banco de dados" acima). Continua sendo só
-  *armazenamento* — emissão de NFC-e/SEFAZ é trabalho futuro separado.
+- Cadastro do certificado digital da loja (bucket `store-certificates` +
+  tabelas + UI no `AdminModule.tsx` + rota `app/api/certificado`),
+  funcional de ponta a ponta e testado com upload real em 2026-07-03 (ver
+  seção "Certificado digital fiscal" acima; a migration 006 sozinha nunca
+  tinha funcionado até essa correção). Continua sendo só *armazenamento*:
+  emissão de NFC-e/SEFAZ é trabalho futuro separado.
 - Varredura completa de segurança/bugs/performance/UX (2026-07-02, ver
   histórico de commits do dia) — cobriu: rate-limit de PIN e login,
   preço de pedido validado server-side, vazamento de PIN no
@@ -348,6 +434,20 @@ baixa de ingrediente via ficha técnica), LGPD (exportação/exclusão de
 dado do cliente). Detalhamento de cada item em
 `docs/plans/2026-07-02-varredura-correcoes-plan.md`.
 
+**Integração fiscal, planejada, nada implementado ainda (anotado
+2026-07-03, não é pra agir sem pedido explícito):** o usuário quer, além
+da emissão direta via certificado + SEFAZ já mencionada acima, uma
+integração com a **Omie** pro cupom fiscal: toda venda no NTB Vendas
+geraria os dados do cupom, que seriam enviados pra Omie, e a Omie
+comunicaria com o SEFAZ (mesma Omie que o `ntb-estoque-next` já usa pra
+estoque/ordem de produção, ver `C:\Users\media\OneDrive\Desktop\EMPRESA
+TRIFORCE AUTO\clientes\ntb-ramon-andrey\ntb-estoque-next`). Ou seja, duas
+abordagens de emissão fiscal foram citadas pelo usuário (certificado
+digital direto vs. via Omie), ainda não decidido qual (ou se as duas)
+vai ser usada, isso precisa ser esclarecido antes de desenhar qualquer
+coisa. Pendente também: pesquisar se o SEFAZ tem ambiente de homologação/
+teste e se ele exige uma nota fiscal real já emitida pra poder ser usado.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users` (sem hash). A
@@ -376,8 +476,6 @@ dado do cliente). Detalhamento de cada item em
   em `lib/api.ts` (retornam `{ store, error? }`/`{ categories, products,
   error? }` agora; o mock ainda retorna o formato antigo). Corrigir antes
   de usar `USE_MOCK=true` pra qualquer teste.
-- **Migrations 007/008/009 não aplicadas em produção** no momento em que
-  este documento foi escrito — ver aviso na seção "Banco de dados".
 
 ## Como rodar
 

@@ -802,43 +802,37 @@ export const uploadStoreLogo = async (file: File): Promise<string> => uploadToCl
 export const uploadProductImage = async (file: File): Promise<string> => uploadToCloudinary(file);
 
 // Certificado digital fiscal: NÃO usa Cloudinary (é público/sem controle de
-// acesso). Vai pro bucket privado `store-certificates` — ver
-// supabase/migrations/006_fiscal_certificado.sql pro porquê.
-const CERT_BUCKET = 'store-certificates';
+// acesso). Vai pro bucket privado `store-certificates`, e o upload/remoção
+// passam por /api/certificado (service role key) em vez do client direto —
+// ver supabase/migrations/006_fiscal_certificado.sql e
+// 011_certificado_via_api.sql pro porquê.
 
-export const uploadStoreCertificate = async (storeId: string, file: File): Promise<{ success: boolean; message?: string }> => {
-  const path = `${storeId}/certificado.pfx`;
-  const { error } = await supabase.storage.from(CERT_BUCKET).upload(path, file, { upsert: true });
-  if (error) return { success: false, message: error.message };
-  return { success: true };
+// As 3 funções abaixo chamam a mesma rota /api/certificado (service role
+// key) em vez de tocar supabase.storage/tabelas direto com a chave
+// anônima. Motivo (ver app/api/certificado/route.ts pro detalhe completo):
+// o arquivo em si exige leitura de volta pra fazer upload/limpeza, e a
+// senha exige leitura pra fazer update/upsert num row já existente — as
+// duas leituras, se liberadas pra `anon`, exporiam o .pfx e a senha em
+// texto puro pra qualquer um com a chave pública.
+const postCertificado = async (fields: Record<string, string | File>): Promise<{ success: boolean; message?: string }> => {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  try {
+    const res = await fetch('/api/certificado', { method: 'POST', body: form });
+    return await res.json();
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
 };
 
-export const saveStoreCertificateMetadata = async (storeId: string, originalFilename: string, expiresAt: string | null): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.from('store_fiscal_certificates').upsert({
-    store_id: storeId,
-    file_path: `${storeId}/certificado.pfx`,
-    original_filename: originalFilename,
-    uploaded_at: new Date().toISOString(),
-    expires_at: expiresAt,
-  }, { onConflict: 'store_id' });
-  if (error) return { success: false, message: error.message };
-  return { success: true };
-};
+export const uploadStoreCertificate = async (storeId: string, file: File): Promise<{ success: boolean; message?: string }> =>
+  postCertificado({ storeId, file });
 
-export const saveStoreCertificateSecret = async (storeId: string, password: string): Promise<{ success: boolean; message?: string }> => {
-  // SEM .select() de propósito: a tabela não tem policy de SELECT pra anon
-  // (write-only, ver a migration). supabase-js só pede a linha de volta
-  // (Prefer: return=representation) quando .select() é encadeado — sem
-  // isso, o upsert funciona como INSERT/UPDATE puro mesmo sem permissão
-  // de leitura nenhuma.
-  const { error } = await supabase.from('store_fiscal_certificate_secrets').upsert({
-    store_id: storeId,
-    password,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'store_id' });
-  if (error) return { success: false, message: error.message };
-  return { success: true };
-};
+export const saveStoreCertificateMetadata = async (storeId: string, originalFilename: string, expiresAt: string | null): Promise<{ success: boolean; message?: string }> =>
+  postCertificado({ storeId, originalFilename, expiresAt: expiresAt ?? '' });
+
+export const saveStoreCertificateSecret = async (storeId: string, password: string): Promise<{ success: boolean; message?: string }> =>
+  postCertificado({ storeId, password });
 
 export const fetchStoreCertificateStatus = async (storeId: string): Promise<StoreFiscalCertificateStatus | null> => {
   const { data, error } = await supabase
@@ -988,13 +982,19 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
 // 009_indices_realtime_e_soft_delete.sql).
 export const deleteStore = async (id: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { data: certFiles, error: listError } = await supabase.storage.from(CERT_BUCKET).list(id);
-    if (listError) {
-      console.error('Erro ao listar certificado da loja no Storage:', listError);
-    } else if (certFiles && certFiles.length > 0) {
-      const paths = certFiles.map((f) => `${id}/${f.name}`);
-      const { error: removeError } = await supabase.storage.from(CERT_BUCKET).remove(paths);
-      if (removeError) console.error('Erro ao remover certificado órfão da loja:', removeError);
+    // Limpeza do certificado também passa por /api/certificado (mesmo
+    // motivo do uploadStoreCertificate acima): listar o que existe no
+    // bucket exige a mesma leitura que não pode ser liberada pra `anon`.
+    try {
+      const res = await fetch('/api/certificado', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: id }),
+      });
+      const data = await res.json();
+      if (!data.success) console.error('Erro ao remover certificado órfão da loja:', data.message);
+    } catch (certError) {
+      console.error('Erro ao remover certificado órfão da loja:', certError);
     }
 
     const { error } = await supabase.from('stores').update({ is_active: false }).eq('id', id);
