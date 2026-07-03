@@ -704,7 +704,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
         loadBill();
 
         const channel = supabase.channel(`bill_${tableId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadBill())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `store_id=eq.${storeId}` }, () => loadBill())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `id=eq.${tableId}` }, () => loadBill())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'stores', filter: `id=eq.${storeId}` }, () => loadBill())
             .subscribe();

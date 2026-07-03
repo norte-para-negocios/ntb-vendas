@@ -224,7 +224,7 @@ const useStoreNotifications = (storeId: string | undefined) => {
         
         const channel = supabase.channel(`notifications_${storeId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `store_id=eq.${storeId}` }, loadCounts)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, loadCounts)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `store_id=eq.${storeId}` }, loadCounts)
             .subscribe();
 
         return () => {
@@ -484,7 +484,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
   useEffect(() => {
     loadOrders();
     const channel = supabase.channel(`${destination}_updates_${storeId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `store_id=eq.${storeId}` }, () => {
             loadOrders(true); // Refresh on any change + alerta sonoro se surgiu item novo
         })
         .subscribe();
@@ -987,9 +987,9 @@ NOTIFY pgrst, 'reload schema';`;
         loadData();
         // Subscribe to relevant tables to keep card summary updated
         const channel = supabase.channel(`tables_dashboard_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => loadData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `store_id=eq.${storeId}` }, () => loadData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${storeId}` }, () => loadData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `store_id=eq.${storeId}` }, () => loadData())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
@@ -1981,8 +1981,8 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
     useEffect(() => {
         load();
         const channel = supabase.channel(`counter_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => load())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${storeId}` }, () => load())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `store_id=eq.${storeId}` }, () => load())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
