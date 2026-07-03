@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, createOrderRating } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
@@ -54,6 +54,10 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
     const [order, setOrder] = useState<Order | null>(null);
     const [items, setItems] = useState<OrderItem[]>([]);
     const [secondsToRedirect, setSecondsToRedirect] = useState(5);
+    const [ratingStars, setRatingStars] = useState(0);
+    const [ratingComment, setRatingComment] = useState('');
+    const [ratingSent, setRatingSent] = useState(false);
+    const [isSendingRating, setIsSendingRating] = useState(false);
     // Snapshot do fetch anterior — usado só pra diff, nunca renderizado.
     // null = ainda não carregou nenhuma vez (evita alertar no load inicial).
     const prevItemsRef = useRef<OrderItem[] | null>(null);
@@ -77,6 +81,11 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         const load = async () => {
             const data = await fetchOrderById(orderId);
             setOrder(data);
+
+            if (data) {
+                const ratingKey = `rated_table_${data.table_id ?? data.id}`;
+                if (localStorage.getItem(ratingKey)) setRatingSent(true);
+            }
 
             // Fetch items immediately to determine detailed status
             const { data: itemsData } = await supabase.from('order_items').select('*, product:products(*)').eq('order_id', orderId);
@@ -188,6 +197,28 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         }
     };
 
+    const handleSendRating = async () => {
+        if (ratingStars === 0 || !order) return;
+        setIsSendingRating(true);
+        try {
+            const result = await createOrderRating(order.id, order.store_id, ratingStars, ratingComment || null);
+            if (!result.success) throw new Error(result.message);
+            const ratingKey = `rated_table_${order.table_id ?? order.id}`;
+            localStorage.setItem(ratingKey, '1');
+            setRatingSent(true);
+            toast.success('Obrigado pela avaliação!');
+        } catch (e: any) {
+            toast.error('Erro ao enviar avaliação: ' + e.message);
+        } finally {
+            setIsSendingRating(false);
+        }
+    };
+
+    const handleSkipRating = () => {
+        if (order) localStorage.setItem(`rated_table_${order.table_id ?? order.id}`, '1');
+        setRatingSent(true);
+    };
+
     if (!order) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><div className="animate-pulse text-[var(--brand)] font-bold">Carregando status...</div></div>;
 
     const steps = [
@@ -233,12 +264,39 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                 )}
 
                 {isDelivered ? (
-                     <div className="text-center py-10 animate-fade-in">
+                     <div className="text-center py-10 animate-fade-in w-full max-w-md">
                          <div className="bg-[var(--ok)]/10 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--ok)]">
                              <CheckCircle size={48} />
                          </div>
                          <h2 className="text-2xl font-bold text-[var(--text)] mb-2">Pedido Finalizado</h2>
-                         <p className="text-[var(--text-muted)] mb-2">Obrigado pela preferência!</p>
+                         <p className="text-[var(--text-muted)] mb-4">Obrigado pela preferência!</p>
+
+                         {!ratingSent && (
+                             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-4 text-left">
+                                 <p className="text-sm font-semibold text-[var(--text)] mb-3 text-center">Como foi sua experiência?</p>
+                                 <div className="flex items-center justify-center gap-2 mb-3">
+                                     {[1, 2, 3, 4, 5].map((n) => (
+                                         <button key={n} onClick={() => setRatingStars(n)} className="u-motion">
+                                             <Star size={32} className={n <= ratingStars ? 'fill-[var(--warn)] text-[var(--warn)]' : 'text-[var(--border)]'} />
+                                         </button>
+                                     ))}
+                                 </div>
+                                 {ratingStars > 0 && (
+                                     <textarea
+                                         value={ratingComment}
+                                         onChange={(e) => setRatingComment(e.target.value)}
+                                         placeholder="Comentário (opcional)"
+                                         className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none mb-3"
+                                         rows={2}
+                                     />
+                                 )}
+                                 <div className="flex items-center justify-center gap-3">
+                                     <button onClick={handleSkipRating} className="text-sm text-[var(--text-muted)] u-motion">Pular</button>
+                                     <Button size="sm" onClick={handleSendRating} isLoading={isSendingRating} disabled={ratingStars === 0}>Enviar</Button>
+                                 </div>
+                             </div>
+                         )}
+
                          <p className="text-[var(--brand)] font-bold text-sm bg-[var(--brand)]/8 py-2 px-4 rounded-full inline-block">
                              Reiniciando em {secondsToRedirect}s...
                          </p>
