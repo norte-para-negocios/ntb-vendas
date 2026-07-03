@@ -225,16 +225,11 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   de DELETE pro bucket `store-certificates` (limpa certificado órfão
   quando a loja é desativada).
 
-**As migrations 007, 008 e 009 ainda não foram aplicadas em nenhum banco**
-(este ambiente de trabalho não tinha `.env.local`/`SUPABASE_DB_URL` no
-momento em que foram escritas — ver nota sobre a chave hardcoded em
-`lib/supabaseClient.ts` acima, que é uma credencial diferente e não serve
-pra rodar migration). Rodar `node scripts/aplicar-migration.mjs
-007_seguranca_pedidos.sql` (e 008, 009, nessa ordem) antes de confiar que
-`createOrder`/`authenticateAdmin`/`authenticateStoreUser`/rate-limit de PIN
-estão de fato ativos em produção — até lá, o código em `lib/api.ts` chama
-RPCs que **não existem no banco ainda**, então essas operações vão falhar
-com erro de function not found.
+Todas as migrations (001 a 009) já foram aplicadas no banco de produção e
+verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
+`create_order_secure`, `open_table_session`, rate-limit de login e de PIN,
+bucket `store-certificates`, `order_items.store_id` — todos testados via RPC
+direto em 2026-07-03).
 
 Tabelas principais: `stores`, `store_users`, `system_admins`, `categories`,
 `products`, `tables` (tem o PIN — nunca expor via `select('*')` num contexto
@@ -311,9 +306,8 @@ Três tipos de documento, todos usados em `StoreModule.tsx`:
   cobre app fechado/tela bloqueada (exigiria Web Push real: Service Worker
   + VAPID + backend pra disparar, que este projeto não tem).
 - Espaço pra cadastrar o certificado digital da loja (bucket
-  `store-certificates` + tabelas + UI no `AdminModule.tsx`) — código
-  pronto, **migrations 006/007/008/009 ainda não aplicadas em nenhum
-  banco** (ver seção "Banco de dados" acima). Continua sendo só
+  `store-certificates` + tabelas + UI no `AdminModule.tsx`) — migrations
+  aplicadas e testadas (ver seção "Banco de dados" acima). Continua sendo só
   *armazenamento* — emissão de NFC-e/SEFAZ é trabalho futuro separado.
 - Varredura completa de segurança/bugs/performance/UX (2026-07-02, ver
   histórico de commits do dia) — cobriu: rate-limit de PIN e login,
