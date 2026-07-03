@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { Link2, Copy } from 'lucide-react';
+import { Link2, Copy, Download } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 import { Store } from '@/types';
 import { toast } from '@/components/Toast';
@@ -32,6 +32,14 @@ export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
             console.error('Erro ao copiar link', error);
             toast.error('Não foi possível copiar. Selecione o link e copie manualmente.');
         }
+    };
+
+    const handleDownload = () => {
+        if (!canvasRef.current) return;
+        const link = document.createElement('a');
+        link.download = `qrcode-${store.slug}.png`;
+        link.href = canvasRef.current.toDataURL('image/png');
+        link.click();
     };
 
     if (!store.slug) {
@@ -69,6 +77,9 @@ export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
 
                 <div className="flex flex-col items-center gap-4 pt-2 border-t border-[var(--border)]">
                     <canvas ref={canvasRef} className="rounded-[var(--r-md)] border border-[var(--border)]" />
+                    <Button variant="primary" onClick={handleDownload}>
+                        <Download size={16} /> Baixar QR Code (PNG)
+                    </Button>
                 </div>
             </Card>
         </div>
