@@ -1566,7 +1566,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 {summary?.isServiceFeeEnabled && (
                                                     <div className="flex justify-between p-3 border-b border-[var(--border)] text-sm bg-[var(--info)]/5">
                                                         <div className="flex-1">
-                                                            <span className="font-bold text-[var(--text)]">Taxa de Serviço (10%)</span>
+                                                            <span className="font-bold text-[var(--text)]">Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
                                                             <div className="text-xs text-[var(--text-muted)] mt-1">Opcional</div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
@@ -1791,7 +1791,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                     <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {currentTableSummary.total.toFixed(2)}</p>
                                     {currentTableSummary.isServiceFeeEnabled && (
-                                        <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {currentTableSummary.serviceFee.toFixed(2)} de taxa de serviço (10%)</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {currentTableSummary.serviceFee.toFixed(2)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}%)</p>
                                     )}
                                 </div>
                                 <div className="flex items-center justify-center gap-6 py-2">
@@ -1838,7 +1838,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             ))}
                                             {currentTableSummary?.isServiceFeeEnabled && (
                                                 <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
-                                                    <span>Taxa de Serviço (10%)</span>
+                                                    <span>Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
                                                     <span>{data.serviceFee.toFixed(2)}</span>
                                                 </div>
                                             )}
@@ -2368,8 +2368,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 <h3 className="font-bold text-lg mb-4 text-[var(--text)]">Configurações Gerais</h3>
                 <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
                     <div>
-                        <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço (10%)</h4>
-                        <p className="text-sm text-[var(--text-muted)]">Aplica 10% de taxa opcional no total das comandas e pedidos.</p>
+                        <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço ({((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}%)</h4>
+                        <p className="text-sm text-[var(--text-muted)]">Aplica {((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}% de taxa opcional no total das comandas e pedidos.</p>
                     </div>
                     <button 
                         onClick={handleToggleServiceFee}

@@ -672,6 +672,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
     const [serviceFee, setServiceFee] = useState(0);
     const [subtotal, setSubtotal] = useState(0);
     const [isServiceFeeEnabled, setIsServiceFeeEnabled] = useState(false);
+    const [serviceFeeRate, setServiceFeeRate] = useState(0.10);
 
     useEffect(() => {
         const loadBill = async () => {
@@ -690,13 +691,15 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
 
             // Calculate service fee
             const isFeeEnabled = !!(storeConfig?.charge_service_fee && !tableData?.service_fee_removed);
+            const feeRate = storeConfig?.service_fee_rate ?? 0.10;
             const calculatedSubtotal = data.total;
-            const calculatedServiceFee = isFeeEnabled ? calculateServiceFee(calculatedSubtotal) : 0;
+            const calculatedServiceFee = isFeeEnabled ? calculateServiceFee(calculatedSubtotal, feeRate) : 0;
 
             setSubtotal(calculatedSubtotal);
             setServiceFee(calculatedServiceFee);
-            setTotal(calculateOrderTotal(calculatedSubtotal, isFeeEnabled));
+            setTotal(calculateOrderTotal(calculatedSubtotal, isFeeEnabled, feeRate));
             setIsServiceFeeEnabled(isFeeEnabled);
+            setServiceFeeRate(feeRate);
 
             setItems(data.items);
             setIsLoading(false);
@@ -774,12 +777,12 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
 
         Object.keys(breakdown).forEach(userName => {
             const userSubtotal = breakdown[userName].subtotal;
-            breakdown[userName].serviceFee = isServiceFeeEnabled ? calculateServiceFee(userSubtotal) : 0;
-            breakdown[userName].total = calculateOrderTotal(userSubtotal, isServiceFeeEnabled);
+            breakdown[userName].serviceFee = isServiceFeeEnabled ? calculateServiceFee(userSubtotal, serviceFeeRate) : 0;
+            breakdown[userName].total = calculateOrderTotal(userSubtotal, isServiceFeeEnabled, serviceFeeRate);
         });
 
         return breakdown;
-    }, [items, isServiceFeeEnabled]);
+    }, [items, isServiceFeeEnabled, serviceFeeRate]);
 
     // --- Helper for 'Calculator' Tab ---
     const toggleSelection = (itemId: string, maxQty: number) => {
@@ -821,8 +824,8 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
         return sum;
     }, [items, selectedItems]);
 
-    const calculatorServiceFee = isServiceFeeEnabled ? calculateServiceFee(calculatorSubtotal) : 0;
-    const calculatorTotal = calculateOrderTotal(calculatorSubtotal, isServiceFeeEnabled);
+    const calculatorServiceFee = isServiceFeeEnabled ? calculateServiceFee(calculatorSubtotal, serviceFeeRate) : 0;
+    const calculatorTotal = calculateOrderTotal(calculatorSubtotal, isServiceFeeEnabled, serviceFeeRate);
 
     // --- RENDER MODALS ---
 
@@ -917,7 +920,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                         <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                         <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {total.toFixed(2)}</p>
                                         {isServiceFeeEnabled && (
-                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {serviceFee.toFixed(2)} de taxa de serviço (10% opcional)</p>
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {serviceFee.toFixed(2)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}% opcional)</p>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
@@ -971,7 +974,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                                 ))}
                                                 {isServiceFeeEnabled && (
                                                     <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
-                                                        <span>Taxa de Serviço (10%)</span>
+                                                        <span>Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
                                                         <span className="num">{data.serviceFee.toFixed(2)}</span>
                                                     </div>
                                                 )}
