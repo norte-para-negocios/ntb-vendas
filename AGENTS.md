@@ -484,6 +484,14 @@ integração de verdade.
   Qualquer nova regra de negócio sensível (ex.: limite de desconto, edição
   de pedido já fechado) deveria seguir o mesmo padrão, não checagem só no
   React.
+- **A avaliação pós-refeição (`order_ratings`) só alcança clientes de
+  Balcão.** A tela onde ela foi colocada, `OrderTracker` ("Pedido
+  Finalizado"), só é montada no fluxo de Balcão (`ClientModule.tsx`,
+  `submitOrder`: `if (!currentTable && result.orderId) setTrackedOrderId(...)`).
+  Pedido de mesa termina com só um toast e volta pro cardápio, sem passar
+  por essa tela. Pra cobrir clientes de mesa também, precisaria de um
+  gatilho novo (ex.: quando a mesa fecha, `TableStatus.AVAILABLE` recebido
+  via Realtime em `ClientModule.tsx`, hoje só mostra toast + reload).
 - **`lib/api-mock.ts` (modo `USE_MOCK=true`) está parcialmente
   dessincronizado** das assinaturas novas de `fetchStoreBySlug`/`fetchMenu`
   em `lib/api.ts` (retornam `{ store, error? }`/`{ categories, products,
