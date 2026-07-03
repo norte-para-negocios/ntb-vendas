@@ -39,6 +39,7 @@ export interface Store {
     allow_client_open: boolean;
     require_pin_for_open: boolean;
     charge_service_fee?: boolean;
+    service_fee_rate?: number;
   };
 }
 
