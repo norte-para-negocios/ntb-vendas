@@ -802,6 +802,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 
 const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
+    const serviceFeeRate = store.config?.service_fee_rate ?? 0.10;
     const isFinishingRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -871,8 +872,8 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         });
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id));
-        const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal) : 0;
-        const total = calculateOrderTotal(subtotal, isServiceFeeEnabled);
+        const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
+        const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
         return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled };
     }, [selectedTable, activeOrders, store, removedServiceFees]);
 
@@ -892,11 +893,11 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         });
 
         const splitItems: SplitItem[] = Object.entries(breakdown).map(([userName, data]) => ({ userName, subtotal: data.subtotal }));
-        const totalsByUser = calculateSplitByPerson(splitItems, currentTableSummary.isServiceFeeEnabled);
+        const totalsByUser = calculateSplitByPerson(splitItems, currentTableSummary.isServiceFeeEnabled, serviceFeeRate);
 
         Object.keys(breakdown).forEach(userName => {
             const userSubtotal = breakdown[userName].subtotal;
-            breakdown[userName].serviceFee = currentTableSummary.isServiceFeeEnabled ? calculateServiceFee(userSubtotal) : 0;
+            breakdown[userName].serviceFee = currentTableSummary.isServiceFeeEnabled ? calculateServiceFee(userSubtotal, serviceFeeRate) : 0;
             breakdown[userName].total = totalsByUser.get(userName) ?? userSubtotal;
         });
 
@@ -940,8 +941,8 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         return sum;
     }, [currentTableSummary, paymentSelectedItems]);
 
-    const calculatorServiceFee = (currentTableSummary?.isServiceFeeEnabled) ? calculateServiceFee(calculatorSubtotal) : 0;
-    const calculatorTotal = calculateOrderTotal(calculatorSubtotal, !!currentTableSummary?.isServiceFeeEnabled);
+    const calculatorServiceFee = (currentTableSummary?.isServiceFeeEnabled) ? calculateServiceFee(calculatorSubtotal, serviceFeeRate) : 0;
+    const calculatorTotal = calculateOrderTotal(calculatorSubtotal, !!currentTableSummary?.isServiceFeeEnabled, serviceFeeRate);
 
     const SQL_FIX_SCRIPT = `-- Rode este script no SQL Editor do Supabase
 DO $$
@@ -1029,8 +1030,8 @@ NOTIFY pgrst, 'reload schema';`;
         
         const table = tables.find(t => t.id === tableId);
         const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(tableId));
-        const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal) : 0;
-        const total = calculateOrderTotal(subtotal, isServiceFeeEnabled);
+        const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
+        const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
 
         return { subtotal, serviceFee, total, count: items.length, items: items.slice(0, 3), allItems: items, isServiceFeeEnabled }; // Show top 3
     };
