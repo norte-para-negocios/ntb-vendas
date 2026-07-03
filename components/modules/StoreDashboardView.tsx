@@ -2,12 +2,12 @@
 import React, { useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
 import { Order, TableSession } from '@/types';
-import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp } from 'lucide-react';
+import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { subDays, isAfter, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
+import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel } from '@/lib/labels';
 
@@ -59,6 +59,52 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
     }, [sales, periodType, periodDays, dailySales, weeklySales, monthlySales, now]);
 
     const periodStats = calcStats(periodSales);
+
+    const previousPeriodSales = useMemo(() => {
+        if (periodType === 'today') {
+            const yesterday = subDays(now, 1);
+            return sales.filter(s => isSameDay(new Date(s.created_at), yesterday));
+        }
+        if (periodType === 'week') {
+            const lastWeek = subDays(now, 7);
+            return sales.filter(s => isSameWeek(new Date(s.created_at), lastWeek, { locale: ptBR }));
+        }
+        if (periodType === 'month') {
+            const lastMonth = subMonths(now, 1);
+            return sales.filter(s => isSameMonth(new Date(s.created_at), lastMonth));
+        }
+        if (periodType === 'year') {
+            return sales.filter(s => new Date(s.created_at).getFullYear() === now.getFullYear() - 1);
+        }
+        // custom: os periodDays dias imediatamente antes da janela atual
+        const currentStart = subDays(now, periodDays);
+        const previousStart = subDays(currentStart, periodDays);
+        return sales.filter(s => {
+            const d = new Date(s.created_at);
+            return isAfter(d, previousStart) && isBefore(d, currentStart);
+        });
+    }, [sales, periodType, periodDays, now]);
+
+    const previousPeriodStats = calcStats(previousPeriodSales);
+
+    // undefined = sem base de comparação (período anterior sem nenhuma venda),
+    // não mostra a variação em vez de dividir por zero.
+    const percentChange = (current: number, previous: number): number | undefined => {
+        if (previous === 0) return undefined;
+        return ((current - previous) / previous) * 100;
+    };
+
+    const ChangeBadge = ({ value }: { value: number | undefined }) => {
+        if (value === undefined) return null;
+        const isUp = value >= 0;
+        const Icon = isUp ? TrendingUp : TrendingDown;
+        return (
+            <span className={`inline-flex items-center gap-1 text-xs font-bold ${isUp ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
+                <Icon size={14} />
+                {isUp ? '+' : ''}{value.toFixed(1)}% vs. período anterior
+            </span>
+        );
+    };
 
     const periodTableSessions = useMemo(() => {
         if (periodType === 'today') return dailyTableSessions;
@@ -229,8 +275,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={20} className="text-[var(--brand)]" /> Faturamento</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                            <StatCard title="Total no Período" value={`R$ ${periodStats.total.toFixed(2)}`} icon={Receipt} accentColor="var(--brand)" />
-                            <StatCard title="Ticket Médio" value={`R$ ${periodStats.ticket.toFixed(2)}`} icon={TrendingUp} accentColor="var(--info)" />
+                            <StatCard title="Total no Período" value={`R$ ${periodStats.total.toFixed(2)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
+                            <StatCard title="Ticket Médio" value={`R$ ${periodStats.ticket.toFixed(2)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className={`${cardCls} lg:col-span-2`}>
@@ -270,7 +316,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={20} className="text-[var(--ok)]" /> Pedidos</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Número de Pedidos" value={periodStats.count} icon={CheckCircle} accentColor="var(--ok)" />
+                            <StatCard title="Número de Pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, previousPeriodStats.count)} />} icon={CheckCircle} accentColor="var(--ok)" />
                             <StatCard
                                 title="Tempo Médio de Atendimento"
                                 value={`${avgDeliveryTime.avg} min`}
