@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, OrderRating } from '@/types';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -1012,4 +1012,18 @@ export const deleteStore = async (id: string): Promise<{ success: boolean; messa
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro ao excluir loja.' };
   }
+};
+
+export const createOrderRating = async (orderId: string, storeId: string, stars: number, comment: string | null): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('order_ratings').insert({ order_id: orderId, store_id: storeId, stars, comment: comment || null });
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+};
+
+export const fetchOrderRatings = async (storeId: string, sinceDate?: string): Promise<OrderRating[]> => {
+  let query = supabase.from('order_ratings').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(200);
+  if (sinceDate) query = query.gte('created_at', sinceDate);
+  const { data, error } = await query;
+  if (error) { console.error('Error fetching order ratings:', error); return []; }
+  return data || [];
 };

@@ -145,3 +145,12 @@ export interface StoreFiscalCertificateStatus {
   uploaded_at: string;
   expires_at: string | null;
 }
+
+export interface OrderRating {
+  id: string;
+  order_id: string;
+  store_id: string;
+  stars: number;
+  comment: string | null;
+  created_at: string;
+}
