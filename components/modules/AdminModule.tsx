@@ -166,6 +166,7 @@ export const AdminModule: React.FC = () => {
   const [tableCount, setTableCount] = useState<number>(10);
   const [periodMonths, setPeriodMonths] = useState<number>(12);
   const [isActive, setIsActive] = useState(true);
+  const [serviceFeeRatePercent, setServiceFeeRatePercent] = useState<number>(10);
 
   // Logo Upload State
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -223,6 +224,7 @@ export const AdminModule: React.FC = () => {
       setTableCount(10);
       setPeriodMonths(12);
       setIsActive(true);
+      setServiceFeeRatePercent(10);
       setLogoFile(null);
       setLogoPreview(null);
       setErrorMsg(null);
@@ -257,6 +259,7 @@ export const AdminModule: React.FC = () => {
 
       setPeriodMonths(store.contract_period_months || 12);
       setIsActive(store.is_active);
+      setServiceFeeRatePercent(store.config?.service_fee_rate != null ? store.config.service_fee_rate * 100 : 10);
       setLogoPreview(store.logo_url);
       setLogoFile(null);
       setErrorMsg(null);
@@ -382,7 +385,8 @@ export const AdminModule: React.FC = () => {
               tableCount,
               periodMonths,
               isActive,
-              logoUrl: finalLogoUrl
+              logoUrl: finalLogoUrl,
+              serviceFeeRate: serviceFeeRatePercent / 100,
           };
 
           let result;
@@ -757,6 +761,7 @@ export const AdminModule: React.FC = () => {
                      <Input label="CNPJ" placeholder="00.000.000/0000-00" value={cnpj} onChange={e => setCnpj(e.target.value)} />
                      <Input type="number" label="Meses de Contrato" value={periodMonths} onChange={e => setPeriodMonths(parseInt(e.target.value))} />
                 </div>
+                <Input type="number" label="Taxa de Serviço (%)" value={serviceFeeRatePercent} onChange={e => setServiceFeeRatePercent(Number(e.target.value) || 0)} min="0" max="100" step="0.1" />
                 <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-semibold text-[var(--text)]">Link de Acesso (Slug)</label>
                     <div className="flex items-center group">

@@ -853,6 +853,7 @@ export interface CreateStoreParams {
   periodMonths: number;
   isActive: boolean;
   logoUrl?: string | null;
+  serviceFeeRate: number;
 }
 
 export const createStore = async (params: CreateStoreParams): Promise<{ success: boolean; message?: string }> => {
@@ -862,7 +863,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
       .insert({
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
-        config: { use_pin: true, allow_client_open: true },
+        config: { use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate },
       })
       .select()
       .single();
@@ -940,9 +941,17 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
 export const updateStore = async (id: string, params: CreateStoreParams): Promise<{ success: boolean; message?: string }> => {
   try {
+    // Busca o config atual pra só sobrescrever service_fee_rate, sem apagar
+    // outras flags (use_pin, allow_client_open, require_pin_for_open,
+    // charge_service_fee) que o lojista já pode ter configurado.
+    const { data: current } = await supabase.from('stores').select('config').eq('id', id).single();
     const { error } = await supabase
       .from('stores')
-      .update({ name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType, contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl })
+      .update({
+        name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
+        contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
+        config: { ...(current?.config || {}), service_fee_rate: params.serviceFeeRate },
+      })
       .eq('id', id);
 
     if (error) {
