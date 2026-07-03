@@ -5,8 +5,8 @@ import dynamic from 'next/dynamic';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -2727,6 +2727,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
+    const [ratings, setRatings] = useState<OrderRating[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
 
@@ -2753,9 +2754,10 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
 
     const loadSales = async () => {
         setIsLoading(true);
-        const [data, sessions] = await Promise.all([fetchSalesHistory(storeId), fetchTableSessions(storeId)]);
+        const [data, sessions, ratingsData] = await Promise.all([fetchSalesHistory(storeId), fetchTableSessions(storeId), fetchOrderRatings(storeId)]);
         setSales(data);
         setTableSessions(sessions);
+        setRatings(ratingsData);
         setIsLoading(false);
     };
 
@@ -2964,7 +2966,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 </button>
             </div>
 
-            {activeTab === 'dashboard' && <StoreDashboardView sales={sales} tableSessions={tableSessions} />}
+            {activeTab === 'dashboard' && <StoreDashboardView sales={sales} tableSessions={tableSessions} ratings={ratings} />}
 
             {activeTab === 'users' && <UserManagementView storeId={storeId} />}
 

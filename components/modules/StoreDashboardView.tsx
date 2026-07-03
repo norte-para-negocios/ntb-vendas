@@ -1,8 +1,8 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
-import { Order, TableSession } from '@/types';
-import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown } from 'lucide-react';
+import { Order, TableSession, OrderRating } from '@/types';
+import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown, Star } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, Legend
@@ -18,7 +18,7 @@ const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'
 const MAX_REASONABLE_DELIVERY_MINUTES = 240;
 const MAX_REASONABLE_TABLE_MINUTES = 480;
 
-export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: TableSession[] }> = ({ sales, tableSessions }) => {
+export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: TableSession[]; ratings: OrderRating[] }> = ({ sales, tableSessions, ratings }) => {
     const [periodType, setPeriodType] = useState<'custom' | 'today' | 'week' | 'month' | 'year'>('custom');
     const [periodDays, setPeriodDays] = useState<number>(90);
 
@@ -105,6 +105,19 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
             </span>
         );
     };
+
+    const periodRatings = useMemo(() => {
+        if (periodType === 'today') return ratings.filter(r => isSameDay(new Date(r.created_at), now));
+        if (periodType === 'week') return ratings.filter(r => isSameWeek(new Date(r.created_at), now, { locale: ptBR }));
+        if (periodType === 'month') return ratings.filter(r => isSameMonth(new Date(r.created_at), now));
+        if (periodType === 'year') return ratings.filter(r => new Date(r.created_at).getFullYear() === now.getFullYear());
+        const periodStartDate = subDays(now, periodDays);
+        return ratings.filter(r => isAfter(new Date(r.created_at), periodStartDate));
+    }, [ratings, periodType, periodDays, now]);
+
+    const avgRating = periodRatings.length > 0
+        ? periodRatings.reduce((sum, r) => sum + r.stars, 0) / periodRatings.length
+        : 0;
 
     const periodTableSessions = useMemo(() => {
         if (periodType === 'today') return dailyTableSessions;
@@ -389,6 +402,30 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                             <StatCard title="Faturamento Balcão" value={`R$ ${counterStats.total.toFixed(2)}`} icon={Receipt} accentColor="var(--warn)" />
                             <StatCard title="Número de Pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
                         </div>
+                    </div>
+
+                    {/* Avaliações */}
+                    <div>
+                        <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Star size={20} className="text-[var(--warn)]" /> Avaliações</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <StatCard title="Nota Média" value={periodRatings.length > 0 ? avgRating.toFixed(1) : '-'} subtitle={`${periodRatings.length} avaliação(ões) no período`} icon={Star} accentColor="var(--warn)" />
+                        </div>
+                        <Card className={cardCls}>
+                            <h4 className={h4Cls}>Comentários Recentes</h4>
+                            <div className="space-y-3 max-h-80 overflow-y-auto">
+                                {periodRatings.filter(r => r.comment).slice(0, 10).map((r) => (
+                                    <div key={r.id} className="border-b border-[var(--border)] pb-2 last:border-0">
+                                        <div className="flex items-center gap-1 mb-1">
+                                            {[1, 2, 3, 4, 5].map((n) => (
+                                                <Star key={n} size={12} className={n <= r.stars ? 'fill-[var(--warn)] text-[var(--warn)]' : 'text-[var(--border)]'} />
+                                            ))}
+                                        </div>
+                                        <p className="text-sm text-[var(--text)]">{r.comment}</p>
+                                    </div>
+                                ))}
+                                {periodRatings.filter(r => r.comment).length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem comentários no período</p>}
+                            </div>
+                        </Card>
                     </div>
                 </div>
             </section>
