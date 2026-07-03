@@ -445,8 +445,21 @@ TRIFORCE AUTO\clientes\ntb-ramon-andrey\ntb-estoque-next`). Ou seja, duas
 abordagens de emissão fiscal foram citadas pelo usuário (certificado
 digital direto vs. via Omie), ainda não decidido qual (ou se as duas)
 vai ser usada, isso precisa ser esclarecido antes de desenhar qualquer
-coisa. Pendente também: pesquisar se o SEFAZ tem ambiente de homologação/
-teste e se ele exige uma nota fiscal real já emitida pra poder ser usado.
+coisa.
+
+Pesquisa feita em 2026-07-03 sobre o ambiente de homologação do SEFAZ:
+existe (é praticamente um espelho do ambiente de produção, mesmas regras
+de validação, mas sem validade jurídica) e **não** exige nenhuma nota
+fiscal real já emitida pra poder ser usado. O que ele exige: credenciamento
+prévio junto à SEFAZ do estado da loja (cada estado tem a própria, é um
+sistema estadual, não federal), o mesmo certificado digital (A1 ou A3) que
+seria usado em produção, e (na maioria dos estados que usam NFC-e) um
+Token/CSC específico de homologação, fornecido pela SEFAZ depois do
+cadastro. Os endpoints de teste são diferentes dos de produção, mas o
+fluxo (montar XML, assinar com o certificado, transmitir, receber
+autorização ou rejeição) é o mesmo. Confirmar o procedimento exato no
+portal da SEFAZ do estado específico da loja quando for desenhar essa
+integração de verdade.
 
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
