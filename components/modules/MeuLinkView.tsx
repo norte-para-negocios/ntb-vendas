@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
 import { Link2, Copy } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 import { Store } from '@/types';
@@ -8,11 +9,20 @@ import { toast } from '@/components/Toast';
 
 export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
     const [url, setUrl] = useState('');
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         if (!store.slug) return;
         setUrl(`${window.location.origin}/c/${store.slug}`);
     }, [store.slug]);
+
+    useEffect(() => {
+        if (!url || !canvasRef.current) return;
+        QRCode.toCanvas(canvasRef.current, url, { width: 240, margin: 2 }).catch((error) => {
+            console.error('Erro ao gerar QR Code', error);
+            toast.error('Não foi possível gerar o QR Code.');
+        });
+    }, [url]);
 
     const handleCopy = async () => {
         try {
@@ -55,6 +65,10 @@ export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
                     <Button size="sm" variant="outline" onClick={handleCopy}>
                         <Copy size={14} /> Copiar Link
                     </Button>
+                </div>
+
+                <div className="flex flex-col items-center gap-4 pt-2 border-t border-[var(--border)]">
+                    <canvas ref={canvasRef} className="rounded-[var(--r-md)] border border-[var(--border)]" />
                 </div>
             </Card>
         </div>
