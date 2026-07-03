@@ -16,6 +16,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { playPreparingAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem } from '@/lib/calc';
+import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
 // StoreDashboardView importa recharts (bundle pesado); cozinha/bar/balcão
 // nunca abrem essa aba, então carregamos sob demanda e só no client
@@ -2721,7 +2722,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
 const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     const storeId = store.id;
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -2940,11 +2941,19 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 >
                     Gestão de Usuários
                 </button>
+                <button
+                    onClick={() => setActiveTab('link')}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'link' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                >
+                    Meu Link / QR Code
+                </button>
             </div>
 
             {activeTab === 'dashboard' && <StoreDashboardView sales={sales} tableSessions={tableSessions} />}
-            
+
             {activeTab === 'users' && <UserManagementView storeId={storeId} />}
+
+            {activeTab === 'link' && <MeuLinkView store={store} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">
