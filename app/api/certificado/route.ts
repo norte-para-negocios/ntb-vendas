@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Rodando tudo aqui, com a service role key (ignora RLS por completo), o
 // cliente nunca precisa nem consegue ler nenhuma das duas coisas.
 
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 const CERT_BUCKET = 'store-certificates';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
   const password = form.get('password');
 
   try {
+    const supabaseAdmin = getSupabaseAdmin();
+
     if (file instanceof File) {
       const path = `${storeId}/certificado.pfx`;
       const { error } = await supabaseAdmin.storage.from(CERT_BUCKET).upload(path, file, { upsert: true });
@@ -83,15 +85,21 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
   }
 
-  const { data: certFiles, error: listError } = await supabaseAdmin.storage.from(CERT_BUCKET).list(storeId);
-  if (listError) {
-    return NextResponse.json({ success: false, message: listError.message }, { status: 500 });
-  }
-  if (certFiles && certFiles.length > 0) {
-    const paths = certFiles.map((f) => `${storeId}/${f.name}`);
-    const { error: removeError } = await supabaseAdmin.storage.from(CERT_BUCKET).remove(paths);
-    if (removeError) return NextResponse.json({ success: false, message: removeError.message }, { status: 500 });
-  }
+  try {
+    const supabaseAdmin = getSupabaseAdmin();
 
-  return NextResponse.json({ success: true });
+    const { data: certFiles, error: listError } = await supabaseAdmin.storage.from(CERT_BUCKET).list(storeId);
+    if (listError) {
+      return NextResponse.json({ success: false, message: listError.message }, { status: 500 });
+    }
+    if (certFiles && certFiles.length > 0) {
+      const paths = certFiles.map((f) => `${storeId}/${f.name}`);
+      const { error: removeError } = await supabaseAdmin.storage.from(CERT_BUCKET).remove(paths);
+      if (removeError) return NextResponse.json({ success: false, message: removeError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
 }
