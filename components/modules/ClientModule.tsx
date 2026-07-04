@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, createOrderRating } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem } from '@/types';
@@ -18,6 +18,42 @@ import { calculateServiceFee, calculateOrderTotal } from '@/lib/calc';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 
 // --- COMPONENTS ---
+
+// Identidade "carta de vinhos" do cardápio do cliente: dourado usado só pra
+// preço/proveniência (o azul da marca continua sendo a cor de ação/CTA).
+// Hex fixo de propósito, como os outros consts de marca do projeto
+// (AuthBackdrop, app/page.tsx) — não é um token do design system porque só
+// existe nesta tela.
+const WINE_GOLD = '#D4AF5C';
+// Tom mais escuro só pro ícone dentro do medalhão dourado claro: o dourado
+// puro em cima do próprio tom claro (rgba 0.14) não tem contraste suficiente.
+const WINE_GOLD_DARK = '#8A6A2B';
+
+// Ícone por categoria: leitura visual rápida na navegação, sem depender de
+// texto. Heurística por palavra-chave no nome da categoria (dado real vindo
+// do Omie, não uma taxonomia fixa no banco).
+function categoryIcon(name: string) {
+    const n = name.toLowerCase();
+    if (n.includes('champagne')) return Sparkles;
+    if (n.includes('vinho')) return Wine;
+    if (n.includes('drink')) return Martini;
+    if (n.includes('long neck') || n.includes('artesan')) return Beer;
+    if (n.includes('s/ álcool') || n.includes('s/ alcool') || n.includes('suco')) return GlassWater;
+    if (n.includes('50ml') || n.includes('whisky') || n.includes('destilad') || n.includes('licor') || n.includes('conhaque')) return Flame;
+    if (n.includes('pizza')) return Pizza;
+    if (n.includes('sobremesa')) return Cake;
+    if (n.includes('taxa')) return Receipt;
+    return UtensilsCrossed;
+}
+
+// Muitos vinhos vêm do Omie com o país de origem no fim do nome ("- ARG",
+// "- FR"). Extrai isso pra virar uma etiqueta de proveniência em vez de
+// ficar preso no nome corrido.
+function parseOrigin(name: string): { clean: string; origin: string | null } {
+    const m = name.match(/^(.*)\s-\s([A-ZÇ]{2,4})$/);
+    if (m) return { clean: m[1].trim(), origin: m[2] };
+    return { clean: name, origin: null };
+}
 
 const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onConfirm: () => void, isLoading: boolean }> = ({ isOpen, onClose, onConfirm, isLoading }) => {
     if (!isOpen) return null;
@@ -542,16 +578,21 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // (achado de performance #7). Também navegável por teclado: é um
 // <button> de verdade (Tab foca, Enter/Space aciona), em vez do <div
 // onClick> anterior (achado de UX #1).
-const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style }: {
+// Linha de "carta de vinhos" (não mais card com placeholder de foto): sem
+// fotos reais ainda pra a maioria dos 248 produtos, um card com caixa cinza
+// vazia parece quebrado. A fila tipográfica (medalhão com ícone da
+// categoria, nome, etiqueta de origem, preço em dourado) fica intencional
+// com ou sem imagem — quando a foto chegar, ela só substitui o medalhão.
+const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, icon: Icon = UtensilsCrossed }: {
     product: Product,
     onSelect: (product: Product) => void,
     onQuickAdd?: (product: Product) => void,
     disabled?: boolean,
-    style?: React.CSSProperties
+    style?: React.CSSProperties,
+    icon?: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>,
 }) {
-    // Card é um div-role-button (não <button>) pra poder aninhar o botão de
-    // "+" de adição rápida por dentro sem HTML inválido (button dentro de button).
     const open = () => { if (!disabled) onSelect(product); };
+    const { clean, origin } = parseOrigin(product.name);
     return (
         <div
             role="button"
@@ -559,32 +600,45 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             onClick={open}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
             aria-disabled={disabled}
-            className={`u-grow-in group flex gap-3 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)]/40 rounded-[var(--r-md)] p-3 text-left w-full u-card u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1 ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
-            style={{ boxShadow: 'var(--shadow-sm)', ...style }}
+            className={`u-grow-in group flex items-start gap-3 py-3.5 px-1.5 text-left w-full u-motion border-b border-dotted border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+            style={style}
         >
-            {product.image_url ? (
-                <div className="w-20 h-20 rounded-[var(--r-sm)] overflow-hidden bg-[var(--surface-2)] flex-shrink-0">
-                    <Image src={product.image_url} alt={product.name} width={80} height={80} className="w-full h-full object-cover u-motion group-hover:scale-105" />
+            <div
+                className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center mt-0.5"
+                style={{ background: product.image_url ? undefined : 'rgba(212,175,92,0.14)' }}
+            >
+                {product.image_url ? (
+                    <Image src={product.image_url} alt={product.name} width={44} height={44} className="w-full h-full object-cover u-motion group-hover:scale-105" />
+                ) : (
+                    <Icon size={18} style={{ color: WINE_GOLD_DARK }} />
+                )}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-semibold text-[var(--text)] leading-snug text-[14.5px]">{clean}</h3>
+                    <span className="font-bold whitespace-nowrap num text-[15px]" style={{ color: WINE_GOLD }}>R$ {product.price.toFixed(2)}</span>
                 </div>
-            ) : (
-                <div className="w-20 h-20 bg-[var(--brand-soft)] rounded-[var(--r-sm)] flex items-center justify-center flex-shrink-0">
-                    <UtensilsCrossed size={22} className="text-[var(--brand)]/40 u-motion group-hover:scale-110" />
-                </div>
-            )}
-            <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
-                <div>
-                    <h3 className="font-semibold text-[var(--text)] leading-snug text-[14px]">{product.name}</h3>
-                    {product.description && (
-                        <p className="text-[12px] text-[var(--text-muted)] mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
-                    )}
-                    {!!product.prep_time_minutes && (
-                        <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] mt-1.5">
+                {(origin || product.description) && (
+                    <div className="flex items-center gap-2 mt-1">
+                        {origin && (
+                            <span
+                                className="text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded-[3px] border flex-shrink-0"
+                                style={{ borderColor: 'rgba(212,175,92,0.4)', color: WINE_GOLD }}
+                            >
+                                {origin}
+                            </span>
+                        )}
+                        {product.description && (
+                            <p className="text-[12px] text-[var(--text-muted)] line-clamp-1 min-w-0">{product.description}</p>
+                        )}
+                    </div>
+                )}
+                <div className="flex items-center justify-between mt-1.5 min-h-[32px]">
+                    {!!product.prep_time_minutes ? (
+                        <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
                             <Clock size={11} /> {product.prep_time_minutes} min
                         </span>
-                    )}
-                </div>
-                <div className="flex items-center justify-between gap-2 mt-2">
-                    <span className="font-bold text-[var(--brand)] whitespace-nowrap num text-[15px]">R$ {product.price.toFixed(2)}</span>
+                    ) : <span />}
                     {onQuickAdd && (
                         <button
                             type="button"
@@ -1422,6 +1476,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return prods;
     }, [products, activeCategory, searchTerm, sortBy]);
 
+    const categoryIconById = useMemo(() => {
+        const map: Record<string, ReturnType<typeof categoryIcon>> = {};
+        categories.forEach(c => { map[c.id] = categoryIcon(c.name); });
+        return map;
+    }, [categories]);
+    const activeCategoryObj = useMemo(() => categories.find(c => c.id === activeCategory) || null, [categories, activeCategory]);
+
     if (loadError === 'network') return (
         <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
             <RefreshCw className="text-[var(--text-muted)]" size={48} />
@@ -1480,63 +1541,65 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     return (
         <div className="bg-[var(--bg)] min-h-screen pb-32">
-            {/* Header */}
-            <header className="sticky top-0 bg-[var(--surface)]/95 backdrop-blur-sm z-30 px-4 py-3 flex items-center justify-between border-b border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
-                <div className="flex flex-col min-w-0">
-                    <h1 className="font-semibold text-[var(--text)] text-[16px] leading-tight truncate">{currentStore.name}</h1>
-                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] mt-0.5 flex-wrap">
-                        <span className="flex items-center gap-1 bg-[var(--surface-2)] px-2 py-0.5 rounded-full border border-[var(--border)]">
-                            <User size={9} /> {clientName} {isHost ? '(Host)' : ''}
-                        </span>
-                        {currentTable ? (
-                            <span className="font-medium">Mesa {currentTable.number}</span>
-                        ) : (
-                            <span className="font-medium text-[var(--warn)] bg-[var(--warn)]/10 px-2 rounded-full">Balcão</span>
-                        )}
-
-                        {isHost && currentTable && hostPin && (
-                            <div className="flex items-center gap-1 bg-[var(--warn)]/8 px-2 py-0.5 rounded-full border border-[var(--warn)]/20 cursor-pointer" onClick={() => setShowPin(!showPin)}>
-                                <span className="num font-semibold text-[var(--warn)] tracking-wider">
-                                    {showPin ? hostPin : '••••'}
-                                </span>
-                                {showPin ? <EyeOff size={9} className="text-[var(--warn)]"/> : <Eye size={9} className="text-[var(--warn)]"/>}
-                            </div>
-                        )}
+            {/* Header — banda de marca fixa (sempre --ink, não segue claro/escuro,
+                mesmo princípio do AuthBackdrop): é a "capa" da carta, rola junto
+                com a página em vez de ficar fixa, pra abrir espaço pro conteúdo. */}
+            <header className="relative overflow-hidden px-5 pt-5 pb-6" style={{ background: 'var(--ink)' }}>
+                <svg className="absolute -bottom-2 right-0 w-[65%] h-auto opacity-[0.07] pointer-events-none" viewBox="0 0 1443 912" fill="none" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+                    <path d="M1443 203.5C1443 203.5 1156.08 94.5 868.5 293.5C580.92 492.5 558.996 755 582.5 911.5H1443V203.5Z" fill="#FFFFFF" />
+                </svg>
+                <div className="relative flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: WINE_GOLD }}>Norte Para Negócios</span>
+                        <h1 className="font-bold text-white text-[22px] leading-tight tracking-tight truncate mt-0.5">{currentStore.name}</h1>
+                        <div className="flex items-center gap-1.5 text-[11px] mt-2 flex-wrap">
+                            <span className="flex items-center gap-1 bg-white/10 border border-white/15 text-white/80 px-2 py-1 rounded-full">
+                                <User size={10} /> {clientName} {isHost ? '(Host)' : ''}
+                            </span>
+                            {currentTable ? (
+                                <span className="font-semibold text-white/90 bg-white/10 border border-white/15 px-2 py-1 rounded-full">Mesa {currentTable.number}</span>
+                            ) : (
+                                <span className="font-semibold px-2 py-1 rounded-full" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }}>Balcão</span>
+                            )}
+                            {isHost && currentTable && hostPin && (
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-full cursor-pointer" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }} onClick={() => setShowPin(!showPin)}>
+                                    <span className="num font-semibold tracking-wider">{showPin ? hostPin : '••••'}</span>
+                                    {showPin ? <EyeOff size={9} /> : <Eye size={9} />}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-                <div className="flex gap-2 flex-shrink-0 ml-2">
-                    {currentTable && (
-                        <Button
-                            size="sm"
-                            className={`rounded-full text-[12px] ${
-                                isWaitingBill
-                                    ? 'bg-[var(--warn)] hover:opacity-90 text-white'
-                                    : 'bg-[var(--ok)] hover:opacity-90 text-white'
-                            }`}
-                            onClick={() => setShowBill(true)}
-                        >
-                            {isWaitingBill ? <><Clock size={11} /> Conta</> : <><Receipt size={11}/> Conta</>}
-                        </Button>
-                    )}
-                    <ThemeToggle className="w-8 h-8" />
-                    <button onClick={() => handleLogout(false)} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion">
-                        <LogOut size={15} />
-                    </button>
+                    <div className="flex gap-1.5 flex-shrink-0">
+                        {currentTable && (
+                            <button
+                                onClick={() => setShowBill(true)}
+                                className={`flex items-center gap-1 rounded-full text-[12px] font-semibold px-3 h-8 u-motion ${isWaitingBill ? 'bg-[var(--warn)] text-white' : 'bg-white/10 border border-white/15 text-white hover:bg-white/20'}`}
+                            >
+                                {isWaitingBill ? <Clock size={12} /> : <Receipt size={12} />} Conta
+                            </button>
+                        )}
+                        <ThemeToggle className="w-8 h-8 rounded-full border border-white/15" variant="sidebar" />
+                        <button onClick={() => handleLogout(false)} className="w-8 h-8 flex items-center justify-center bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/20 rounded-full u-motion">
+                            <LogOut size={14} />
+                        </button>
+                    </div>
                 </div>
             </header>
 
             {/* Waiting Bill Banner */}
             {isWaitingBill && (
-                <div className="bg-[var(--warn)] text-white px-4 py-2 text-center text-[13px] font-medium sticky top-[60px] z-30 flex items-center justify-center gap-2">
+                <div className="bg-[var(--warn)] text-white px-4 py-2 text-center text-[13px] font-medium sticky top-0 z-30 flex items-center justify-center gap-2">
                     <Lock size={13}/> Conta Solicitada. Novos pedidos bloqueados.
                 </div>
             )}
 
-            {/* Category Nav — arrastável (mouse), rola no toque, degradê nas bordas */}
-            <div className={`sticky ${isWaitingBill ? 'top-[96px]' : 'top-[60px]'} bg-[var(--surface)] z-20 border-b border-[var(--border)]`}>
+            {/* Category Nav — banda de marca continua aqui: navegação com ícone
+                por categoria, arrastável (mouse), rola no toque, degradê nas
+                bordas. Fica grudada no topo ao rolar (a "capa" acima, não). */}
+            <div className={`sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-20`} style={{ background: 'var(--ink)' }}>
                 <div className="relative">
-                    <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-[var(--surface)] to-transparent z-10" />
-                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[var(--surface)] to-transparent z-10" />
+                    <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 z-10" style={{ background: 'linear-gradient(to right, var(--ink), transparent)' }} />
+                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10" style={{ background: 'linear-gradient(to left, var(--ink), transparent)' }} />
                     <div
                         ref={navScrollRef}
                         onMouseDown={onNavDown}
@@ -1544,20 +1607,22 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         onMouseUp={onNavUp}
                         onMouseLeave={onNavUp}
                         className="overflow-x-auto no-scrollbar flex gap-2 px-4 py-3 cursor-grab active:cursor-grabbing select-none"
+                        style={{ scrollSnapType: 'x proximity' }}
                     >
                         {categories.map((cat) => {
                             const active = activeCategory === cat.id;
+                            const Icon = categoryIconById[cat.id] || UtensilsCrossed;
                             return (
                                 <button
                                     key={cat.id}
                                     ref={(el) => { chipRefs.current[cat.id] = el; }}
                                     onClick={() => { if (!navDrag.current.moved) setActiveCategory(cat.id); }}
-                                    className={`whitespace-nowrap px-4 py-2 rounded-full text-[13px] font-semibold u-motion flex-shrink-0 ${
-                                        active
-                                            ? 'bg-[var(--brand)] text-white shadow-sm'
-                                            : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--brand-soft)] border border-[var(--border)]'
+                                    style={{ scrollSnapAlign: 'center', ...(active ? { background: WINE_GOLD, color: 'var(--ink)' } : undefined) }}
+                                    className={`whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold u-motion flex-shrink-0 ${
+                                        active ? 'shadow-sm' : 'bg-white/8 text-white/75 hover:bg-white/15 hover:text-white border border-white/10'
                                     }`}
                                 >
+                                    <Icon size={14} />
                                     {cat.name}
                                 </button>
                             );
@@ -1567,8 +1632,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
 
             {/* Search and Sort */}
-            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-[150px]' : 'top-[114px]'} z-10`}>
-                <div className="flex gap-2 mb-2">
+            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-[85px]' : 'top-[52px]'} z-10`}>
+                <div className="flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
                         <Input
@@ -1605,18 +1670,29 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 </div>
             </div>
 
-            {/* Menu Grid */}
-            <div className={`p-4 grid gap-3 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                {filteredProducts.map((product, i) => (
-                    <ProductCard
-                        key={product.id}
-                        product={product}
-                        onSelect={setSelectedProduct}
-                        onQuickAdd={(p) => { addToCart(p, 1, ''); toast.success(`${p.name} adicionado`); }}
-                        disabled={isWaitingBill}
-                        style={stagger(Math.min(i, 10) * 30)}
-                    />
-                ))}
+            {/* Menu List — "carta" editorial: título da categoria + contagem,
+                depois as linhas (sem grid de cards). */}
+            <div className={`px-4 pt-4 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                {activeCategoryObj && !searchTerm && (
+                    <div className="flex items-center gap-2 mb-1 u-grow-in">
+                        <h2 className="font-bold text-[var(--text)] text-[17px] tracking-tight">{activeCategoryObj.name}</h2>
+                        <span className="text-[11px] font-semibold text-[var(--text-muted)]">{filteredProducts.length}</span>
+                        <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(212,175,92,0.5), transparent)' }} />
+                    </div>
+                )}
+                <div>
+                    {filteredProducts.map((product, i) => (
+                        <ProductCard
+                            key={product.id}
+                            product={product}
+                            icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
+                            onSelect={setSelectedProduct}
+                            onQuickAdd={(p) => { addToCart(p, 1, ''); toast.success(`${p.name} adicionado`); }}
+                            disabled={isWaitingBill}
+                            style={stagger(Math.min(i, 10) * 30)}
+                        />
+                    ))}
+                </div>
                 {isLoadingMenu ? (
                     <div className="text-center py-12 text-[var(--text-muted)] text-sm animate-pulse">Carregando cardápio...</div>
                 ) : filteredProducts.length === 0 ? (
@@ -1635,24 +1711,24 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {/* Floating Cart Button */}
             {cart.length > 0 && !isWaitingBill && (
                 <div className="fixed bottom-4 left-4 right-4 z-40 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
-                    <div className="bg-[var(--ink)] text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3" style={{boxShadow:'0 8px 30px rgba(0,0,0,0.25)'}}>
+                    <div className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border" style={{ background: 'var(--ink)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}>
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2.5">
-                                <div className="bg-white/10 p-1.5 rounded-[var(--r-sm)]">
-                                    <ShoppingBag size={16} />
+                                <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
+                                    <Wine size={16} style={{ color: WINE_GOLD }} />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[13px] font-medium text-white/80">Meu Pedido</span>
+                                    <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
                                     <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
                                 </div>
                             </div>
-                            <span className="text-[18px] font-semibold num">R$ {cartTotal.toFixed(2)}</span>
+                            <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
                         </div>
                         <Button
                             className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white"
                             onClick={() => setIsCartOpen(true)}
                         >
-                            Ver Sacola
+                            Ver Comanda
                         </Button>
                     </div>
                 </div>
