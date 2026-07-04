@@ -25,6 +25,7 @@ const THERMAL_STYLES = `
   .info { margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 6px; text-align: center; }
   .big-text { font-size: 12px; font-weight: bold; }
   .item-line { font-size: 12px; font-weight: bold; margin: 6px 0; line-height: 1.2; }
+  .addons { font-size: 11px; font-weight: bold; margin-top: -3px; margin-bottom: 3px; }
   .obs { margin-top: 3px; font-size: 10px; text-transform: uppercase; }
   .items-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 2px; }
   .items-table th { border-bottom: 1px dashed #000; padding-bottom: 3px; text-align: left; font-weight: normal; }
@@ -66,6 +67,7 @@ export function printKitchenTicket(opts: {
   client?: string | null;
   quantity: number;
   productName: string;
+  addons?: string;
   observation?: string;
   orderIdShort: string;
 }) {
@@ -80,6 +82,7 @@ export function printKitchenTicket(opts: {
       ${opts.client ? `<div>Cliente: ${escapeHtml(opts.client)}</div>` : ''}
     </div>
     <div class="item-line">${opts.quantity}x ${escapeHtml(opts.productName)}</div>
+    ${opts.addons ? `<div class="addons">Adicional: ${escapeHtml(opts.addons)}</div>` : ''}
     ${opts.observation ? `<div class="obs">OBS: ${escapeHtml(opts.observation)}</div>` : ''}
     <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;

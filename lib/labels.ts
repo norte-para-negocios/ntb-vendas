@@ -31,3 +31,16 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 export const getPaymentMethodLabel = (method?: string | null): string =>
     method ? (PAYMENT_METHOD_LABELS[method] || method) : 'Não especificado';
+
+// Nome de exibição de um item de PEDIDO (histórico/impressão/KDS), com
+// adicionais entre parênteses — nunca travessão (regra do projeto).
+// Formato: "Pizza Marguerita (Catupiry)" ou, com múltiplos adicionais,
+// "Pizza Quatro Queijos (Catupiry, Bacon Extra)".
+export const getOrderItemDisplayName = (
+    item: { product?: { name: string } | null; selected_options?: { name: string }[] | null },
+    fallback = 'Produto Indisponível',
+): string => {
+    const base = item.product?.name || fallback;
+    const opts = item.selected_options || [];
+    return opts.length > 0 ? `${base} (${opts.map(o => o.name).join(', ')})` : base;
+};

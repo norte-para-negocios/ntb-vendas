@@ -82,6 +82,24 @@ export interface Category {
   icon?: string;
 }
 
+export interface ProductOption {
+  id: string;
+  group_id: string;
+  name: string;
+  price_delta: number;
+  order: number;
+}
+
+export interface ProductOptionGroup {
+  id: string;
+  product_id: string;
+  name: string;
+  type: 'single' | 'multiple';
+  required: boolean;
+  order: number;
+  options: ProductOption[]; // anexado em runtime por fetchMenu, nao e coluna de banco
+}
+
 export interface Product {
   id: string;
   category_id: string | null; // FK is `on delete set null` — categoria excluida deixa o produto orfao
@@ -94,6 +112,7 @@ export interface Product {
   prep_time_minutes: number;
   order?: number;
   destination?: 'kitchen' | 'bar';
+  option_groups?: ProductOptionGroup[]; // so populado quando o Product veio de fetchMenu
 }
 
 export interface Order {
@@ -122,13 +141,26 @@ export interface OrderItem {
   notes?: string;
   created_at: string;
   price_at_time: number;
+  selected_options?: { name: string; price_delta: number }[]; // snapshot gravado por create_order_secure
   order?: Order;
+}
+
+// Escolha do cliente ANTES de virar pedido — tem os ids (pro RPC e pro
+// dedup do carrinho). Note a assimetria proposital com
+// OrderItem.selected_options (snapshot pos-pedido, sem ids, so
+// name/price_delta): sao estagios de vida diferentes do mesmo dado.
+export interface SelectedOption {
+  group_id: string;
+  option_id: string;
+  name: string;
+  price_delta: number;
 }
 
 export interface CartItem {
   product: Product;
   quantity: number;
   notes?: string;
+  selectedOptions?: SelectedOption[];
 }
 
 export interface TableSession {

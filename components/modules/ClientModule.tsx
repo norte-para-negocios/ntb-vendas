@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, createOrderRating } from '@/lib/api';
-import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem } from '@/types';
+import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -13,8 +13,8 @@ import { playPreparingAlert, playReadyAlert, vibrateAlert } from '@/lib/audioAle
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getTableStatusLabel } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal } from '@/lib/calc';
+import { getTableStatusLabel, getOrderItemDisplayName } from '@/lib/labels';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal } from '@/lib/calc';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 
 // --- COMPONENTS ---
@@ -104,7 +104,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         for (const item of nextItems) {
             const prevStatus = prevById.get(item.id);
             if (!prevStatus || prevStatus === item.status) continue;
-            const itemName = item.product?.name || 'Item';
+            const itemName = getOrderItemDisplayName(item, 'Item');
             if (item.status === OrderStatus.PREPARING) {
                 toast.info(`${itemName} entrou em preparo`);
             } else if (item.status === OrderStatus.READY) {
@@ -373,7 +373,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                                 {items.map(item => (
                                     <div key={item.id} className="p-3 flex items-center justify-between">
                                         <div className="text-sm">
-                                            <span className="font-bold text-[var(--text)]">{item.quantity}x</span> {item.product?.name || 'Item'}
+                                            <span className="font-bold text-[var(--text)]">{item.quantity}x</span> {getOrderItemDisplayName(item, 'Item')}
                                         </div>
                                         <div className="flex-shrink-0 ml-2">
                                             {getItemStatusIcon(item.status)}
@@ -656,15 +656,36 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
 });
 ProductCard.displayName = 'ProductCard';
 
-const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string) => void }> = ({ product, onClose, onAdd }) => {
+const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ product, onClose, onAdd }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
+    const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
 
     useEffect(() => {
-        if(product) { setQty(1); setNotes(''); }
+        if(product) { setQty(1); setNotes(''); setSelections({}); }
     }, [product]);
 
     if (!product) return null;
+
+    const groups = product.option_groups || [];
+
+    const toggleOption = (group: ProductOptionGroup, optionId: string) => {
+        setSelections(prev => {
+            const current = prev[group.id] || [];
+            if (group.type === 'single') return { ...prev, [group.id]: current[0] === optionId ? [] : [optionId] };
+            const next = current.includes(optionId) ? current.filter(id => id !== optionId) : [...current, optionId];
+            return { ...prev, [group.id]: next };
+        });
+    };
+
+    const selectedOptions: SelectedOption[] = groups.flatMap(g =>
+        (selections[g.id] || []).flatMap(optId => {
+            const opt = g.options.find(o => o.id === optId);
+            return opt ? [{ group_id: g.id, option_id: opt.id, name: opt.name, price_delta: opt.price_delta }] : [];
+        })
+    );
+    const unitPrice = product.price + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
+    const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
     return (
         <Modal isOpen={!!product} onClose={onClose} title={product.name}>
@@ -685,6 +706,29 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                     </div>
                 </div>
 
+                {groups.map(group => (
+                    <div key={group.id} className="border border-[var(--border)] rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold text-sm text-[var(--text)]">{group.name}</h4>
+                            {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
+                        </div>
+                        {group.options.map(opt => (
+                            <label key={opt.id} className="flex items-center justify-between py-1.5 cursor-pointer">
+                                <span className="flex items-center gap-2 text-sm text-[var(--text)]">
+                                    <input
+                                        type={group.type === 'single' ? 'radio' : 'checkbox'}
+                                        name={`group-${group.id}`}
+                                        checked={(selections[group.id] || []).includes(opt.id)}
+                                        onChange={() => toggleOption(group, opt.id)}
+                                    />
+                                    {opt.name}
+                                </span>
+                                {opt.price_delta > 0 && <span className="num text-[var(--text-muted)] text-sm">+R$ {opt.price_delta.toFixed(2)}</span>}
+                            </label>
+                        ))}
+                    </div>
+                ))}
+
                 <Input
                     label="Observações"
                     placeholder="Ex: Tirar cebola, ponto da carne..."
@@ -692,9 +736,10 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <Button className="w-full mt-4 h-12 text-lg" onClick={() => { onAdd(qty, notes); onClose(); }}>
-                    Adicionar • R$ {(product.price * qty).toFixed(2)}
+                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                    Adicionar • R$ {(unitPrice * qty).toFixed(2)}
                 </Button>
+                {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
             </div>
         </Modal>
     );
@@ -743,8 +788,11 @@ const CartModal: React.FC<{
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start gap-2">
-                                        <h4 className="font-medium text-[var(--text)] text-sm truncate">{item.product.name}</h4>
-                                        <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(item.product.price * item.quantity).toFixed(2)}</span>
+                                        <h4 className="font-medium text-[var(--text)] text-sm truncate">
+                                            {item.product.name}
+                                            {!!item.selectedOptions?.length && ` (${item.selectedOptions.map(o => o.name).join(', ')})`}
+                                        </h4>
+                                        <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
                                     </div>
                                     {item.notes && <p className="text-[12px] text-[var(--text-muted)] mt-0.5 italic">"{item.notes}"</p>}
 
@@ -1071,7 +1119,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                             {items.map((it, idx) => (
                                                 <li key={idx} className="flex justify-between items-center py-1">
                                                     <div className="flex items-center gap-2">
-                                                        <span>{it.quantity}x {it.product?.name}</span>
+                                                        <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                         {getItemStatusBadge(it.status)}
                                                     </div>
                                                     <span>{(it.price_at_time * it.quantity).toFixed(2)}</span>
@@ -1096,7 +1144,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                                     <div key={it.id} className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1">
                                                         <div className="flex items-center gap-1.5">
                                                             {getItemStatusBadge(it.status)}
-                                                            <span>{it.quantity}x {it.product?.name}</span>
+                                                            <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                         </div>
                                                         <span className="num">{(it.price_at_time * it.quantity).toFixed(2)}</span>
                                                     </div>
@@ -1132,7 +1180,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start">
                                                         <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
-                                                            {item.product?.name}
+                                                            {getOrderItemDisplayName(item)}
                                                         </span>
                                                         <span className="text-sm font-medium num">R$ {item.price_at_time.toFixed(2)}</span>
                                                     </div>
@@ -1456,7 +1504,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
          // Maintain session logged in
     };
 
-    const cartTotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
+    const cartTotal = calculateCartTotal(cart);
 
     const filteredProducts = useMemo(() => {
         let prods = [...products]; // Create a copy to avoid mutating state directly
@@ -1687,7 +1735,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             product={product}
                             icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
                             onSelect={setSelectedProduct}
-                            onQuickAdd={(p) => { addToCart(p, 1, ''); toast.success(`${p.name} adicionado`); }}
+                            onQuickAdd={(p) => {
+                                // Produto com grupo obrigatorio nao pode pular a escolha:
+                                // abre o modal completo em vez de adicionar direto.
+                                const hasRequiredGroup = (p.option_groups || []).some(g => g.required);
+                                if (hasRequiredGroup) { setSelectedProduct(p); return; }
+                                addToCart(p, 1, '', []);
+                                toast.success(`${p.name} adicionado`);
+                            }}
                             disabled={isWaitingBill}
                             style={stagger(Math.min(i, 10) * 30)}
                         />
@@ -1755,9 +1810,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             <ProductModal
                 product={selectedProduct}
                 onClose={() => setSelectedProduct(null)}
-                onAdd={(qty, notes) => {
+                onAdd={(qty, notes, selectedOptions) => {
                     if (selectedProduct) {
-                        addToCart(selectedProduct, qty, notes);
+                        addToCart(selectedProduct, qty, notes, selectedOptions);
                         toast.success('Adicionado ao carrinho!');
                     }
                 }}
@@ -1777,8 +1832,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 total={cartTotal}
                 onConfirm={handleSendOrder}
                 isLoading={isLoading}
-                onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes)}
-                onRemove={(item) => removeFromCart(item.product, item.notes)}
+                onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
+                onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
             />
 
             {showBill && currentTable && currentStore && (

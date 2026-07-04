@@ -6,14 +6,14 @@ import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, 
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert } from '@/lib/audioAlert';
@@ -665,6 +665,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
           client,
           quantity: item.quantity,
           productName: item.product?.name || 'Produto Indisponível',
+          addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
           observation,
           orderIdShort: item.order_id.slice(0, 8),
       });
@@ -728,7 +729,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                             </div>
                         </div>
                         <h3 className="font-black text-[var(--text)] leading-tight mb-2 text-lg">
-                            {item.quantity}x {item.product?.name || 'Produto Indisponível'}
+                            {item.quantity}x {getOrderItemDisplayName(item)}
                         </h3>
 
                         {/* Customer Name Badge (Neutral) */}
@@ -1156,7 +1157,7 @@ NOTIFY pgrst, 'reload schema';`;
             label: `MESA ${table.number}`,
             items: summary.allItems.map(item => ({
                 quantity: item.quantity,
-                name: item.product?.name || 'Produto Indisponível',
+                name: getOrderItemDisplayName(item),
                 total: item.price_at_time * item.quantity,
             })),
             subtotal: summary.subtotal,
@@ -1472,7 +1473,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             {summary.items.length > 0 ? (
                                                 summary.items.map((item, idx) => (
                                                     <div key={idx} className="flex justify-between items-center gap-1.5 text-xs text-[var(--text)]">
-                                                        <span className="truncate min-w-0 flex-1 font-medium">{item.quantity}x {item.product?.name}</span>
+                                                        <span className="truncate min-w-0 flex-1 font-medium">{item.quantity}x {getOrderItemDisplayName(item)}</span>
                                                         {item.status === 'delivered' && <CheckCircle size={12} className="text-[var(--ok)] flex-shrink-0" />}
                                                         {item.status === 'preparing' && <ChefHat size={12} className="text-[var(--info)] flex-shrink-0" />}
                                                         {(item.status === 'pending' || item.status === 'accepted') && <Clock size={12} className="text-[var(--warn)] flex-shrink-0" />}
@@ -1643,7 +1644,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                         <div className="flex-1">
                                                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                                                 <span className="bg-[var(--surface-2)] px-1.5 rounded text-xs text-[var(--text-muted)]">x{item.quantity}</span>
-                                                                {item.product?.name}
+                                                                {getOrderItemDisplayName(item)}
                                                             </span>
                                                             <div className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-1 ml-7">
                                                                 {item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
@@ -1932,7 +1933,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             {data.items.map((it: any) => (
                                                 <div key={it.id} className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1">
                                                     <div className="flex items-center gap-1.5">
-                                                        <span>{it.quantity}x {it.product?.name}</span>
+                                                        <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                     </div>
                                                     <span>{(it.price_at_time * it.quantity).toFixed(2)}</span>
                                                 </div>
@@ -1979,7 +1980,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             <div className="flex-1">
                                                 <div className="flex justify-between items-start">
                                                     <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
-                                                        {item.product?.name}
+                                                        {getOrderItemDisplayName(item)}
                                                     </span>
                                                     <span className="text-sm font-medium">R$ {item.price_at_time.toFixed(2)}</span>
                                                 </div>
@@ -2135,7 +2136,7 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
             label: `BALCÃO - ${order.customer_name || 'Cliente'}`,
             items: items.map(item => ({
                 quantity: item.quantity,
-                name: item.product?.name || 'Produto Indisponível',
+                name: getOrderItemDisplayName(item),
                 total: item.price_at_time * item.quantity,
             })),
             subtotal: total,
@@ -2167,7 +2168,7 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
                          <div className="flex-1 overflow-y-auto max-h-[150px] space-y-1 mb-3 bg-[var(--surface-2)] p-2 rounded-[var(--r-md)] border border-[var(--border)]">
                              {order.order_items?.map((item, idx) => (
                                  <div key={idx} className="flex justify-between text-sm text-[var(--text-muted)]">
-                                     <span className="truncate flex-1">{item.quantity}x {item.product?.name}</span>
+                                     <span className="truncate flex-1">{item.quantity}x {getOrderItemDisplayName(item)}</span>
                                      <span className="font-mono text-xs">{(item.price_at_time * item.quantity).toFixed(2)}</span>
                                  </div>
                              ))}
@@ -2212,6 +2213,15 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
 const UNCATEGORIZED_ID = '__uncategorized__';
 const groupIdOf = (p: Product) => p.category_id ?? UNCATEGORIZED_ID;
 
+interface DraftOption { tempId: string; name: string; price_delta: string }
+interface DraftOptionGroup { tempId: string; name: string; type: 'single' | 'multiple'; required: boolean; options: DraftOption[] }
+
+const toDraftGroups = (groups?: Product['option_groups']): DraftOptionGroup[] =>
+    (groups || []).map(g => ({
+        tempId: g.id, name: g.name, type: g.type, required: g.required,
+        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString() })),
+    }));
+
 const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
     const storeId = store.id;
     const [categories, setCategories] = useState<Category[]>([]);
@@ -2230,6 +2240,18 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pFile, setPFile] = useState<File | null>(null);
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    // Adicionais/opcionais do produto (ex: "Escolha a borda") — rascunho
+    // local, so' persiste no banco quando "Salvar Produto" e' clicado
+    // (syncProductOptionGroups apaga e recria tudo, seguro porque
+    // order_items.selected_options e' snapshot historico, nao FK viva).
+    const [pOptionGroups, setPOptionGroups] = useState<DraftOptionGroup[]>([]);
+    const addOptionGroup = () => setPOptionGroups(prev => [...prev, { tempId: crypto.randomUUID(), name: '', type: 'single', required: false, options: [] }]);
+    const updateOptionGroup = (tempId: string, patch: Partial<DraftOptionGroup>) => setPOptionGroups(prev => prev.map(g => g.tempId === tempId ? { ...g, ...patch } : g));
+    const removeOptionGroup = (tempId: string) => setPOptionGroups(prev => prev.filter(g => g.tempId !== tempId));
+    const addOption = (groupTempId: string) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0' }] } : g));
+    const updateOption = (groupTempId: string, optTempId: string, patch: Partial<DraftOption>) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.map(o => o.tempId === optTempId ? { ...o, ...patch } : o) } : g));
+    const removeOption = (groupTempId: string, optTempId: string) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.filter(o => o.tempId !== optTempId) } : g));
 
     const loadMenu = async () => {
         const { categories: c, products: p } = await fetchMenu(storeId, false);
@@ -2351,6 +2373,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTime(product.prep_time_minutes.toString());
             setPPreview(product.image_url);
             setPDestination(product.destination || 'kitchen');
+            setPOptionGroups(toDraftGroups(product.option_groups));
         } else {
             setEditingProduct(null);
             setPName('');
@@ -2360,6 +2383,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTime('15');
             setPPreview(null);
             setPDestination('kitchen');
+            setPOptionGroups([]);
         }
         setPFile(null);
         setIsProductModalOpen(true);
@@ -2389,12 +2413,22 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 destination: pDestination
             };
 
+            let productId: string;
             if (editingProduct) {
                 await updateProduct(editingProduct.id, productData);
+                productId = editingProduct.id;
             } else {
-                await createProduct(storeId, pCat, productData);
+                productId = await createProduct(storeId, pCat, productData);
             }
-            
+
+            const groupsToSave: ProductOptionGroupInput[] = pOptionGroups
+                .filter(g => g.name.trim())
+                .map(g => ({
+                    name: g.name.trim(), type: g.type, required: g.required,
+                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0 })),
+                }));
+            await syncProductOptionGroups(productId, groupsToSave);
+
             setIsProductModalOpen(false);
             loadMenu();
         } catch (e: any) {
@@ -2639,6 +2673,48 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                  <option value="bar">Bar</option>
                              </select>
                          </div>
+                    </div>
+
+                    <div className="border-t border-[var(--border)] pt-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-bold text-sm text-[var(--text)]">Adicionais deste produto</h4>
+                            <button type="button" onClick={addOptionGroup} className="text-xs font-bold text-[var(--brand)] hover:underline">
+                                + Grupo de opção
+                            </button>
+                        </div>
+                        {pOptionGroups.length === 0 && (
+                            <p className="text-xs text-[var(--text-muted)] italic">Nenhum grupo de opção (ex: "Escolha a borda").</p>
+                        )}
+                        {pOptionGroups.map(group => (
+                            <div key={group.tempId} className="border border-[var(--border)] rounded-lg p-3 mb-3 space-y-2 bg-[var(--surface-2)]">
+                                <div className="flex gap-2 items-center">
+                                    <Input placeholder='Nome do grupo (ex: "Escolha a borda")' value={group.name}
+                                        onChange={e => updateOptionGroup(group.tempId, { name: e.target.value })} className="flex-1" />
+                                    <button type="button" onClick={() => removeOptionGroup(group.tempId)} className="text-[var(--err)]/60 hover:text-[var(--err)]"><Trash2 size={14}/></button>
+                                </div>
+                                <div className="flex gap-3 items-center text-xs">
+                                    <label className="flex items-center gap-1">
+                                        <input type="radio" checked={group.type === 'single'} onChange={() => updateOptionGroup(group.tempId, { type: 'single' })}/> Escolha 1
+                                    </label>
+                                    <label className="flex items-center gap-1">
+                                        <input type="radio" checked={group.type === 'multiple'} onChange={() => updateOptionGroup(group.tempId, { type: 'multiple' })}/> Escolha vários
+                                    </label>
+                                    <label className="ml-auto flex items-center gap-1">
+                                        <input type="checkbox" checked={group.required} onChange={e => updateOptionGroup(group.tempId, { required: e.target.checked })}/> Obrigatório
+                                    </label>
+                                </div>
+                                {group.options.map(opt => (
+                                    <div key={opt.tempId} className="flex gap-2 items-center pl-3">
+                                        <Input placeholder='Opção (ex: "Catupiry")' value={opt.name}
+                                            onChange={e => updateOption(group.tempId, opt.tempId, { name: e.target.value })} className="flex-1" />
+                                        <Input placeholder="+R$" type="number" step="0.01" min="0" value={opt.price_delta}
+                                            onChange={e => updateOption(group.tempId, opt.tempId, { price_delta: e.target.value })} className="w-24" />
+                                        <button type="button" onClick={() => removeOption(group.tempId, opt.tempId)} className="text-[var(--err)]/60 hover:text-[var(--err)]"><X size={14}/></button>
+                                    </div>
+                                ))}
+                                <button type="button" onClick={() => addOption(group.tempId)} className="text-xs font-bold text-[var(--brand)] hover:underline pl-3">+ Opção</button>
+                            </div>
+                        ))}
                     </div>
 
                     <Button className="w-full h-12 mt-4" onClick={handleSaveProduct} isLoading={isLoading}>Salvar Produto</Button>
@@ -3262,7 +3338,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                                                 <div className="hidden group-hover/items:block absolute z-20 left-0 top-full mt-1 w-56 max-h-48 overflow-y-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-2 text-xs text-[var(--text)] whitespace-normal">
                                                                     {order.order_items?.map((i, idx) => (
                                                                         <div key={idx} className="flex justify-between gap-2 py-0.5">
-                                                                            <span>{i.quantity}x {i.product?.name || 'Produto excluído'}</span>
+                                                                            <span>{i.quantity}x {getOrderItemDisplayName(i)}</span>
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -3330,7 +3406,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                     <div key={item.id} className="flex justify-between text-sm">
                                         <div className="flex gap-2">
                                             <span className="font-medium text-[var(--text-muted)]">{item.quantity}x</span>
-                                            <span className="text-[var(--text)]">{item.product?.name || 'Produto Excluído'}</span>
+                                            <span className="text-[var(--text)]">{getOrderItemDisplayName(item)}</span>
                                         </div>
                                         <span className="text-[var(--text-muted)]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</span>
                                     </div>

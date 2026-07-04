@@ -33,3 +33,15 @@ export function calculateSplitByPerson(items: SplitItem[], chargeServiceFee: boo
 export function calculateChange(amountPaid: number, total: number): number {
   return Math.max(0, amountPaid - total);
 }
+
+// Preço unitário de uma linha do carrinho com adicionais (base + soma dos
+// price_delta escolhidos). Centraliza aqui em vez de repetir a soma no
+// ProductModal, no CartModal e no cartTotal do ClientModule.
+export function calculateCartItemUnitPrice(item: { product: { price: number }; selectedOptions?: { price_delta: number }[] }): number {
+  const addonsTotal = (item.selectedOptions || []).reduce((acc, o) => acc + o.price_delta, 0);
+  return item.product.price + addonsTotal;
+}
+
+export function calculateCartTotal(cart: { product: { price: number }; quantity: number; selectedOptions?: { price_delta: number }[] }[]): number {
+  return cart.reduce((acc, item) => acc + calculateCartItemUnitPrice(item) * item.quantity, 0);
+}
