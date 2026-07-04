@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus } from '@/lib/api';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
@@ -23,6 +23,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     // Password Change State
     const [needsChange, setNeedsChange] = useState(false);
     const [userId, setUserId] = useState('');
+    const [isUniversalChange, setIsUniversalChange] = useState(false);
     const [newPass, setNewPass] = useState('');
     const [confirmPass, setConfirmPass] = useState('');
 
@@ -35,6 +36,23 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                 if (result.mustChangePass) {
                     setNeedsChange(true);
                     setUserId(result.userId || '');
+                    setIsUniversalChange(false);
+                } else {
+                    onLogin();
+                }
+                setIsLoading(false);
+                return;
+            }
+
+            // Não bateu num system_admin: tenta a conta universal (o mesmo
+            // email que acessa o painel do Lojista também entra aqui). O
+            // campo "Usuário" aceita o e-mail universal.
+            const universalResult = await authenticateUniversalUser(username, password);
+            if (universalResult.success && universalResult.user) {
+                if (universalResult.mustChangePass) {
+                    setNeedsChange(true);
+                    setUserId(universalResult.user.id);
+                    setIsUniversalChange(true);
                 } else {
                     onLogin();
                 }
@@ -54,7 +72,11 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            await updateAdminPassword(userId, newPass);
+            if (isUniversalChange) {
+                await updateUniversalUserPassword(userId, newPass);
+            } else {
+                await updateAdminPassword(userId, newPass);
+            }
             toast.success('Senha alterada com sucesso! Faça login novamente.');
             setNeedsChange(false);
             setPassword('');
@@ -106,7 +128,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                     <div className="space-y-4">
                         <div className="relative">
                             <User className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
-                            <Input label="Usuário" className="pl-10" placeholder="Ex: andrey" value={username} onChange={e => setUsername(e.target.value)} />
+                            <Input label="Usuário ou e-mail" className="pl-10" placeholder="admin ou seu@email.com" value={username} onChange={e => setUsername(e.target.value)} />
                         </div>
                         <div className="relative">
                             <Lock className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
