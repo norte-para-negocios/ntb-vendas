@@ -5,8 +5,8 @@ import dynamic from 'next/dynamic';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -29,29 +29,60 @@ const StoreDashboardView = dynamic(
 
 // --- COMPONENTS ---
 
+// Permissões fixas da conta universal: acesso total, sempre. Não é uma
+// linha de store_users (essa loja pode nem ter usuário nenhum ainda), é
+// sintetizada no client depois de escolher a loja na tela de seleção.
+const UNIVERSAL_PERMISSIONS = { tables: true, counter: true, kitchen: true, bar: true, menu: true, admin: true };
+
 const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => void }> = ({ onLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    
+
     // Reset Password State
     const [needsChange, setNeedsChange] = useState(false);
     const [userId, setUserId] = useState('');
+    const [isUniversalChange, setIsUniversalChange] = useState(false);
     const [newPass, setNewPass] = useState('');
     const [confirmPass, setConfirmPass] = useState('');
+
+    // Conta universal: autentica numa tabela separada (universal_users) e,
+    // em vez de entrar direto numa loja, mostra um seletor com todas as
+    // lojas ativas. Ver supabase/migrations/015_universal_login.sql.
+    const [universalUser, setUniversalUser] = useState<UniversalUser | null>(null);
+    const [stores, setStores] = useState<Store[]>([]);
+    const [storeFilter, setStoreFilter] = useState('');
+    const [isLoadingStores, setIsLoadingStores] = useState(false);
 
     const handleLogin = async () => {
         setError('');
         setIsLoading(true);
         const result = await authenticateStoreUser(email, password);
-        
+
         if (result.success && result.user) {
             if (result.user.must_change_password) {
                 setNeedsChange(true);
                 setUserId(result.user.id);
+                setIsUniversalChange(false);
             } else {
                 onLogin(result.user);
+            }
+            setIsLoading(false);
+            return;
+        }
+
+        // Não bateu em nenhum store_user: tenta a conta universal antes de
+        // mostrar erro (tabelas separadas, sem custo extra de segurança em
+        // tentar as duas em sequência).
+        const universalResult = await authenticateUniversalUser(email, password);
+        if (universalResult.success && universalResult.user) {
+            if (universalResult.mustChangePass) {
+                setNeedsChange(true);
+                setUserId(universalResult.user.id);
+                setIsUniversalChange(true);
+            } else {
+                setUniversalUser(universalResult.user);
             }
         } else {
             setError(result.message || 'Erro ao entrar.');
@@ -62,10 +93,14 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     const handleChangePassword = async () => {
         if (newPass.length < 6) return setError('A senha deve ter no mínimo 6 caracteres.');
         if (newPass !== confirmPass) return setError('As senhas não coincidem.');
-        
+
         setIsLoading(true);
         try {
-            await updateStoreUserPassword(userId, newPass);
+            if (isUniversalChange) {
+                await updateUniversalUserPassword(userId, newPass);
+            } else {
+                await updateStoreUserPassword(userId, newPass);
+            }
             toast.success('Senha atualizada com sucesso! Faça login novamente.');
             setNeedsChange(false);
             setPassword('');
@@ -74,6 +109,29 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         } finally {
             setIsLoading(false);
         }
+    };
+
+    useEffect(() => {
+        if (!universalUser) return;
+        setIsLoadingStores(true);
+        fetchAllStores().then((data) => {
+            setStores(data.filter(s => s.is_active));
+            setIsLoadingStores(false);
+        });
+    }, [universalUser]);
+
+    const handleSelectStore = (store: Store) => {
+        if (!universalUser) return;
+        onLogin({
+            id: universalUser.id,
+            store_id: store.id,
+            name: universalUser.name,
+            email: universalUser.email,
+            role: 'universal',
+            must_change_password: false,
+            permissions: UNIVERSAL_PERMISSIONS,
+            store,
+        });
     };
 
     if (needsChange) {
@@ -109,6 +167,47 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                         </div>
                     </div>
                 </Card>
+            </div>
+        );
+    }
+
+    if (universalUser) {
+        const filteredStores = stores.filter(s => s.name.toLowerCase().includes(storeFilter.toLowerCase()));
+        return (
+            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+                <div className="auth-mesh" />
+                <div className="auth-grain" />
+                <div className="relative z-[1] max-w-md w-full">
+                    <div className="u-stagger text-center mb-6" style={stagger(0)}>
+                        <div className="bg-[var(--brand)] w-12 h-12 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-white">
+                            <StoreIcon size={22} />
+                        </div>
+                        <h1 className="text-xl font-semibold text-[var(--text)]">Qual loja você quer acessar?</h1>
+                        <p className="text-[var(--text-muted)] text-sm mt-1">Logado como {universalUser.name}</p>
+                    </div>
+                    <Card className="auth-card u-stagger p-4" style={stagger(60)}>
+                        <Input placeholder="Buscar loja..." value={storeFilter} onChange={e => setStoreFilter(e.target.value)} className="mb-3" />
+                        <div className="max-h-96 overflow-y-auto space-y-1">
+                            {isLoadingStores && <p className="text-sm text-[var(--text-muted)] text-center py-6">Carregando lojas...</p>}
+                            {!isLoadingStores && filteredStores.map(store => (
+                                <button
+                                    key={store.id}
+                                    onClick={() => handleSelectStore(store)}
+                                    className="w-full text-left p-3 rounded-[var(--r-md)] hover:bg-[var(--surface-2)] u-motion flex items-center justify-between"
+                                >
+                                    <span className="font-medium text-[var(--text)]">{store.name}</span>
+                                    <ArrowRight size={16} className="text-[var(--text-muted)]" />
+                                </button>
+                            ))}
+                            {!isLoadingStores && filteredStores.length === 0 && (
+                                <p className="text-sm text-[var(--text-muted)] text-center py-6">Nenhuma loja encontrada.</p>
+                            )}
+                        </div>
+                    </Card>
+                    <button onClick={() => setUniversalUser(null)} className="w-full text-center text-sm text-[var(--text-muted)] mt-4 u-motion">
+                        Sair
+                    </button>
+                </div>
             </div>
         );
     }
@@ -238,7 +337,7 @@ const useStoreNotifications = (storeId: string | undefined) => {
     return counts;
 };
 
-const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, user: StoreUser & { store: Store } }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, user }) => {
+const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store } }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const notifications = useStoreNotifications(user.store.id);
@@ -318,6 +417,11 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     ))}
                 </div>
                 <div className="p-3 border-t border-white/10">
+                    {user.role === 'universal' && onSwitchStore && (
+                        <button onClick={onSwitchStore} className="flex items-center gap-3 w-full px-3 py-2.5 text-white/70 hover:text-white hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[14px]">
+                            <RefreshCw size={18}/> Trocar de Loja
+                        </button>
+                    )}
                     <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 py-2.5 text-[var(--err)]/80 hover:text-[var(--err)] hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[14px]">
                         <LogOut size={18}/> Sair
                     </button>
@@ -386,6 +490,16 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
         <div className={`p-3 border-t border-white/8 ${isCollapsed ? 'space-y-1' : 'flex items-center gap-1'}`}>
           <ThemeToggle variant="sidebar" className={isCollapsed ? 'mx-auto' : ''} />
+          {user.role === 'universal' && onSwitchStore && (
+            <button
+              onClick={onSwitchStore}
+              className={`flex items-center w-full px-3 py-2.5 text-white/60 hover:text-white hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[13px] ${isCollapsed ? 'justify-center' : 'gap-3'}`}
+              title={isCollapsed ? "Trocar de Loja" : ""}
+            >
+              <RefreshCw size={18} />
+              {!isCollapsed && <span>Trocar de Loja</span>}
+            </button>
+          )}
           <button
             onClick={onLogout}
             className={`flex items-center w-full px-3 py-2.5 text-[var(--err)]/60 hover:text-[var(--err)] hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[13px] ${isCollapsed ? 'justify-center' : 'gap-3'}`}
@@ -3312,8 +3426,33 @@ export const StoreModule: React.FC = () => {
 
         (async () => {
             try {
-                const saved = JSON.parse(raw) as { userId?: string; storeId?: string };
-                const restoredUser = saved?.userId ? await fetchStoreUserById(saved.userId) : null;
+                const saved = JSON.parse(raw) as { userId?: string; storeId?: string; isUniversal?: boolean };
+                let restoredUser: (StoreUser & { store: Store }) | null = null;
+
+                if (saved?.isUniversal && saved.userId && saved.storeId) {
+                    // Conta universal: reconstrói o usuário sintético a partir
+                    // de universal_users + stores, em vez de store_users (o id
+                    // salvo não existe nessa tabela).
+                    const [universalUser, store] = await Promise.all([
+                        fetchUniversalUserById(saved.userId),
+                        fetchStoreById(saved.storeId),
+                    ]);
+                    if (universalUser && store && store.is_active) {
+                        restoredUser = {
+                            id: universalUser.id,
+                            store_id: store.id,
+                            name: universalUser.name,
+                            email: universalUser.email,
+                            role: 'universal',
+                            must_change_password: false,
+                            permissions: UNIVERSAL_PERMISSIONS,
+                            store,
+                        };
+                    }
+                } else if (saved?.userId) {
+                    restoredUser = await fetchStoreUserById(saved.userId);
+                }
+
                 if (restoredUser) {
                     setUser(restoredUser);
                     setTab(pickInitialStoreTab(restoredUser));
@@ -3331,13 +3470,19 @@ export const StoreModule: React.FC = () => {
     const handleLogin = (u: StoreUser & { store: Store }) => {
         setUser(u);
         setTab(pickInitialStoreTab(u));
-        localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id }));
+        localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id, isUniversal: u.role === 'universal' }));
     };
 
     const handleLogout = () => {
         setUser(null);
         localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
     };
+
+    // Botão "Trocar de Loja" da conta universal: mesma ação de logout, só
+    // com um rótulo mais claro pra quem está usando a conta universal (o
+    // e-mail/senha universal continua o mesmo pro próximo login, só o
+    // seletor de loja é reaberto).
+    const handleSwitchStore = handleLogout;
 
     if (isRestoringSession) {
         return (
@@ -3375,6 +3520,7 @@ export const StoreModule: React.FC = () => {
             onTabChange={setTab}
             storeName={user.store.name}
             onLogout={handleLogout}
+            onSwitchStore={handleSwitchStore}
             user={user}
         >
             {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} loggedUser={user} />}

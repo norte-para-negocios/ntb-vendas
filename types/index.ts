@@ -154,3 +154,9 @@ export interface OrderRating {
   comment: string | null;
   created_at: string;
 }
+
+export interface UniversalUser {
+  id: string;
+  name: string;
+  email: string;
+}

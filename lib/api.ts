@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, OrderRating } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, OrderRating, UniversalUser } from '@/types';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -1012,4 +1012,36 @@ export const fetchOrderRatings = async (storeId: string, sinceDate?: string): Pr
   const { data, error } = await query;
   if (error) { console.error('Error fetching order ratings:', error); return []; }
   return data || [];
+};
+
+// Conta universal: um login só que, em vez de estar preso a uma loja
+// (como store_users), escolhe qual loja acessar a cada entrada. Tabela
+// própria (universal_users), nunca acessada direto pelo client (mesmo
+// padrão write-only via RPC do resto da autenticação).
+export const authenticateUniversalUser = async (email: string, password: string): Promise<{ success: boolean; user?: UniversalUser; mustChangePass?: boolean; message?: string }> => {
+  try {
+    const { data, error } = await supabase.rpc('authenticate_universal_user_secure', { p_email: email, p_password: password });
+    if (error) return { success: false, message: 'Erro de conexão.' };
+    if (!data?.success) {
+      return {
+        success: false,
+        message: data?.locked ? 'Muitas tentativas incorretas. Tente novamente em alguns minutos.' : 'Usuário ou senha incorretos.',
+      };
+    }
+    return { success: true, user: data.user, mustChangePass: data.mustChangePass };
+  } catch (error: any) {
+    console.error('Auth Universal User Error:', error);
+    return { success: false, message: 'Erro de conexão.' };
+  }
+};
+
+export const updateUniversalUserPassword = async (userId: string, newPassword: string) => {
+  const { error } = await supabase.rpc('update_universal_user_password_secure', { p_user_id: userId, p_new_password: newPassword });
+  if (error) throw error;
+};
+
+export const fetchUniversalUserById = async (userId: string): Promise<UniversalUser | null> => {
+  const { data, error } = await supabase.rpc('fetch_universal_user_by_id_secure', { p_user_id: userId });
+  if (error || !data) return null;
+  return data;
 };
