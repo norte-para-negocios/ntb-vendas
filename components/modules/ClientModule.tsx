@@ -15,6 +15,7 @@ import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal } from '@/lib/calc';
+import { AuthBackdrop } from '@/components/AuthBackdrop';
 
 // --- COMPONENTS ---
 
@@ -416,23 +417,20 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><span className="text-[var(--text-muted)] text-sm animate-pulse">Carregando...</span></div>;
 
     return (
-        <div className="auth-shell min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-6">
-            <div className="auth-mesh" />
-            <div className="auth-orb" style={{ width: 300, height: 300, top: '-10%', left: '-6%', background: 'var(--brand)' }} />
-            <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-12%', right: '-8%', background: 'var(--err)', animationDelay: '-6s' }} />
-            <div className="auth-grain" />
-            <div className="u-stagger relative z-[1] mb-8 text-center" style={stagger(0)}>
+        <AuthBackdrop>
+          <div className="w-full max-w-sm flex flex-col items-center">
+            <div className="mb-7 text-center">
                 {store?.logo_url ? (
-                    <Image src={store.logo_url} alt="Logo" width={80} height={80} className="w-20 h-20 rounded-[var(--r-lg)] mx-auto mb-4 object-cover" style={{boxShadow:'var(--shadow-md)'}} />
+                    <Image src={store.logo_url} alt={`Logo de ${store.name}`} width={80} height={80} className="w-20 h-20 rounded-[1.4rem] mx-auto mb-4 object-cover border-2 border-white/40" style={{ boxShadow: '0 18px 40px -12px rgba(0,0,0,0.4)' }} />
                 ) : (
-                    <div className="bg-[var(--brand)] w-16 h-16 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-white" style={{boxShadow:'0 4px 14px rgba(27,58,75,0.3)'}}>
-                        <Coffee size={24}/>
+                    <div className="w-16 h-16 rounded-[1.4rem] flex items-center justify-center mx-auto mb-4 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ animation: '3s ease-in-out infinite icon-float' }}>
+                        <Coffee size={26}/>
                     </div>
                 )}
-                <h1 className="text-xl font-semibold text-[var(--text)] mb-1">{store?.name || 'Cardápio Digital'}</h1>
-                <p className="text-[var(--text-muted)] text-sm">Faça seu pedido direto pelo celular</p>
+                <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
+                <p className="text-white/75 text-sm">Faça seu pedido direto pelo celular</p>
             </div>
-            <Card className="auth-card u-stagger w-full max-w-sm p-6 space-y-5" style={stagger(60)}>
+            <Card className="u-grow-in w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
                 {store?.contract_type === 'balcao_mesas' && (
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <button
@@ -534,7 +532,8 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                         : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
                 </Button>
             </Card>
-        </div>
+          </div>
+        </AuthBackdrop>
     );
 };
 
@@ -554,14 +553,16 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, disable
             type="button"
             onClick={() => onSelect(product)}
             disabled={disabled}
-            className="u-stagger flex gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-md)] p-3 text-left w-full u-card u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1"
+            className="u-grow-in group flex gap-3 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)]/40 rounded-[var(--r-md)] p-3 text-left w-full u-card u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1"
             style={{ boxShadow: 'var(--shadow-sm)', ...style }}
         >
             {product.image_url ? (
-                <Image src={product.image_url} alt={product.name} width={80} height={80} className="w-20 h-20 object-cover rounded-[var(--r-sm)] bg-[var(--surface-2)] flex-shrink-0" />
+                <div className="w-20 h-20 rounded-[var(--r-sm)] overflow-hidden bg-[var(--surface-2)] flex-shrink-0">
+                    <Image src={product.image_url} alt={product.name} width={80} height={80} className="w-full h-full object-cover u-motion group-hover:scale-105" />
+                </div>
             ) : (
                 <div className="w-20 h-20 bg-[var(--brand-soft)] rounded-[var(--r-sm)] flex items-center justify-center flex-shrink-0">
-                    <UtensilsCrossed size={22} className="text-[var(--brand)]/40" />
+                    <UtensilsCrossed size={22} className="text-[var(--brand)]/40 u-motion group-hover:scale-110" />
                 </div>
             )}
             <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
@@ -1564,7 +1565,15 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 {isLoadingMenu ? (
                     <div className="text-center py-12 text-[var(--text-muted)] text-sm animate-pulse">Carregando cardápio...</div>
                 ) : filteredProducts.length === 0 ? (
-                    <div className="text-center py-12 text-[var(--text-muted)] text-sm u-fade-in">Nenhum produto encontrado.</div>
+                    <div className="flex flex-col items-center text-center py-16 u-grow-in">
+                        <div className="w-16 h-16 rounded-[1.4rem] bg-[var(--brand-soft)] flex items-center justify-center mb-4" style={{ animation: '3s ease-in-out infinite icon-float' }}>
+                            <UtensilsCrossed size={26} className="text-[var(--brand)]/50" />
+                        </div>
+                        <p className="text-[var(--text)] font-medium">{searchTerm ? 'Nada encontrado' : 'Cardápio a caminho'}</p>
+                        <p className="text-[var(--text-muted)] text-sm mt-1 max-w-[15rem]">
+                            {searchTerm ? 'Tente buscar por outro nome.' : 'Os pratos desta loja aparecem aqui assim que forem cadastrados.'}
+                        </p>
+                    </div>
                 ) : null}
             </div>
 
