@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
+import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
@@ -136,67 +137,56 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
 
     if (needsChange) {
          return (
-            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
-                <div className="auth-mesh" />
-                <div className="auth-orb" style={{ width: 280, height: 280, top: '-8%', left: '-6%', background: 'var(--warn)' }} />
-                <div className="auth-orb" style={{ width: 240, height: 240, bottom: '-10%', right: '-8%', background: 'var(--brand)', animationDelay: '-5s' }} />
-                <div className="auth-grain" />
-                <Card className="auth-card w-full max-w-sm p-8">
-                    <div className="u-stagger text-center mb-6" style={stagger(0)}>
+            <AuthBackdrop>
+                <Card className="u-grow-in w-full max-w-sm p-8" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+                    <div className="text-center mb-6">
                         <div className="bg-[var(--warn)]/10 w-14 h-14 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
                             <Lock size={24} />
                         </div>
-                        <h2 className="text-xl font-semibold text-[var(--text)]">Crie sua Senha</h2>
+                        <h2 className="text-xl font-bold text-[var(--text)]">Crie sua Senha</h2>
                         <p className="text-[var(--text-muted)] text-sm mt-1">Primeiro acesso. Defina uma senha segura para continuar.</p>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="u-stagger" style={stagger(60)}>
-                            <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
-                        </div>
-                        <div className="u-stagger" style={stagger(100)}>
-                            <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
-                        </div>
+                        <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
+                        <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
 
                         {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
 
-                        <div className="u-stagger" style={stagger(140)}>
-                            <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
-                                Salvar Senha
-                            </Button>
-                        </div>
+                        <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
+                            Salvar Senha
+                        </Button>
                     </div>
                 </Card>
-            </div>
+            </AuthBackdrop>
         );
     }
 
     if (universalUser) {
         const filteredStores = stores.filter(s => s.name.toLowerCase().includes(storeFilter.toLowerCase()));
         return (
-            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
-                <div className="auth-mesh" />
-                <div className="auth-grain" />
-                <div className="relative z-[1] max-w-md w-full">
-                    <div className="u-stagger text-center mb-6" style={stagger(0)}>
-                        <div className="bg-[var(--brand)] w-12 h-12 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-white">
-                            <StoreIcon size={22} />
+            <AuthBackdrop>
+                <div className="max-w-md w-full">
+                    <div className="text-center mb-6">
+                        <div className="w-14 h-14 rounded-[1.25rem] flex items-center justify-center mx-auto mb-4 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ animation: '3s ease-in-out infinite icon-float' }}>
+                            <StoreIcon size={24} />
                         </div>
-                        <h1 className="text-xl font-semibold text-[var(--text)]">Qual loja você quer acessar?</h1>
-                        <p className="text-[var(--text-muted)] text-sm mt-1">Logado como {universalUser.name}</p>
+                        <h1 className="text-2xl font-bold text-white">Qual loja você quer acessar?</h1>
+                        <p className="text-white/75 text-sm mt-1">Logado como {universalUser.name}</p>
                     </div>
-                    <Card className="auth-card u-stagger p-4" style={stagger(60)}>
+                    <Card className="u-grow-in p-4" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
                         <Input placeholder="Buscar loja..." value={storeFilter} onChange={e => setStoreFilter(e.target.value)} className="mb-3" />
                         <div className="max-h-96 overflow-y-auto space-y-1">
                             {isLoadingStores && <p className="text-sm text-[var(--text-muted)] text-center py-6">Carregando lojas...</p>}
-                            {!isLoadingStores && filteredStores.map(store => (
+                            {!isLoadingStores && filteredStores.map((store, i) => (
                                 <button
                                     key={store.id}
                                     onClick={() => handleSelectStore(store)}
-                                    className="w-full text-left p-3 rounded-[var(--r-md)] hover:bg-[var(--surface-2)] u-motion flex items-center justify-between"
+                                    className="u-grow-in group/store w-full text-left p-3 rounded-[var(--r-md)] hover:bg-[var(--brand-soft)] u-motion flex items-center justify-between"
+                                    style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
                                 >
-                                    <span className="font-medium text-[var(--text)]">{store.name}</span>
-                                    <ArrowRight size={16} className="text-[var(--text-muted)]" />
+                                    <span className="font-medium text-[var(--text)] group-hover/store:text-[var(--brand)]">{store.name}</span>
+                                    <ArrowRight size={16} className="text-[var(--text-muted)] u-motion group-hover/store:translate-x-1 group-hover/store:text-[var(--brand)]" />
                                 </button>
                             ))}
                             {!isLoadingStores && filteredStores.length === 0 && (
@@ -204,29 +194,25 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                             )}
                         </div>
                     </Card>
-                    <button onClick={() => setUniversalUser(null)} className="w-full text-center text-sm text-[var(--text-muted)] mt-4 u-motion">
+                    <button onClick={() => setUniversalUser(null)} className="w-full text-center text-sm text-white/70 hover:text-white mt-4 u-motion">
                         Sair
                     </button>
                 </div>
-            </div>
+            </AuthBackdrop>
         );
     }
 
     return (
-        <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
-             <div className="auth-mesh" />
-             <div className="auth-orb" style={{ width: 300, height: 300, top: '-10%', right: '-6%', background: 'var(--brand)' }} />
-             <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-12%', left: '-8%', background: 'var(--err)', animationDelay: '-4s' }} />
-             <div className="auth-grain" />
-             <div className="relative z-[1] max-w-sm w-full">
-                 <div className="u-stagger text-center mb-8" style={stagger(0)}>
-                     <div className="bg-[var(--brand)] w-12 h-12 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-5 text-white" style={{boxShadow:'0 4px 14px rgba(27,58,75,0.35)'}}>
-                         <StoreIcon size={22} />
-                     </div>
-                     <h1 className="text-2xl font-semibold text-[var(--text)]">Área do Lojista</h1>
-                     <p className="text-[var(--text-muted)] text-sm mt-1">Gerencie seus pedidos e mesas</p>
-                 </div>
-                 <Card className="auth-card u-stagger p-6" style={stagger(60)}>
+        <AuthBackdrop>
+            <div className="max-w-sm w-full">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 rounded-[1.4rem] flex items-center justify-center mx-auto mb-5 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ boxShadow: '0 20px 40px -12px rgba(0,0,0,0.35)', animation: '3s ease-in-out infinite icon-float' }}>
+                        <StoreIcon size={26} />
+                    </div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">Área do Lojista</h1>
+                    <p className="text-white/75 text-sm mt-1.5">Gerencie seus pedidos e mesas</p>
+                </div>
+                <Card className="u-grow-in p-6" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
                     <div className="space-y-4">
                         <Input label="Email de Acesso" placeholder="seu@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                         <Input label="Senha" placeholder="••••••" type="password" value={password} onChange={e => setPassword(e.target.value)} />
@@ -242,9 +228,9 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                             {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />}
                         </Button>
                     </div>
-                 </Card>
-             </div>
-        </div>
+                </Card>
+            </div>
+        </AuthBackdrop>
     );
 };
 

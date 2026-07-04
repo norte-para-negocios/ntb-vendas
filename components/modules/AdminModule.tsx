@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
+import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
@@ -66,13 +67,9 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
     if (needsChange) {
         return (
-            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
-                <div className="auth-mesh" />
-                <div className="auth-orb" style={{ width: 300, height: 300, top: '-8%', left: '-6%', background: 'var(--warn)' }} />
-                <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-10%', right: '-8%', background: 'var(--brand)', animationDelay: '-5s' }} />
-                <div className="auth-grain" />
-                <Card className="auth-card w-full max-w-md p-8">
-                    <div className="u-stagger text-center mb-6" style={stagger(0)}>
+            <AuthBackdrop>
+                <Card className="u-grow-in w-full max-w-md p-8" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+                    <div className="text-center mb-6">
                         <div className="bg-[var(--warn)]/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
                             <Lock size={32} />
                         </div>
@@ -81,63 +78,55 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                     </div>
 
                     <div className="space-y-4">
-                        <div className="u-stagger" style={stagger(60)}>
-                            <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
-                        </div>
-                        <div className="u-stagger" style={stagger(100)}>
-                            <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
-                        </div>
+                        <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
+                        <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
 
                         {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
 
-                        <div className="u-stagger" style={stagger(140)}>
-                            <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
-                                Atualizar Senha
-                            </Button>
-                        </div>
+                        <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
+                            Atualizar Senha
+                        </Button>
                     </div>
                 </Card>
-            </div>
+            </AuthBackdrop>
         );
     }
 
     return (
-        <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--ink)] p-4">
-            <div className="auth-mesh" />
-            <div className="auth-orb" style={{ width: 320, height: 320, top: '-10%', right: '-8%', background: 'var(--brand)' }} />
-            <div className="auth-orb" style={{ width: 280, height: 280, bottom: '-12%', left: '-6%', background: 'var(--err)', animationDelay: '-4s' }} />
-            <div className="auth-grain" />
-            <Card className="auth-card w-full max-w-sm p-8">
-                <div className="u-stagger text-center mb-8" style={stagger(0)}>
-                    <h1 className="text-3xl font-bold text-[var(--brand)] mb-2">Painel Admin</h1>
-                    <p className="text-[var(--text-muted)]">Acesso Restrito</p>
+        <AuthBackdrop>
+            <div className="w-full max-w-sm">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 rounded-[1.4rem] flex items-center justify-center mx-auto mb-5 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ boxShadow: '0 20px 40px -12px rgba(0,0,0,0.35)', animation: '3s ease-in-out infinite icon-float' }}>
+                        <Lock size={26} />
+                    </div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">Painel Master</h1>
+                    <p className="text-white/75 text-sm mt-1.5">Acesso restrito da Norte Para Negócios</p>
                 </div>
-
-                <div className="space-y-4">
-                    <div className="u-stagger relative" style={stagger(60)}>
-                        <User className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
-                        <Input label="Usuário" className="pl-10" placeholder="Ex: andrey" value={username} onChange={e => setUsername(e.target.value)} />
-                    </div>
-                    <div className="u-stagger relative" style={stagger(100)}>
-                        <Lock className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
-                        <Input label="Senha" type="password" className="pl-10" placeholder="••••••" value={password} onChange={e => setPassword(e.target.value)} />
-                    </div>
-
-                    {error && (
-                        <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
-                            <AlertCircle size={16} /> {error}
+                <Card className="u-grow-in p-8" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+                    <div className="space-y-4">
+                        <div className="relative">
+                            <User className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
+                            <Input label="Usuário" className="pl-10" placeholder="Ex: andrey" value={username} onChange={e => setUsername(e.target.value)} />
                         </div>
-                    )}
+                        <div className="relative">
+                            <Lock className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
+                            <Input label="Senha" type="password" className="pl-10" placeholder="••••••" value={password} onChange={e => setPassword(e.target.value)} />
+                        </div>
 
-                    <div className="u-stagger" style={stagger(140)}>
-                        <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20 group" onClick={handleLogin} isLoading={isLoading}>
+                        {error && (
+                            <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
+                                <AlertCircle size={16} /> {error}
+                            </div>
+                        )}
+
+                        <Button className="w-full h-12 text-lg group" onClick={handleLogin} isLoading={isLoading}>
                             Entrar
                             {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />}
                         </Button>
                     </div>
-                </div>
-            </Card>
-        </div>
+                </Card>
+            </div>
+        </AuthBackdrop>
     );
 };
 

@@ -1,30 +1,24 @@
 import Link from 'next/link';
 import { UtensilsCrossed } from 'lucide-react';
-import { stagger } from '@/components/Skeleton';
+import { AuthBackdrop } from '@/components/AuthBackdrop';
 
 export default function NotFound() {
   return (
-    <div className="auth-shell min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary-dark to-primary p-6 text-white text-center">
-      <div className="auth-mesh" />
-      <div className="auth-orb" style={{ width: 280, height: 280, top: '-10%', right: '-6%', background: 'var(--err)' }} />
-      <div className="auth-orb" style={{ width: 260, height: 260, bottom: '-12%', left: '-8%', background: 'var(--brand)', animationDelay: '-4s' }} />
-      <div className="auth-grain" />
-
-      <div className="relative z-[1] flex flex-col items-center">
-        <div className="u-stagger bg-white/10 backdrop-blur-sm border border-white/20 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6" style={stagger(0)}>
-          <UtensilsCrossed className="w-10 h-10 text-white opacity-60" />
+    <AuthBackdrop>
+      <div className="flex flex-col items-center text-center text-white u-grow-in">
+        <div className="bg-white/12 backdrop-blur-sm border border-white/25 w-20 h-20 rounded-[1.6rem] flex items-center justify-center mx-auto mb-6" style={{ animation: '3s ease-in-out infinite icon-float' }}>
+          <UtensilsCrossed className="w-10 h-10 text-white opacity-70" />
         </div>
-        <h1 className="u-stagger text-6xl font-bold mb-4 opacity-60" style={stagger(60)}>404</h1>
-        <h2 className="u-stagger text-2xl font-bold mb-2" style={stagger(110)}>Página não encontrada</h2>
-        <p className="u-stagger text-white/70 mb-8" style={stagger(150)}>O cardápio ou recurso que você procura não existe.</p>
+        <h1 className="text-7xl font-bold mb-3 tracking-tight text-white/85">404</h1>
+        <h2 className="text-2xl font-bold mb-2">Página não encontrada</h2>
+        <p className="text-white/70 mb-8 max-w-xs">O cardápio ou recurso que você procura não existe.</p>
         <Link
           href="/"
-          className="u-stagger u-motion bg-white text-[var(--brand)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--surface-2)] shadow-lg"
-          style={stagger(190)}
+          className="u-motion u-press bg-white text-[var(--brand)] px-6 py-3 rounded-2xl font-bold hover:bg-white/90 shadow-lg"
         >
           Voltar ao início
         </Link>
       </div>
-    </div>
+    </AuthBackdrop>
   );
 }
