@@ -127,7 +127,8 @@ em `lib/api.ts`/`StoreModule.tsx`).
 
 | Rota | Renderização | Descrição |
 |---|---|---|
-| `/` | estática | Landing/tela de boas-vindas — ver seção própria abaixo |
+| `/` | estática | Landing pública — SÓ o botão "Área do Lojista", sem menção ao Master Admin (ver seção "Landing pages" abaixo) |
+| `/acesso` | estática | Landing completa (Painel Master + Área do Lojista) — link discreto, só a equipe Norte conhece; nunca linkado a partir de `/` |
 | `/painel` | estática | Master Admin (login + CRUD de lojas/usuários) |
 | `/loja` | estática | Lojista (login + painel completo da loja) |
 | `/c/[slug]` | ISR, `revalidate = 60` | Cardápio do cliente final |
@@ -145,24 +146,32 @@ consumo de free tier na Vercel).
 - **`AdminModule.tsx`** — `AdminLogin` + `AdminModule` (dashboard Master: lista
   de lojas, CRUD de loja, CRUD de usuário por loja, duplicar loja). "Excluir
   Loja" é soft-delete (`is_active = false`), não apaga dado.
-- **`StoreModule.tsx`** (o maior arquivo do projeto, ~3300 linhas — considerar
+- **`StoreModule.tsx`** (o maior arquivo do projeto, ~3400 linhas — considerar
   quebrar em arquivos menores se for crescer mais) — `StoreLogin` (sessão
-  persistida em `localStorage`, sobrevive a F5), `KdsView` (cozinha e bar
-  unificados num componente parametrizado por `destination`, com alerta
-  sonoro de pedido novo e indicador de atraso via `prep_time_minutes`),
-  `CounterView`, `TablesView` (a mais complexa: mesas, comanda, pagamento
-  com cálculo de troco, impressão), `MenuManagementView` (produtos sem
-  categoria ficam visíveis numa seção "Sem categoria" em vez de sumir),
-  `UserManagementView`, `StoreAdminView` (dashboard + histórico de vendas +
-  gestão de usuários), `StoreModule` (shell/roteamento por aba, `canAccess`
-  por permissão).
+  persistida em `localStorage`, sobrevive a F5; autentica primeiro contra
+  `store_users`, e se falhar tenta `universal_users` — ver "Conta universal"
+  abaixo), `KdsView` (cozinha e bar unificados num componente parametrizado
+  por `destination`, com alerta sonoro de pedido novo e indicador de atraso
+  via `prep_time_minutes`), `CounterView`, `TablesView` (a mais complexa:
+  mesas, comanda, pagamento com cálculo de troco, impressão),
+  `MenuManagementView` (produtos sem categoria ficam visíveis numa seção
+  "Sem categoria" em vez de sumir; formulário de produto tem seção
+  "Adicionais deste produto" — ver "Adicionais/opcionais de produto"
+  abaixo), `UserManagementView`, `StoreAdminView` (dashboard + histórico de
+  vendas + gestão de usuários + "Meu Link / QR Code"), `StoreModule`
+  (shell/roteamento por aba, `canAccess` por permissão; usuário com
+  `role === 'universal'` ganha botão "Trocar de Loja" na sidebar).
 - **`ClientModule.tsx`** — `LoginScreen` (escolher mesa/PIN via RPC),
   `OrderTracker` (toast por item + som/vibração na transição agregada do
   pedido, ver `lib/audioAlert.ts`), `ProductCard` (memoizado, navegável por
-  teclado), `BillSplitter` (divisão de conta — usa colunas explícitas ao
+  teclado; linha editorial "carta de vinhos" com medalhão do ícone da
+  categoria e etiqueta de origem extraída do nome, não card com foto —
+  ver "Design system" abaixo), `ProductModal` (renderiza os grupos de
+  `product.option_groups`, se houver — ver "Adicionais/opcionais de
+  produto"), `BillSplitter` (divisão de conta — usa colunas explícitas ao
   buscar `tables`, nunca `select('*')`, pra não vazar o PIN pra convidados
-  não-anfitriões), cardápio propriamente dito (categorias, carrinho,
-  checkout).
+  não-anfitriões), cardápio propriamente dito (categorias com ícone e
+  arrasto por mouse, carrinho, checkout).
 - **`StoreDashboardView.tsx`** — gráficos do dashboard do lojista (recharts,
   importado via `next/dynamic({ ssr: false })` dentro de `StoreModule.tsx`
   pra não pesar o bundle de quem nunca abre essa aba): vendas por dia,
@@ -269,13 +278,40 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   `store_fiscal_certificates` por uma de `SELECT` só. A escrita também
   passou pra rota de servidor, o client só precisa continuar lendo pra
   mostrar o badge de status do certificado.
+- **`013_order_ratings.sql`**: `order_ratings` (estrelas + comentário
+  opcional pós-refeição). Dado não sensível, RLS `allow_all_anon` direto
+  (sem `security definer`), mesmo padrão reaproveitado em 016 abaixo.
+- **`014_fecha_vazamento_senhas.sql`**: achado grave (2026-07-04) —
+  `store_users`/`system_admins` tinham `allow_all_anon` cobrindo também
+  `SELECT`, expondo senha em texto puro de qualquer lojista/admin real pra
+  quem tivesse a chave anônima pública. Migration remove a policy de
+  leitura das duas tabelas e move todo acesso (login, trocar senha, listar
+  time, criar/editar/excluir usuário) pra 8 functions `security definer`
+  novas (`fetch_store_user_by_id_secure`, `fetch_all_store_users_secure`,
+  `create_store_team_member_secure` etc.) — `lib/api.ts` correspondente
+  virou só chamadas `.rpc(...)`, nunca mais `.from('store_users'/'system_admins')`
+  direto do client.
+- **`015_universal_login.sql`**: tabela `universal_users` (ver "Conta
+  universal" abaixo) + `authenticate_universal_user_secure`/
+  `update_universal_user_password_secure`/`fetch_universal_user_by_id_secure`,
+  mesmo padrão de rate-limit de `authenticate_store_user_secure`.
+- **`016_adicionais_produto.sql`**: `product_option_groups`/
+  `product_options` (RLS `allow_all_anon`, dado público igual a
+  `products`/`categories`) + `order_items.selected_options jsonb` (snapshot
+  histórico) + `create_order_secure` atualizada pra aceitar
+  `option_ids: uuid[]` por item, validar que cada opção pertence a um
+  grupo do mesmo produto, e somar `price_delta` ao preço antes de gravar
+  `price_at_time`. Ver "Adicionais/opcionais de produto" abaixo pro desenho
+  completo.
 
-Todas as migrations (001 a 012) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 016) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
-`create_order_secure`, `open_table_session`, rate-limit de login e de PIN,
-bucket `store-certificates` com upload/leitura de status/remoção
-funcionando de ponta a ponta via `/api/certificado`, `order_items.store_id`,
-todos testados via RPC/upload real em 2026-07-03).
+`create_order_secure` com e sem adicionais, `open_table_session`,
+rate-limit de login e de PIN, bucket `store-certificates` com
+upload/leitura de status/remoção funcionando de ponta a ponta via
+`/api/certificado`, `order_items.store_id`, autenticação universal nos dois
+painéis, adicionais de produto com grupo único/múltiplo/obrigatório
+testados ponta a ponta na loja "Japanese").
 
 ## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
 
@@ -315,11 +351,83 @@ estar configurada nas env vars do projeto na Vercel (não só no
 `.env.local` local), sem ela `/api/certificado` falha em produção com
 credencial ausente. Não verificado nesta sessão se já está configurada lá.
 
-Tabelas principais: `stores`, `store_users`, `system_admins`, `categories`,
-`products`, `tables` (tem o PIN — nunca expor via `select('*')` num contexto
-pré-login, usar `fetchTablesPublic`), `orders`, `order_items` (agora com
-`store_id` denormalizado), `table_sessions`, `store_fiscal_certificates`,
-`store_fiscal_certificate_secrets`.
+Tabelas principais: `stores`, `store_users`, `system_admins`, `universal_users`
+(ver "Conta universal" abaixo), `categories`, `products`,
+`product_option_groups`/`product_options` (ver "Adicionais/opcionais de
+produto" abaixo), `tables` (tem o PIN — nunca expor via `select('*')` num
+contexto pré-login, usar `fetchTablesPublic`), `orders`, `order_items`
+(`store_id` denormalizado + `selected_options jsonb`, snapshot dos
+adicionais escolhidos), `table_sessions`, `order_ratings`,
+`store_fiscal_certificates`, `store_fiscal_certificate_secrets`.
+
+## Conta universal (`universal_users`, migration 015)
+
+Um único email/senha (ex.: `equipe@norteparanegocios.com.br`) acessa
+**qualquer loja** no painel do Lojista (`/loja`) e também o Master Admin
+(`/painel`), pensado pra equipe interna da Norte não precisar de uma conta
+por loja. Fluxo: `StoreLogin`/`AdminLogin` tentam primeiro
+`authenticate_store_user_secure`/`authenticate_admin_secure`; se falhar,
+tentam `authenticate_universal_user_secure`. Do lado do Lojista, autenticar
+como universal mostra um seletor de loja (`fetchAllStores` filtrado por
+`is_active`) em vez de entrar direto — ao escolher uma loja, o client monta
+um objeto sintético `StoreUser & { store }` com
+`UNIVERSAL_PERMISSIONS = { tables: true, counter: true, kitchen: true, bar: true, menu: true, admin: true }`
+(não é uma linha real de `store_users`) e segue o resto do app normalmente.
+A sessão salva em `localStorage` guarda um flag `isUniversal` pra saber, ao
+restaurar depois de F5, se busca em `store_users` ou reconstrói o objeto
+sintético via `fetchUniversalUserById` + `fetchStoreById`. `StoreLayout`
+mostra um botão extra "Trocar de Loja" (`handleSwitchStore`, literalmente
+um alias de `handleLogout`) só quando `user.role === 'universal'`.
+
+## Adicionais/opcionais de produto (migration 016)
+
+Qualquer produto pode ganhar grupos de opção configuráveis pelo lojista no
+próprio formulário de cadastro (`MenuManagementView`, seção "Adicionais
+deste produto") — motivado por um caso real: uma loja tinha "Bordas de
+Pizza" como produtos soltos numa categoria própria, sem ligação com qual
+pizza era, quando deveria ser uma escolha dentro do produto Pizza.
+
+Modelo de dados, dois níveis: **grupo** (`product_option_groups` — nome,
+`type: 'single'|'multiple'`, `required`, ordem) e **opção**
+(`product_options` — nome, `price_delta >= 0`, ordem). Um produto pode ter
+quantos grupos quiser, cada um `single` (radio) ou `multiple` (checkbox),
+obrigatório ou não — testado ponta a ponta com os dois grupos juntos no
+mesmo produto. `price_delta` nunca é negativo por design (simplicidade e
+segurança); um "acompanhamento grátis obrigatório" (padrão comum em outras
+lojas do sistema — comida com side dish incluso, drink com sabor à
+escolha) é só um grupo `required` com todas as opções em `price_delta: 0`,
+sem precisar de nenhum campo extra.
+
+- `fetchMenu` (`lib/api.ts`) busca `product_option_groups`/`product_options`
+  via `!inner` em `products` (mesmo padrão de `fetchKitchenOrders`) e
+  anexa em `product.option_groups` — só populado nesse fluxo, produtos
+  embutidos em `Order`/`OrderItem` não têm isso (a exibição histórica usa o
+  snapshot, não o catálogo vivo).
+- `syncProductOptionGroups` apaga e recria todos os grupos/opções do
+  produto a cada "Salvar Produto" — seguro porque `order_items.selected_options`
+  é snapshot histórico (não FK viva), então recriar com ids novos não afeta
+  pedido já feito.
+- **Preço segue o mesmo princípio de `create_order_secure`**: o client
+  manda só `option_ids: uuid[]` por item; a function relê `price_delta` em
+  `product_options`, valida que cada opção pertence a um grupo do MESMO
+  `product_id` do item (rejeita opção de outro produto, testado
+  ativamente) e soma ao preço antes de gravar `price_at_time`.
+  "`required`" só é validado no client (UX, não segurança de preço).
+- Carrinho: `CartItem.selectedOptions` (com ids, pro RPC e pro dedup) vs.
+  `OrderItem.selected_options` (snapshot pós-pedido, só nome/price_delta) —
+  assimetria proposital, estágios de vida diferentes do mesmo dado. Dedup
+  do carrinho (`AppContext.addToCart`) inclui uma assinatura ordenada dos
+  `option_id` escolhidos, senão duas variações do mesmo produto se
+  fundiriam numa linha só.
+- `lib/labels.ts` → `getOrderItemDisplayName(item)` centraliza a exibição
+  ("Pizza Marguerita (Catupiry)") — usada em todo lugar que antes fazia
+  `item.product?.name` inline (KDS, comanda, histórico, `printBillReceipt`).
+  `printKitchenTicket` (`lib/print.ts`) tem uma linha própria "Adicional:
+  ..." separada da `observation` (texto livre do cliente).
+- Botão de adição rápida ("+") no card do produto: se o produto tem
+  qualquer grupo `required`, abre o modal completo em vez de adicionar
+  direto (não dá pra pular uma escolha obrigatória); só com grupos
+  opcionais, continua adicionando direto sem adicional nenhum.
 
 ## Design system (`app/globals.css` + `components/ui.tsx`)
 
@@ -338,15 +446,37 @@ navegador escura também, antes mesmo de logar. Aplicada nas 4 telas de login
 obrigatória"). Regra geral: **telas de pré-autenticação sempre claras**; o
 modo escuro só existe depois do login, dentro do próprio painel.
 
-**`.auth-shell`/`.auth-mesh`/`.auth-orb`/`.auth-grain`** — efeito de
-profundidade (mesh gradient + blobs desfocados animados + grain) usado nas 4
-telas de login e no 404. Não usar em telas fora desse conjunto sem necessidade
-— é um efeito pesado (várias camadas absolutas + blur).
+**`components/AuthBackdrop.tsx`** — substituiu o antigo padrão
+`.auth-shell`/`.auth-mesh`/`.auth-orb`/`.auth-grain` (2026-07-04). Fundo azul
+sólido `#484DB5` fixo (sempre `.force-light`, independente do tema), forma
+curva decorativa e duas camadas de nuvem no rodapé (paths reais extraídos do
+site institucional norteparanegocios.com.br, animação `cloud-drift` lenta,
+sem parallax de mouse — isso é login, não precisa de show). Usado nas 4
+telas de login (Lojista, Master, troca de senha, seletor de loja da conta
+universal) e no 404. Fonte do projeto: **Atkinson Hyperlegible** (trocada de
+Plus Jakarta Sans, mesma fonte do site institucional) via `--font-sans-src`
+em `app/layout.tsx`.
 
-## Landing page (`app/page.tsx`)
+**Cardápio do cliente (`ClientModule.tsx`)** tem identidade própria "carta de
+vinhos": cabeçalho e barra de categorias sempre na cor `--ink` (com ícone por
+categoria, heurística de nome em `categoryIcon()`), produtos em linha
+editorial (medalhão + nome + etiqueta de origem, não card com placeholder de
+foto — pensado pra funcionar bem SEM foto real, já que a maioria dos
+produtos importados de ERP como Omie não vem com imagem), preço em dourado
+(`WINE_GOLD`, hex local só nesse arquivo, mesmo padrão de const de marca já
+usado em `AuthBackdrop`/`app/page.tsx`). Categoria ativa arrasta com o mouse
+(`onMouseDown`/`onMouseMove` no container de scroll) e faz auto-scroll pro
+centro ao trocar.
 
-Client Component (precisa de `useEffect`/`useRef` pro parallax do mouse nas
-nuvens). Estilo copiado **literalmente** do hero de produção do
+## Landing pages (`app/page.tsx` + `app/acesso/page.tsx`)
+
+Duas landings, separadas por segurança (2026-07-04): `app/page.tsx` é a
+**pública** (raiz do domínio, qualquer um vê) — só o botão "Área do
+Lojista", o botão do Master Admin nunca aparece aqui. `app/acesso/page.tsx`
+é a **privada** (link discreto, só a equipe Norte conhece) — mesmo visual,
+com os dois botões (Painel Master + Área do Lojista). Ambas são Client
+Component (precisam de `useEffect`/`useRef` pro parallax do mouse nas
+nuvens) com estilo copiado **literalmente** do hero de produção do
 norteparanegocios.com.br (cores em hex fixo, paths SVG das nuvens extraídos do
 DOM renderizado real, não reconstruídos à mão): fundo azul sólido `#484DB5`,
 duas camadas de nuvem no rodapé (cinza translúcida atrás, branca na frente,
@@ -422,17 +552,46 @@ correção só de código):**
   contratado já cobrir por padrão (confirmar se Storage — logos, fotos,
   certificado fiscal — está incluído, não só o Postgres).
 
+**Implementado (2026-07-04):** sessão grande, quatro frentes.
+
+- **Fechamento de vazamento crítico**: `store_users`/`system_admins` tinham
+  RLS permissiva demais cobrindo `SELECT`, expondo senha em texto puro de
+  lojas/admin reais pra qualquer um com a chave anônima — corrigido na
+  migration 014 (ver seção de migrations acima). Achado e corrigido antes
+  de qualquer outra coisa nesta sessão, por ser o mais grave.
+- **Conta universal** (login único acessando todas as lojas + Master
+  Admin) + landing pública separada da privada (`/` só Lojista, `/acesso`
+  com os dois botões) — ver seções dedicadas acima.
+- **Redesign completo inspirado no site institucional
+  norteparanegocios.com.br**: fonte Atkinson Hyperlegible, `AuthBackdrop`
+  (substituiu `.auth-shell`), identidade "carta de vinhos" no cardápio do
+  cliente (ícone por categoria, medalhão em vez de placeholder de foto,
+  preço em dourado, categorias arrastáveis com auto-scroll).
+- **Adicionais/opcionais de produto** (recurso nativo, migration 016) —
+  ver seção dedicada acima. Motivado por uma loja de vinhos/bistrô real
+  que precisou reorganizar o cardápio (248 produtos importados via API do
+  Omie, mesma integração que o `ntb-estoque-next` já usa) e tinha
+  "Bordas de Pizza" cadastrada errada como categoria de produtos soltos.
+- Corrigido de quebra (não relacionado às features acima, achado ao
+  testar): `next.config.ts` não tinha o hostname do Storage do próprio
+  Supabase do projeto nos `remotePatterns` — qualquer produto com imagem
+  enviada direto pro Storage (em vez de Cloudinary) derrubava a tela
+  inteira que tentasse mostrá-lo.
+
 **Standby — novas features, não iniciadas por decisão explícita do
 usuário (2026-07-02):** taxa de serviço configurável por loja, exportar
-CSV, comparação vs. período anterior no dashboard, avaliação pós-refeição,
-identidade do cliente por telefone/WhatsApp, delivery/retirada, cupom de
-desconto, multi-idioma (inclui a camada de i18n em si), notificação push
-real (Web Push/Service Worker), programa de fidelidade, dashboard
-cross-loja pro Master Admin, campo de custo/margem por produto (CMV),
-reserva de mesa antecipada, integração com o Norte Estoque (ntb-estoque —
-baixa de ingrediente via ficha técnica), LGPD (exportação/exclusão de
-dado do cliente). Detalhamento de cada item em
-`docs/plans/2026-07-02-varredura-correcoes-plan.md`.
+CSV, comparação vs. período anterior no dashboard, identidade do cliente
+por telefone/WhatsApp, delivery/retirada, cupom de desconto, multi-idioma
+(inclui a camada de i18n em si), notificação push real (Web
+Push/Service Worker), programa de fidelidade, dashboard cross-loja pro
+Master Admin, campo de custo/margem por produto (CMV), reserva de mesa
+antecipada, integração com o Norte Estoque (ntb-estoque — baixa de
+ingrediente via ficha técnica), LGPD (exportação/exclusão de dado do
+cliente). Detalhamento de cada item em
+`docs/plans/2026-07-02-varredura-correcoes-plan.md`. ("Avaliação
+pós-refeição" saiu desta lista — já implementada, ver `order_ratings` na
+seção de migrations e a limitação conhecida na seção de dívidas técnicas
+abaixo.)
 
 **Integração fiscal, planejada, nada implementado ainda (anotado
 2026-07-03, não é pra agir sem pedido explícito):** o usuário quer, além
@@ -463,13 +622,17 @@ integração de verdade.
 
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
-- **Senha em texto puro** em `system_admins`/`store_users` (sem hash). A
-  comparação em si migrou pro servidor (`authenticate_*_secure`, rate-limit
-  incluído — ver "Decisões de arquitetura"), mas a senha **continua** gravada
-  sem hash na tabela. Ainda é a dívida de segurança mais séria do sistema —
-  só ficou mais difícil de forçar por brute-force, não mais segura em caso
-  de acesso direto ao banco.
-- **`StoreModule.tsx` está grande demais** (~3300 linhas — a unificação de
+- **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
+  (sem hash). A comparação em si migrou pro servidor (`authenticate_*_secure`,
+  rate-limit incluído — ver "Decisões de arquitetura"), e desde a migration
+  014 (2026-07-04) a leitura via `SELECT` direto pela chave anônima também
+  foi fechada (era um vazamento ativo real, não só teórico — qualquer um
+  com a chave anônima pública conseguia ler a senha de qualquer
+  lojista/admin). A senha **continua** gravada sem hash na tabela, então
+  ainda é a dívida de segurança mais séria do sistema em caso de acesso
+  direto ao banco (ex.: vazamento de credencial do Postgres) — só deixou de
+  ser explorável só com a chave anônima pública.
+- **`StoreModule.tsx` está grande demais** (~3400 linhas — a unificação de
   `KitchenView`+`BarView` em `KdsView` removeu ~170 linhas duplicadas, mas o
   arquivo continua concentrando componentes não relacionados). Candidato
   natural a quebrar em `components/modules/store/` por sub-área (mesas,
