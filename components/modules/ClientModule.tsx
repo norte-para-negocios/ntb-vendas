@@ -542,18 +542,24 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // (achado de performance #7). Também navegável por teclado: é um
 // <button> de verdade (Tab foca, Enter/Space aciona), em vez do <div
 // onClick> anterior (achado de UX #1).
-const ProductCard = React.memo(function ProductCard({ product, onSelect, disabled, style }: {
+const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style }: {
     product: Product,
     onSelect: (product: Product) => void,
+    onQuickAdd?: (product: Product) => void,
     disabled?: boolean,
     style?: React.CSSProperties
 }) {
+    // Card é um div-role-button (não <button>) pra poder aninhar o botão de
+    // "+" de adição rápida por dentro sem HTML inválido (button dentro de button).
+    const open = () => { if (!disabled) onSelect(product); };
     return (
-        <button
-            type="button"
-            onClick={() => onSelect(product)}
-            disabled={disabled}
-            className="u-grow-in group flex gap-3 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)]/40 rounded-[var(--r-md)] p-3 text-left w-full u-card u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1"
+        <div
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            onClick={open}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+            aria-disabled={disabled}
+            className={`u-grow-in group flex gap-3 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)]/40 rounded-[var(--r-md)] p-3 text-left w-full u-card u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1 ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
             style={{ boxShadow: 'var(--shadow-sm)', ...style }}
         >
             {product.image_url ? (
@@ -567,21 +573,31 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, disable
             )}
             <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
                 <div>
-                    <div className="flex justify-between items-start gap-2">
-                        <h3 className="font-medium text-[var(--text)] leading-snug text-[14px]">{product.name}</h3>
-                        <span className="font-semibold text-[var(--brand)] whitespace-nowrap num text-[14px] flex-shrink-0">R$ {product.price.toFixed(2)}</span>
-                    </div>
+                    <h3 className="font-semibold text-[var(--text)] leading-snug text-[14px]">{product.name}</h3>
                     {product.description && (
                         <p className="text-[12px] text-[var(--text-muted)] mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
                     )}
+                    {!!product.prep_time_minutes && (
+                        <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] mt-1.5">
+                            <Clock size={11} /> {product.prep_time_minutes} min
+                        </span>
+                    )}
                 </div>
-                {product.prep_time_minutes && (
-                    <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] mt-1.5">
-                        <Clock size={11} /> {product.prep_time_minutes} min
-                    </div>
-                )}
+                <div className="flex items-center justify-between gap-2 mt-2">
+                    <span className="font-bold text-[var(--brand)] whitespace-nowrap num text-[15px]">R$ {product.price.toFixed(2)}</span>
+                    {onQuickAdd && (
+                        <button
+                            type="button"
+                            aria-label={`Adicionar ${product.name}`}
+                            onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
+                            className="w-8 h-8 rounded-full bg-[var(--brand)] text-white flex items-center justify-center shadow-sm u-motion u-press hover:bg-[var(--brand-strong)] flex-shrink-0"
+                        >
+                            <Plus size={17} />
+                        </button>
+                    )}
+                </div>
             </div>
-        </button>
+        </div>
     );
 });
 ProductCard.displayName = 'ProductCard';
@@ -1143,6 +1159,28 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
+
+    // Barra de categorias: arrastável com o mouse (desktop) + auto-scroll da
+    // categoria ativa pra dentro da vista. No mobile o toque já rola nativo.
+    const navScrollRef = useRef<HTMLDivElement>(null);
+    const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const navDrag = useRef({ down: false, moved: false, startX: 0, startScroll: 0 });
+    const onNavDown = (e: React.MouseEvent) => {
+        const el = navScrollRef.current; if (!el) return;
+        navDrag.current = { down: true, moved: false, startX: e.pageX, startScroll: el.scrollLeft };
+    };
+    const onNavMove = (e: React.MouseEvent) => {
+        if (!navDrag.current.down) return;
+        const el = navScrollRef.current; if (!el) return;
+        const dx = e.pageX - navDrag.current.startX;
+        if (Math.abs(dx) > 3) navDrag.current.moved = true;
+        el.scrollLeft = navDrag.current.startScroll - dx;
+    };
+    const onNavUp = () => { navDrag.current.down = false; };
+    useEffect(() => {
+        const el = chipRefs.current[activeCategory];
+        el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }, [activeCategory]);
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showBill, setShowBill] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -1494,22 +1532,38 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 </div>
             )}
 
-            {/* Category Nav */}
-            <div className={`sticky ${isWaitingBill ? 'top-[96px]' : 'top-[60px]'} bg-[var(--surface)] z-20 border-b border-[var(--border)] overflow-x-auto flex gap-2 px-4 py-3 no-scrollbar`}>
-                {categories.map((cat, i) => (
-                    <button
-                        key={cat.id}
-                        onClick={() => setActiveCategory(cat.id)}
-                        className={`u-stagger whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-medium u-motion u-press-sm ${
-                            activeCategory === cat.id
-                                ? 'bg-[var(--brand)] text-white'
-                                : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] border border-[var(--border)]'
-                        }`}
-                        style={stagger(Math.min(i, 10) * 30)}
+            {/* Category Nav — arrastável (mouse), rola no toque, degradê nas bordas */}
+            <div className={`sticky ${isWaitingBill ? 'top-[96px]' : 'top-[60px]'} bg-[var(--surface)] z-20 border-b border-[var(--border)]`}>
+                <div className="relative">
+                    <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-[var(--surface)] to-transparent z-10" />
+                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[var(--surface)] to-transparent z-10" />
+                    <div
+                        ref={navScrollRef}
+                        onMouseDown={onNavDown}
+                        onMouseMove={onNavMove}
+                        onMouseUp={onNavUp}
+                        onMouseLeave={onNavUp}
+                        className="overflow-x-auto no-scrollbar flex gap-2 px-4 py-3 cursor-grab active:cursor-grabbing select-none"
                     >
-                        {cat.name}
-                    </button>
-                ))}
+                        {categories.map((cat) => {
+                            const active = activeCategory === cat.id;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    ref={(el) => { chipRefs.current[cat.id] = el; }}
+                                    onClick={() => { if (!navDrag.current.moved) setActiveCategory(cat.id); }}
+                                    className={`whitespace-nowrap px-4 py-2 rounded-full text-[13px] font-semibold u-motion flex-shrink-0 ${
+                                        active
+                                            ? 'bg-[var(--brand)] text-white shadow-sm'
+                                            : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--brand-soft)] border border-[var(--border)]'
+                                    }`}
+                                >
+                                    {cat.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
 
             {/* Search and Sort */}
@@ -1558,6 +1612,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         key={product.id}
                         product={product}
                         onSelect={setSelectedProduct}
+                        onQuickAdd={(p) => { addToCart(p, 1, ''); toast.success(`${p.name} adicionado`); }}
                         disabled={isWaitingBill}
                         style={stagger(Math.min(i, 10) * 30)}
                     />
