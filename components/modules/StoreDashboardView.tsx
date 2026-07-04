@@ -217,7 +217,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
     const counterStats = calcStats(counterSales);
 
     const StatCard = ({ title, value, subtitle, icon: Icon, accentColor }: any) => (
-        <Card accentColor={accentColor} className="p-4 pl-5 shadow-sm">
+        <Card accentColor={accentColor} className="u-grow-in u-card p-4 pl-5 shadow-sm">
             <div className="flex items-center justify-between">
                 <div>
                     <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">{title}</p>
@@ -244,8 +244,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                         { label: 'Hoje', stats: dailyStats },
                         { label: 'Esta Semana', stats: weeklyStats },
                         { label: 'Este Mês', stats: monthlyStats },
-                    ].map(({ label, stats }) => (
-                        <Card key={label} className={cardCls}>
+                    ].map(({ label, stats }, i) => (
+                        <Card key={label} className={`${cardCls} u-grow-in u-card`} style={{ animationDelay: `${i * 60}ms` }}>
                             <h3 className="font-bold text-[var(--text)] mb-3 border-b border-[var(--border)] pb-2">{label}</h3>
                             <div className="space-y-2">
                                 <div className="flex justify-between"><span className="text-sm text-[var(--text-muted)]">Total:</span><span className="font-bold text-[var(--brand)]">R$ {stats.total.toFixed(2)}</span></div>
