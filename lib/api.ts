@@ -18,10 +18,7 @@ export const authenticateAdmin = async (username: string, password: string): Pro
 };
 
 export const updateAdminPassword = async (userId: string, newPassword: string) => {
-  const { error } = await supabase
-    .from('system_admins')
-    .update({ password: newPassword, must_change_password: false })
-    .eq('id', userId);
+  const { error } = await supabase.rpc('update_admin_password_secure', { p_user_id: userId, p_new_password: newPassword });
   if (error) throw error;
 };
 
@@ -72,10 +69,7 @@ export const authenticateStoreUser = async (email: string, password: string): Pr
 };
 
 export const updateStoreUserPassword = async (userId: string, newPassword: string) => {
-  const { error } = await supabase
-    .from('store_users')
-    .update({ password: newPassword, must_change_password: false })
-    .eq('id', userId);
+  const { error } = await supabase.rpc('update_store_user_password_secure', { p_user_id: userId, p_new_password: newPassword });
   if (error) throw error;
 };
 
@@ -84,8 +78,10 @@ export const updateStoreUserPassword = async (userId: string, newPassword: strin
 // localStorage no login bem-sucedido e revalida a loja com a mesma checagem
 // de authenticateStoreUser (loja precisa existir e continuar ativa); nunca
 // reautentica por senha, só usada quando já existe uma sessão local salva.
+// Passa por uma RPC (nunca select direto): store_users não tem mais policy
+// de SELECT pra anon desde a 014_fecha_vazamento_senhas.sql.
 export const fetchStoreUserById = async (userId: string): Promise<(StoreUser & { store: Store }) | null> => {
-  const { data, error } = await supabase.from('store_users').select('*').eq('id', userId).single();
+  const { data, error } = await supabase.rpc('fetch_store_user_by_id_secure', { p_user_id: userId });
   if (error || !data) return null;
 
   const store = await fetchStoreById(data.store_id);
@@ -94,49 +90,39 @@ export const fetchStoreUserById = async (userId: string): Promise<(StoreUser & {
   return { ...data, store };
 };
 
+// As 4 funções abaixo passam por RPC (nunca acesso direto à tabela):
+// store_users não tem mais nenhuma policy pra anon desde a
+// 014_fecha_vazamento_senhas.sql (era de onde vazava a senha em texto
+// puro de todas as lojas reais).
 export const fetchStoreTeamMembers = async (storeId: string): Promise<StoreUser[]> => {
-  const { data, error } = await supabase
-    .from('store_users')
-    .select('*')
-    .eq('store_id', storeId)
-    .order('name');
+  const { data, error } = await supabase.rpc('fetch_store_team_members_secure', { p_store_id: storeId });
   if (error) { console.error('Error fetching store team:', error); return []; }
   return data || [];
 };
 
 export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any }) => {
-  const { data, error } = await supabase
-    .from('store_users')
-    .insert([{
-      store_id: storeId,
-      name: userData.name,
-      email: userData.email,
-      password: userData.password || '123456',
-      role: userData.role,
-      permissions: userData.permissions,
-      must_change_password: true,
-    }])
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc('create_store_team_member_secure', {
+    p_store_id: storeId,
+    p_name: userData.name,
+    p_email: userData.email,
+    p_password: userData.password || '123456',
+    p_role: userData.role,
+    p_permissions: userData.permissions,
+  });
   if (error) throw error;
+  if (!data?.success) throw new Error(data?.message || 'Erro ao criar usuário.');
   return data;
 };
 
 export const updateStoreTeamMember = async (userId: string, userData: { name?: string; email?: string; role?: string; permissions?: any; password?: string }) => {
-  const updates: any = { ...userData };
-  if (updates.password) updates.must_change_password = true;
-  const { data, error } = await supabase
-    .from('store_users')
-    .update(updates)
-    .eq('id', userId)
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: userData });
   if (error) throw error;
+  if (!data?.success) throw new Error(data?.message || 'Erro ao atualizar usuário.');
   return data;
 };
 
 export const deleteStoreTeamMember = async (userId: string) => {
-  const { error } = await supabase.from('store_users').delete().eq('id', userId);
+  const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId });
   if (error) throw error;
 };
 
@@ -176,18 +162,20 @@ export const fetchStoreById = async (storeId: string): Promise<Store | null> => 
   return data;
 };
 
+// As 4 funções abaixo (visão do Master Admin) também passam por RPC,
+// mesmo motivo das equivalentes do lojista acima.
 export const createStoreUser = async (storeId: string, name: string, email: string, password: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { error } = await supabase.from('store_users').insert({
-      store_id: storeId, name, email, password,
-      role: 'owner',
-      permissions: { tables: true, counter: true, kitchen: true, menu: true, admin: true },
-      must_change_password: true,
+    const { data, error } = await supabase.rpc('create_store_team_member_secure', {
+      p_store_id: storeId,
+      p_name: name,
+      p_email: email,
+      p_password: password,
+      p_role: 'owner',
+      p_permissions: { tables: true, counter: true, kitchen: true, menu: true, admin: true },
     });
-    if (error) {
-      if (error.code === '23505') return { success: false, message: 'Este e-mail já está cadastrado nesta loja.' };
-      throw error;
-    }
+    if (error) throw error;
+    if (!data?.success) return { success: false, message: data?.message };
     return { success: true };
   } catch (error: any) {
     console.error('Create User Error:', error);
@@ -197,8 +185,9 @@ export const createStoreUser = async (storeId: string, name: string, email: stri
 
 export const updateStoreUser = async (userId: string, updates: Partial<StoreUser> & { password?: string }): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { error } = await supabase.from('store_users').update(updates).eq('id', userId);
+    const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: updates });
     if (error) throw error;
+    if (!data?.success) return { success: false, message: data?.message };
     return { success: true };
   } catch (error: any) {
     return { success: false, message: error.message };
@@ -207,7 +196,7 @@ export const updateStoreUser = async (userId: string, updates: Partial<StoreUser
 
 export const deleteStoreUser = async (userId: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { error } = await supabase.from('store_users').delete().eq('id', userId);
+    const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId });
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -216,12 +205,9 @@ export const deleteStoreUser = async (userId: string): Promise<{ success: boolea
 };
 
 export const fetchStoreUsers = async (): Promise<(StoreUser & { store: Store })[]> => {
-  const { data, error } = await supabase
-    .from('store_users')
-    .select('*, store:stores(*)')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.rpc('fetch_all_store_users_secure');
   if (error) { console.error('Fetch Users Error:', error); return []; }
-  return data as any;
+  return (data as any) || [];
 };
 
 // Idem fetchStoreBySlug: distingue erro de rede/timeout de "cardápio vazio de
