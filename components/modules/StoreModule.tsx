@@ -6,7 +6,7 @@ import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, 
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -18,6 +18,7 @@ import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/pr
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem } from '@/lib/calc';
+import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
 // StoreDashboardView importa recharts (bundle pesado); cozinha/bar/balcão
@@ -790,7 +791,21 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
 
     useEffect(() => {
-        if(product) { setQty(1); setNotes(''); setSelections({}); }
+        if (product) {
+            setQty(1);
+            setNotes('');
+            // Grupo unico obrigatorio (ex: "Tamanho" P/M/G) vem pre-selecionado
+            // na 1a opcao disponivel, em vez de forcar o garcom a clicar antes
+            // de poder lancar o item.
+            const initialSelections: Record<string, string[]> = {};
+            (product.option_groups || []).forEach(group => {
+                if (group.type === 'single' && group.required) {
+                    const firstAvailable = group.options.find(o => o.available !== false);
+                    if (firstAvailable) initialSelections[group.id] = [firstAvailable.id];
+                }
+            });
+            setSelections(initialSelections);
+        }
     }, [product]);
 
     if (!product) return null;
@@ -2296,6 +2311,10 @@ const parseOptionalInt = (value: string): number | null => {
     return Number.isNaN(n) ? null : n;
 };
 
+// Rotulos curtos de dia da semana pro modal de horario da categoria (0 =
+// domingo, mesmo indice usado em Category.available_days/getDay()).
+const SCHEDULE_DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
 const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
     const storeId = store.id;
     const [categories, setCategories] = useState<Category[]>([]);
@@ -2303,7 +2322,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [newCatName, setNewCatName] = useState('');
-    
+
+    // Horario/turno da categoria (migration 018 — ver lib/schedule.ts):
+    // modal pequeno aberto a partir do icone de relogio no chip da
+    // categoria, ver Task 3 do plano 2026-07-05.
+    const [scheduleCategory, setScheduleCategory] = useState<Category | null>(null);
+    const [scheduleAllDay, setScheduleAllDay] = useState(true);
+    const [scheduleFrom, setScheduleFrom] = useState('');
+    const [scheduleUntil, setScheduleUntil] = useState('');
+    const [scheduleDays, setScheduleDays] = useState<number[]>([]);
+    const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
     // Product Form
     const [pName, setPName] = useState('');
     const [pDesc, setPDesc] = useState('');
@@ -2470,6 +2499,38 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         if (await confirm({ message: 'Excluir categoria? Produtos nela podem ficar órfãos.', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteCategory(id);
             loadMenu();
+        }
+    };
+
+    const openScheduleModal = (cat: Category) => {
+        setScheduleCategory(cat);
+        const hasSchedule = Boolean(cat.available_from || cat.available_until || (cat.available_days && cat.available_days.length > 0));
+        setScheduleAllDay(!hasSchedule);
+        setScheduleFrom(cat.available_from ? cat.available_from.slice(0, 5) : '');
+        setScheduleUntil(cat.available_until ? cat.available_until.slice(0, 5) : '');
+        setScheduleDays(cat.available_days || []);
+    };
+
+    const toggleScheduleDay = (day: number) => {
+        setScheduleDays(prev => (prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort((a, b) => a - b)));
+    };
+
+    const handleSaveSchedule = async () => {
+        if (!scheduleCategory) return;
+        setIsSavingSchedule(true);
+        try {
+            await updateCategorySchedule(scheduleCategory.id, {
+                available_from: scheduleAllDay ? null : (scheduleFrom || null),
+                available_until: scheduleAllDay ? null : (scheduleUntil || null),
+                available_days: scheduleAllDay || scheduleDays.length === 0 ? null : scheduleDays,
+            });
+            setScheduleCategory(null);
+            loadMenu();
+        } catch (e) {
+            console.error('Error updating category schedule', e);
+            toast.error('Erro ao salvar horário da categoria.');
+        } finally {
+            setIsSavingSchedule(false);
         }
     };
 
@@ -2655,7 +2716,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 {...provided.droppableProps}
                                 ref={provided.innerRef}
                             >
-                                {categories.map((cat, index) => (
+                                {categories.map((cat, index) => {
+                                    const scheduleLabel = formatScheduleLabel(cat);
+                                    return (
                                     <Draggable key={cat.id} draggableId={cat.id} index={index}>
                                         {(provided, snapshot) => (
                                             <div
@@ -2667,13 +2730,20 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                     <GripVertical size={16} />
                                                 </div>
                                                 <span className="font-bold text-[var(--text)]">{cat.name}</span>
+                                                {scheduleLabel && (
+                                                    <Badge color="bg-[var(--info)]/10 text-[var(--info)]">{scheduleLabel}</Badge>
+                                                )}
+                                                <button onClick={() => openScheduleModal(cat)} className="text-[var(--text-muted)]/50 hover:text-[var(--brand)] opacity-0 group-hover:opacity-100 u-motion u-press">
+                                                    <Clock size={14}/>
+                                                </button>
                                                 <button onClick={() => handleDeleteCategory(cat.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
                                                     <X size={14}/>
                                                 </button>
                                             </div>
                                         )}
                                     </Draggable>
-                                ))}
+                                    );
+                                })}
                                 {provided.placeholder}
                                 {categories.length === 0 && <span className="text-[var(--text-muted)] text-sm italic">Nenhuma categoria criada.</span>}
                             </div>
@@ -2881,6 +2951,52 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
 
                     <Button className="w-full h-12 mt-4" onClick={handleSaveProduct} isLoading={isLoading}>Salvar Produto</Button>
+                </div>
+            </Modal>
+
+            {/* CATEGORY SCHEDULE MODAL */}
+            <Modal isOpen={!!scheduleCategory} onClose={() => setScheduleCategory(null)} title={`Horário — ${scheduleCategory?.name || ''}`}>
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                        <div>
+                            <h4 className="font-bold text-sm text-[var(--text)]">Disponível o dia todo</h4>
+                            <p className="text-xs text-[var(--text-muted)]">Desligue para restringir esta categoria a um horário e/ou dias específicos.</p>
+                        </div>
+                        <button
+                            onClick={() => setScheduleAllDay(prev => !prev)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${scheduleAllDay ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${scheduleAllDay ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+
+                    {!scheduleAllDay && (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input label="Das" type="time" value={scheduleFrom} onChange={e => setScheduleFrom(e.target.value)} />
+                                <Input label="Até" type="time" value={scheduleUntil} onChange={e => setScheduleUntil(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-sm font-semibold text-[var(--text)] block mb-1.5">Dias da semana</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {SCHEDULE_DAY_LABELS.map((label, day) => (
+                                        <label
+                                            key={day}
+                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer u-motion ${
+                                                scheduleDays.includes(day) ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
+                                            }`}
+                                        >
+                                            <input type="checkbox" className="hidden" checked={scheduleDays.includes(day)} onChange={() => toggleScheduleDay(day)} />
+                                            {label}
+                                        </label>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-[var(--text-muted)] mt-1">Nenhum dia marcado = todos os dias.</p>
+                            </div>
+                        </>
+                    )}
+
+                    <Button className="w-full h-12 mt-2" onClick={handleSaveSchedule} isLoading={isSavingSchedule}>Salvar</Button>
                 </div>
             </Modal>
         </div>
