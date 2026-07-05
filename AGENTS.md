@@ -303,15 +303,26 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   grupo do mesmo produto, e somar `price_delta` ao preço antes de gravar
   `price_at_time`. Ver "Adicionais/opcionais de produto" abaixo pro desenho
   completo.
+- **`017_adicionais_padrao.sql`**: `min_select`/`max_select` em
+  `product_option_groups`; `available` em `product_options`; function nova
+  `sync_product_option_groups` (RPC atômico, substitui o padrão
+  apaga+recria via múltiplas chamadas REST separadas do client, que não
+  era transacional); `create_order_secure` ganha dedup (`select distinct`)
+  e limite de `option_ids` por item (30) e de itens por pedido (100) —
+  achado de segurança: `option_id` duplicado no mesmo item não era
+  filtrado, permitindo forçar milhares de round-trips numa única chamada
+  RPC pública sem autenticação.
 
-Todas as migrations (001 a 016) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 017) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
 `create_order_secure` com e sem adicionais, `open_table_session`,
 rate-limit de login e de PIN, bucket `store-certificates` com
 upload/leitura de status/remoção funcionando de ponta a ponta via
 `/api/certificado`, `order_items.store_id`, autenticação universal nos dois
 painéis, adicionais de produto com grupo único/múltiplo/obrigatório
-testados ponta a ponta na loja "Japanese").
+testados ponta a ponta na loja "Japanese", `sync_product_option_groups` e
+os novos campos de min/max/disponibilidade da migration 017 verificados
+via query direta após aplicar).
 
 ## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
 
@@ -379,7 +390,7 @@ sintético via `fetchUniversalUserById` + `fetchStoreById`. `StoreLayout`
 mostra um botão extra "Trocar de Loja" (`handleSwitchStore`, literalmente
 um alias de `handleLogout`) só quando `user.role === 'universal'`.
 
-## Adicionais/opcionais de produto (migration 016)
+## Adicionais/opcionais de produto (migrations 016 e 017)
 
 Qualquer produto pode ganhar grupos de opção configuráveis pelo lojista no
 próprio formulário de cadastro (`MenuManagementView`, seção "Adicionais
@@ -388,42 +399,95 @@ Pizza" como produtos soltos numa categoria própria, sem ligação com qual
 pizza era, quando deveria ser uma escolha dentro do produto Pizza.
 
 Modelo de dados, dois níveis: **grupo** (`product_option_groups` — nome,
-`type: 'single'|'multiple'`, `required`, ordem) e **opção**
-(`product_options` — nome, `price_delta >= 0`, ordem). Um produto pode ter
-quantos grupos quiser, cada um `single` (radio) ou `multiple` (checkbox),
-obrigatório ou não — testado ponta a ponta com os dois grupos juntos no
+`type: 'single'|'multiple'`, `required`, `min_select`/`max_select`
+opcionais — só fazem sentido pra `multiple`, `single` já é 0 ou 1 por
+natureza do radio button —, ordem) e **opção** (`product_options` — nome,
+`price_delta >= 0`, `available` boolean, ordem). Um produto pode ter
+quantos grupos quiser — testado ponta a ponta com os dois grupos juntos no
 mesmo produto. `price_delta` nunca é negativo por design (simplicidade e
-segurança); um "acompanhamento grátis obrigatório" (padrão comum em outras
-lojas do sistema — comida com side dish incluso, drink com sabor à
-escolha) é só um grupo `required` com todas as opções em `price_delta: 0`,
-sem precisar de nenhum campo extra.
+segurança); um "acompanhamento grátis obrigatório" é só um grupo
+`required` com todas as opções em `price_delta: 0`.
+
+**Virou "recurso padrão" de verdade em 2026-07-05** (antes só tinha sido
+testado no fluxo QR do cliente numa loja só). Varredura + correção
+cobriram:
+
+- **Fluxo do garçom lançando item manual na comanda** (`TablesView` →
+  `StoreTableMenu`/`StoreProductModal`) agora tem o MESMO seletor de
+  adicionais que o cliente (réplica funcional do `ProductModal`, visual
+  adaptado ao painel do lojista) — antes esse caminho não tinha seletor
+  nenhum, então um produto com grupo obrigatório era lançado sem escolher
+  nada e o preço saía errado.
+- **Sync atômico**: `syncProductOptionGroups` (`lib/api.ts`) hoje é uma
+  única chamada `supabase.rpc('sync_product_option_groups', ...)` — a
+  function faz apaga-e-recria numa transação só dentro do Postgres
+  (migration 017), substituindo o padrão antigo de várias chamadas REST
+  separadas (delete + N inserts) que podia falhar no meio e perder grupos
+  silenciosamente. Continua seguro pelo mesmo motivo de sempre:
+  `order_items.selected_options` é snapshot histórico, não FK viva.
+- **Validação de grupo obrigatório vazio**: salvar um grupo `required` sem
+  nenhuma opção bloqueia o "Salvar Produto" com erro claro — antes disso
+  passava batido e "brickava" o produto pro cliente (botão de adicionar
+  ficava desabilitado pra sempre, sem nenhum aviso pro lojista).
+- **`min_select`/`max_select`** em grupo `multiple` (ex.: "escolha até 2
+  sabores") — enforced no client (`ProductModal` desabilita checkbox extra
+  ao atingir o máximo) E o `missingRequired` usa um mínimo efetivo
+  (`max(min_select ou 1, 1)` se `required`) em vez de só checar
+  `length === 0`.
+- **Disponibilidade por opção** (`product_options.available`) — "acabou o
+  Catupiry" não exige mais apagar a opção (perdendo a configuração);
+  `fetchMenu` já filtra pra `available=true` no cardápio do cliente e no
+  fluxo do garçom (`includeUnavailable=false`, default), mas o
+  `MenuManagementView` (edição pelo lojista) chama
+  `fetchMenu(storeId, false, true)` pra continuar vendo e podendo
+  reativar as indisponíveis.
+- **Trava contra abuso em `create_order_secure`**: `option_ids` duplicado
+  no mesmo item agora é deduplicado (`select distinct`) antes do loop —
+  achado real: um client malicioso podia repetir o mesmo id válido
+  milhares de vezes numa única chamada RPC pública (sem autenticação,
+  cardápio é público) forçando milhares de round-trips de query. Limite
+  também de 100 itens por pedido e 30 opções por item.
+- **Reordenar opções dentro de um grupo** via drag-and-drop (mesmo padrão
+  `@hello-pangea/dnd` já usado pra categoria/produto).
+- **Relatório impresso, CSV e "Top 5" do dashboard** agora mostram
+  produto+adicional (`getOrderItemDisplayName`), não só a contagem/produto
+  base — "Pizza + Catupiry" e "Pizza + Mussarela" contam como linhas
+  separadas no ranking de mais vendidos.
+- Acessibilidade do seletor: `<fieldset>`/`<legend>` por grupo,
+  `aria-required` quando obrigatório, alvo de toque de 44px por opção
+  (mesmo padrão já usado nos botões +/- do carrinho).
+- `lib/api-mock.ts` (`USE_MOCK=true`) ganhou `syncProductOptionGroups`
+  (no-op) e `option_groups: []` no `fetchMenu` mockado — antes disso
+  **todo** "Salvar Produto" quebrava em modo mock, não só a parte de
+  adicionais (a função nem existia lá).
+
+**Limitação conhecida, não implementada de propósito (esforço alto
+demais pra agora):** meio-a-meio/combo de sabores (ex.: pizza metade um
+sabor, metade outro) como conceito próprio — não é modelável via grupo de
+opção comum, precisaria de um modelo de preço e de UI de seleção dupla
+diferentes. Fica documentado aqui até (se) for pedido explicitamente.
 
 - `fetchMenu` (`lib/api.ts`) busca `product_option_groups`/`product_options`
-  via `!inner` em `products` (mesmo padrão de `fetchKitchenOrders`) e
-  anexa em `product.option_groups` — só populado nesse fluxo, produtos
-  embutidos em `Order`/`OrderItem` não têm isso (a exibição histórica usa o
-  snapshot, não o catálogo vivo).
-- `syncProductOptionGroups` apaga e recria todos os grupos/opções do
-  produto a cada "Salvar Produto" — seguro porque `order_items.selected_options`
-  é snapshot histórico (não FK viva), então recriar com ids novos não afeta
-  pedido já feito.
+  via `!inner` em `products` (mesmo padrão de `fetchKitchenOrders`),
+  paralelizado com as queries de categorias/produtos (não roda mais depois
+  delas), com `.limit(500)` nas duas queries — e anexa em
+  `product.option_groups`, só populado nesse fluxo (produtos embutidos em
+  `Order`/`OrderItem` não têm isso; a exibição histórica usa o snapshot).
 - **Preço segue o mesmo princípio de `create_order_secure`**: o client
   manda só `option_ids: uuid[]` por item; a function relê `price_delta` em
   `product_options`, valida que cada opção pertence a um grupo do MESMO
-  `product_id` do item (rejeita opção de outro produto, testado
-  ativamente) e soma ao preço antes de gravar `price_at_time`.
-  "`required`" só é validado no client (UX, não segurança de preço).
+  `product_id` do item E está `available=true` (rejeita opção de outro
+  produto ou indisponível) e soma ao preço antes de gravar `price_at_time`.
+  "`required`"/min/max só são validados no client (UX, não segurança de
+  preço).
 - Carrinho: `CartItem.selectedOptions` (com ids, pro RPC e pro dedup) vs.
   `OrderItem.selected_options` (snapshot pós-pedido, só nome/price_delta) —
   assimetria proposital, estágios de vida diferentes do mesmo dado. Dedup
   do carrinho (`AppContext.addToCart`) inclui uma assinatura ordenada dos
   `option_id` escolhidos, senão duas variações do mesmo produto se
-  fundiriam numa linha só.
-- `lib/labels.ts` → `getOrderItemDisplayName(item)` centraliza a exibição
-  ("Pizza Marguerita (Catupiry)") — usada em todo lugar que antes fazia
-  `item.product?.name` inline (KDS, comanda, histórico, `printBillReceipt`).
-  `printKitchenTicket` (`lib/print.ts`) tem uma linha própria "Adicional:
-  ..." separada da `observation` (texto livre do cliente).
+  fundiriam numa linha só. `lib/labels.ts` tem duas funções de exibição
+  espelhadas pros dois estágios: `getOrderItemDisplayName` (pedido já
+  feito) e `getCartItemDisplayName` (carrinho, pré-pedido).
 - Botão de adição rápida ("+") no card do produto: se o produto tem
   qualquer grupo `required`, abre o modal completo em vez de adicionar
   direto (não dá pra pular uma escolha obrigatória); só com grupos
