@@ -313,16 +313,25 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   filtrado, permitindo forçar milhares de round-trips numa única chamada
   RPC pública sem autenticação.
 
-Todas as migrations (001 a 017) já foram aplicadas no banco de produção e
+- **`018_categoria_horario.sql`**: `available_from`/`available_until`
+  (`time`) e `available_days` (`int[]`) em `categories` — cardápio por
+  horário/turno, ver seção dedicada abaixo. Sem function nova (enforcement
+  100% client-side, mesmo princípio de `required`/min/max de adicionais).
+
+Todas as migrations (001 a 018) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
 `create_order_secure` com e sem adicionais, `open_table_session`,
 rate-limit de login e de PIN, bucket `store-certificates` com
 upload/leitura de status/remoção funcionando de ponta a ponta via
 `/api/certificado`, `order_items.store_id`, autenticação universal nos dois
 painéis, adicionais de produto com grupo único/múltiplo/obrigatório
-testados ponta a ponta na loja "Japanese", `sync_product_option_groups` e
-os novos campos de min/max/disponibilidade da migration 017 verificados
-via query direta após aplicar).
+testados ponta a ponta na loja "Japanese" e na "Bistrô Demo" via QA
+automatizado com Playwright em 2026-07-05 — 14 cenários, incluindo
+validação de grupo obrigatório vazio, filtro de indisponível, limite
+min/max de seleção, e o fluxo do garçom —, `sync_product_option_groups` e
+os campos de min/max/disponibilidade da migration 017 verificados via
+query direta após aplicar, colunas de horário da migration 018
+verificadas do mesmo jeito).
 
 ## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
 
@@ -492,6 +501,58 @@ diferentes. Fica documentado aqui até (se) for pedido explicitamente.
   qualquer grupo `required`, abre o modal completo em vez de adicionar
   direto (não dá pra pular uma escolha obrigatória); só com grupos
   opcionais, continua adicionando direto sem adicional nenhum.
+
+**"Tamanho" (P/M/G) não precisou de nenhum schema novo.** Já é modelável
+hoje com o que existe: um grupo `type='single'`, `required=true`,
+chamado "Tamanho" (ou qualquer nome), com as opções sendo os tamanhos e
+`price_delta` sendo o acréscimo sobre o preço base (P). Único ajuste de
+UX feito em 2026-07-05: em todo grupo `single`+`required`, a **primeira
+opção com `available !== false` vem pré-selecionada** por padrão (tanto
+no `ProductModal` do cliente quanto no `StoreProductModal` do garçom) —
+antes disso o cliente era obrigado a clicar manualmente até num grupo de
+escolha única obrigatória, o que é atrito desnecessário pro caso de uso
+mais comum (tamanho quase sempre tem um "padrão" natural, tipo Médio).
+
+## Cardápio por horário/turno (migration 018)
+
+Uma categoria inteira do cardápio pode ficar restrita a uma janela de
+horário e/ou dias da semana (ex.: categoria "Café da Manhã" só aparece
+das 07:00 às 11:00; "Menu Executivo" só de segunda a sexta). Motivado por
+uma necessidade real e comum de restaurante físico — cardápio muda de
+turno, diferente do problema de adicionais (que foi sobre variação
+*dentro* de um produto).
+
+- `categories.available_from`/`available_until` (`time`, nullable) e
+  `available_days` (`int[]`, nullable, 0=domingo..6=sábado) — os 3
+  null/undefined (default) = categoria sempre disponível, sem restrição
+  nenhuma. Nenhuma coluna nova em `products`; a granularidade é só por
+  categoria, decisão consciente (mais comum na prática — seção inteira
+  liga/desliga junto — e muito menos trabalho de cadastro pro lojista do
+  que configurar produto por produto).
+- `lib/schedule.ts` — `isCategoryAvailableNow(category, now?)` (função
+  pura, calcula se a categoria está disponível *agora*; trata o caso da
+  janela virar meia-noite, ex. "23:00 até 03:00") e
+  `formatScheduleLabel(category)` (string tipo "Disponível das 07:00 às
+  11:00", usada como badge no chip da categoria no painel do lojista).
+- **Enforcement é 100% client-side, decisão explícita** — mesmo princípio
+  já usado pra `required`/min/max de adicionais neste projeto: não existe
+  valor financeiro em jogo (ninguém "trapaceia" pedindo café da manhã às
+  14h; na pior das hipóteses a cozinha só prepara mesmo assim), então não
+  compensa a complexidade de validar isso em `create_order_secure`.
+  Nenhuma function nova no banco pra esta feature — só as 3 colunas.
+- `MenuManagementView`: ícone de relógio no chip da categoria abre um
+  modal (toggle "Disponível o dia todo" + horário + dias da semana).
+  Categoria com restrição configurada mostra o badge do
+  `formatScheduleLabel` direto no chip, sempre visível (não só no hover).
+- `ClientModule.tsx`: a barra de categorias filtra por
+  `isCategoryAvailableNow` — categoria fora da janela simplesmente não
+  aparece (mesmo comportamento que produto `available=false` já tem: some
+  inteiro, não fica desabilitada visível). Um `setInterval` de 60s força
+  reavaliação mesmo sem nenhuma outra mudança de estado (senão nada
+  faria o React perceber que "o relógio virou" o horário de corte
+  enquanto o cliente já está com o cardápio aberto); se a categoria ativa
+  deixar de estar disponível durante a visita, troca automaticamente pra
+  primeira categoria ainda disponível.
 
 ## Design system (`app/globals.css` + `components/ui.tsx`)
 
