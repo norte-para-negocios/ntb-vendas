@@ -620,6 +620,26 @@ autorização ou rejeição) é o mesmo. Confirmar o procedimento exato no
 portal da SEFAZ do estado específico da loja quando for desenhar essa
 integração de verdade.
 
+**Atualização 2026-07-05 (ainda só anotação, não é pra agir sem pedido
+explícito):** o usuário já tem o certificado digital cadastrado de pelo
+menos uma loja real (via `/api/certificado`, ver seção acima) e confirma
+que quer seguir pela via do certificado direto + SEFAZ (não descartou
+Omie de vez, mas essa é a prioridade citada). Duas frentes de integração
+com o **ntb-estoque** (`ntb-estoque-next`) foram mencionadas juntas:
+1. Emissão do cupom fiscal (NFC-e) usando o certificado já cadastrado.
+2. **Criar/concluir automaticamente uma Ordem de Produção no ntb-estoque a
+   cada pedido vendido no NTB Vendas** — o sistema veria qual prato foi
+   pedido e geraria a ordem de produção correspondente (ntb-estoque já tem
+   esse conceito de Ordem de Produção, ver memória do projeto). Isso é uma
+   extensão mais concreta da ideia genérica "integração com o Norte
+   Estoque" que já estava no backlog de features (ver lista de standby
+   abaixo) — precisa de: (a) um mapeamento prato→ficha técnica/produto do
+   ntb-estoque (hoje não existe nenhuma referência cruzada entre as duas
+   bases), (b) decidir se a comunicação é direta banco-a-banco, via API
+   REST de um pro outro, ou via alguma fila/webhook, e (c) tratar o caso de
+   pedido cancelado/estornado depois da ordem de produção já ter sido
+   criada. Nada disso foi desenhado ainda.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
