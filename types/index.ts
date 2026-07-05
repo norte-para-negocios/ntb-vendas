@@ -87,6 +87,7 @@ export interface ProductOption {
   group_id: string;
   name: string;
   price_delta: number;
+  available: boolean; // migration 017 — "acabou o Catupiry" sem apagar a opcao
   order: number;
 }
 
@@ -96,6 +97,8 @@ export interface ProductOptionGroup {
   name: string;
   type: 'single' | 'multiple';
   required: boolean;
+  min_select?: number | null; // migration 017 — so' se aplica a type='multiple', null = sem limite
+  max_select?: number | null;
   order: number;
   options: ProductOption[]; // anexado em runtime por fetchMenu, nao e coluna de banco
 }

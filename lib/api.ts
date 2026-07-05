@@ -214,55 +214,75 @@ export const fetchStoreUsers = async (): Promise<(StoreUser & { store: Store })[
 // verdade" (0 categorias/produtos é um estado legítimo, não um erro). Antes,
 // qualquer erro de rede virava silenciosamente `{ categories: [], products:
 // [] }` — indistinguível de uma loja que só ainda não cadastrou nada.
-// Anexa product_option_groups(+ product_options) aos produtos já carregados.
-// Filtro por loja via !inner em products (mesmo padrão de fetchKitchenOrders
-// — sem !inner o filtro não restringe as linhas devolvidas, só zera o campo
-// embutido, ver AGENTS.md). Opções vêm numa 2ª leitura (dependem dos ids de
-// grupo) em vez de embed de 2 níveis, por simplicidade e certeza de
-// comportamento.
-async function attachOptionGroups(products: Product[], storeId: string): Promise<Product[]> {
+// Busca product_option_groups(+ product_options) da loja inteira (não
+// depende da lista de produtos recebida — só do storeId), pra poder rodar
+// em paralelo com as queries de categorias/produtos em fetchMenu em vez de
+// depois delas. Filtro por loja via !inner em products (mesmo padrão de
+// fetchKitchenOrders — sem !inner o filtro não restringe as linhas
+// devolvidas, só zera o campo embutido, ver AGENTS.md). Opções vêm numa 2ª
+// leitura (dependem dos ids de grupo) em vez de embed de 2 níveis, por
+// simplicidade e certeza de comportamento. `.limit(500)` nas duas queries,
+// mesmo padrão de fetchActiveOrdersForTables/fetchKitchenOrders.
+// `includeUnavailable`: false/omitido (cardápio do cliente e fluxo de
+// pedido do garçom) filtra product_options só `available = true`; true
+// (MenuManagementView editando produto) traz todas, inclusive indisponíveis.
+async function fetchOptionGroupsByProduct(storeId: string, includeUnavailable = false): Promise<Map<string, ProductOptionGroup[]>> {
   const { data: groupsData, error: groupsError } = await supabase
     .from('product_option_groups')
     .select('*, product:products!inner(store_id)')
     .eq('product.store_id', storeId)
-    .order('order');
+    .order('order')
+    .limit(500);
   if (groupsError || !groupsData || groupsData.length === 0) {
     if (groupsError) console.error('Fetch product option groups error:', groupsError);
-    return products;
+    return new Map();
   }
 
   const groupIds = groupsData.map((g: any) => g.id);
-  const { data: optionsData, error: optionsError } = await supabase
-    .from('product_options')
-    .select('*')
-    .in('group_id', groupIds)
-    .order('order');
+  let optionsQuery = supabase.from('product_options').select('*').in('group_id', groupIds).order('order').limit(500);
+  if (!includeUnavailable) optionsQuery = optionsQuery.eq('available', true);
+  const { data: optionsData, error: optionsError } = await optionsQuery;
   if (optionsError) console.error('Fetch product options error:', optionsError);
 
-  const optionsByGroup = new Map<string, { id: string; group_id: string; name: string; price_delta: number; order: number }[]>();
+  const optionsByGroup = new Map<string, { id: string; group_id: string; name: string; price_delta: number; available: boolean; order: number }[]>();
   for (const o of optionsData || []) {
     const list = optionsByGroup.get(o.group_id) || [];
-    list.push({ id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), order: o.order });
+    list.push({ id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), available: o.available, order: o.order });
     optionsByGroup.set(o.group_id, list);
   }
 
   const groupsByProduct = new Map<string, ProductOptionGroup[]>();
   for (const g of groupsData as any[]) {
     const list = groupsByProduct.get(g.product_id) || [];
-    list.push({ id: g.id, product_id: g.product_id, name: g.name, type: g.type, required: g.required, order: g.order, options: optionsByGroup.get(g.id) || [] });
+    list.push({
+      id: g.id, product_id: g.product_id, name: g.name, type: g.type, required: g.required,
+      min_select: g.min_select ?? null, max_select: g.max_select ?? null, order: g.order,
+      options: optionsByGroup.get(g.id) || [],
+    });
     groupsByProduct.set(g.product_id, list);
   }
 
+  return groupsByProduct;
+}
+
+function mergeOptionGroups(products: Product[], groupsByProduct: Map<string, ProductOptionGroup[]>): Product[] {
   return products.map(p => ({ ...p, option_groups: groupsByProduct.get(p.id) || [] }));
 }
 
-export const fetchMenu = async (storeId: string, onlyAvailable = true): Promise<{ categories: Category[]; products: Product[]; error?: 'network' }> => {
+export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<{ categories: Category[]; products: Product[]; error?: 'network' }> => {
   try {
     const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
     let productsQuery = supabase.from('products').select('*').eq('store_id', storeId).order('order', { ascending: true, nullsFirst: false });
     if (onlyAvailable) productsQuery = productsQuery.eq('available', true);
 
-    const [cats, prods] = await Promise.all([categoriesQuery, productsQuery]);
+    // Query de adicionais paralelizada com categorias/produtos (não depende
+    // do resultado delas, só do storeId) — antes rodava sequencialmente
+    // depois do Promise.all abaixo.
+    const [cats, prods, groupsByProduct] = await Promise.all([
+      categoriesQuery,
+      productsQuery,
+      fetchOptionGroupsByProduct(storeId, includeUnavailable),
+    ]);
 
     if (prods.error && (prods.error.code === '42703' || prods.error.message?.includes('column') || prods.error.message?.includes('does not exist'))) {
       let fallbackQuery = supabase.from('products').select('*').eq('store_id', storeId);
@@ -272,7 +292,7 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true): Promise<
         console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
         return { categories: cats.data || [], products: fallbackProds.data || [], error: 'network' };
       }
-      return { categories: cats.data || [], products: await attachOptionGroups(fallbackProds.data || [], storeId) };
+      return { categories: cats.data || [], products: mergeOptionGroups(fallbackProds.data || [], groupsByProduct) };
     }
 
     if (cats.error || prods.error) {
@@ -280,7 +300,7 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true): Promise<
       return { categories: cats.data || [], products: prods.data || [], error: 'network' };
     }
 
-    return { categories: cats.data || [], products: await attachOptionGroups(prods.data || [], storeId) };
+    return { categories: cats.data || [], products: mergeOptionGroups(prods.data || [], groupsByProduct) };
   } catch (error) {
     console.error('Error fetching menu:', error);
     return { categories: [], products: [], error: 'network' };
@@ -328,34 +348,31 @@ export interface ProductOptionGroupInput {
   name: string;
   type: 'single' | 'multiple';
   required: boolean;
-  options: { name: string; price_delta: number }[];
+  min_select?: number | null;
+  max_select?: number | null;
+  options: { name: string; price_delta: number; available?: boolean }[];
 }
 
-// Apaga e recria todos os grupos/opcoes do produto a cada save do form do
-// lojista — seguro porque order_items.selected_options e' snapshot
-// historico (nao FK viva), entao recriar com ids novos nao afeta pedido ja
-// feito. Mais simples que diff incremental de adicionado/editado/removido.
+// Sync atomico via function Postgres security definer (migration 017) — antes
+// era apaga + loop de inserts separados em varias chamadas REST distintas,
+// sem transacao (uma falha no meio perdia grupos silenciosamente). Agora e'
+// uma unica chamada RPC; o apaga-e-recria continua acontecendo (dentro da
+// function, numa unica transacao) e continua seguro pelo mesmo motivo de
+// antes: order_items.selected_options e' snapshot historico (nao FK viva),
+// entao recriar com ids novos nao afeta pedido ja feito.
 export const syncProductOptionGroups = async (productId: string, groups: ProductOptionGroupInput[]) => {
-  const { error: deleteError } = await supabase.from('product_option_groups').delete().eq('product_id', productId);
-  if (deleteError) throw deleteError; // cascade cuida de product_options do grupo apagado
-
-  for (let gi = 0; gi < groups.length; gi++) {
-    const g = groups[gi];
-    if (!g.name.trim()) continue;
-    const { data: groupRow, error: groupError } = await supabase
-      .from('product_option_groups')
-      .insert({ product_id: productId, name: g.name.trim(), type: g.type, required: g.required, order: gi })
-      .select('id').single();
-    if (groupError) throw groupError;
-
-    const validOptions = g.options.filter(o => o.name.trim());
-    if (validOptions.length > 0) {
-      const { error: optionsError } = await supabase.from('product_options').insert(
-        validOptions.map((o, oi) => ({ group_id: groupRow.id, name: o.name.trim(), price_delta: o.price_delta, order: oi }))
-      );
-      if (optionsError) throw optionsError;
-    }
-  }
+  const { error } = await supabase.rpc('sync_product_option_groups', {
+    p_product_id: productId,
+    p_groups: groups.map(g => ({
+      name: g.name,
+      type: g.type,
+      required: g.required,
+      min_select: g.min_select ?? null,
+      max_select: g.max_select ?? null,
+      options: g.options.map(o => ({ name: o.name, price_delta: o.price_delta, available: o.available ?? true })),
+    })),
+  });
+  if (error) throw error;
 };
 
 export const updateProduct = async (id: string, updates: Partial<Product>) => {
