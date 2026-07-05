@@ -2266,14 +2266,35 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
 const UNCATEGORIZED_ID = '__uncategorized__';
 const groupIdOf = (p: Product) => p.category_id ?? UNCATEGORIZED_ID;
 
-interface DraftOption { tempId: string; name: string; price_delta: string }
-interface DraftOptionGroup { tempId: string; name: string; type: 'single' | 'multiple'; required: boolean; options: DraftOption[] }
+interface DraftOption { tempId: string; name: string; price_delta: string; available: boolean }
+interface DraftOptionGroup {
+    tempId: string; name: string; type: 'single' | 'multiple'; required: boolean;
+    // min_select/max_select ficam como string no rascunho (mesmo padrão de
+    // price_delta) — vazio = sem limite/null, só relevantes quando type === 'multiple'.
+    min_select: string; max_select: string;
+    options: DraftOption[];
+}
 
 const toDraftGroups = (groups?: Product['option_groups']): DraftOptionGroup[] =>
     (groups || []).map(g => ({
         tempId: g.id, name: g.name, type: g.type, required: g.required,
-        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString() })),
+        min_select: g.min_select != null ? g.min_select.toString() : '',
+        max_select: g.max_select != null ? g.max_select.toString() : '',
+        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString(), available: o.available })),
     }));
+
+// Soft-cap client-side (achado de robustez 2026-07-05): evita centenas de
+// round-trips numa única "Salvar Produto" se o lojista, por engano ou
+// abuso, tentar criar grupos/opções sem limite nenhum.
+const MAX_OPTION_GROUPS = 20;
+const MAX_OPTIONS_PER_GROUP = 30;
+
+const parseOptionalInt = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const n = parseInt(trimmed, 10);
+    return Number.isNaN(n) ? null : n;
+};
 
 const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
     const storeId = store.id;
@@ -2299,15 +2320,51 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // (syncProductOptionGroups apaga e recria tudo, seguro porque
     // order_items.selected_options e' snapshot historico, nao FK viva).
     const [pOptionGroups, setPOptionGroups] = useState<DraftOptionGroup[]>([]);
-    const addOptionGroup = () => setPOptionGroups(prev => [...prev, { tempId: crypto.randomUUID(), name: '', type: 'single', required: false, options: [] }]);
+    const addOptionGroup = () => {
+        if (pOptionGroups.length >= MAX_OPTION_GROUPS) {
+            toast.error(`Limite de ${MAX_OPTION_GROUPS} grupos de opção por produto atingido.`);
+            return;
+        }
+        setPOptionGroups(prev => [...prev, { tempId: crypto.randomUUID(), name: '', type: 'single', required: false, min_select: '', max_select: '', options: [] }]);
+    };
     const updateOptionGroup = (tempId: string, patch: Partial<DraftOptionGroup>) => setPOptionGroups(prev => prev.map(g => g.tempId === tempId ? { ...g, ...patch } : g));
     const removeOptionGroup = (tempId: string) => setPOptionGroups(prev => prev.filter(g => g.tempId !== tempId));
-    const addOption = (groupTempId: string) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0' }] } : g));
+    const addOption = (groupTempId: string) => {
+        const group = pOptionGroups.find(g => g.tempId === groupTempId);
+        if (group && group.options.length >= MAX_OPTIONS_PER_GROUP) {
+            toast.error(`Limite de ${MAX_OPTIONS_PER_GROUP} opções por grupo atingido.`);
+            return;
+        }
+        setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0', available: true }] } : g));
+    };
     const updateOption = (groupTempId: string, optTempId: string, patch: Partial<DraftOption>) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.map(o => o.tempId === optTempId ? { ...o, ...patch } : o) } : g));
     const removeOption = (groupTempId: string, optTempId: string) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.filter(o => o.tempId !== optTempId) } : g));
 
+    // Reordena opções dentro de um mesmo grupo (drag-and-drop) — mesmo padrão
+    // do handleDragEnd de categoria/produto abaixo, mas isolado num
+    // DragDropContext próprio (Modal, fora da árvore de categorias/produtos).
+    // Só permite mover dentro do MESMO grupo (não faz sentido "vazar" uma
+    // opção de um grupo pra outro via arrasto).
+    const handleOptionDragEnd = (result: DropResult) => {
+        const { source, destination } = result;
+        if (!destination) return;
+        if (source.droppableId !== destination.droppableId) return;
+        if (source.index === destination.index) return;
+        const groupTempId = source.droppableId;
+        setPOptionGroups(prev => prev.map(g => {
+            if (g.tempId !== groupTempId) return g;
+            const newOptions = [...g.options];
+            const [moved] = newOptions.splice(source.index, 1);
+            newOptions.splice(destination.index, 0, moved);
+            return { ...g, options: newOptions };
+        }));
+    };
+
     const loadMenu = async () => {
-        const { categories: c, products: p } = await fetchMenu(storeId, false);
+        // includeUnavailable=true: o lojista precisa ver e editar opções
+        // marcadas como indisponíveis nesta tela (só o cardápio do cliente
+        // filtra `available = true`, ver fetchMenu em lib/api.ts).
+        const { categories: c, products: p } = await fetchMenu(storeId, false, true);
         setCategories(c);
         setProducts(p);
     };
@@ -2448,6 +2505,19 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         if (isNaN(priceNum) || priceNum < 0) return toast.error('Preço não pode ser negativo.');
         const prepNum = parseInt(pTime);
         if (isNaN(prepNum) || prepNum < 0) return toast.error('Tempo de preparo não pode ser negativo.');
+
+        // Validação: grupo obrigatório sem nenhuma opção válida "bricaria" o
+        // produto pro cliente (obrigatório mas nada pra escolher, sem aviso
+        // nenhum) — bloqueia o save antes de tocar em produto ou adicionais.
+        // Só considera grupos que de fato serão salvos (nome preenchido).
+        for (const g of pOptionGroups) {
+            if (!g.name.trim() || !g.required) continue;
+            const validOptions = g.options.filter(o => o.name.trim());
+            if (validOptions.length === 0) {
+                return toast.error(`Grupo "${g.name.trim()}" está marcado como obrigatório mas não tem nenhuma opção — adicione uma opção ou desmarque obrigatório.`);
+            }
+        }
+
         setIsLoading(true);
 
         try {
@@ -2478,7 +2548,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 .filter(g => g.name.trim())
                 .map(g => ({
                     name: g.name.trim(), type: g.type, required: g.required,
-                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0 })),
+                    min_select: g.type === 'multiple' ? parseOptionalInt(g.min_select) : null,
+                    max_select: g.type === 'multiple' ? parseOptionalInt(g.max_select) : null,
+                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0, available: o.available })),
                 }));
             await syncProductOptionGroups(productId, groupsToSave);
 
@@ -2745,7 +2817,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         onChange={e => updateOptionGroup(group.tempId, { name: e.target.value })} className="flex-1" />
                                     <button type="button" onClick={() => removeOptionGroup(group.tempId)} className="text-[var(--err)]/60 hover:text-[var(--err)]"><Trash2 size={14}/></button>
                                 </div>
-                                <div className="flex gap-3 items-center text-xs">
+                                <div className="flex gap-3 items-center text-xs flex-wrap">
                                     <label className="flex items-center gap-1">
                                         <input type="radio" checked={group.type === 'single'} onChange={() => updateOptionGroup(group.tempId, { type: 'single' })}/> Escolha 1
                                     </label>
@@ -2756,15 +2828,53 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         <input type="checkbox" checked={group.required} onChange={e => updateOptionGroup(group.tempId, { required: e.target.checked })}/> Obrigatório
                                     </label>
                                 </div>
-                                {group.options.map(opt => (
-                                    <div key={opt.tempId} className="flex gap-2 items-center pl-3">
-                                        <Input placeholder='Opção (ex: "Catupiry")' value={opt.name}
-                                            onChange={e => updateOption(group.tempId, opt.tempId, { name: e.target.value })} className="flex-1" />
-                                        <Input placeholder="+R$" type="number" step="0.01" min="0" value={opt.price_delta}
-                                            onChange={e => updateOption(group.tempId, opt.tempId, { price_delta: e.target.value })} className="w-24" />
-                                        <button type="button" onClick={() => removeOption(group.tempId, opt.tempId)} className="text-[var(--err)]/60 hover:text-[var(--err)]"><X size={14}/></button>
+                                <p className="text-xs text-[var(--text-muted)]">
+                                    "Escolha 1" mostra um seletor único (rádio) para o cliente; "Escolha vários" mostra
+                                    caixas de seleção (checkbox), permitindo marcar mais de uma opção. Marcar
+                                    "Obrigatório" bloqueia o botão "+" de adição rápida no cardápio do cliente — ele
+                                    precisa abrir o produto e escolher antes de adicionar ao carrinho.
+                                </p>
+                                {group.type === 'multiple' && (
+                                    <div className="flex gap-2 items-center">
+                                        <Input placeholder="Mínimo" type="number" min="0" value={group.min_select}
+                                            onChange={e => updateOptionGroup(group.tempId, { min_select: e.target.value })} className="w-24" />
+                                        <Input placeholder="Máximo" type="number" min="0" value={group.max_select}
+                                            onChange={e => updateOptionGroup(group.tempId, { max_select: e.target.value })} className="w-24" />
+                                        <span className="text-xs text-[var(--text-muted)]">Vazio = sem limite de seleção</span>
                                     </div>
-                                ))}
+                                )}
+                                <DragDropContext onDragEnd={handleOptionDragEnd}>
+                                    <Droppable droppableId={group.tempId} type="option">
+                                        {(provided) => (
+                                            <div className="space-y-2" {...provided.droppableProps} ref={provided.innerRef}>
+                                                {group.options.map((opt, index) => (
+                                                    <Draggable key={opt.tempId} draggableId={opt.tempId} index={index}>
+                                                        {(provided, snapshot) => (
+                                                            <div
+                                                                ref={provided.innerRef}
+                                                                {...provided.draggableProps}
+                                                                className={`flex gap-2 items-center pl-1 ${snapshot.isDragging ? 'bg-[var(--surface)] rounded ring-1 ring-[var(--brand)]' : ''}`}
+                                                            >
+                                                                <div {...provided.dragHandleProps} className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-grab active:cursor-grabbing">
+                                                                    <GripVertical size={14} />
+                                                                </div>
+                                                                <Input placeholder='Opção (ex: "Catupiry")' value={opt.name}
+                                                                    onChange={e => updateOption(group.tempId, opt.tempId, { name: e.target.value })} className="flex-1" />
+                                                                <Input placeholder="+R$" type="number" step="0.01" min="0" value={opt.price_delta}
+                                                                    onChange={e => updateOption(group.tempId, opt.tempId, { price_delta: e.target.value })} className="w-24" />
+                                                                <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                                                                    <input type="checkbox" checked={opt.available} onChange={e => updateOption(group.tempId, opt.tempId, { available: e.target.checked })}/> Disponível
+                                                                </label>
+                                                                <button type="button" onClick={() => removeOption(group.tempId, opt.tempId)} className="text-[var(--err)]/60 hover:text-[var(--err)]"><X size={14}/></button>
+                                                            </div>
+                                                        )}
+                                                    </Draggable>
+                                                ))}
+                                                {provided.placeholder}
+                                            </div>
+                                        )}
+                                    </Droppable>
+                                </DragDropContext>
                                 <button type="button" onClick={() => addOption(group.tempId)} className="text-xs font-bold text-[var(--brand)] hover:underline pl-3">+ Opção</button>
                             </div>
                         ))}
