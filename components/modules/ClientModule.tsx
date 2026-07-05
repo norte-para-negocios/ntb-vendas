@@ -15,6 +15,7 @@ import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal } from '@/lib/calc';
+import { isCategoryAvailableNow } from '@/lib/schedule';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 
 // --- COMPONENTS ---
@@ -662,7 +663,23 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
 
     useEffect(() => {
-        if(product) { setQty(1); setNotes(''); setSelections({}); }
+        if (!product) return;
+        setQty(1);
+        setNotes('');
+
+        // Reduz atrito: grupo unico obrigatorio (ex. "Tamanho" P/M/G) vem com a
+        // 1a opcao disponivel ja pre-selecionada, em vez de forcar o cliente a
+        // clicar numa escolha que teria que fazer de qualquer forma. Defesa
+        // client-side extra com `available !== false` mesmo o servidor
+        // (fetchMenu) ja filtrando por available=true por padrao.
+        const initialSelections: Record<string, string[]> = {};
+        (product.option_groups || []).forEach(group => {
+            if (group.type === 'single' && group.required) {
+                const firstAvailable = group.options.find(opt => opt.available !== false);
+                if (firstAvailable) initialSelections[group.id] = [firstAvailable.id];
+            }
+        });
+        setSelections(initialSelections);
     }, [product]);
 
     if (!product) return null;
@@ -1288,6 +1305,17 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
 
+    // Cardapio por horario/turno (migration 018): `scheduleNow` tickando a
+    // cada minuto forca reavaliar `isCategoryAvailableNow` mesmo sem
+    // nenhuma outra mudanca de estado — sem isso, uma categoria que sai da
+    // janela de horario no meio da visita do cliente (ex: relogio virou
+    // 11h01 com "Cafe da Manha" ja selecionada) so sumiria depois de um F5.
+    const [scheduleNow, setScheduleNow] = useState(() => new Date());
+    useEffect(() => {
+        const interval = setInterval(() => setScheduleNow(new Date()), 60 * 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     // Barra de categorias: arrastável com o mouse (desktop) + auto-scroll da
     // categoria ativa pra dentro da vista. No mobile o toque já rola nativo.
     const navScrollRef = useRef<HTMLDivElement>(null);
@@ -1359,7 +1387,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         const { categories, products, error: menuError } = await fetchMenu(store.id, true);
         setCategories(categories);
         setProducts(products);
-        if (categories.length > 0) setActiveCategory(categories[0].id);
+        // Cardapio por horario (migration 018): comeca ja na 1a categoria
+        // disponivel AGORA, nao so a 1a da lista (que pode estar fora da
+        // janela de horario) — evita abrir o cardapio numa categoria vazia.
+        if (categories.length > 0) {
+            const firstAvailable = categories.find(c => isCategoryAvailableNow(c)) || categories[0];
+            setActiveCategory(firstAvailable.id);
+        }
         if (menuError) setLoadError('network');
         setIsLoadingMenu(false);
     }, [slug, setCurrentStore]);
@@ -1532,10 +1566,38 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     const cartTotal = calculateCartTotal(cart);
 
+    // Cardapio por horario/turno (migration 018): categoria fora da janela
+    // configurada simplesmente some da barra — mesmo comportamento que
+    // produto com available=false ja tem hoje (some inteiro, nao fica
+    // desabilitada visivel). `scheduleNow` como dependencia garante que isso
+    // reavalia sozinho conforme o relogio passa, sem precisar de F5.
+    const visibleCategories = useMemo(
+        () => categories.filter(cat => isCategoryAvailableNow(cat, scheduleNow)),
+        [categories, scheduleNow]
+    );
+
+    // Se a categoria ativa deixar de estar disponivel (relogio virou durante
+    // a visita do cliente), troca automaticamente pra primeira categoria
+    // ainda disponivel — nao existe hoje nenhuma aba "Todas" no cardapio do
+    // cliente (activeCategory sempre aponta pra uma categoria concreta desde
+    // o load inicial), entao "mostrar tudo" nao é o padrao aplicavel aqui.
+    useEffect(() => {
+        if (visibleCategories.length === 0) return;
+        if (!visibleCategories.some(c => c.id === activeCategory)) {
+            setActiveCategory(visibleCategories[0].id);
+        }
+    }, [visibleCategories, activeCategory]);
+
     const filteredProducts = useMemo(() => {
         let prods = [...products]; // Create a copy to avoid mutating state directly
 
-        if (activeCategory) prods = prods.filter(p => p.category_id === activeCategory);
+        if (activeCategory) {
+            // Produtos de uma categoria que acabou de sair da janela de horario
+            // (ainda nao corrigido pelo efeito acima) tambem somem — nunca
+            // mostra produto de categoria que nao esta na barra.
+            const isActiveVisible = visibleCategories.some(c => c.id === activeCategory);
+            prods = isActiveVisible ? prods.filter(p => p.category_id === activeCategory) : [];
+        }
         if (searchTerm) prods = prods.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
         // Sorting Logic
@@ -1548,14 +1610,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
 
         return prods;
-    }, [products, activeCategory, searchTerm, sortBy]);
+    }, [products, activeCategory, visibleCategories, searchTerm, sortBy]);
 
     const categoryIconById = useMemo(() => {
         const map: Record<string, ReturnType<typeof categoryIcon>> = {};
         categories.forEach(c => { map[c.id] = categoryIcon(c.name); });
         return map;
     }, [categories]);
-    const activeCategoryObj = useMemo(() => categories.find(c => c.id === activeCategory) || null, [categories, activeCategory]);
+    const activeCategoryObj = useMemo(() => visibleCategories.find(c => c.id === activeCategory) || null, [visibleCategories, activeCategory]);
 
     if (loadError === 'network') return (
         <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -1683,7 +1745,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         className="overflow-x-auto no-scrollbar flex gap-2 px-4 py-3 cursor-grab active:cursor-grabbing select-none"
                         style={{ scrollSnapType: 'x proximity' }}
                     >
-                        {categories.map((cat) => {
+                        {visibleCategories.map((cat) => {
                             const active = activeCategory === cat.id;
                             const Icon = categoryIconById[cat.id] || UtensilsCrossed;
                             return (
