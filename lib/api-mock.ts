@@ -198,7 +198,16 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true) => {
   const cats = categories.filter(c => c.store_id === storeId).sort((a, b) => a.order - b.order);
   let prods = products.filter(p => p.store_id === storeId);
   if (onlyAvailable) prods = prods.filter(p => p.available);
-  return { categories: cats, products: prods };
+  // option_groups vazio: mock nao simula adicionais de verdade, so precisa
+  // bater com a assinatura que ClientModule.tsx espera (Product.option_groups).
+  return { categories: cats, products: prods.map(p => ({ ...p, option_groups: [] })) };
+};
+
+// No-op: mock nao persiste grupos/opcoes de verdade, so precisa nao quebrar
+// a chamada incondicional em StoreModule.tsx (handleSaveProduct chama isso
+// pra QUALQUER produto, com ou sem adicional configurado).
+export const syncProductOptionGroups = async (_productId: string, _groups: any[]) => {
+  await delay();
 };
 
 export const createCategory = async (storeId: string, name: string) => {
