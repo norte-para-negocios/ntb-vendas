@@ -7,7 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser } from '@/types';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -777,15 +777,43 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
 
 // --- SUB-MODULE: TABLES ---
 
-const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string) => void }> = ({ product, onClose, onAdd }) => {
+// Réplica, adaptada ao estilo do painel do lojista, do seletor de
+// adicionais do ProductModal do cliente (ClientModule.tsx) — mesma
+// capacidade (grupos single=radio/multiple=checkbox, obrigatório bloqueia
+// o "Lançar Pedido", preço somado em tempo real), só o visual muda.
+// Achado real (varredura 2026-07-05): antes o garçom conseguia lançar um
+// produto com grupo obrigatório sem escolher nada e o preço saía sem o
+// price_delta.
+const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ product, onClose, onAdd }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
+    const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
 
     useEffect(() => {
-        if(product) { setQty(1); setNotes(''); }
+        if(product) { setQty(1); setNotes(''); setSelections({}); }
     }, [product]);
 
     if (!product) return null;
+
+    const groups = product.option_groups || [];
+
+    const toggleOption = (group: ProductOptionGroup, optionId: string) => {
+        setSelections(prev => {
+            const current = prev[group.id] || [];
+            if (group.type === 'single') return { ...prev, [group.id]: current[0] === optionId ? [] : [optionId] };
+            const next = current.includes(optionId) ? current.filter(id => id !== optionId) : [...current, optionId];
+            return { ...prev, [group.id]: next };
+        });
+    };
+
+    const selectedOptions: SelectedOption[] = groups.flatMap(g =>
+        (selections[g.id] || []).flatMap(optId => {
+            const opt = g.options.find(o => o.id === optId);
+            return opt ? [{ group_id: g.id, option_id: opt.id, name: opt.name, price_delta: opt.price_delta }] : [];
+        })
+    );
+    const unitPrice = product.price + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
+    const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
     return (
         <Modal isOpen={!!product} onClose={onClose} title="Adicionar Item">
@@ -810,22 +838,47 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                     </div>
                 </div>
 
-                <Input 
+                {groups.map(group => (
+                    <div key={group.id} className="border border-[var(--border)] rounded-xl p-3 bg-[var(--surface-2)]">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-bold text-sm text-[var(--text)]">{group.name}</h4>
+                            {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
+                        </div>
+                        {group.options.map(opt => (
+                            <label key={opt.id} className="flex items-center justify-between py-2 px-1 cursor-pointer min-h-11">
+                                <span className="flex items-center gap-2 text-sm text-[var(--text)]">
+                                    <input
+                                        type={group.type === 'single' ? 'radio' : 'checkbox'}
+                                        name={`store-group-${group.id}`}
+                                        checked={(selections[group.id] || []).includes(opt.id)}
+                                        onChange={() => toggleOption(group, opt.id)}
+                                        className="w-4 h-4 accent-[var(--brand)]"
+                                    />
+                                    {opt.name}
+                                </span>
+                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-xs font-semibold">+R$ {opt.price_delta.toFixed(2)}</span>}
+                            </label>
+                        ))}
+                    </div>
+                ))}
+
+                <Input
                     label="Observação (Opcional)"
-                    placeholder="Ex: Lojista: Sem cebola" 
+                    placeholder="Ex: Lojista: Sem cebola"
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <Button className="w-full mt-4 h-12 text-lg" onClick={() => { onAdd(qty, notes); onClose(); }}>
-                    Lançar Pedido • R$ {(product.price * qty).toFixed(2)}
+                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                    Lançar Pedido • R$ {(unitPrice * qty).toFixed(2)}
                 </Button>
+                {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
             </div>
         </Modal>
     );
 };
 
-const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string) => void }> = ({ storeId, onAddItem }) => {
+const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ storeId, onAddItem }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
@@ -889,12 +942,12 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 ))}
             </div>
 
-            <StoreProductModal 
-                product={selectedProduct} 
-                onClose={() => setSelectedProduct(null)} 
-                onAdd={(qty, notes) => {
+            <StoreProductModal
+                product={selectedProduct}
+                onClose={() => setSelectedProduct(null)}
+                onAdd={(qty, notes, selectedOptions) => {
                     if (selectedProduct) {
-                        onAddItem(selectedProduct, qty, notes);
+                        onAddItem(selectedProduct, qty, notes, selectedOptions);
                     }
                 }}
             />
@@ -1306,7 +1359,7 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
     
-    const handleAddItem = async (product: Product, qty: number, notes: string) => {
+    const handleAddItem = async (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => {
         if (!selectedTable) return;
 
         const finalNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
@@ -1314,10 +1367,10 @@ NOTIFY pgrst, 'reload schema';`;
         try {
             // Reuses createOrder logic which handles adding to existing orders
             await createOrder(selectedTable.id, storeId, [{
-                product, quantity: qty, notes: finalNotes
+                product, quantity: qty, notes: finalNotes, selectedOptions
             }], loggedUser.name);
-            
-            toast.success("Item adicionado com sucesso!");
+
+            toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
             // Optional: Close menu to go back to bill, or stay to add more
             // setShowMenuMode(false);
         } catch (e) {
