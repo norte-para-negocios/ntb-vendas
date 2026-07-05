@@ -13,7 +13,7 @@ import { playPreparingAlert, playReadyAlert, vibrateAlert } from '@/lib/audioAle
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getTableStatusLabel, getOrderItemDisplayName } from '@/lib/labels';
+import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal } from '@/lib/calc';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 
@@ -685,7 +685,13 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
         })
     );
     const unitPrice = product.price + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
-    const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
+    // Mínimo efetivo: grupo obrigatório sempre exige pelo menos 1 (ou
+    // min_select, se maior); grupo opcional só exige algo se min_select
+    // tiver sido configurado explicitamente.
+    const missingRequired = groups.some(g => {
+        const effectiveMin = g.required ? Math.max(g.min_select || 1, 1) : (g.min_select || 0);
+        return (selections[g.id] || []).length < effectiveMin;
+    });
 
     return (
         <Modal isOpen={!!product} onClose={onClose} title={product.name}>
@@ -706,28 +712,49 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                     </div>
                 </div>
 
-                {groups.map(group => (
-                    <div key={group.id} className="border border-[var(--border)] rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-sm text-[var(--text)]">{group.name}</h4>
-                            {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
-                        </div>
-                        {group.options.map(opt => (
-                            <label key={opt.id} className="flex items-center justify-between py-1.5 cursor-pointer">
-                                <span className="flex items-center gap-2 text-sm text-[var(--text)]">
-                                    <input
-                                        type={group.type === 'single' ? 'radio' : 'checkbox'}
-                                        name={`group-${group.id}`}
-                                        checked={(selections[group.id] || []).includes(opt.id)}
-                                        onChange={() => toggleOption(group, opt.id)}
-                                    />
-                                    {opt.name}
-                                </span>
-                                {opt.price_delta > 0 && <span className="num text-[var(--text-muted)] text-sm">+R$ {opt.price_delta.toFixed(2)}</span>}
-                            </label>
-                        ))}
-                    </div>
-                ))}
+                {groups.map(group => {
+                    // Defesa client-side extra: o servidor (fetchMenu) já filtra
+                    // product_options por available=true por padrão, mas manter
+                    // o filtro aqui também, caso a opção chegue por outro caminho.
+                    const visibleOptions = group.options.filter(opt => opt.available !== false);
+                    const groupSelections = selections[group.id] || [];
+                    const hasMaxLimit = group.type === 'multiple' && typeof group.max_select === 'number';
+                    const atMaxLimit = hasMaxLimit && groupSelections.length >= (group.max_select as number);
+
+                    return (
+                        <fieldset key={group.id} className="border border-[var(--border)] rounded-lg p-3">
+                            <legend className="w-full flex items-center justify-between gap-2 mb-2 px-1">
+                                <span className="font-semibold text-sm text-[var(--text)]">{group.name}</span>
+                                {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
+                            </legend>
+                            {hasMaxLimit && (
+                                <p className="text-xs text-[var(--text-muted)] mb-1.5">
+                                    {groupSelections.length} de {group.max_select} selecionados
+                                </p>
+                            )}
+                            {visibleOptions.map(opt => {
+                                const isChecked = groupSelections.includes(opt.id);
+                                const isDisabled = atMaxLimit && !isChecked;
+                                return (
+                                    <label key={opt.id} className={`flex items-center justify-between py-1.5 min-h-11 cursor-pointer ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <span className="flex items-center gap-2 text-sm text-[var(--text)]">
+                                            <input
+                                                type={group.type === 'single' ? 'radio' : 'checkbox'}
+                                                name={`group-${group.id}`}
+                                                checked={isChecked}
+                                                disabled={isDisabled}
+                                                aria-required={group.required}
+                                                onChange={() => toggleOption(group, opt.id)}
+                                            />
+                                            {opt.name}
+                                        </span>
+                                        {opt.price_delta > 0 && <span className="num text-[var(--text-muted)] text-sm">+R$ {opt.price_delta.toFixed(2)}</span>}
+                                    </label>
+                                );
+                            })}
+                        </fieldset>
+                    );
+                })}
 
                 <Input
                     label="Observações"
@@ -789,8 +816,7 @@ const CartModal: React.FC<{
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start gap-2">
                                         <h4 className="font-medium text-[var(--text)] text-sm truncate">
-                                            {item.product.name}
-                                            {!!item.selectedOptions?.length && ` (${item.selectedOptions.map(o => o.name).join(', ')})`}
+                                            {getCartItemDisplayName(item)}
                                         </h4>
                                         <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
                                     </div>
