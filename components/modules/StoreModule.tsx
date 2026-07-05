@@ -3231,6 +3231,11 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
         return 'Todo o histórico';
     }, [filterMonth, filterStartDate, filterEndDate]);
 
+    // "2x Pizza Marguerita (Catupiry), 1x Coca-Cola" — reusa getOrderItemDisplayName
+    // (produto + adicional) por item da venda, não só a contagem de linhas.
+    const buildItemsSummary = (order: Order) =>
+        order.order_items?.map(item => `${item.quantity}x ${getOrderItemDisplayName(item)}`).join(', ') || '';
+
     const handlePrintReport = () => {
         printSalesReport({
             storeName: store.name,
@@ -3240,6 +3245,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
                 customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
                 items: order.order_items?.length || 0,
+                itemsSummary: buildItemsSummary(order),
                 total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
             })),
             totalRevenue,
@@ -3253,6 +3259,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
                 customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
                 items: order.order_items?.length || 0,
+                itemsSummary: buildItemsSummary(order),
                 total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
             })),
             `vendas-${store.name.toLowerCase().replace(/\s+/g, '-')}.csv`

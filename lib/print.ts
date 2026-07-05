@@ -152,6 +152,7 @@ const REPORT_STYLES = `
   th { background: #f3f3f3; text-transform: uppercase; font-size: 11px; letter-spacing: .02em; }
   td.right, th.right { text-align: right; }
   tfoot td { font-weight: bold; border-top: 2px solid #111; }
+  .items-summary-row td { padding-top: 0; padding-bottom: 8px; font-size: 11px; color: #555; font-style: italic; }
   @media print { @page { margin: 16mm; } }
 `;
 
@@ -160,6 +161,10 @@ export interface SalesReportRow {
   type: string;
   customer: string;
   items: number;
+  // Texto livre listando os itens vendidos na linha (produto + adicional,
+  // ex.: "2x Pizza Marguerita (Catupiry), 1x Coca-Cola"). Opcional pra não
+  // quebrar quem ainda só manda a contagem em `items`.
+  itemsSummary?: string;
   total: number;
 }
 
@@ -191,7 +196,8 @@ export function printSalesReport(opts: {
             <td>${escapeHtml(r.customer)}</td>
             <td class="right">${r.items}</td>
             <td class="right">R$ ${r.total.toFixed(2)}</td>
-          </tr>`
+          </tr>
+          ${r.itemsSummary ? `<tr class="items-summary-row"><td colspan="5">${escapeHtml(r.itemsSummary)}</td></tr>` : ''}`
           )
           .join('')}
       </tbody>

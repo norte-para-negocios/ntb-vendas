@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getPaymentMethodLabel } from '@/lib/labels';
+import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -152,21 +152,31 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
         return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     }, [periodSales]);
 
+    // Assinatura dos adicionais escolhidos, mesmo princípio de `optionsSignature` em
+    // context/AppContext.tsx (dedup do carrinho) — mas aqui a fonte é o snapshot
+    // `order_items.selected_options` (sem ids), então a assinatura é por `name`
+    // ordenado em vez de `option_id`.
+    const optionsSignature = (opts?: { name: string }[]) => (opts || []).map(o => o.name).slice().sort().join('|');
+
     const productStats = useMemo(() => {
-        const map = new Map<string, { id: string, name: string, qty: number }>();
+        // Chave agora inclui a assinatura dos adicionais: "Pizza Marguerita (Catupiry)"
+        // e "Pizza Marguerita (Mussarela)" viram linhas separadas no ranking, não uma
+        // linha só agrupada por product_id.
+        const map = new Map<string, { key: string, name: string, qty: number }>();
         periodSales.forEach(o => {
             o.order_items?.forEach(i => {
                 if (!i.product) return;
-                const existing = map.get(i.product_id) || { id: i.product_id, name: i.product.name, qty: 0 };
+                const key = `${i.product_id}::${optionsSignature(i.selected_options)}`;
+                const existing = map.get(key) || { key, name: getOrderItemDisplayName(i), qty: 0 };
                 existing.qty += i.quantity;
-                map.set(i.product_id, existing);
+                map.set(key, existing);
             });
         });
         const arr = Array.from(map.values()).sort((a, b) => b.qty - a.qty);
         const top = arr.slice(0, 5);
-        const topIds = new Set(top.map(p => p.id));
+        const topKeys = new Set(top.map(p => p.key));
         // Exclui do "menos vendidos" quem ja aparece no "mais vendidos" (acontecia quando havia <=10 produtos distintos no periodo).
-        const bottom = arr.slice().reverse().filter(p => !topIds.has(p.id)).slice(0, 5);
+        const bottom = arr.slice().reverse().filter(p => !topKeys.has(p.key)).slice(0, 5);
         return { top, bottom };
     }, [periodSales]);
 

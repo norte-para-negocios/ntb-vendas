@@ -10,7 +10,7 @@ function escapeCsvField(value: string): string {
 }
 
 export function downloadSalesReportCsv(rows: SalesReportRow[], filename: string): void {
-  const header = ['Data', 'Tipo', 'Cliente/Mesa', 'Itens', 'Total'];
+  const header = ['Data', 'Tipo', 'Cliente/Mesa', 'Itens', 'Produtos', 'Total'];
   const lines = [
     header.join(';'),
     ...rows.map((r) =>
@@ -19,6 +19,7 @@ export function downloadSalesReportCsv(rows: SalesReportRow[], filename: string)
         escapeCsvField(r.type),
         escapeCsvField(r.customer),
         String(r.items),
+        escapeCsvField(r.itemsSummary || ''),
         r.total.toFixed(2).replace('.', ','),
       ].join(';')
     ),
