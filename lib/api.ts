@@ -390,6 +390,17 @@ export const updateCategoryOrder = async (updates: { id: string; order: number }
   if (error) throw error;
 };
 
+// Cardapio por horario/turno (migration 018). NULL nos 3 campos = categoria
+// sempre disponivel. Enforcement e' so client-side (ver AGENTS.md) — usar
+// lib/schedule.ts (isCategoryAvailableNow) pra filtrar/exibir.
+export const updateCategorySchedule = async (
+  categoryId: string,
+  updates: { available_from: string | null; available_until: string | null; available_days: number[] | null }
+) => {
+  const { error } = await supabase.from('categories').update(updates).eq('id', categoryId);
+  if (error) throw error;
+};
+
 export const updateProductOrder = async (updates: { id: string; order: number }[]) => {
   const { error } = await supabase.rpc('update_products_order', { p_updates: updates });
   if (error) {

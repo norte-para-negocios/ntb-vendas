@@ -80,6 +80,11 @@ export interface Category {
   name: string;
   order: number;
   icon?: string;
+  // Cardapio por horario/turno (migration 018) — NULL nos 3 = sempre
+  // disponivel. Ver lib/schedule.ts (isCategoryAvailableNow/formatScheduleLabel).
+  available_from?: string | null;
+  available_until?: string | null;
+  available_days?: number[] | null; // 0=domingo .. 6=sabado
 }
 
 export interface ProductOption {
