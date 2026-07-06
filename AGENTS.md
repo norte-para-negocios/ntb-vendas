@@ -317,21 +317,29 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   (`time`) e `available_days` (`int[]`) em `categories` — cardápio por
   horário/turno, ver seção dedicada abaixo. Sem function nova (enforcement
   100% client-side, mesmo princípio de `required`/min/max de adicionais).
+- **`019_cardapio_que_vende.sql`**: `promo_price`/`featured`/`tags` em
+  `products` — pacote "cardápio que vende", ver seção dedicada abaixo.
+  `create_order_secure` recriada pra cobrar `coalesce(promo_price, price)`
+  no servidor (mesmo princípio de 007/016/017: client nunca dita preço).
 
-Todas as migrations (001 a 018) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 019) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
-`create_order_secure` com e sem adicionais, `open_table_session`,
-rate-limit de login e de PIN, bucket `store-certificates` com
-upload/leitura de status/remoção funcionando de ponta a ponta via
-`/api/certificado`, `order_items.store_id`, autenticação universal nos dois
-painéis, adicionais de produto com grupo único/múltiplo/obrigatório
-testados ponta a ponta na loja "Japanese" e na "Bistrô Demo" via QA
-automatizado com Playwright em 2026-07-05 — 14 cenários, incluindo
-validação de grupo obrigatório vazio, filtro de indisponível, limite
-min/max de seleção, e o fluxo do garçom —, `sync_product_option_groups` e
-os campos de min/max/disponibilidade da migration 017 verificados via
-query direta após aplicar, colunas de horário da migration 018
-verificadas do mesmo jeito).
+`create_order_secure` com e sem adicionais e com e sem promoção,
+`open_table_session`, rate-limit de login e de PIN, bucket
+`store-certificates` com upload/leitura de status/remoção funcionando de
+ponta a ponta via `/api/certificado`, `order_items.store_id`, autenticação
+universal nos dois painéis, adicionais de produto com grupo único/
+múltiplo/obrigatório testados ponta a ponta na loja "Japanese" e na
+"Bistrô Demo" via QA automatizado com Playwright em 2026-07-05 — 14
+cenários, incluindo validação de grupo obrigatório vazio, filtro de
+indisponível, limite min/max de seleção, e o fluxo do garçom —,
+`sync_product_option_groups` e os campos de min/max/disponibilidade da
+migration 017 verificados via query direta após aplicar, colunas de
+horário da migration 018 verificadas do mesmo jeito, e `promo_price`/
+`featured`/`tags`/CHECK da migration 019 verificados via query direta +
+teste real de `create_order_secure` numa categoria/produto temporário na
+"Bistrô Demo" confirmando que o total cobrado usa o preço promocional,
+não o cheio — produto e categoria de teste removidos logo em seguida).
 
 ## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
 
@@ -553,6 +561,61 @@ turno, diferente do problema de adicionais (que foi sobre variação
   enquanto o cliente já está com o cardápio aberto); se a categoria ativa
   deixar de estar disponível durante a visita, troca automaticamente pra
   primeira categoria ainda disponível.
+
+## Cardápio que vende (migration 019)
+
+Pacote de 5 features de baixo esforço pra elevar o cardápio de "digital
+básico" pra "cardápio que vende mais": preço promocional riscado,
+etiquetas/badges, vitrine de destaques, busca por descrição e chips de
+observação rápida. **Requisito central (explícito do dono do projeto):
+tudo é configurável pelo próprio lojista em `MenuManagementView`** — nada
+preso no Master Admin, nada hardcoded.
+
+- **Preço promocional** — `products.promo_price` (`numeric`, nullable),
+  com `CHECK (promo_price is null or (promo_price >= 0 and promo_price <
+  price))` (promoção "maior que o preço cheio" seria só bug de cadastro,
+  o banco já barra). **Cobrado no servidor**: `create_order_secure` usa
+  `coalesce(promo_price, price)` como preço efetivo de cada item — mesmo
+  princípio que já protege o preço base desde a migration 007 (client
+  nunca dita preço). No client, `lib/calc.ts` expõe
+  `getEffectivePrice(product)` (mesma regra, `promo_price` só vale se
+  setado e menor que `price`) — é a única fonte usada tanto pra exibição
+  (preço riscado) quanto pro cálculo de carrinho
+  (`calculateCartItemUnitPrice`/`calculateCartTotal`), então os dois nunca
+  divergem. Configurado no formulário de produto do lojista, campo "Preço
+  promocional (opcional)" com validação amigável (< preço cheio) antes de
+  bater no CHECK do banco.
+- **Etiquetas/badges** — `products.tags` (`text[]`, default `'{}'`),
+  restrito a um catálogo fixo em `lib/labels.ts`
+  (`PRODUCT_TAGS: Record<string, {label, emoji}>` — `picante`, `vegano`,
+  `vegetariano`, `sem_gluten`, `sem_lactose`, `novo`, `da_casa`). Catálogo
+  fechado por decisão consciente (consistência visual > texto livre);
+  lojista escolhe multi-seleção via chips no form de produto. No cardápio
+  do cliente: só emoji no `ProductCard` (a estética "carta de vinhos" não
+  pode virar poluição visual), emoji+label completo no `ProductModal`.
+- **Vitrine de destaques** — `products.featured` (`boolean`, default
+  `false`), toggle "⭐ Destacar no topo do cardápio" no form de produto.
+  `ClientModule.tsx` renderiza uma faixa horizontal rolável "Destaques" no
+  topo do cardápio (antes da navegação de categorias) com todo produto
+  `featured=true` cuja categoria esteja disponível agora (mesma regra de
+  `isCategoryAvailableNow` da seção de horário acima — produto órfão sem
+  categoria não tem restrição). Reusa o `ProductCard` normal; produto
+  destacado continua aparecendo na categoria dele também (vitrine é além,
+  não em vez disso).
+- **Busca por descrição** — `filteredProducts` em `ClientModule.tsx` passa
+  a casar o termo digitado tanto no nome quanto em `description` (campo
+  opcional, `?.`). Mudança 100% client-side, sem migration.
+- **Chips de observação rápida** — sem coluna nova: reaproveita
+  `stores.config` (`jsonb`, já existente, mesmo lugar do toggle de taxa de
+  serviço) com a chave `note_suggestions: string[]`. Editado pelo lojista
+  na área de configurações da loja (mesma seção do toggle de taxa de
+  serviço) via `updateStoreConfig` já existente — adicionar/remover chip,
+  limite de 20, sem duplicata. No `ProductModal` do cliente, os chips
+  aparecem acima do campo de observação; clicar num chip só acrescenta o
+  texto (concatenando com vírgula se já houver texto) — não é toggle, é
+  atalho de digitação, o cliente pode editar livremente depois. Loja sem
+  nenhuma sugestão cadastrada: campo de observação continua exatamente
+  como sempre foi (nenhum chip aparece).
 
 ## Design system (`app/globals.css` + `components/ui.tsx`)
 
