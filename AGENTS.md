@@ -667,6 +667,19 @@ produto. Mesmo requisito central: o que é configuração de loja mora em
   no `ProductModal`, com cards compactos que trocam o produto do modal ao
   clicar (mesmo mecanismo de estado que já controla qual produto está
   aberto).
+  **Bug real achado em QA end-to-end (2026-07-06) e corrigido no mesmo
+  dia**: `product_recommendations` tem 2 FKs pra `products` (`product_id`
+  e `recommended_product_id`) — a query de `fetchProductRecommendationsByStore`
+  (`lib/api.ts`) fazia `products!inner(store_id)` sem dizer qual FK usar,
+  o PostgREST devolvia `PGRST201` (relacionamento ambíguo), e o catch
+  "nunca quebra o cardápio" engolia o erro silenciosamente — resultado:
+  "Peça também" nunca aparecia pra nenhum produto de nenhuma loja, sem
+  nenhum erro visível pro usuário. Corrigido apontando a FK explícita:
+  `products!product_recommendations_product_id_fkey!inner(store_id)`.
+  Achado porque um agente de QA testou o fluxo completo num navegador
+  real (Playwright) em vez de só confiar em `tsc`/`build` — os dois
+  passam limpo mesmo com esse tipo de erro, que só aparece em runtime
+  contra o PostgREST de verdade.
 - **Favoritar produto** — 100% client-side, sem nenhuma peça de servidor.
   Ícone de coração no `ProductCard` e no `ProductModal`, estado persistido
   em `localStorage` (chave `fav_products_${storeId}`, por loja). Chip "❤
