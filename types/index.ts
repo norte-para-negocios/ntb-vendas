@@ -44,6 +44,10 @@ export interface Store {
     // de observacao do cliente, editaveis pelo lojista em MenuManagementView.
     // undefined/[] = nenhum chip aparece (comportamento atual, sem mudanca).
     note_suggestions?: string[];
+    // Vende mais II (migration 020): liga o badge "mais vendido" automatico
+    // no cardapio do cliente. undefined/false = nenhum badge aparece
+    // (comportamento atual, sem mudanca).
+    show_bestsellers?: boolean;
   };
 }
 
@@ -132,6 +136,10 @@ export interface Product {
   featured: boolean;
   tags: string[];
   option_groups?: ProductOptionGroup[]; // so populado quando o Product veio de fetchMenu
+  // Vende mais II (migration 020): "peca tambem" (cross-sell manual do
+  // lojista). Anexado em runtime por fetchMenu, nao e coluna de banco
+  // (mesmo padrao de option_groups).
+  recommended_products?: Product[];
 }
 
 export interface Order {

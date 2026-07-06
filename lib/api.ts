@@ -269,20 +269,62 @@ function mergeOptionGroups(products: Product[], groupsByProduct: Map<string, Pro
   return products.map(p => ({ ...p, option_groups: groupsByProduct.get(p.id) || [] }));
 }
 
+// Vende mais II (migration 020) — "peca tambem": segue exatamente o mesmo
+// padrao de fetchOptionGroupsByProduct acima (join !inner em products pra
+// filtrar por loja, ver AGENTS.md sobre embed do Postgrest sem !inner nao
+// restringir linhas). Sem policy de escrita pro anon nessa tabela (só
+// SELECT) — toda escrita passa por sync_product_recommendations (RPC
+// security definer). Erro/vazio devolve Map vazio, mesmo fallback de
+// fetchOptionGroupsByProduct: recomendação é um detalhe do form do lojista,
+// não pode quebrar o carregamento do cardápio.
+async function fetchProductRecommendationsByStore(storeId: string): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase
+    .from('product_recommendations')
+    .select('*, product:products!inner(store_id)')
+    .eq('product.store_id', storeId)
+    .order('position')
+    .limit(500);
+  if (error || !data || data.length === 0) {
+    if (error) console.error('Fetch product recommendations error:', error);
+    return new Map();
+  }
+
+  const recommendedByProduct = new Map<string, string[]>();
+  for (const r of data as any[]) {
+    const list = recommendedByProduct.get(r.product_id) || [];
+    list.push(r.recommended_product_id);
+    recommendedByProduct.set(r.product_id, list);
+  }
+  return recommendedByProduct;
+}
+
 export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<{ categories: Category[]; products: Product[]; error?: 'network' }> => {
   try {
     const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
     let productsQuery = supabase.from('products').select('*').eq('store_id', storeId).order('order', { ascending: true, nullsFirst: false });
     if (onlyAvailable) productsQuery = productsQuery.eq('available', true);
 
-    // Query de adicionais paralelizada com categorias/produtos (não depende
-    // do resultado delas, só do storeId) — antes rodava sequencialmente
-    // depois do Promise.all abaixo.
-    const [cats, prods, groupsByProduct] = await Promise.all([
+    // Query de adicionais e de recomendações paralelizadas com
+    // categorias/produtos (não dependem do resultado delas, só do storeId)
+    // — antes rodava sequencialmente depois do Promise.all abaixo.
+    const [cats, prods, groupsByProduct, recommendedByProduct] = await Promise.all([
       categoriesQuery,
       productsQuery,
       fetchOptionGroupsByProduct(storeId, includeUnavailable),
+      fetchProductRecommendationsByStore(storeId),
     ]);
+
+    // Resolve os ids de recomendação contra a própria lista de produtos já
+    // carregada — produto recomendado que não existe mais na lista (ex.:
+    // ficou indisponível, foi excluído) é filtrado silenciosamente, não
+    // quebra o cardápio.
+    const resolveRecommended = (products: Product[]): Product[] => {
+      const byId = new Map(products.map(p => [p.id, p]));
+      return products.map(p => ({
+        ...p,
+        recommended_products: (recommendedByProduct.get(p.id) || []).map(id => byId.get(id)).filter(Boolean) as Product[],
+      }));
+    };
 
     if (prods.error && (prods.error.code === '42703' || prods.error.message?.includes('column') || prods.error.message?.includes('does not exist'))) {
       let fallbackQuery = supabase.from('products').select('*').eq('store_id', storeId);
@@ -292,7 +334,7 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
         console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
         return { categories: cats.data || [], products: fallbackProds.data || [], error: 'network' };
       }
-      return { categories: cats.data || [], products: mergeOptionGroups(fallbackProds.data || [], groupsByProduct) };
+      return { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)) };
     }
 
     if (cats.error || prods.error) {
@@ -300,7 +342,7 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
       return { categories: cats.data || [], products: prods.data || [], error: 'network' };
     }
 
-    return { categories: cats.data || [], products: mergeOptionGroups(prods.data || [], groupsByProduct) };
+    return { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)) };
   } catch (error) {
     console.error('Error fetching menu:', error);
     return { categories: [], products: [], error: 'network' };
@@ -377,6 +419,36 @@ export const syncProductOptionGroups = async (productId: string, groups: Product
     })),
   });
   if (error) throw error;
+};
+
+// Vende mais II (migration 020) — "peca tambem": sync atomico via function
+// Postgres security definer, mesmo padrao de syncProductOptionGroups acima
+// (apaga+recria numa transação só, valida loja/limite/auto-recomendação
+// dentro da própria function). Erro propaga (throw) pro caller (form do
+// lojista) poder mostrar toast — diferente de fetchBestsellerProductIds
+// abaixo, que é só leitura decorativa.
+export const updateProductRecommendations = async (productId: string, storeId: string, recommendedIds: string[]): Promise<void> => {
+  const { error } = await supabase.rpc('sync_product_recommendations', {
+    p_product_id: productId,
+    p_store_id: storeId,
+    p_recommended_ids: recommendedIds,
+  });
+  if (error) throw error;
+};
+
+// Vende mais II (migration 020) — "mais vendido": RPC security definer que
+// nunca expõe quantidade/receita bruta pro cliente anônimo, só a lista
+// ordenada de product_id (ver get_bestseller_product_ids na migration).
+// Enfeite visual do cardápio, não algo crítico — erro loga e devolve [],
+// não deve quebrar o carregamento do cardápio.
+export const fetchBestsellerProductIds = async (storeId: string, days = 30, limit = 5): Promise<string[]> => {
+  const { data, error } = await supabase.rpc('get_bestseller_product_ids', {
+    p_store_id: storeId,
+    p_days: days,
+    p_limit: limit,
+  });
+  if (error) { console.error('Fetch bestseller product ids error:', error); return []; }
+  return (data as string[]) || [];
 };
 
 export const updateProduct = async (id: string, updates: Partial<Product>) => {
