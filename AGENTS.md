@@ -718,6 +718,17 @@ pós-refeição" saiu desta lista — já implementada, ver `order_ratings` na
 seção de migrations e a limitação conhecida na seção de dívidas técnicas
 abaixo.)
 
+**⚠️ REGRA CRÍTICA (2026-07-06), vale pra qualquer trabalho de emissão
+fiscal neste projeto daqui pra frente: SEMPRE testar em ambiente de
+HOMOLOGAÇÃO da SEFAZ. NUNCA emitir nota fiscal real durante
+desenvolvimento/teste.** O usuário foi explícito e enfático sobre isso.
+Nota fiscal real tem validade jurídica/tributária — emitir sem querer
+durante teste geraria obrigação fiscal de verdade pro CNPJ da loja usada
+como teste. Antes de qualquer chamada real de emissão, confirmar
+explicitamente que a configuração aponta pro ambiente de homologação
+(endpoints/Token-CSC de homologação são diferentes dos de produção, ver
+pesquisa abaixo) — nunca assumir/usar produção por padrão.
+
 **Integração fiscal, planejada, nada implementado ainda (anotado
 2026-07-03, não é pra agir sem pedido explícito):** o usuário quer, além
 da emissão direta via certificado + SEFAZ já mencionada acima, uma
