@@ -6,7 +6,7 @@ import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, 
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -2304,6 +2304,11 @@ const toDraftGroups = (groups?: Product['option_groups']): DraftOptionGroup[] =>
 const MAX_OPTION_GROUPS = 20;
 const MAX_OPTIONS_PER_GROUP = 30;
 
+// Vende mais II (migration 020) — "peca tambem": mesmo limite validado dentro
+// de sync_product_recommendations (security definer), replicado aqui so' pra
+// desabilitar os checkboxes restantes na UI antes de bater no erro do banco.
+const MAX_RECOMMENDATIONS = 3;
+
 const parseOptionalInt = (value: string): number | null => {
     const trimmed = value.trim();
     if (trimmed === '') return null;
@@ -2352,6 +2357,27 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pTags, setPTags] = useState<string[]>([]);
     const toggleProductTag = (tag: string) => {
         setPTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    };
+
+    // Vende mais II (migration 020) — "peca tambem": rascunho local igual ao
+    // de option_groups/tags acima, so' persiste de verdade quando "Salvar
+    // Produto" e' clicado (ver handleSaveProduct: chama
+    // updateProductRecommendations depois de ja' ter o productId definitivo,
+    // mesma ordem que syncProductOptionGroups ja' segue). Ao editar um
+    // produto existente, `product.recommended_products` ja' vem resolvido
+    // pelo fetchMenu (lib/api.ts) — nao precisa de fetch novo, so' mapear pra
+    // ids (ver openProductModal abaixo).
+    const [pRecommendedIds, setPRecommendedIds] = useState<string[]>([]);
+    const [pRecommendationSearch, setPRecommendationSearch] = useState('');
+    const toggleRecommendedProduct = (productId: string) => {
+        setPRecommendedIds(prev => {
+            if (prev.includes(productId)) return prev.filter(id => id !== productId);
+            if (prev.length >= MAX_RECOMMENDATIONS) {
+                toast.error(`No máximo ${MAX_RECOMMENDATIONS} produtos recomendados.`);
+                return prev;
+            }
+            return [...prev, productId];
+        });
     };
 
     // Adicionais/opcionais do produto (ex: "Escolha a borda") — rascunho
@@ -2558,6 +2584,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPromoPrice(product.promo_price != null ? product.promo_price.toString() : '');
             setPFeatured(product.featured ?? false);
             setPTags(product.tags ?? []);
+            setPRecommendedIds((product.recommended_products || []).map(rp => rp.id));
         } else {
             setEditingProduct(null);
             setPName('');
@@ -2571,7 +2598,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPromoPrice('');
             setPFeatured(false);
             setPTags([]);
+            setPRecommendedIds([]);
         }
+        setPRecommendationSearch('');
         setPFile(null);
         setIsProductModalOpen(true);
     };
@@ -2645,6 +2674,19 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 }));
             await syncProductOptionGroups(productId, groupsToSave);
 
+            // Vende mais II (migration 020) — "peca tambem": so' pode rodar
+            // depois de ter o productId definitivo (mesma ordem que
+            // syncProductOptionGroups acima). Try/catch proprio de proposito:
+            // um erro aqui nao pode travar o resto do salvamento (produto e
+            // adicionais ja' foram gravados com sucesso), so' avisa o
+            // lojista com um toast especifico.
+            try {
+                await updateProductRecommendations(productId, storeId, pRecommendedIds);
+            } catch (recError) {
+                console.error('Error updating product recommendations', recError);
+                toast.error('Produto salvo, mas houve erro ao salvar as recomendações.');
+            }
+
             setIsProductModalOpen(false);
             loadMenu();
         } catch (e: any) {
@@ -2673,6 +2715,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [serviceFeeEnabled, setServiceFeeEnabled] = useState(store.config?.charge_service_fee ?? false);
     const [currentStoreConfig, setCurrentStoreConfig] = useState(store.config);
 
+    // Vende mais II (migration 020) — "mais vendido" automatico. Mesma chave
+    // jsonb de sempre (stores.config), so' com show_bestsellers nova; mesmo
+    // padrao otimista do toggle de taxa de servico logo acima.
+    const [showBestsellersEnabled, setShowBestsellersEnabled] = useState(store.config?.show_bestsellers ?? false);
+
     // Sugestoes de observacao rapida (migration 019, cardapio que vende) —
     // mesmo padrao/coluna jsonb ja usado pela taxa de servico
     // (stores.config), so' com uma chave nova (note_suggestions). Vazio =
@@ -2691,6 +2738,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setCurrentStoreConfig(store.config);
         setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
         setNoteSuggestions(store.config?.note_suggestions ?? []);
+        setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
     }, [store]);
 
     const handleToggleServiceFee = async () => {
@@ -2710,6 +2758,23 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             console.error("Error updating config", e);
             setServiceFeeEnabled(!newValue); // Revert on error
             toast.error("Erro ao atualizar configuração de taxa de serviço.");
+        }
+    };
+
+    const handleToggleBestsellers = async () => {
+        const newValue = !showBestsellersEnabled;
+        setShowBestsellersEnabled(newValue); // otimista, mesmo padrão do toggle de taxa de serviço acima
+        try {
+            const newConfig = { ...currentStoreConfig, show_bestsellers: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+        } catch (e) {
+            console.error("Error updating bestsellers config", e);
+            setShowBestsellersEnabled(!newValue); // revert on error
+            toast.error("Erro ao atualizar configuração de mais vendidos.");
         }
     };
 
@@ -2761,6 +2826,22 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         ? [...categories, { id: UNCATEGORIZED_ID, store_id: storeId, name: 'Sem categoria', order: Number.MAX_SAFE_INTEGER }]
         : categories;
 
+    // Vende mais II (migration 020) — "peca tambem": candidatos pra recomendar
+    // no form de produto = todo produto da MESMA loja (products ja' vem
+    // escopado por storeId via fetchMenu) exceto o proprio produto em edicao;
+    // criando produto novo (editingProduct === null) nada precisa ser
+    // excluido. Filtro de busca por nome em cima disso — loja pode ter
+    // dezenas de produtos.
+    const recommendableProducts = useMemo(
+        () => products.filter(p => p.id !== editingProduct?.id),
+        [products, editingProduct]
+    );
+    const filteredRecommendableProducts = useMemo(() => {
+        const term = pRecommendationSearch.trim().toLowerCase();
+        if (!term) return recommendableProducts;
+        return recommendableProducts.filter(p => p.name.toLowerCase().includes(term));
+    }, [recommendableProducts, pRecommendationSearch]);
+
     return (
         <div className="space-y-8">
             {/* STORE SETTINGS */}
@@ -2776,6 +2857,24 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${serviceFeeEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
                     >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${serviceFeeEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                </div>
+
+                {/* Vende mais II (migration 020) — "mais vendido" automatico, calculado
+                    de venda real (get_bestseller_product_ids), nunca tag manual. */}
+                <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                    <div>
+                        <h4 className="font-bold text-[var(--text)]">🔥 Mostrar mais vendidos automaticamente no cardápio</h4>
+                        <p className="text-sm text-[var(--text-muted)]">Calcula os produtos mais vendidos dos últimos 30 dias (por quantidade, sem expor valor de venda) e mostra um selo "Mais vendido" pro cliente no cardápio.</p>
+                    </div>
+                    <button
+                        onClick={handleToggleBestsellers}
+                        role="switch"
+                        aria-checked={showBestsellersEnabled}
+                        aria-label="Mostrar mais vendidos automaticamente no cardápio"
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${showBestsellersEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBestsellersEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                 </div>
 
@@ -3055,6 +3154,54 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             ))}
                         </div>
                         <p className="text-xs text-[var(--text-muted)] mt-1">Aparecem como badge no cardápio do cliente, ao lado do nome do produto.</p>
+                    </div>
+
+                    {/* Vende mais II (migration 020) — "peca tambem": cross-sell manual
+                        entre produtos da mesma loja. Rascunho local (pRecommendedIds),
+                        so' persiste via updateProductRecommendations dentro de
+                        handleSaveProduct, depois que o productId ja' esta' resolvido. */}
+                    <div className="border-t border-[var(--border)] pt-4">
+                        <h4 className="font-bold text-sm text-[var(--text)]">Sugerir junto (opcional)</h4>
+                        <p className="text-xs text-[var(--text-muted)] mb-2">
+                            Escolha até {MAX_RECOMMENDATIONS} produtos da loja pra aparecer como "Peça também" quando o
+                            cliente abrir este produto no cardápio.
+                        </p>
+                        <Input
+                            placeholder="Buscar produto..."
+                            aria-label="Buscar produto para recomendar"
+                            value={pRecommendationSearch}
+                            onChange={e => setPRecommendationSearch(e.target.value)}
+                            className="mb-2"
+                        />
+                        <div className="max-h-48 overflow-y-auto space-y-1 border border-[var(--border)] rounded-lg p-2 bg-[var(--surface-2)]">
+                            {filteredRecommendableProducts.length === 0 && (
+                                <p className="text-xs text-[var(--text-muted)] italic p-1.5">
+                                    {recommendableProducts.length === 0 ? 'Nenhum outro produto cadastrado nesta loja ainda.' : 'Nenhum produto encontrado.'}
+                                </p>
+                            )}
+                            {filteredRecommendableProducts.map(p => {
+                                const checked = pRecommendedIds.includes(p.id);
+                                const limitReached = !checked && pRecommendedIds.length >= MAX_RECOMMENDATIONS;
+                                return (
+                                    <label
+                                        key={p.id}
+                                        title={limitReached ? `Limite de ${MAX_RECOMMENDATIONS} produtos recomendados atingido — desmarque algum pra trocar.` : undefined}
+                                        className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm u-motion ${
+                                            limitReached ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--surface)]'
+                                        } ${checked ? 'text-[var(--brand)] font-semibold' : 'text-[var(--text)]'}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={limitReached}
+                                            onChange={() => toggleRecommendedProduct(p.id)}
+                                        />
+                                        {p.name}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">{pRecommendedIds.length}/{MAX_RECOMMENDATIONS} selecionados.</p>
                     </div>
 
                     <div className="border-t border-[var(--border)] pt-4">
