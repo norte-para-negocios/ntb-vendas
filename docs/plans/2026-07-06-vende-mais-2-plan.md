@@ -60,6 +60,7 @@ as $$
     from order_items oi
     join orders o on o.id = oi.order_id
     where oi.store_id = p_store_id
+      and oi.product_id is not null -- produto excluido (on delete set null) nao pode "vender mais"
       and o.created_at > now() - (greatest(p_days, 1) || ' days')::interval
       and o.status != 'canceled'
     group by oi.product_id
