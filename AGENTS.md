@@ -807,6 +807,34 @@ ainda neste repo, foi um teste manual fora da aplicação):**
   nem um 403), suspeitar de rede/firewall antes de suspeitar de
   certificado ou código.
 
+**Atualização 2026-07-06 (2ª parte) — tentativa real de emissão de NFC-e
+em homologação, feita como pedido explícito, resultado registrado:**
+Montado um script standalone (fora do app, `scripts/nfce-referencia/gerar-nfce-teste.mjs`
+— referência técnica, não integrado, sem nenhum segredo hardcoded) que:
+gera a chave de acesso de 44 dígitos (módulo 11), monta o XML da NFC-e
+(modelo 65, `tpAmb=2` sempre), assina digitalmente com `xml-crypto`
+(enveloped, C14N, SHA1/RSA-SHA1 — padrão histórico da NFe) usando a chave
+extraída do `.pfx`, e envia via SOAP 1.2 pro `NFeAutorizacao4` com mTLS.
+
+- **Gotcha de certificado**: o `.pfx` só contém o certificado "folha"
+  (confirmado com `openssl pkcs12 ... -clcerts`), sem a cadeia
+  intermediária. O `curl`/Windows completa isso sozinho via repositório
+  de certificados do SO, mas o `https` do Node não — precisa montar a
+  cadeia manualmente (achar a URL da AC emissora via `openssl x509
+  -text | grep "CA Issuers"`, baixar o `.p7b`, extrair com `openssl pkcs7
+  -print_certs`, concatenar com o certificado da loja) e mandar a cadeia
+  inteira no handshake mTLS — sem isso o IIS da SEFAZ devolve 403
+  Forbidden antes até de olhar o corpo SOAP.
+- **Resultado real da SEFAZ-BA**: `HTTP 200`, `cStat=702` — "Rejeicao:
+  NFC-e nao e aceita pela UF do Emitente", `tpAmb=2` (homologação
+  confirmada). Ou seja: a estrutura do XML e a assinatura digital foram
+  aceitas o suficiente pra chegar numa regra de negócio (não um erro de
+  schema/assinatura) — rejeitado especificamente porque falta o
+  credenciamento de NFC-e dessa loja na SEFAZ-BA (o mesmo gap já
+  documentado acima). Confirma, com teste real contra o ambiente de
+  verdade, que o próximo passo é administrativo (credenciamento/CSC),
+  não é código.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
