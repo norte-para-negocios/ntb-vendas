@@ -776,6 +776,37 @@ com o **ntb-estoque** (`ntb-estoque-next`) foram mencionadas juntas:
    pedido cancelado/estornado depois da ordem de produção já ter sido
    criada. Nada disso foi desenhado ainda.
 
+**Atualização 2026-07-06 — primeiro teste real contra a SEFAZ-BA em
+homologação, confirmado tecnicamente (nenhum código de emissão criado
+ainda neste repo, foi um teste manual fora da aplicação):**
+- Certificado (loja "Vieras e Vinhos") extraído com `openssl pkcs12`:
+  e-CNPJ A1 válido, CNPJ `50.493.129/0001-57`, razão social "Vinhas e
+  Vinhetos Distribuidoras LTDA", registrado em Mata de São João/**BA**
+  (`cUF` IBGE = **29**).
+- Bahia roda infraestrutura própria de SEFAZ (não usa SVRS
+  compartilhado). Webservices de homologação em
+  `https://hnfe.sefaz.ba.gov.br/webservices/<Servico>4/<Servico>4.asmx`
+  — exigem certificado cliente (mTLS) até pra servir o `?wsdl` (sem
+  certificado, IIS devolve 403 Forbidden).
+- Uma chamada SOAP real de `nfeStatusServicoNF` (Status do Serviço —
+  não exige CSC/credenciamento, é consulta pública) devolveu
+  `cStat=107 "Servico em Operacao"`, `tpAmb=2` (homologação confirmado),
+  `cUF=29` — prova que certificado + rede + protocolo SOAP funcionam de
+  ponta a ponta contra o ambiente real de homologação da SEFAZ-BA.
+- **NFC-e (modelo 65) de verdade ainda não pode ser emitida**: exige
+  credenciamento + CSC de homologação, feito em
+  `efisc.sefaz.ba.gov.br/credenciamento`, que **ainda não foi feito**
+  pra essa loja. Sem isso, o hash do QR Code (campo obrigatório do XML)
+  não pode ser gerado corretamente.
+- **Gotcha de rede real**: testando da rede residencial do usuário no Rio
+  de Janeiro, o tráfego pra `hnfe.sefaz.ba.gov.br:443` foi descartado
+  silenciosamente bem na borda da rede da SEFAZ-BA (traceroute chegava
+  até `200.187.38.254`, mesma faixa do servidor, e morria ali — sem
+  resposta TLS nem TCP). Trocar pra uma rede de dados móveis resolveu na
+  hora. Se isso for reproduzido de novo e travar com timeout total (sem
+  nem um 403), suspeitar de rede/firewall antes de suspeitar de
+  certificado ou código.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
