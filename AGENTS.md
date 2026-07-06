@@ -321,8 +321,12 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   `products` — pacote "cardápio que vende", ver seção dedicada abaixo.
   `create_order_secure` recriada pra cobrar `coalesce(promo_price, price)`
   no servidor (mesmo princípio de 007/016/017: client nunca dita preço).
+- **`020_vende_mais_2.sql`**: `get_bestseller_product_ids` (function
+  `security definer`, leitura agregada) + tabela `product_recommendations`
+  e `sync_product_recommendations` (RPC atômica) — pacote "vende mais II",
+  ver seção dedicada abaixo.
 
-Todas as migrations (001 a 019) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 020) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
 `create_order_secure` com e sem adicionais e com e sem promoção,
 `open_table_session`, rate-limit de login e de PIN, bucket
@@ -335,11 +339,20 @@ cenários, incluindo validação de grupo obrigatório vazio, filtro de
 indisponível, limite min/max de seleção, e o fluxo do garçom —,
 `sync_product_option_groups` e os campos de min/max/disponibilidade da
 migration 017 verificados via query direta após aplicar, colunas de
-horário da migration 018 verificadas do mesmo jeito, e `promo_price`/
+horário da migration 018 verificadas do mesmo jeito, `promo_price`/
 `featured`/`tags`/CHECK da migration 019 verificados via query direta +
 teste real de `create_order_secure` numa categoria/produto temporário na
 "Bistrô Demo" confirmando que o total cobrado usa o preço promocional,
-não o cheio — produto e categoria de teste removidos logo em seguida).
+não o cheio, e `get_bestseller_product_ids`/`sync_product_recommendations`
+da migration 020 testados diretamente via `scripts/db.mjs` — incluindo um
+achado real corrigido antes do commit: a agregação de mais vendidos
+inicialmente não filtrava `product_id is not null`, e a Bistrô Demo tinha
+um `order_item` órfão de produto já excluído (`on delete set null`),
+fazendo a function devolver `{null}` em vez de `{}` — corrigido com o
+filtro antes de aplicar em definitivo; `sync_product_recommendations`
+testado com produtos temporários (sync válido, rejeição de
+auto-recomendação, limpeza do array com lista vazia), tudo removido em
+seguida sem deixar resíduo).
 
 ## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
 
@@ -616,6 +629,51 @@ preso no Master Admin, nada hardcoded.
   atalho de digitação, o cliente pode editar livremente depois. Loja sem
   nenhuma sugestão cadastrada: campo de observação continua exatamente
   como sempre foi (nenhum chip aparece).
+
+## Vende mais II (migration 020)
+
+Continuação do "cardápio que vende": mais 3 features de baixo esforço —
+"mais vendido" automático, "peça também" (cross-sell manual) e favoritar
+produto. Mesmo requisito central: o que é configuração de loja mora em
+`MenuManagementView`, pelo lojista.
+
+- **Mais vendido (automático)** — não é tag manual, é calculado de venda
+  real. `get_bestseller_product_ids(store_id, days=30, limit=5)`, function
+  `security definer`, agrega `order_items`/`orders` (que não têm `SELECT`
+  liberado pro `anon` — dado de venda é sensível, concorrente não pode
+  raspar quantidade/receita) e devolve **só uma lista ordenada de
+  `product_id`**, nunca quantidade nem valor. Toggle do lojista "🔥 Mostrar
+  mais vendidos automaticamente" em `stores.config.show_bestsellers`
+  (default off). `ClientModule.tsx` chama a RPC uma vez ao carregar (só se
+  o toggle estiver ligado) e marca com um badge "🔥 Mais vendido" (visual
+  distinto de `PRODUCT_TAGS`, pra não parecer etiqueta manual) todo
+  produto cujo id apareça na lista devolvida; erro na chamada não quebra o
+  cardápio, só não mostra badge nenhum. **Achado real corrigido antes de
+  aplicar em definitivo**: a primeira versão da agregação não filtrava
+  `product_id is not null`, e um `order_item` órfão (produto excluído,
+  `on delete set null`) fazia a function devolver `{null}` em vez de
+  `{}` — corrigido com `and oi.product_id is not null` na query.
+- **Peça também (cross-sell manual)** — tabela `product_recommendations
+  (product_id, recommended_product_id, position)`, só com policy de
+  `SELECT` pro `anon` (mesmo nível público de `products`/`categories`);
+  toda escrita passa por `sync_product_recommendations` (RPC `security
+  definer`, mesmo padrão atômico de `sync_product_option_groups`: apaga e
+  recria tudo numa chamada só, valida que os produtos recomendados são da
+  mesma loja, rejeita auto-recomendação, limite de 3). Configurado na
+  seção "Sugerir junto (opcional)" do formulário de produto (busca por
+  nome + checkbox, mesmo rascunho local que já existe pra adicionais/
+  etiquetas, só persiste de verdade depois que o produto tem `id`
+  definitivo). No cardápio do cliente, aparece como seção "Peça também"
+  no `ProductModal`, com cards compactos que trocam o produto do modal ao
+  clicar (mesmo mecanismo de estado que já controla qual produto está
+  aberto).
+- **Favoritar produto** — 100% client-side, sem nenhuma peça de servidor.
+  Ícone de coração no `ProductCard` e no `ProductModal`, estado persistido
+  em `localStorage` (chave `fav_products_${storeId}`, por loja). Chip "❤
+  Favoritos" na mesma área da busca/ordenação filtra a lista exibida —
+  cumulativo com categoria ativa e busca por texto (mesmo comportamento
+  que a busca por descrição já tem: restringe mais, não substitui o filtro
+  de categoria).
 
 ## Design system (`app/globals.css` + `components/ui.tsx`)
 
