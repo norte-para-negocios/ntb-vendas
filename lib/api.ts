@@ -277,10 +277,15 @@ function mergeOptionGroups(products: Product[], groupsByProduct: Map<string, Pro
 // security definer). Erro/vazio devolve Map vazio, mesmo fallback de
 // fetchOptionGroupsByProduct: recomendação é um detalhe do form do lojista,
 // não pode quebrar o carregamento do cardápio.
+// Achado real em QA (2026-07-06): `product_recommendations` tem 2 FKs pra
+// `products` (product_id e recommended_product_id) — sem nomear qual FK
+// usar no embed, o PostgREST devolve PGRST201 (relacionamento ambíguo),
+// erro que o catch abaixo engolia silenciosamente, fazendo "Peça também"
+// nunca aparecer pra ninguém. Precisa apontar a FK explicitamente.
 async function fetchProductRecommendationsByStore(storeId: string): Promise<Map<string, string[]>> {
   const { data, error } = await supabase
     .from('product_recommendations')
-    .select('*, product:products!inner(store_id)')
+    .select('*, product:products!product_recommendations_product_id_fkey!inner(store_id)')
     .eq('product.store_id', storeId)
     .order('position')
     .limit(500);
