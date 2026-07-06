@@ -13,8 +13,8 @@ import { playPreparingAlert, playReadyAlert, vibrateAlert } from '@/lib/audioAle
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal } from '@/lib/calc';
+import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 
@@ -29,6 +29,14 @@ const WINE_GOLD = '#D4AF5C';
 // Tom mais escuro só pro ícone dentro do medalhão dourado claro: o dourado
 // puro em cima do próprio tom claro (rgba 0.14) não tem contraste suficiente.
 const WINE_GOLD_DARK = '#8A6A2B';
+
+// Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
+// E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
+// usada aqui só pra decidir SE mostra o preço riscado, não pra calcular o
+// valor cobrado (isso é sempre getEffectivePrice/calculateCartItemUnitPrice).
+function hasActivePromo(product: { price: number; promo_price?: number | null }): boolean {
+    return product.promo_price != null && product.promo_price < product.price;
+}
 
 // Ícone por categoria: leitura visual rápida na navegação, sem depender de
 // texto. Heurística por palavra-chave no nome da categoria (dado real vindo
@@ -616,8 +624,29 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             </div>
             <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold text-[var(--text)] leading-snug text-[14.5px]">{clean}</h3>
-                    <span className="font-bold whitespace-nowrap num text-[15px]" style={{ color: WINE_GOLD }}>R$ {product.price.toFixed(2)}</span>
+                    <h3 className="font-semibold text-[var(--text)] leading-snug text-[14.5px]">
+                        {clean}
+                        {/* Badges (migration 019): só o emoji aqui, discreto — a carta de
+                            vinhos não pode virar poluição visual. Label completo só no
+                            ProductModal (detalhe expandido). */}
+                        {product.tags.length > 0 && (
+                            <span
+                                className="ml-1.5 text-[12px] align-middle"
+                                title={product.tags.map(t => getTagDisplay(t).label).join(', ')}
+                            >
+                                {product.tags.map(t => getTagDisplay(t).emoji).filter(Boolean).join(' ')}
+                            </span>
+                        )}
+                    </h3>
+                    {/* Preço promocional (migration 019): cheio riscado + efetivo em
+                        destaque (mesmo dourado de sempre). getEffectivePrice é a mesma
+                        fonte que já decide quanto o carrinho cobra (lib/calc.ts). */}
+                    <span className="flex items-baseline gap-1.5 whitespace-nowrap flex-shrink-0">
+                        {hasActivePromo(product) && (
+                            <span className="text-[11.5px] text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
+                        )}
+                        <span className="font-bold num text-[15px]" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
+                    </span>
                 </div>
                 {(origin || product.description) && (
                     <div className="flex items-center gap-2 mt-1">
@@ -657,7 +686,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
 });
 ProductCard.displayName = 'ProductCard';
 
-const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ product, onClose, onAdd }) => {
+const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void, noteSuggestions?: string[] }> = ({ product, onClose, onAdd, noteSuggestions = [] }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -701,7 +730,7 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
             return opt ? [{ group_id: g.id, option_id: opt.id, name: opt.name, price_delta: opt.price_delta }] : [];
         })
     );
-    const unitPrice = product.price + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
+    const unitPrice = getEffectivePrice(product) + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
     // Mínimo efetivo: grupo obrigatório sempre exige pelo menos 1 (ou
     // min_select, se maior); grupo opcional só exige algo se min_select
     // tiver sido configurado explicitamente.
@@ -720,8 +749,34 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                 )}
                 <p className="text-[var(--text-muted)] leading-relaxed">{product.description}</p>
 
+                {/* Badges (migration 019): aqui, detalhe expandido, emoji + label
+                    completo — no ProductCard (linha da lista) é só o emoji. */}
+                {product.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                        {product.tags.map(tag => {
+                            const { label, emoji } = getTagDisplay(tag);
+                            return (
+                                <span
+                                    key={tag}
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full border"
+                                    style={{ borderColor: 'rgba(212,175,92,0.35)', color: WINE_GOLD, background: 'rgba(212,175,92,0.08)' }}
+                                >
+                                    {emoji} {label}
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
+
                 <div className="flex items-center justify-between bg-[var(--surface-2)] px-4 py-3 rounded-[var(--r-md)] border border-[var(--border)]">
-                    <span className="text-xl font-semibold text-[var(--brand)] num">R$ {product.price.toFixed(2)}</span>
+                    {hasActivePromo(product) ? (
+                        <span className="flex items-baseline gap-2">
+                            <span className="text-sm text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
+                            <span className="text-xl font-semibold num" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
+                        </span>
+                    ) : (
+                        <span className="text-xl font-semibold text-[var(--brand)] num">R$ {product.price.toFixed(2)}</span>
+                    )}
                     <div className="flex items-center gap-3 bg-[var(--surface)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
                         <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
                         <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
@@ -772,6 +827,25 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                         </fieldset>
                     );
                 })}
+
+                {/* Chips de observação rápida (migration 019, stores.config.note_suggestions,
+                    editado pelo lojista em MenuManagementView) — atalho de digitação, não
+                    é toggle: clicar só acrescenta o texto, o cliente ainda edita livremente
+                    depois. Some inteiro quando a loja não configurou nenhuma sugestão. */}
+                {noteSuggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                        {noteSuggestions.map((suggestion, idx) => (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setNotes(prev => prev.trim() ? `${prev}, ${suggestion}` : suggestion)}
+                                className="text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)] hover:text-[var(--text)] u-motion u-press-sm"
+                            >
+                                {suggestion}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 <Input
                     label="Observações"
@@ -835,7 +909,19 @@ const CartModal: React.FC<{
                                         <h4 className="font-medium text-[var(--text)] text-sm truncate">
                                             {getCartItemDisplayName(item)}
                                         </h4>
-                                        <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
+                                        {/* Preço promocional (migration 019): calculateCartItemUnitPrice
+                                            já usa getEffectivePrice por baixo, então o valor cobrado
+                                            aqui sempre está certo — só decidimos SE mostra o riscado. */}
+                                        {hasActivePromo(item.product) ? (
+                                            <span className="flex flex-col items-end flex-shrink-0 leading-tight">
+                                                <span className="text-[11px] text-[var(--text-muted)] line-through num">
+                                                    R$ {((item.product.price + (item.selectedOptions || []).reduce((a, o) => a + o.price_delta, 0)) * item.quantity).toFixed(2)}
+                                                </span>
+                                                <span className="font-semibold text-sm num" style={{ color: WINE_GOLD }}>R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
+                                            </span>
+                                        ) : (
+                                            <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
+                                        )}
                                     </div>
                                     {item.notes && <p className="text-[12px] text-[var(--text-muted)] mt-0.5 italic">"{item.notes}"</p>}
 
@@ -1598,7 +1684,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             const isActiveVisible = visibleCategories.some(c => c.id === activeCategory);
             prods = isActiveVisible ? prods.filter(p => p.category_id === activeCategory) : [];
         }
-        if (searchTerm) prods = prods.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            // Busca por descrição (migration 019): além do nome, também bate se o
+            // termo aparecer na descrição do produto — descrição é opcional, daí
+            // o `?.` (produto sem descrição simplesmente não casa por esse lado).
+            prods = prods.filter(p => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term));
+        }
 
         // Sorting Logic
         if (sortBy === 'price_asc') {
@@ -1611,6 +1703,17 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
         return prods;
     }, [products, activeCategory, visibleCategories, searchTerm, sortBy]);
+
+    // Vitrine de destaques (migration 019): produtos featured=true, respeitando
+    // a mesma janela de horário/dia de categoria que o resto do cardápio já
+    // respeita (visibleCategories == isCategoryAvailableNow). Produto órfão
+    // (sem categoria) não tem restrição de horário nenhuma, então continua
+    // visível. `products` já vem só com available=true (fetchMenu(store.id,
+    // true)), não precisa refiltrar disponibilidade de estoque aqui.
+    const featuredProducts = useMemo(
+        () => products.filter(p => p.featured && (p.category_id == null || visibleCategories.some(c => c.id === p.category_id))),
+        [products, visibleCategories]
+    );
 
     const categoryIconById = useMemo(() => {
         const map: Record<string, ReturnType<typeof categoryIcon>> = {};
@@ -1726,6 +1829,47 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {isWaitingBill && (
                 <div className="bg-[var(--warn)] text-white px-4 py-2 text-center text-[13px] font-medium sticky top-0 z-30 flex items-center justify-center gap-2">
                     <Lock size={13}/> Conta Solicitada. Novos pedidos bloqueados.
+                </div>
+            )}
+
+            {/* Vitrine de Destaques (migration 019) — faixa horizontal rolável no
+                topo do cardápio, antes da navegação de categorias. Reusa o
+                ProductCard normal (mesma linha editorial), só envolto num
+                container de largura fixa pra virar "cartão" dentro do scroll
+                horizontal; `last:border-0` do próprio ProductCard já remove o
+                separador pontilhado de linha-de-lista porque cada um vira
+                filho único do seu wrapper. Produto destacado continua
+                aparecendo normalmente dentro da categoria dele também — esta
+                vitrine é além, não em vez disso. */}
+            {featuredProducts.length > 0 && (
+                <div className={`px-4 pt-4 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                    <div className="flex items-center gap-2 mb-1.5 u-grow-in">
+                        <Star size={14} style={{ color: WINE_GOLD }} className="fill-current" />
+                        <h2 className="font-bold text-[var(--text)] text-[17px] tracking-tight">Destaques</h2>
+                        <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(212,175,92,0.5), transparent)' }} />
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1.5 px-1.5 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+                        {featuredProducts.map(product => (
+                            <div
+                                key={product.id}
+                                className="w-64 flex-shrink-0 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)]"
+                                style={{ scrollSnapAlign: 'start' }}
+                            >
+                                <ProductCard
+                                    product={product}
+                                    icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
+                                    onSelect={setSelectedProduct}
+                                    onQuickAdd={(p) => {
+                                        const hasRequiredGroup = (p.option_groups || []).some(g => g.required);
+                                        if (hasRequiredGroup) { setSelectedProduct(p); return; }
+                                        addToCart(p, 1, '', []);
+                                        toast.success(`${p.name} adicionado`);
+                                    }}
+                                    disabled={isWaitingBill}
+                                />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -1904,6 +2048,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         toast.success('Adicionado ao carrinho!');
                     }
                 }}
+                noteSuggestions={currentStore?.config?.note_suggestions || []}
             />
 
             <CounterConfirmModal
