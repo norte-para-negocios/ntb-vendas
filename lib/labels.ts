@@ -32,6 +32,31 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 export const getPaymentMethodLabel = (method?: string | null): string =>
     method ? (PAYMENT_METHOD_LABELS[method] || method) : 'Não especificado';
 
+// Catalogo fixo de etiquetas/badges de produto (migration 019). Armazenado
+// como products.tags (text[]) com essas chaves; a UI (lojista e cliente) so'
+// oferece este catalogo, nunca texto livre — consistencia visual. Ver
+// AGENTS.md (secao cardapio-que-vende). PRODUCT_TAGS e' a fonte unica: o
+// seletor de tags do lojista e a exibicao de badges no cardapio leem daqui.
+export const PRODUCT_TAGS: Record<string, { label: string; emoji: string }> = {
+    picante:      { label: 'Picante',      emoji: '🌶️' },
+    vegano:       { label: 'Vegano',       emoji: '🌱' },
+    vegetariano:  { label: 'Vegetariano',  emoji: '🥬' },
+    sem_gluten:   { label: 'Sem Glúten',   emoji: '🌾' },
+    sem_lactose:  { label: 'Sem Lactose',  emoji: '🥛' },
+    novo:         { label: 'Novo',         emoji: '✨' },
+    da_casa:      { label: 'Da Casa',      emoji: '⭐' },
+};
+
+// {label, emoji} de uma chave de tag, com fallback pra chave crua (mesmo
+// principio dos getters de enum acima: nunca deixar valor cru vazar pra tela
+// sem um formato previsivel). Tag desconhecida (ex.: removida do catalogo mas
+// ainda gravada num produto antigo) volta como label = a propria chave e sem
+// emoji, em vez de quebrar a UI.
+export const getTagDisplay = (tag: string): { label: string; emoji: string } =>
+    PRODUCT_TAGS[tag] || { label: tag, emoji: '' };
+
+export const getTagLabel = (tag: string): string => getTagDisplay(tag).label;
+
 // Nome de exibição de um item de PEDIDO (histórico/impressão/KDS), com
 // adicionais entre parênteses — nunca travessão (regra do projeto).
 // Formato: "Pizza Marguerita (Catupiry)" ou, com múltiplos adicionais,

@@ -73,17 +73,17 @@ let categories: Category[] = [
 ];
 
 let products: Product[] = [
-  { id: 'p1', category_id: 'cat-1', store_id: 'mock-store-1', name: 'Bruschetta', description: 'Pão torrado com tomate e manjericão', price: 18, image_url: null, available: true, prep_time_minutes: 10, order: 1, destination: 'kitchen' },
-  { id: 'p2', category_id: 'cat-1', store_id: 'mock-store-1', name: 'Carpaccio', description: 'Carne fatiada com alcaparras e parmesão', price: 32, image_url: null, available: true, prep_time_minutes: 8, order: 2, destination: 'kitchen' },
-  { id: 'p3', category_id: 'cat-2', store_id: 'mock-store-1', name: 'Risoto de Funghi', description: 'Arroz arbóreo cremoso com cogumelos frescos', price: 58, image_url: null, available: true, prep_time_minutes: 25, order: 1, destination: 'kitchen' },
-  { id: 'p4', category_id: 'cat-2', store_id: 'mock-store-1', name: 'Filé ao Molho Madeira', description: 'Filé mignon grelhado com arroz e batata', price: 72, image_url: null, available: true, prep_time_minutes: 20, order: 2, destination: 'kitchen' },
-  { id: 'p5', category_id: 'cat-2', store_id: 'mock-store-1', name: 'Salmão Grelhado', description: 'Salmão com legumes salteados na manteiga', price: 65, image_url: null, available: true, prep_time_minutes: 18, order: 3, destination: 'kitchen' },
-  { id: 'p6', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Água Mineral 500ml', description: 'Com ou sem gás', price: 6, image_url: null, available: true, prep_time_minutes: 1, order: 1, destination: 'bar' },
-  { id: 'p7', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Suco de Laranja', description: 'Natural, 300ml', price: 12, image_url: null, available: true, prep_time_minutes: 5, order: 2, destination: 'bar' },
-  { id: 'p8', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Caipirinha', description: 'Limão, cachaça artesanal e gelo', price: 22, image_url: null, available: true, prep_time_minutes: 5, order: 3, destination: 'bar' },
-  { id: 'p9', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Vinho Tinto Taça', description: 'Malbec argentino, 150ml', price: 28, image_url: null, available: true, prep_time_minutes: 2, order: 4, destination: 'bar' },
-  { id: 'p10', category_id: 'cat-4', store_id: 'mock-store-1', name: 'Petit Gâteau', description: 'Bolinho quente com sorvete de baunilha', price: 24, image_url: null, available: true, prep_time_minutes: 12, order: 1, destination: 'kitchen' },
-  { id: 'p11', category_id: 'cat-4', store_id: 'mock-store-1', name: 'Tiramisù', description: 'Clássico italiano com mascarpone e café', price: 22, image_url: null, available: true, prep_time_minutes: 5, order: 2, destination: 'kitchen' },
+  { id: 'p1', category_id: 'cat-1', store_id: 'mock-store-1', name: 'Bruschetta', description: 'Pão torrado com tomate e manjericão', price: 18, image_url: null, available: true, prep_time_minutes: 10, order: 1, destination: 'kitchen', featured: false, tags: [] },
+  { id: 'p2', category_id: 'cat-1', store_id: 'mock-store-1', name: 'Carpaccio', description: 'Carne fatiada com alcaparras e parmesão', price: 32, image_url: null, available: true, prep_time_minutes: 8, order: 2, destination: 'kitchen', featured: false, tags: [] },
+  { id: 'p3', category_id: 'cat-2', store_id: 'mock-store-1', name: 'Risoto de Funghi', description: 'Arroz arbóreo cremoso com cogumelos frescos', price: 58, image_url: null, available: true, prep_time_minutes: 25, order: 1, destination: 'kitchen', featured: false, tags: [] },
+  { id: 'p4', category_id: 'cat-2', store_id: 'mock-store-1', name: 'Filé ao Molho Madeira', description: 'Filé mignon grelhado com arroz e batata', price: 72, image_url: null, available: true, prep_time_minutes: 20, order: 2, destination: 'kitchen', featured: false, tags: [] },
+  { id: 'p5', category_id: 'cat-2', store_id: 'mock-store-1', name: 'Salmão Grelhado', description: 'Salmão com legumes salteados na manteiga', price: 65, image_url: null, available: true, prep_time_minutes: 18, order: 3, destination: 'kitchen', featured: false, tags: [] },
+  { id: 'p6', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Água Mineral 500ml', description: 'Com ou sem gás', price: 6, image_url: null, available: true, prep_time_minutes: 1, order: 1, destination: 'bar', featured: false, tags: [] },
+  { id: 'p7', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Suco de Laranja', description: 'Natural, 300ml', price: 12, image_url: null, available: true, prep_time_minutes: 5, order: 2, destination: 'bar', featured: false, tags: [] },
+  { id: 'p8', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Caipirinha', description: 'Limão, cachaça artesanal e gelo', price: 22, image_url: null, available: true, prep_time_minutes: 5, order: 3, destination: 'bar', featured: false, tags: [] },
+  { id: 'p9', category_id: 'cat-3', store_id: 'mock-store-1', name: 'Vinho Tinto Taça', description: 'Malbec argentino, 150ml', price: 28, image_url: null, available: true, prep_time_minutes: 2, order: 4, destination: 'bar', featured: false, tags: [] },
+  { id: 'p10', category_id: 'cat-4', store_id: 'mock-store-1', name: 'Petit Gâteau', description: 'Bolinho quente com sorvete de baunilha', price: 24, image_url: null, available: true, prep_time_minutes: 12, order: 1, destination: 'kitchen', featured: false, tags: [] },
+  { id: 'p11', category_id: 'cat-4', store_id: 'mock-store-1', name: 'Tiramisù', description: 'Clássico italiano com mascarpone e café', price: 22, image_url: null, available: true, prep_time_minutes: 5, order: 2, destination: 'kitchen', featured: false, tags: [] },
 ];
 
 const now = () => new Date().toISOString();
@@ -231,6 +231,7 @@ export const createProduct = async (storeId: string, categoryId: string, product
     price: product.price || 0, image_url: product.image_url || null,
     available: true, prep_time_minutes: product.prep_time_minutes || 15,
     order: maxOrder + 1, destination: product.destination || 'kitchen',
+    promo_price: product.promo_price ?? null, featured: product.featured ?? false, tags: product.tags ?? [],
   });
 };
 

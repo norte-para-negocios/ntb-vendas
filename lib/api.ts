@@ -327,6 +327,10 @@ export const createProduct = async (storeId: string, categoryId: string, product
     store_id: storeId, category_id: categoryId, name: product.name, description: product.description,
     price: product.price, image_url: product.image_url, prep_time_minutes: product.prep_time_minutes || 15,
     available: true, order: nextOrder, destination: product.destination || 'kitchen',
+    // Cardapio que vende (migration 019). updateProduct ja persiste esses 3
+    // de graca (passa o Partial<Product> direto pro .update); no insert
+    // precisam ser explicitos porque createProduct monta o objeto campo a campo.
+    promo_price: product.promo_price ?? null, featured: product.featured ?? false, tags: product.tags ?? [],
   }).select('id').single();
 
   if (error) {

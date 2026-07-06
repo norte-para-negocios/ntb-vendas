@@ -120,6 +120,13 @@ export interface Product {
   prep_time_minutes: number;
   order?: number;
   destination?: 'kitchen' | 'bar';
+  // Cardapio que vende (migration 019). promo_price NULL/undefined = sem
+  // promocao; quando setado, o CHECK do banco garante < price e
+  // create_order_secure cobra o menor no servidor (ver getEffectivePrice
+  // em lib/calc.ts). tags usa o catalogo fixo PRODUCT_TAGS (lib/labels.ts).
+  promo_price?: number | null;
+  featured: boolean;
+  tags: string[];
   option_groups?: ProductOptionGroup[]; // so populado quando o Product veio de fetchMenu
 }
 
