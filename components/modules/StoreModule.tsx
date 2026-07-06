@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -13,11 +13,11 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem, getEffectivePrice } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -2344,6 +2344,16 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
+    // Cardapio que vende (migration 019) — preco promocional, destaque e
+    // etiquetas, tudo configuravel pelo lojista aqui mesmo (requisito
+    // explicito do dono do projeto, ver Task B1 do plano 2026-07-06).
+    const [pPromoPrice, setPPromoPrice] = useState('');
+    const [pFeatured, setPFeatured] = useState(false);
+    const [pTags, setPTags] = useState<string[]>([]);
+    const toggleProductTag = (tag: string) => {
+        setPTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    };
+
     // Adicionais/opcionais do produto (ex: "Escolha a borda") — rascunho
     // local, so' persiste no banco quando "Salvar Produto" e' clicado
     // (syncProductOptionGroups apaga e recria tudo, seguro porque
@@ -2545,6 +2555,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPreview(product.image_url);
             setPDestination(product.destination || 'kitchen');
             setPOptionGroups(toDraftGroups(product.option_groups));
+            setPPromoPrice(product.promo_price != null ? product.promo_price.toString() : '');
+            setPFeatured(product.featured ?? false);
+            setPTags(product.tags ?? []);
         } else {
             setEditingProduct(null);
             setPName('');
@@ -2555,6 +2568,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPreview(null);
             setPDestination('kitchen');
             setPOptionGroups([]);
+            setPPromoPrice('');
+            setPFeatured(false);
+            setPTags([]);
         }
         setPFile(null);
         setIsProductModalOpen(true);
@@ -2566,6 +2582,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         if (isNaN(priceNum) || priceNum < 0) return toast.error('Preço não pode ser negativo.');
         const prepNum = parseInt(pTime);
         if (isNaN(prepNum) || prepNum < 0) return toast.error('Tempo de preparo não pode ser negativo.');
+
+        // Preco promocional (migration 019): validacao amigavel aqui no
+        // client — o CHECK do banco (promo_price < price) e' a rede de
+        // seguranca final, mas o lojista nao deveria descobrir isso via um
+        // erro 400 cru. Vazio = sem promocao (null).
+        let promoPriceNum: number | null = null;
+        if (pPromoPrice.trim() !== '') {
+            promoPriceNum = parseFloat(pPromoPrice);
+            if (isNaN(promoPriceNum) || promoPriceNum < 0) return toast.error('Preço promocional não pode ser negativo.');
+            if (promoPriceNum >= priceNum) return toast.error('Preço promocional precisa ser menor que o preço cheio.');
+        }
 
         // Validação: grupo obrigatório sem nenhuma opção válida "bricaria" o
         // produto pro cliente (obrigatório mas nada pra escolher, sem aviso
@@ -2594,7 +2621,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 category_id: pCat,
                 prep_time_minutes: prepNum,
                 image_url: imageUrl,
-                destination: pDestination
+                destination: pDestination,
+                promo_price: promoPriceNum,
+                featured: pFeatured,
+                tags: pTags,
             };
 
             let productId: string;
@@ -2643,6 +2673,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [serviceFeeEnabled, setServiceFeeEnabled] = useState(store.config?.charge_service_fee ?? false);
     const [currentStoreConfig, setCurrentStoreConfig] = useState(store.config);
 
+    // Sugestoes de observacao rapida (migration 019, cardapio que vende) —
+    // mesmo padrao/coluna jsonb ja usado pela taxa de servico
+    // (stores.config), so' com uma chave nova (note_suggestions). Vazio =
+    // nenhum chip aparece pro cliente (comportamento atual do campo de
+    // observacao continua igual).
+    const [noteSuggestions, setNoteSuggestions] = useState<string[]>(store.config?.note_suggestions ?? []);
+    const [newNoteSuggestion, setNewNoteSuggestion] = useState('');
+    const [isSavingNoteSuggestions, setIsSavingNoteSuggestions] = useState(false);
+
     // A `store` recebida via prop ja e a fonte da verdade (StoreModule mantem
     // `user.store` atualizado via `onStoreUpdate` a cada mudanca real de
     // config) — nao ha motivo pra rebuscar do banco aqui (achado de
@@ -2651,6 +2690,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     useEffect(() => {
         setCurrentStoreConfig(store.config);
         setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
+        setNoteSuggestions(store.config?.note_suggestions ?? []);
     }, [store]);
 
     const handleToggleServiceFee = async () => {
@@ -2673,6 +2713,45 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         }
     };
 
+    const persistNoteSuggestions = async (updated: string[]) => {
+        const previous = noteSuggestions;
+        setNoteSuggestions(updated); // otimista, mesmo padrão do toggle de taxa de serviço acima
+        setIsSavingNoteSuggestions(true);
+        try {
+            const newConfig = { ...currentStoreConfig, note_suggestions: updated };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+        } catch (e) {
+            console.error("Error updating note suggestions", e);
+            setNoteSuggestions(previous); // revert on error
+            toast.error("Erro ao atualizar sugestões de observação.");
+        } finally {
+            setIsSavingNoteSuggestions(false);
+        }
+    };
+
+    const handleAddNoteSuggestion = () => {
+        const trimmed = newNoteSuggestion.trim();
+        if (!trimmed) return;
+        if (noteSuggestions.includes(trimmed)) {
+            toast.error('Essa sugestão já existe.');
+            return;
+        }
+        if (noteSuggestions.length >= 20) {
+            toast.error('Limite de 20 sugestões atingido.');
+            return;
+        }
+        setNewNoteSuggestion('');
+        persistNoteSuggestions([...noteSuggestions, trimmed]);
+    };
+
+    const handleRemoveNoteSuggestion = (value: string) => {
+        persistNoteSuggestions(noteSuggestions.filter(s => s !== value));
+    };
+
     // Produtos órfãos (categoria excluída, FK on delete set null) entram numa
     // seção sintética "Sem categoria" no final da lista, reusando o mesmo
     // Droppable/Draggable e os mesmos controles de editar/pausar/excluir das
@@ -2692,12 +2771,56 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço ({((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}%)</h4>
                         <p className="text-sm text-[var(--text-muted)]">Aplica {((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}% de taxa opcional no total das comandas e pedidos.</p>
                     </div>
-                    <button 
+                    <button
                         onClick={handleToggleServiceFee}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${serviceFeeEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
                     >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${serviceFeeEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
+                </div>
+
+                {/* Sugestoes de observacao rapida (migration 019) — chips de atalho
+                    pro campo de observacao do cliente, ver ProductModal em ClientModule.tsx */}
+                <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                    <h4 className="font-bold text-[var(--text)]">Sugestões de observação rápida</h4>
+                    <p className="text-sm text-[var(--text-muted)] mb-3">
+                        Chips de atalho que aparecem pro cliente no campo de observação do pedido (ex.: "Sem cebola",
+                        "Bem passado", "Sem gelo"). Sem nenhuma sugestão cadastrada, o campo de observação continua
+                        como é hoje.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {noteSuggestions.length === 0 && (
+                            <span className="text-xs text-[var(--text-muted)] italic">Nenhuma sugestão cadastrada.</span>
+                        )}
+                        {noteSuggestions.map(suggestion => (
+                            <span
+                                key={suggestion}
+                                className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-xs font-medium text-[var(--text)]"
+                            >
+                                {suggestion}
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveNoteSuggestion(suggestion)}
+                                    aria-label={`Remover sugestão "${suggestion}"`}
+                                    className="text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                    <div className="flex gap-2">
+                        <Input
+                            placeholder='Nova sugestão (ex: "Sem cebola")'
+                            aria-label="Nova sugestão de observação"
+                            value={newNoteSuggestion}
+                            onChange={e => setNewNoteSuggestion(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddNoteSuggestion(); } }}
+                        />
+                        <Button onClick={handleAddNoteSuggestion} isLoading={isSavingNoteSuggestions} aria-label="Adicionar sugestão">
+                            <Plus size={20}/>
+                        </Button>
+                    </div>
                 </div>
             </section>
 
@@ -2791,9 +2914,25 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                             )}
                                                                         </div>
                                                                         <div className="flex-1">
-                                                                            <div className="flex justify-between items-start">
-                                                                                <h5 className="font-bold text-[var(--text)]">{prod.name}</h5>
-                                                                                <span className="font-bold text-[var(--brand)]">R$ {prod.price.toFixed(2)}</span>
+                                                                            <div className="flex justify-between items-start gap-2">
+                                                                                <h5 className="font-bold text-[var(--text)] flex items-center gap-1">
+                                                                                    {prod.featured && (
+                                                                                        <Star size={14} className="text-[var(--warn)] fill-[var(--warn)] flex-shrink-0" aria-label="Produto em destaque" />
+                                                                                    )}
+                                                                                    {prod.name}
+                                                                                </h5>
+                                                                                {(() => {
+                                                                                    const effectivePrice = getEffectivePrice(prod);
+                                                                                    const hasActivePromo = effectivePrice < prod.price;
+                                                                                    return hasActivePromo ? (
+                                                                                        <span className="flex flex-col items-end leading-tight flex-shrink-0">
+                                                                                            <span className="text-[11px] text-[var(--text-muted)] line-through">R$ {prod.price.toFixed(2)}</span>
+                                                                                            <span className="font-bold text-[var(--brand)]">R$ {effectivePrice.toFixed(2)}</span>
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="font-bold text-[var(--brand)] flex-shrink-0">R$ {prod.price.toFixed(2)}</span>
+                                                                                    );
+                                                                                })()}
                                                                             </div>
                                                                             <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-1">{prod.description}</p>
                                                                             <div className="mt-2 flex gap-2">
@@ -2851,6 +2990,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <Input label="Descrição" value={pDesc} onChange={e => setPDesc(e.target.value)} />
                     <div className="grid grid-cols-2 gap-4">
                         <Input label="Preço (R$)" type="number" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
+                        <Input
+                            label="Preço promocional (opcional)"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Deixe em branco pra não ter promoção"
+                            value={pPromoPrice}
+                            onChange={e => setPPromoPrice(e.target.value)}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Categoria</label>
                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30" value={pCat} onChange={e => setPCat(e.target.value)}>
@@ -2858,9 +3008,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
+                         <Input label="Tempo Preparo (min)" type="number" min="0" value={pTime} onChange={e => setPTime(e.target.value)} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                         <Input label="Tempo Preparo (min)" type="number" min="0" value={pTime} onChange={e => setPTime(e.target.value)} />
                          <div className="flex flex-col gap-1.5">
                              <label className="text-sm font-semibold text-[var(--text)]">Destino do Pedido</label>
                              <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30" value={pDestination} onChange={e => setPDestination(e.target.value as 'kitchen' | 'bar')}>
@@ -2868,6 +3018,43 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                  <option value="bar">Bar</option>
                              </select>
                          </div>
+                    </div>
+
+                    {/* Destaque e etiquetas (migration 019, cardapio que vende) —
+                        tudo configuravel pelo lojista aqui mesmo, sem Master Admin. */}
+                    <div className="flex items-center justify-between p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                        <div>
+                            <h4 className="font-bold text-sm text-[var(--text)]">⭐ Destacar no topo do cardápio</h4>
+                            <p className="text-xs text-[var(--text-muted)]">Produtos destacados aparecem numa vitrine especial no topo do cardápio do cliente.</p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={pFeatured}
+                            aria-label="Destacar no topo do cardápio"
+                            onClick={() => setPFeatured(prev => !prev)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${pFeatured ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pFeatured ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+
+                    <div>
+                        <label className="text-sm font-semibold text-[var(--text)] block mb-1.5">Etiquetas</label>
+                        <div className="flex flex-wrap gap-2">
+                            {Object.entries(PRODUCT_TAGS).map(([key, tag]) => (
+                                <label
+                                    key={key}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer u-motion ${
+                                        pTags.includes(key) ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
+                                    }`}
+                                >
+                                    <input type="checkbox" className="hidden" checked={pTags.includes(key)} onChange={() => toggleProductTag(key)} />
+                                    <span aria-hidden="true">{tag.emoji}</span> {tag.label}
+                                </label>
+                            ))}
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">Aparecem como badge no cardápio do cliente, ao lado do nome do produto.</p>
                     </div>
 
                     <div className="border-t border-[var(--border)] pt-4">

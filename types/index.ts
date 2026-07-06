@@ -40,6 +40,10 @@ export interface Store {
     require_pin_for_open: boolean;
     charge_service_fee?: boolean;
     service_fee_rate?: number;
+    // Cardapio que vende (migration 019, Task B1): chips de atalho pro campo
+    // de observacao do cliente, editaveis pelo lojista em MenuManagementView.
+    // undefined/[] = nenhum chip aparece (comportamento atual, sem mudanca).
+    note_suggestions?: string[];
   };
 }
 
