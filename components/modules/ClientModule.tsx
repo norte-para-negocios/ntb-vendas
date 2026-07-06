@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, createOrderRating } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
@@ -592,13 +592,19 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // vazia parece quebrado. A fila tipográfica (medalhão com ícone da
 // categoria, nome, etiqueta de origem, preço em dourado) fica intencional
 // com ou sem imagem — quando a foto chegar, ela só substitui o medalhão.
-const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, icon: Icon = UtensilsCrossed }: {
+const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, icon: Icon = UtensilsCrossed, isBestseller, isFavorite, onToggleFavorite }: {
     product: Product,
     onSelect: (product: Product) => void,
     onQuickAdd?: (product: Product) => void,
     disabled?: boolean,
     style?: React.CSSProperties,
     icon?: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>,
+    // Vende mais II (migration 020): badge calculado (não é PRODUCT_TAGS) e
+    // favorito 100% client-side (localStorage) — ambos opcionais pra não
+    // quebrar nenhum outro caller existente do ProductCard.
+    isBestseller?: boolean,
+    isFavorite?: boolean,
+    onToggleFavorite?: (productId: string) => void,
 }) {
     const open = () => { if (!disabled) onSelect(product); };
     const { clean, origin } = parseOrigin(product.name);
@@ -637,16 +643,45 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                                 {product.tags.map(t => getTagDisplay(t).emoji).filter(Boolean).join(' ')}
                             </span>
                         )}
+                        {/* "Mais vendido" (migration 020, Vende Mais II): calculado a
+                            partir de venda real (get_bestseller_product_ids), não é
+                            tag manual do catálogo — por isso ganha fundo/borda própria
+                            em vez de só emoji solto, pra não ser confundido com
+                            PRODUCT_TAGS. */}
+                        {isBestseller && (
+                            <span
+                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full align-middle whitespace-nowrap"
+                                style={{ background: 'rgba(234,88,12,0.12)', color: '#C2410C' }}
+                                title="Um dos produtos mais vendidos desta loja"
+                            >
+                                🔥 Mais vendido
+                            </span>
+                        )}
                     </h3>
                     {/* Preço promocional (migration 019): cheio riscado + efetivo em
                         destaque (mesmo dourado de sempre). getEffectivePrice é a mesma
-                        fonte que já decide quanto o carrinho cobra (lib/calc.ts). */}
-                    <span className="flex items-baseline gap-1.5 whitespace-nowrap flex-shrink-0">
-                        {hasActivePromo(product) && (
-                            <span className="text-[11.5px] text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
+                        fonte que já decide quanto o carrinho cobra (lib/calc.ts).
+                        Favoritar (Vende Mais II, 100% client-side): coração empilhado
+                        acima do preço, mesmo canto — stopPropagation pra não abrir o
+                        modal (o card inteiro já é clicável). */}
+                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                        {onToggleFavorite && (
+                            <button
+                                type="button"
+                                aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
+                                onClick={(e) => { e.stopPropagation(); onToggleFavorite(product.id); }}
+                                className="p-0.5 -mt-1 -mr-1 text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
+                            >
+                                <Heart size={14} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : ''} />
+                            </button>
                         )}
-                        <span className="font-bold num text-[15px]" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
-                    </span>
+                        <span className="flex items-baseline gap-1.5 whitespace-nowrap">
+                            {hasActivePromo(product) && (
+                                <span className="text-[11.5px] text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
+                            )}
+                            <span className="font-bold num text-[15px]" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
+                        </span>
+                    </div>
                 </div>
                 {(origin || product.description) && (
                     <div className="flex items-center gap-2 mt-1">
@@ -686,7 +721,19 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
 });
 ProductCard.displayName = 'ProductCard';
 
-const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void, noteSuggestions?: string[] }> = ({ product, onClose, onAdd, noteSuggestions = [] }) => {
+const ProductModal: React.FC<{
+    product: Product | null,
+    onClose: () => void,
+    onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void,
+    noteSuggestions?: string[],
+    // Vende mais II (migration 020): "peça também" reusa o mesmo mecanismo de
+    // estado que já controla qual produto está com o modal aberto (troca o
+    // selectedProduct do ClientModule, o próprio useEffect abaixo já reseta
+    // qty/notes ao mudar de produto). Favorito é 100% client-side.
+    onSelectRecommended: (product: Product) => void,
+    isFavorite: boolean,
+    onToggleFavorite: (productId: string) => void,
+}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -741,7 +788,18 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
 
     return (
         <Modal isOpen={!!product} onClose={onClose} title={product.name}>
-            <div className="space-y-4">
+            <div className="relative space-y-4">
+                {/* Favoritar (Vende Mais II, 100% client-side, localStorage) — canto
+                    superior direito do modal, sobrepõe a foto quando existe; sem
+                    foto, fica sobre a descrição, mesmo canto. */}
+                <button
+                    type="button"
+                    aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
+                    onClick={() => onToggleFavorite(product.id)}
+                    className="absolute top-0 right-0 z-10 p-2 rounded-full bg-[var(--surface)]/85 backdrop-blur-sm border border-[var(--border)] u-motion u-press-sm"
+                >
+                    <Heart size={18} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : 'text-[var(--text-muted)]'} />
+                </button>
                 {product.image_url && (
                     <div className="relative w-full h-56 rounded-xl overflow-hidden shadow-sm">
                         <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 100vw, 480px" className="object-cover" />
@@ -783,6 +841,43 @@ const ProductModal: React.FC<{ product: Product | null, onClose: () => void, onA
                         <button onClick={() => setQty(q => Math.min(99, q + 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
                     </div>
                 </div>
+
+                {/* "Peça também" (migration 020, Vende Mais II): cross-sell manual
+                    do lojista (product_recommendations), já resolvido pelo
+                    fetchMenu contra a lista de produtos da loja (indisponível/
+                    excluído já filtrado antes de chegar em product.recommended_products).
+                    Cards compactos em linha rolável; clicar troca o produto do
+                    próprio modal (onSelectRecommended -> setSelectedProduct no
+                    ClientModule, mesmo mecanismo de estado de sempre). */}
+                {!!product.recommended_products?.length && (
+                    <div>
+                        <h4 className="text-[13px] font-semibold text-[var(--text)] mb-2 flex items-center gap-1.5">
+                            <Sparkles size={13} style={{ color: WINE_GOLD }} /> Peça também
+                        </h4>
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+                            {product.recommended_products.map(rec => (
+                                <button
+                                    key={rec.id}
+                                    type="button"
+                                    onClick={() => onSelectRecommended(rec)}
+                                    className="flex-shrink-0 w-24 text-left border border-[var(--border)] rounded-[var(--r-md)] overflow-hidden bg-[var(--surface)] u-motion hover:border-[var(--brand)]"
+                                >
+                                    <div className="w-full h-16 bg-[var(--surface-2)] flex items-center justify-center overflow-hidden">
+                                        {rec.image_url ? (
+                                            <Image src={rec.image_url} alt={rec.name} width={96} height={64} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <UtensilsCrossed size={16} className="text-[var(--text-muted)]/40" />
+                                        )}
+                                    </div>
+                                    <div className="p-1.5">
+                                        <p className="text-[11px] font-medium text-[var(--text)] leading-tight line-clamp-2">{rec.name}</p>
+                                        <p className="text-[11px] font-bold num mt-0.5" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(rec).toFixed(2)}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {groups.map(group => {
                     // Defesa client-side extra: o servidor (fetchMenu) já filtra
@@ -1391,6 +1486,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
 
+    // Vende mais II (migration 020): "mais vendido" automático (via RPC
+    // get_bestseller_product_ids, só quando a loja liga
+    // config.show_bestsellers) e favoritos (100% client-side, localStorage,
+    // sem coluna/RPC nenhuma — ver efeitos abaixo).
+    const [bestsellerIds, setBestsellerIds] = useState<Set<string>>(new Set());
+    const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+    const [favoritesOnly, setFavoritesOnly] = useState(false);
+
     // Cardapio por horario/turno (migration 018): `scheduleNow` tickando a
     // cada minuto forca reavaliar `isCategoryAvailableNow` mesmo sem
     // nenhuma outra mudanca de estado — sem isso, uma categoria que sai da
@@ -1469,6 +1572,16 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
         setCurrentStore(store);
 
+        // "Mais vendido" (migration 020, Vende Mais II): opt-in por loja
+        // (config.show_bestsellers), roda em paralelo (não é `await`ado) —
+        // fetchBestsellerProductIds já nunca lança (devolve [] em erro), então
+        // isso nunca atrasa nem quebra o carregamento do cardápio.
+        if (store.config?.show_bestsellers) {
+            fetchBestsellerProductIds(store.id).then(ids => setBestsellerIds(new Set(ids)));
+        } else {
+            setBestsellerIds(new Set());
+        }
+
         // Pass TRUE to fetch only available products
         const { categories, products, error: menuError } = await fetchMenu(store.id, true);
         setCategories(categories);
@@ -1487,6 +1600,30 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     useEffect(() => {
         loadStoreAndMenu();
     }, [loadStoreAndMenu]);
+
+    // Favoritos (Vende Mais II, 100% client-side): lido do localStorage uma
+    // vez por loja (chave `fav_products_${storeId}`), assim que
+    // currentStore.id fica disponível (troca de loja recarrega do zero).
+    useEffect(() => {
+        if (!currentStore?.id) return;
+        try {
+            const raw = localStorage.getItem(`fav_products_${currentStore.id}`);
+            setFavoriteIds(new Set(raw ? JSON.parse(raw) : []));
+        } catch {
+            setFavoriteIds(new Set());
+        }
+    }, [currentStore?.id]);
+
+    const toggleFavorite = useCallback((productId: string) => {
+        setFavoriteIds(prev => {
+            const next = new Set(prev);
+            if (next.has(productId)) next.delete(productId); else next.add(productId);
+            if (currentStore?.id) {
+                try { localStorage.setItem(`fav_products_${currentStore.id}`, JSON.stringify(Array.from(next))); } catch {}
+            }
+            return next;
+        });
+    }, [currentStore?.id]);
 
     // Realtime Table Status Listener
     useEffect(() => {
@@ -1691,6 +1828,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             // o `?.` (produto sem descrição simplesmente não casa por esse lado).
             prods = prods.filter(p => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term));
         }
+        // Favoritos (Vende Mais II, 100% client-side): mesmo padrão cumulativo
+        // que a busca por texto já usa aqui em cima — categoria ativa (e busca)
+        // continuam valendo, isso só restringe ainda mais (AND, não substitui).
+        if (favoritesOnly) {
+            prods = prods.filter(p => favoriteIds.has(p.id));
+        }
 
         // Sorting Logic
         if (sortBy === 'price_asc') {
@@ -1702,7 +1845,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
 
         return prods;
-    }, [products, activeCategory, visibleCategories, searchTerm, sortBy]);
+    }, [products, activeCategory, visibleCategories, searchTerm, sortBy, favoritesOnly, favoriteIds]);
 
     // Vitrine de destaques (migration 019): produtos featured=true, respeitando
     // a mesma janela de horário/dia de categoria que o resto do cardápio já
@@ -1866,6 +2009,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         toast.success(`${p.name} adicionado`);
                                     }}
                                     disabled={isWaitingBill}
+                                    isBestseller={bestsellerIds.has(product.id)}
+                                    isFavorite={favoriteIds.has(product.id)}
+                                    onToggleFavorite={toggleFavorite}
                                 />
                             </div>
                         ))}
@@ -1925,6 +2071,17 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     </div>
                     {/* Sort Dropdown / Toggles */}
                     <div className="flex gap-1">
+                        {/* Favoritos (Vende Mais II, 100% client-side): mesma área da
+                            busca/ordenação, filtra filteredProducts de forma cumulativa
+                            (ver useMemo acima) — não desliga categoria nem busca. */}
+                        <button
+                            onClick={() => setFavoritesOnly(v => !v)}
+                            className={`flex items-center gap-1 px-2.5 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--err)] text-white border-[var(--err)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            title="Mostrar só favoritos"
+                            aria-pressed={favoritesOnly}
+                        >
+                            <Heart size={14} className={favoritesOnly ? 'fill-current' : ''} /> Favoritos
+                        </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_asc' ? 'default' : 'price_asc')}
                             className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
@@ -1977,6 +2134,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             }}
                             disabled={isWaitingBill}
                             style={stagger(Math.min(i, 10) * 30)}
+                            isBestseller={bestsellerIds.has(product.id)}
+                            isFavorite={favoriteIds.has(product.id)}
+                            onToggleFavorite={toggleFavorite}
                         />
                     ))}
                 </div>
@@ -2049,6 +2209,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     }
                 }}
                 noteSuggestions={currentStore?.config?.note_suggestions || []}
+                onSelectRecommended={setSelectedProduct}
+                isFavorite={!!selectedProduct && favoriteIds.has(selectedProduct.id)}
+                onToggleFavorite={toggleFavorite}
             />
 
             <CounterConfirmModal
