@@ -649,9 +649,12 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                             em vez de só emoji solto, pra não ser confundido com
                             PRODUCT_TAGS. */}
                         {isBestseller && (
+                            // Cor via token de tema (--warn), já calibrado pra AA (>=4.5:1)
+                            // em claro e escuro numa rodada de acessibilidade anterior —
+                            // mesmo padrão usado nos outros badges deste arquivo (ex.: status
+                            // de pedido), em vez de hex fixo sem variante dark.
                             <span
-                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full align-middle whitespace-nowrap"
-                                style={{ background: 'rgba(234,88,12,0.12)', color: '#C2410C' }}
+                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full align-middle whitespace-nowrap bg-[var(--warn)]/12 text-[var(--warn)]"
                                 title="Um dos produtos mais vendidos desta loja"
                             >
                                 🔥 Mais vendido
@@ -666,11 +669,16 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         modal (o card inteiro já é clicável). */}
                     <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                         {onToggleFavorite && (
+                            // Alvo de toque real de 44x44 (padrão do projeto) sem alterar o
+                            // layout compacto do card: padding aumenta a caixa clicável e a
+                            // margem negativa equivalente cancela o espaço extra reservado no
+                            // fluxo, então o ícone continua visualmente pequeno e no mesmo
+                            // lugar — só a área de toque invisível fica maior ao redor dele.
                             <button
                                 type="button"
                                 aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
                                 onClick={(e) => { e.stopPropagation(); onToggleFavorite(product.id); }}
-                                className="p-0.5 -mt-1 -mr-1 text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
+                                className="p-[15px] -m-[15px] text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
                             >
                                 <Heart size={14} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : ''} />
                             </button>
@@ -817,7 +825,7 @@ const ProductModal: React.FC<{
                                 <span
                                     key={tag}
                                     className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full border"
-                                    style={{ borderColor: 'rgba(212,175,92,0.35)', color: WINE_GOLD, background: 'rgba(212,175,92,0.08)' }}
+                                    style={{ borderColor: 'rgba(212,175,92,0.35)', color: WINE_GOLD_DARK, background: 'rgba(212,175,92,0.08)' }}
                                 >
                                     {emoji} {label}
                                 </span>
@@ -933,8 +941,8 @@ const ProductModal: React.FC<{
                             <button
                                 key={idx}
                                 type="button"
-                                onClick={() => setNotes(prev => prev.trim() ? `${prev}, ${suggestion}` : suggestion)}
-                                className="text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)] hover:text-[var(--text)] u-motion u-press-sm"
+                                onClick={() => setNotes(prev => prev.trim() ? `${prev.trim()}, ${suggestion}` : suggestion)}
+                                className="inline-flex items-center min-h-11 text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)] hover:text-[var(--text)] u-motion u-press-sm"
                             >
                                 {suggestion}
                             </button>
@@ -1991,30 +1999,39 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         <h2 className="font-bold text-[var(--text)] text-[17px] tracking-tight">Destaques</h2>
                         <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(212,175,92,0.5), transparent)' }} />
                     </div>
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1.5 px-1.5 pb-1" style={{ scrollSnapType: 'x proximity' }}>
-                        {featuredProducts.map(product => (
-                            <div
-                                key={product.id}
-                                className="w-64 flex-shrink-0 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)]"
-                                style={{ scrollSnapAlign: 'start' }}
-                            >
-                                <ProductCard
-                                    product={product}
-                                    icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
-                                    onSelect={setSelectedProduct}
-                                    onQuickAdd={(p) => {
-                                        const hasRequiredGroup = (p.option_groups || []).some(g => g.required);
-                                        if (hasRequiredGroup) { setSelectedProduct(p); return; }
-                                        addToCart(p, 1, '', []);
-                                        toast.success(`${p.name} adicionado`);
-                                    }}
-                                    disabled={isWaitingBill}
-                                    isBestseller={bestsellerIds.has(product.id)}
-                                    isFavorite={favoriteIds.has(product.id)}
-                                    onToggleFavorite={toggleFavorite}
-                                />
-                            </div>
-                        ))}
+                    {/* Fade nas duas pontas sinalizando que dá pra rolar mais (útil em
+                        desktop sem trackpad/touch, onde não há nenhuma outra pista
+                        visual de overflow horizontal) — mesmo princípio do fade da
+                        navegação de categorias logo abaixo, cor adaptada pro fundo
+                        claro/escuro (--bg) desta seção. */}
+                    <div className="relative">
+                        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-4 z-10" style={{ background: 'linear-gradient(to right, var(--bg), transparent)' }} />
+                        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10" style={{ background: 'linear-gradient(to left, var(--bg), transparent)' }} />
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1.5 px-1.5 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+                            {featuredProducts.map(product => (
+                                <div
+                                    key={product.id}
+                                    className="w-64 flex-shrink-0 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)]"
+                                    style={{ scrollSnapAlign: 'start' }}
+                                >
+                                    <ProductCard
+                                        product={product}
+                                        icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
+                                        onSelect={setSelectedProduct}
+                                        onQuickAdd={(p) => {
+                                            const hasRequiredGroup = (p.option_groups || []).some(g => g.required);
+                                            if (hasRequiredGroup) { setSelectedProduct(p); return; }
+                                            addToCart(p, 1, '', []);
+                                            toast.success(`${p.name} adicionado`);
+                                        }}
+                                        disabled={isWaitingBill}
+                                        isBestseller={bestsellerIds.has(product.id)}
+                                        isFavorite={favoriteIds.has(product.id)}
+                                        onToggleFavorite={toggleFavorite}
+                                    />
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}
@@ -2076,7 +2093,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             (ver useMemo acima) — não desliga categoria nem busca. */}
                         <button
                             onClick={() => setFavoritesOnly(v => !v)}
-                            className={`flex items-center gap-1 px-2.5 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--err)] text-white border-[var(--err)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`flex items-center gap-1 px-2.5 h-11 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--err)] text-white border-[var(--err)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Mostrar só favoritos"
                             aria-pressed={favoritesOnly}
                         >
