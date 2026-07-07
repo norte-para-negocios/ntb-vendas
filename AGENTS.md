@@ -325,8 +325,11 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
   `security definer`, leitura agregada) + tabela `product_recommendations`
   e `sync_product_recommendations` (RPC atômica) — pacote "vende mais II",
   ver seção dedicada abaixo.
+- **`021_fecha_rls_orders_products.sql`** e
+  **`022_revoga_anon_orders_products.sql`**: correção crítica de segurança
+  (2026-07-07), ver seção dedicada logo abaixo desta lista.
 
-Todas as migrations (001 a 020) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 022) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
 `create_order_secure` com e sem adicionais e com e sem promoção,
 `open_table_session`, rate-limit de login e de PIN, bucket
@@ -353,6 +356,90 @@ filtro antes de aplicar em definitivo; `sync_product_recommendations`
 testado com produtos temporários (sync válido, rejeição de
 auto-recomendação, limpeza do array com lista vazia), tudo removido em
 seguida sem deixar resíduo).
+
+## Correção de segurança crítica (2026-07-07): RLS aberta em orders/order_items/products
+
+Numa varredura de segurança pedida pelo usuário, achado e confirmado **ao
+vivo** (não teórico): a policy `allow_all_anon` de `001_schema_inicial.sql`
+cobria `orders`/`order_items` com `SELECT`+`INSERT` liberados e `products`
+com `UPDATE`+`INSERT`+`DELETE` liberados pra **qualquer um com a chave
+anônima pública do app** (a mesma hardcoded como fallback em
+`lib/supabaseClient.ts`) — sem login, sem passar por nenhuma RPC. Confirmado
+na prática: deu pra ler nome de cliente e forma de pagamento de pedidos de
+qualquer loja da plataforma, e mudar o preço de um produto real de R$0,75
+pra R$0,01 com uma única chamada REST (revertido na hora, sem impacto real).
+
+**Por que existia desde a migration 001 e ninguém tinha achado**: este app
+não usa Supabase Auth — não há JWT/sessão real vinculada a `store_users`,
+então `store_id` sempre foi o único limite de confiança usado em todo lugar
+(é assim que `fetchKitchenOrders(storeId)` sempre funcionou). O achado não é
+"falta autenticação real" (fora de escopo, reforma grande) — é que dava pra
+pular esse limite totalmente: ler as 2 tabelas inteiras sem filtro nenhum de
+loja, e escrever com payload arbitrário (qualquer coluna) em vez de passar
+pelas RPCs que já validam regra de negócio.
+
+**Correção, em 2 fases pra nunca deixar a loja real fora do ar**:
+- **`021_fecha_rls_orders_products.sql`** (aditivo): criou 18 RPCs
+  `security definer` — `create_product_secure`/`update_product_secure`/
+  `delete_product_secure`, `update_order_status_secure`/
+  `send_order_to_kitchen_secure`/`close_counter_order_secure`/
+  `update_order_item_status_secure`/`cancel_order_item_secure`/
+  `close_table_orders_secure`/`cancel_pending_table_items_secure`/
+  `clear_sales_history_secure`, `fetch_order_by_id_secure`/
+  `fetch_active_table_orders_secure`/`fetch_table_order_summary_secure`/
+  `fetch_kitchen_orders_secure`/`fetch_counter_orders_secure`/
+  `fetch_sales_history_secure`, e `duplicate_products_secure` (usada pelo
+  Master Admin ao duplicar loja). As RPCs de leitura devolvem `jsonb` no
+  mesmo formato que o `.select()` aninhado do Postgrest já devolvia, pra não
+  precisar mudar quem consome o retorno em `StoreModule.tsx`/`ClientModule.tsx`.
+  Uma decisão sutil: os embeds de `product` usam `left join` (não `join`),
+  igual ao comportamento padrão do Postgrest sem `!inner` — um `order_item`
+  de produto já excluído (`product_id` null, `on delete set null`) continua
+  aparecendo no pedido com `product: null`, em vez de sumir da lista; só
+  `fetch_kitchen_orders_secure` usa `join`/`!inner` de propósito (mesmo
+  motivo já documentado desde sempre: sem isso, o filtro por loja não
+  restringe as linhas, só zera o campo embutido).
+- **`lib/api.ts`**: as ~18 funções que antes faziam `.from(...).select/
+  insert/update/delete` direto em `orders`/`order_items`/`products` agora
+  chamam as RPCs. `updateProduct`/`deleteProduct` ganharam um parâmetro
+  `storeId` novo (antes não existia) — só pra RPC validar que o produto é
+  da loja, 3 call sites em `StoreModule.tsx` atualizados. `lib/api-mock.ts`
+  corrigido em par (senão `USE_MOCK=true` quebraria: o 3º argumento novo
+  cairia no lugar de `updates`) — aproveitado pra também fechar um gap já
+  conhecido (faltavam `fetchBestsellerProductIds`/`updateProductRecommendations`
+  no mock).
+- **`022_revoga_anon_orders_products.sql`** (o corte, só aplicado depois de
+  testar tudo): `drop policy allow_all_anon` em `orders`/`order_items`/
+  `products`, substituída por `select using (false)` nas duas primeiras
+  (não tem mais nenhum SELECT público, só via RPC) e `select using (true)`
+  em `products` (cardápio continua público, só perde INSERT/UPDATE/DELETE
+  direto).
+
+**Testado antes do corte final**: 6 fluxos completos via Playwright na
+Bistrô Demo (balcão, KDS com mudança de status, mesa com abrir/lançar/
+fechar conta, editar produto, criar+excluir produto, histórico de vendas) —
+achado que a Bistrô Demo estava com 0 produtos/categorias cadastrados
+(resíduo de alguma limpeza de teste anterior, não relacionado a esta
+correção), restaurado o cardápio-semente original (4 categorias, 11
+produtos, ver `002_seed_demo.sql`) antes de prosseguir. As 4 RPCs não
+exercitadas pelo fluxo de UI (`cancel_order_item_secure`,
+`cancel_pending_table_items_secure`, `clear_sales_history_secure`,
+`duplicate_products_secure`) testadas à parte via `scripts/db.mjs` com dado
+descartável. **Depois do corte**, repetido o teste que achou a
+vulnerabilidade (mesma anon key): `SELECT` em `order_items`/`orders` agora
+devolve array vazio sem erro, `UPDATE` em `products` idem (preço confirmado
+intacto), `SELECT` em `products` continua público como esperado — e um
+pedido real via `create_order_secure` continua funcionando normal
+(confirmado preço vindo do servidor, não do client).
+
+**Fora de escopo, registrado pra próxima rodada**: `tables`/`table_sessions`
+têm a mesma `allow_all_anon` aberta (`waiter_requested`, `pin`,
+`current_host_name`) — menor severidade (sem PII, sem valor financeiro
+direto), mesma classe de achado. Autenticação real (Supabase Auth/JWT por
+`store_user`) resolveria isso na raiz, mas é reforma grande, não escopo
+desta correção pontual. Ver
+`docs/plans/2026-07-07-fecha-rls-orders-products-plan.md` pro plano
+completo.
 
 ## Certificado digital fiscal (`app/api/certificado`, `lib/supabaseAdmin.ts`)
 
