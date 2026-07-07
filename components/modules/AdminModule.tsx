@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight } from 'lucide-react';
+import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword } from '@/lib/api';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
@@ -190,6 +190,30 @@ export const AdminModule: React.FC = () => {
   const [certStatus, setCertStatus] = useState<StoreFiscalCertificateStatus | null>(null);
   const [isSavingCert, setIsSavingCert] = useState(false);
 
+  // Configuração do Emissor Fiscal State (store_fiscal_config, migration 024)
+  // — campos numéricos ficam como string pra bind de <input> controlado,
+  // convertidos com Number(...) só na hora de montar o payload de save.
+  // CSC/CSCID nunca voltam do banco (write-only), sempre começam vazios.
+  const [fiscalAmbiente, setFiscalAmbiente] = useState<'homologacao' | 'producao'>('homologacao');
+  const [fiscalNfeSerie, setFiscalNfeSerie] = useState('');
+  const [fiscalNfceSerie, setFiscalNfceSerie] = useState('');
+  const [fiscalCteSerie, setFiscalCteSerie] = useState('');
+  const [fiscalMdfeSerie, setFiscalMdfeSerie] = useState('');
+  const [fiscalNfeUltimoNumero, setFiscalNfeUltimoNumero] = useState('');
+  const [fiscalNfceUltimoNumero, setFiscalNfceUltimoNumero] = useState('');
+  const [fiscalCteUltimoNumero, setFiscalCteUltimoNumero] = useState('');
+  const [fiscalMdfeUltimoNumero, setFiscalMdfeUltimoNumero] = useState('');
+  const [fiscalInscricaoMunicipal, setFiscalInscricaoMunicipal] = useState('');
+  const [fiscalCasasDecimais, setFiscalCasasDecimais] = useState('2');
+  const [fiscalCnpjAutorizado, setFiscalCnpjAutorizado] = useState('');
+  const [fiscalObservacaoNfe, setFiscalObservacaoNfe] = useState('');
+  const [fiscalObservacaoPedido, setFiscalObservacaoPedido] = useState('');
+  const [fiscalCscHomologacao, setFiscalCscHomologacao] = useState('');
+  const [fiscalCscidHomologacao, setFiscalCscidHomologacao] = useState('');
+  const [fiscalCscProducao, setFiscalCscProducao] = useState('');
+  const [fiscalCscidProducao, setFiscalCscidProducao] = useState('');
+  const [isSavingFiscalConfig, setIsSavingFiscalConfig] = useState(false);
+
   // User Form State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -244,6 +268,30 @@ export const AdminModule: React.FC = () => {
       setCertPassword('');
       setCertExpiresAt('');
       setCertStatus(null);
+
+      resetFiscalConfigForm();
+  };
+
+  const resetFiscalConfigForm = () => {
+      setFiscalAmbiente('homologacao');
+      setFiscalNfeSerie('');
+      setFiscalNfceSerie('');
+      setFiscalCteSerie('');
+      setFiscalMdfeSerie('');
+      setFiscalNfeUltimoNumero('');
+      setFiscalNfceUltimoNumero('');
+      setFiscalCteUltimoNumero('');
+      setFiscalMdfeUltimoNumero('');
+      setFiscalInscricaoMunicipal('');
+      setFiscalCasasDecimais('2');
+      setFiscalCnpjAutorizado('');
+      setFiscalObservacaoNfe('');
+      setFiscalObservacaoPedido('');
+      // CSC/CSCID nunca vêm do banco (write-only) — sempre resetam vazios.
+      setFiscalCscHomologacao('');
+      setFiscalCscidHomologacao('');
+      setFiscalCscProducao('');
+      setFiscalCscidProducao('');
   };
 
   const resetUserForm = () => {
@@ -279,6 +327,33 @@ export const AdminModule: React.FC = () => {
       setCertPassword('');
       setCertExpiresAt('');
       setCertStatus(await fetchStoreCertificateStatus(store.id));
+
+      const fiscalConfig = await fetchStoreFiscalConfig(store.id);
+      if (fiscalConfig) {
+          setFiscalAmbiente(fiscalConfig.ambiente);
+          setFiscalNfeSerie(fiscalConfig.nfe_serie != null ? String(fiscalConfig.nfe_serie) : '');
+          setFiscalNfceSerie(fiscalConfig.nfce_serie != null ? String(fiscalConfig.nfce_serie) : '');
+          setFiscalCteSerie(fiscalConfig.cte_serie != null ? String(fiscalConfig.cte_serie) : '');
+          setFiscalMdfeSerie(fiscalConfig.mdfe_serie != null ? String(fiscalConfig.mdfe_serie) : '');
+          setFiscalNfeUltimoNumero(String(fiscalConfig.nfe_ultimo_numero ?? 0));
+          setFiscalNfceUltimoNumero(String(fiscalConfig.nfce_ultimo_numero ?? 0));
+          setFiscalCteUltimoNumero(String(fiscalConfig.cte_ultimo_numero ?? 0));
+          setFiscalMdfeUltimoNumero(String(fiscalConfig.mdfe_ultimo_numero ?? 0));
+          setFiscalInscricaoMunicipal(fiscalConfig.inscricao_municipal || '');
+          setFiscalCasasDecimais(String(fiscalConfig.casas_decimais ?? 2));
+          setFiscalCnpjAutorizado(fiscalConfig.cnpj_autorizado || '');
+          setFiscalObservacaoNfe(fiscalConfig.observacao_nfe || '');
+          setFiscalObservacaoPedido(fiscalConfig.observacao_pedido || '');
+          // CSC/CSCID nunca vêm do banco (write-only) — sempre resetam vazios.
+          setFiscalCscHomologacao('');
+          setFiscalCscidHomologacao('');
+          setFiscalCscProducao('');
+          setFiscalCscidProducao('');
+      } else {
+          // Loja nunca configurou nada — volta pros defaults (ambiente
+          // homologação, números vazios/zero), mesma lógica de resetFiscalConfigForm.
+          resetFiscalConfigForm();
+      }
 
       setIsModalOpen(true);
   };
@@ -355,6 +430,50 @@ export const AdminModule: React.FC = () => {
           toast.error('Erro ao salvar certificado: ' + e.message);
       } finally {
           setIsSavingCert(false);
+      }
+  };
+
+  const handleSaveFiscalConfig = async () => {
+      if (!editingId) return; // só disponível editando loja existente
+      setIsSavingFiscalConfig(true);
+      try {
+          // Só entram no payload os campos preenchidos — string vazia vira
+          // undefined, não é enviada (mesmo princípio "não mexer no que não
+          // foi preenchido" já usado em handleSaveCertificate/saveStoreCertificateSecret).
+          const params: UpdateStoreFiscalConfigParams = { ambiente: fiscalAmbiente };
+          if (fiscalNfeSerie) params.nfeSerie = Number(fiscalNfeSerie);
+          if (fiscalNfceSerie) params.nfceSerie = Number(fiscalNfceSerie);
+          if (fiscalCteSerie) params.cteSerie = Number(fiscalCteSerie);
+          if (fiscalMdfeSerie) params.mdfeSerie = Number(fiscalMdfeSerie);
+          if (fiscalNfeUltimoNumero) params.nfeUltimoNumero = Number(fiscalNfeUltimoNumero);
+          if (fiscalNfceUltimoNumero) params.nfceUltimoNumero = Number(fiscalNfceUltimoNumero);
+          if (fiscalCteUltimoNumero) params.cteUltimoNumero = Number(fiscalCteUltimoNumero);
+          if (fiscalMdfeUltimoNumero) params.mdfeUltimoNumero = Number(fiscalMdfeUltimoNumero);
+          if (fiscalInscricaoMunicipal) params.inscricaoMunicipal = fiscalInscricaoMunicipal;
+          if (fiscalCasasDecimais) params.casasDecimais = Number(fiscalCasasDecimais);
+          if (fiscalCnpjAutorizado) params.cnpjAutorizado = fiscalCnpjAutorizado;
+          if (fiscalObservacaoNfe) params.observacaoNfe = fiscalObservacaoNfe;
+          if (fiscalObservacaoPedido) params.observacaoPedido = fiscalObservacaoPedido;
+          if (fiscalCscHomologacao) params.cscHomologacao = fiscalCscHomologacao;
+          if (fiscalCscidHomologacao) params.cscidHomologacao = fiscalCscidHomologacao;
+          if (fiscalCscProducao) params.cscProducao = fiscalCscProducao;
+          if (fiscalCscidProducao) params.cscidProducao = fiscalCscidProducao;
+
+          const result = await updateStoreFiscalConfig(editingId, params);
+          if (!result.success) throw new Error(result.message);
+
+          toast.success('Configuração fiscal salva com sucesso!');
+          // Limpa só os campos de CSC (senão o usuário vê a "senha" na tela
+          // depois de salvar — mesmo tratamento que certPassword recebe em
+          // handleSaveCertificate).
+          setFiscalCscHomologacao('');
+          setFiscalCscidHomologacao('');
+          setFiscalCscProducao('');
+          setFiscalCscidProducao('');
+      } catch (e: any) {
+          toast.error('Erro ao salvar configuração fiscal: ' + e.message);
+      } finally {
+          setIsSavingFiscalConfig(false);
       }
   };
 
@@ -800,6 +919,110 @@ export const AdminModule: React.FC = () => {
                           </div>
                           <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
                               Salvar Certificado
+                          </Button>
+                      </div>
+                      <hr className="border-[var(--border)]" />
+
+                      {/* Configuração do Emissor Fiscal (store_fiscal_config, migration 024) —
+                          só armazenamento/configuração, sem lógica de emissão real ainda
+                          (ver AGENTS.md, seção "Configuração do emissor fiscal"). */}
+                      <div className="space-y-4">
+                          <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Configuração do Emissor</label>
+
+                          <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20 flex gap-3">
+                              <AlertCircle className="text-[var(--warn)] flex-shrink-0" size={20} />
+                              <p className="text-sm text-[var(--warn)]">
+                                  ⚠️ Sempre configure e teste em Homologação primeiro. Nunca emita nota fiscal real durante testes.
+                              </p>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                              <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
+                              <select
+                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                value={fiscalAmbiente}
+                                onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
+                              >
+                                  <option value="homologacao">Homologação</option>
+                                  <option value="producao">Produção</option>
+                              </select>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">NF-e</p>
+                                  <Input type="number" label="Série" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                                  <Input type="number" label="Último número emitido" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
+                                  <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                              </div>
+                              <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">NFC-e</p>
+                                  <Input type="number" label="Série" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                                  <Input type="number" label="Último número emitido" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                                  <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                              </div>
+                          </div>
+
+                          <details className="border border-[var(--border)] rounded-lg p-3">
+                              <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Avançado (CT-e / MDF-e)</summary>
+                              <div className="grid grid-cols-2 gap-4 mt-3">
+                                  <div className="space-y-2">
+                                      <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
+                                      <Input type="number" label="Série" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
+                                      <Input type="number" label="Último número emitido" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
+                                      <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                                  </div>
+                                  <div className="space-y-2">
+                                      <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
+                                      <Input type="number" label="Série" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
+                                      <Input type="number" label="Último número emitido" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
+                                      <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                                  </div>
+                              </div>
+                          </details>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
+                                  <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
+                                  <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
+                              </div>
+                              <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
+                                  <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
+                                  <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
+                              </div>
+                          </div>
+
+                          <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
+                              <Input label="CNPJ Autorizado" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                              <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
+                              <textarea
+                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                rows={2}
+                                value={fiscalObservacaoNfe}
+                                onChange={e => setFiscalObservacaoNfe(e.target.value)}
+                              />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                              <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
+                              <textarea
+                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                rows={2}
+                                value={fiscalObservacaoPedido}
+                                onChange={e => setFiscalObservacaoPedido(e.target.value)}
+                              />
+                          </div>
+
+                          <Button variant="secondary" className="w-full" onClick={handleSaveFiscalConfig} isLoading={isSavingFiscalConfig}>
+                              Salvar Configuração Fiscal
                           </Button>
                       </div>
                       <hr className="border-[var(--border)]" />
