@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, updateTableStatus, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, StoreFiscalConfig } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -2376,6 +2377,223 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
+    // Certificado digital + Configuração do Emissor Fiscal — mesma tela que
+    // já existe pro Master Admin (AdminModule.tsx), aberta pro lojista
+    // também (decisão do usuário em 2026-07-07, "só Master por enquanto"
+    // deixou de valer). Mesmo padrão de estado/handlers, duplicado de
+    // propósito (arquivo diferente, sem componente compartilhado — ver
+    // docs/plans/2026-07-07-emissor-fiscal-completo-plan.md, Task B2).
+
+    // Certificado Digital Fiscal State
+    const [certFile, setCertFile] = useState<File | null>(null);
+    const [certPassword, setCertPassword] = useState('');
+    const [certExpiresAt, setCertExpiresAt] = useState('');
+    const [certStatus, setCertStatus] = useState<StoreFiscalCertificateStatus | null>(null);
+    const [isSavingCert, setIsSavingCert] = useState(false);
+
+    // Configuração do Emissor Fiscal State (store_fiscal_config, migration
+    // 024 + 025) — campos numéricos ficam como string pra bind de <input>
+    // controlado, convertidos com Number(...) só na hora de montar o
+    // payload de save. CSC/CSCID nunca voltam do banco (write-only),
+    // sempre começam vazios.
+    const [fiscalAmbiente, setFiscalAmbiente] = useState<'homologacao' | 'producao'>('homologacao');
+    const [fiscalNfeSerie, setFiscalNfeSerie] = useState('');
+    const [fiscalNfceSerie, setFiscalNfceSerie] = useState('');
+    const [fiscalCteSerie, setFiscalCteSerie] = useState('');
+    const [fiscalMdfeSerie, setFiscalMdfeSerie] = useState('');
+    const [fiscalNfeUltimoNumero, setFiscalNfeUltimoNumero] = useState('');
+    const [fiscalNfceUltimoNumero, setFiscalNfceUltimoNumero] = useState('');
+    const [fiscalCteUltimoNumero, setFiscalCteUltimoNumero] = useState('');
+    const [fiscalMdfeUltimoNumero, setFiscalMdfeUltimoNumero] = useState('');
+    const [fiscalInscricaoMunicipal, setFiscalInscricaoMunicipal] = useState('');
+    const [fiscalCasasDecimais, setFiscalCasasDecimais] = useState('2');
+    const [fiscalCnpjAutorizado, setFiscalCnpjAutorizado] = useState('');
+    const [fiscalObservacaoNfe, setFiscalObservacaoNfe] = useState('');
+    const [fiscalObservacaoPedido, setFiscalObservacaoPedido] = useState('');
+    const [fiscalCscHomologacao, setFiscalCscHomologacao] = useState('');
+    const [fiscalCscidHomologacao, setFiscalCscidHomologacao] = useState('');
+    const [fiscalCscProducao, setFiscalCscProducao] = useState('');
+    const [fiscalCscidProducao, setFiscalCscidProducao] = useState('');
+    // Identificação da empresa (migration 025)
+    const [fiscalRazaoSocial, setFiscalRazaoSocial] = useState('');
+    const [fiscalNomeFantasia, setFiscalNomeFantasia] = useState('');
+    const [fiscalTipoPessoa, setFiscalTipoPessoa] = useState<'juridica' | 'fisica'>('juridica');
+    const [fiscalInscricaoEstadual, setFiscalInscricaoEstadual] = useState('');
+    const [fiscalEnderecoLogradouro, setFiscalEnderecoLogradouro] = useState('');
+    const [fiscalEnderecoNumero, setFiscalEnderecoNumero] = useState('');
+    const [fiscalEnderecoComplemento, setFiscalEnderecoComplemento] = useState('');
+    const [fiscalEnderecoBairro, setFiscalEnderecoBairro] = useState('');
+    const [fiscalEnderecoCidade, setFiscalEnderecoCidade] = useState('');
+    const [fiscalEnderecoUf, setFiscalEnderecoUf] = useState('');
+    const [fiscalEnderecoCep, setFiscalEnderecoCep] = useState('');
+    // Padrões de impostos (migration 025) — default por loja, não
+    // classificação por produto/NCM (isso continua fora de escopo).
+    const [fiscalCstCsosnPadrao, setFiscalCstCsosnPadrao] = useState('');
+    const [fiscalCstPisPadrao, setFiscalCstPisPadrao] = useState('');
+    const [fiscalCstCofinsPadrao, setFiscalCstCofinsPadrao] = useState('');
+    const [fiscalCstIpiPadrao, setFiscalCstIpiPadrao] = useState('');
+    const [fiscalFretePadrao, setFiscalFretePadrao] = useState('');
+    const [fiscalTipoPagamentoPadrao, setFiscalTipoPagamentoPadrao] = useState('');
+    const [fiscalNaturezaOperacaoPadrao, setFiscalNaturezaOperacaoPadrao] = useState('');
+    const [isSavingFiscalConfig, setIsSavingFiscalConfig] = useState(false);
+
+    const loadFiscalData = async () => {
+        setCertStatus(await fetchStoreCertificateStatus(storeId));
+
+        const fiscalConfig = await fetchStoreFiscalConfig(storeId);
+        if (fiscalConfig) {
+            setFiscalAmbiente(fiscalConfig.ambiente);
+            setFiscalNfeSerie(fiscalConfig.nfe_serie != null ? String(fiscalConfig.nfe_serie) : '');
+            setFiscalNfceSerie(fiscalConfig.nfce_serie != null ? String(fiscalConfig.nfce_serie) : '');
+            setFiscalCteSerie(fiscalConfig.cte_serie != null ? String(fiscalConfig.cte_serie) : '');
+            setFiscalMdfeSerie(fiscalConfig.mdfe_serie != null ? String(fiscalConfig.mdfe_serie) : '');
+            setFiscalNfeUltimoNumero(String(fiscalConfig.nfe_ultimo_numero ?? 0));
+            setFiscalNfceUltimoNumero(String(fiscalConfig.nfce_ultimo_numero ?? 0));
+            setFiscalCteUltimoNumero(String(fiscalConfig.cte_ultimo_numero ?? 0));
+            setFiscalMdfeUltimoNumero(String(fiscalConfig.mdfe_ultimo_numero ?? 0));
+            setFiscalInscricaoMunicipal(fiscalConfig.inscricao_municipal || '');
+            setFiscalCasasDecimais(String(fiscalConfig.casas_decimais ?? 2));
+            setFiscalCnpjAutorizado(fiscalConfig.cnpj_autorizado || '');
+            setFiscalObservacaoNfe(fiscalConfig.observacao_nfe || '');
+            setFiscalObservacaoPedido(fiscalConfig.observacao_pedido || '');
+            setFiscalRazaoSocial(fiscalConfig.razao_social || '');
+            setFiscalNomeFantasia(fiscalConfig.nome_fantasia || '');
+            setFiscalTipoPessoa(fiscalConfig.tipo_pessoa || 'juridica');
+            setFiscalInscricaoEstadual(fiscalConfig.inscricao_estadual || '');
+            setFiscalEnderecoLogradouro(fiscalConfig.endereco_logradouro || '');
+            setFiscalEnderecoNumero(fiscalConfig.endereco_numero || '');
+            setFiscalEnderecoComplemento(fiscalConfig.endereco_complemento || '');
+            setFiscalEnderecoBairro(fiscalConfig.endereco_bairro || '');
+            setFiscalEnderecoCidade(fiscalConfig.endereco_cidade || '');
+            setFiscalEnderecoUf(fiscalConfig.endereco_uf || '');
+            setFiscalEnderecoCep(fiscalConfig.endereco_cep || '');
+            setFiscalCstCsosnPadrao(fiscalConfig.cst_csosn_padrao || '');
+            setFiscalCstPisPadrao(fiscalConfig.cst_pis_padrao || '');
+            setFiscalCstCofinsPadrao(fiscalConfig.cst_cofins_padrao || '');
+            setFiscalCstIpiPadrao(fiscalConfig.cst_ipi_padrao || '');
+            setFiscalFretePadrao(fiscalConfig.frete_padrao || '');
+            setFiscalTipoPagamentoPadrao(fiscalConfig.tipo_pagamento_padrao || '');
+            setFiscalNaturezaOperacaoPadrao(fiscalConfig.natureza_operacao_padrao || '');
+            // CSC/CSCID nunca vêm do banco (write-only) — sempre resetam vazios.
+            setFiscalCscHomologacao('');
+            setFiscalCscidHomologacao('');
+            setFiscalCscProducao('');
+            setFiscalCscidProducao('');
+        }
+    };
+
+    useEffect(() => { loadFiscalData(); }, [storeId]);
+
+    const handleCertFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) setCertFile(file);
+    };
+
+    const handleSaveCertificate = async () => {
+        if (!certFile && !certPassword && !certExpiresAt) {
+            return toast.error('Escolha um arquivo, senha ou validade pra salvar.');
+        }
+        setIsSavingCert(true);
+        try {
+            if (certFile) {
+                const uploadResult = await uploadStoreCertificate(storeId, certFile);
+                if (!uploadResult.success) throw new Error(uploadResult.message);
+
+                const metaResult = await saveStoreCertificateMetadata(storeId, certFile.name, certExpiresAt || null);
+                if (!metaResult.success) throw new Error(metaResult.message);
+            } else if (certExpiresAt) {
+                // Só atualizando a validade, sem trocar o arquivo
+                const metaResult = await saveStoreCertificateMetadata(storeId, certStatus?.original_filename || 'certificado.pfx', certExpiresAt);
+                if (!metaResult.success) throw new Error(metaResult.message);
+            }
+
+            if (certPassword) {
+                const secretResult = await saveStoreCertificateSecret(storeId, certPassword);
+                if (!secretResult.success) throw new Error(secretResult.message);
+            }
+
+            toast.success('Certificado atualizado com sucesso!');
+            setCertFile(null);
+            setCertPassword('');
+            setCertStatus(await fetchStoreCertificateStatus(storeId));
+        } catch (e: any) {
+            toast.error('Erro ao salvar certificado: ' + e.message);
+        } finally {
+            setIsSavingCert(false);
+        }
+    };
+
+    const handleSaveFiscalConfig = async () => {
+        setIsSavingFiscalConfig(true);
+        try {
+            // Só entram no payload os campos preenchidos — string vazia vira
+            // undefined, não é enviada (mesmo princípio "não mexer no que não
+            // foi preenchido" já usado em handleSaveCertificate/saveStoreCertificateSecret).
+            const params: UpdateStoreFiscalConfigParams = { ambiente: fiscalAmbiente };
+            if (fiscalNfeSerie) params.nfeSerie = Number(fiscalNfeSerie);
+            if (fiscalNfceSerie) params.nfceSerie = Number(fiscalNfceSerie);
+            if (fiscalCteSerie) params.cteSerie = Number(fiscalCteSerie);
+            if (fiscalMdfeSerie) params.mdfeSerie = Number(fiscalMdfeSerie);
+            if (fiscalNfeUltimoNumero) params.nfeUltimoNumero = Number(fiscalNfeUltimoNumero);
+            if (fiscalNfceUltimoNumero) params.nfceUltimoNumero = Number(fiscalNfceUltimoNumero);
+            if (fiscalCteUltimoNumero) params.cteUltimoNumero = Number(fiscalCteUltimoNumero);
+            if (fiscalMdfeUltimoNumero) params.mdfeUltimoNumero = Number(fiscalMdfeUltimoNumero);
+            if (fiscalInscricaoMunicipal) params.inscricaoMunicipal = fiscalInscricaoMunicipal;
+            if (fiscalCasasDecimais) params.casasDecimais = Number(fiscalCasasDecimais);
+            if (fiscalCnpjAutorizado) params.cnpjAutorizado = fiscalCnpjAutorizado;
+            if (fiscalObservacaoNfe) params.observacaoNfe = fiscalObservacaoNfe;
+            if (fiscalObservacaoPedido) params.observacaoPedido = fiscalObservacaoPedido;
+            if (fiscalCscHomologacao) params.cscHomologacao = fiscalCscHomologacao;
+            if (fiscalCscidHomologacao) params.cscidHomologacao = fiscalCscidHomologacao;
+            if (fiscalCscProducao) params.cscProducao = fiscalCscProducao;
+            if (fiscalCscidProducao) params.cscidProducao = fiscalCscidProducao;
+            if (fiscalRazaoSocial) params.razaoSocial = fiscalRazaoSocial;
+            if (fiscalNomeFantasia) params.nomeFantasia = fiscalNomeFantasia;
+            if (fiscalTipoPessoa) params.tipoPessoa = fiscalTipoPessoa;
+            if (fiscalInscricaoEstadual) params.inscricaoEstadual = fiscalInscricaoEstadual;
+            if (fiscalEnderecoLogradouro) params.enderecoLogradouro = fiscalEnderecoLogradouro;
+            if (fiscalEnderecoNumero) params.enderecoNumero = fiscalEnderecoNumero;
+            if (fiscalEnderecoComplemento) params.enderecoComplemento = fiscalEnderecoComplemento;
+            if (fiscalEnderecoBairro) params.enderecoBairro = fiscalEnderecoBairro;
+            if (fiscalEnderecoCidade) params.enderecoCidade = fiscalEnderecoCidade;
+            if (fiscalEnderecoUf) params.enderecoUf = fiscalEnderecoUf;
+            if (fiscalEnderecoCep) params.enderecoCep = fiscalEnderecoCep;
+            if (fiscalCstCsosnPadrao) params.cstCsosnPadrao = fiscalCstCsosnPadrao;
+            if (fiscalCstPisPadrao) params.cstPisPadrao = fiscalCstPisPadrao;
+            if (fiscalCstCofinsPadrao) params.cstCofinsPadrao = fiscalCstCofinsPadrao;
+            if (fiscalCstIpiPadrao) params.cstIpiPadrao = fiscalCstIpiPadrao;
+            if (fiscalFretePadrao) params.fretePadrao = fiscalFretePadrao;
+            if (fiscalTipoPagamentoPadrao) params.tipoPagamentoPadrao = fiscalTipoPagamentoPadrao;
+            if (fiscalNaturezaOperacaoPadrao) params.naturezaOperacaoPadrao = fiscalNaturezaOperacaoPadrao;
+
+            const result = await updateStoreFiscalConfig(storeId, params);
+            if (!result.success) throw new Error(result.message);
+
+            toast.success('Configuração fiscal salva com sucesso!');
+            // Limpa só os campos de CSC (senão o lojista vê a "senha" na tela
+            // depois de salvar — mesmo tratamento que certPassword recebe em
+            // handleSaveCertificate).
+            setFiscalCscHomologacao('');
+            setFiscalCscidHomologacao('');
+            setFiscalCscProducao('');
+            setFiscalCscidProducao('');
+        } catch (e: any) {
+            toast.error('Erro ao salvar configuração fiscal: ' + e.message);
+        } finally {
+            setIsSavingFiscalConfig(false);
+        }
+    };
+
+    const certBadge = () => {
+        if (!certStatus) return <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">Nenhum certificado cadastrado</Badge>;
+        if (!certStatus.expires_at) return <Badge color="bg-[var(--info)]/10 text-[var(--info)]">Cadastrado (sem validade informada)</Badge>;
+        const days = differenceInDays(parseISO(certStatus.expires_at), new Date());
+        const label = `Válido até ${format(parseISO(certStatus.expires_at), 'dd/MM/yyyy')}`;
+        if (days < 0) return <Badge color="bg-[var(--err)]/10 text-[var(--err)]"><AlertCircle size={12} className="mr-1"/> Vencido ({label})</Badge>;
+        if (days <= 30) return <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]"><AlertCircle size={12} className="mr-1"/> Vence em breve ({label})</Badge>;
+        return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
+    };
+
     // Cardapio que vende (migration 019) — preco promocional, destaque e
     // etiquetas, tudo configuravel pelo lojista aqui mesmo (requisito
     // explicito do dono do projeto, ver Task B1 do plano 2026-07-06).
@@ -2947,6 +3165,197 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <Plus size={20}/>
                         </Button>
                     </div>
+                </div>
+            </section>
+
+            {/* CERTIFICADO E CONFIGURAÇÃO FISCAL — mesma tela do Master Admin
+                (AdminModule.tsx), aberta pro lojista também (2026-07-07). Só
+                armazenamento/configuração, nenhuma lógica de emissão de NFC-e
+                de verdade (ver AGENTS.md, seção "Configuração do emissor
+                fiscal"). */}
+            <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm space-y-6">
+                <h3 className="font-bold text-lg text-[var(--text)]">Certificado e Configuração Fiscal</h3>
+
+                {/* Certificado Digital */}
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
+                        {certBadge()}
+                    </div>
+                    <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
+                        <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
+                        <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input type="date" label="Validade do certificado" value={certExpiresAt} onChange={e => setCertExpiresAt(e.target.value)} />
+                        <Input type="password" label="Senha do certificado" placeholder="Deixe em branco pra manter a atual" value={certPassword} onChange={e => setCertPassword(e.target.value)} />
+                    </div>
+                    <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
+                        Salvar Certificado
+                    </Button>
+                </div>
+                <hr className="border-[var(--border)]" />
+
+                {/* Configuração do Emissor Fiscal (store_fiscal_config,
+                    migration 024 + 025) — só armazenamento/configuração, sem
+                    lógica de emissão real ainda. */}
+                <div className="space-y-4">
+                    <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Configuração do Emissor</label>
+
+                    <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20 flex gap-3">
+                        <AlertCircle className="text-[var(--warn)] flex-shrink-0" size={20} />
+                        <p className="text-sm text-[var(--warn)]">
+                            ⚠️ Sempre configure e teste em Homologação primeiro. Nunca emita nota fiscal real durante testes.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
+                        <select
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                          value={fiscalAmbiente}
+                          onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
+                        >
+                            <option value="homologacao">Homologação</option>
+                            <option value="producao">Produção</option>
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">NF-e</p>
+                            <Input type="number" label="Série" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                            <Input type="number" label="Último número emitido" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
+                            <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">NFC-e</p>
+                            <Input type="number" label="Série" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                            <Input type="number" label="Último número emitido" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                            <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                        </div>
+                    </div>
+
+                    <details className="border border-[var(--border)] rounded-lg p-3">
+                        <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Avançado (CT-e / MDF-e)</summary>
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
+                                <Input type="number" label="Série" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
+                                <Input type="number" label="Último número emitido" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
+                                <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
+                                <Input type="number" label="Série" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
+                                <Input type="number" label="Último número emitido" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
+                                <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
+                            <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
+                            <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
+                            <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
+                            <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
+                        </div>
+                    </div>
+
+                    <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
+                        <Input label="CNPJ Autorizado" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
+                        <textarea
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                          rows={2}
+                          value={fiscalObservacaoNfe}
+                          onChange={e => setFiscalObservacaoNfe(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
+                        <textarea
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                          rows={2}
+                          value={fiscalObservacaoPedido}
+                          onChange={e => setFiscalObservacaoPedido(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Identificação da empresa (migration 025) */}
+                    <div className="pt-4 border-t border-[var(--border)] space-y-3">
+                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Identificação da empresa</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="Razão Social" placeholder="Opcional" value={fiscalRazaoSocial} onChange={e => setFiscalRazaoSocial(e.target.value)} />
+                            <Input label="Nome Fantasia" placeholder="Opcional" value={fiscalNomeFantasia} onChange={e => setFiscalNomeFantasia(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-sm font-semibold text-[var(--text)]">Tipo</label>
+                                <select
+                                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                  value={fiscalTipoPessoa}
+                                  onChange={e => setFiscalTipoPessoa(e.target.value as 'juridica' | 'fisica')}
+                                >
+                                    <option value="juridica">Jurídica</option>
+                                    <option value="fisica">Física</option>
+                                </select>
+                            </div>
+                            <Input label="Inscrição Estadual" placeholder="Opcional" value={fiscalInscricaoEstadual} onChange={e => setFiscalInscricaoEstadual(e.target.value)} />
+                        </div>
+                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Endereço</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="Logradouro" placeholder="Opcional" value={fiscalEnderecoLogradouro} onChange={e => setFiscalEnderecoLogradouro(e.target.value)} />
+                            <Input label="Número" placeholder="Opcional" value={fiscalEnderecoNumero} onChange={e => setFiscalEnderecoNumero(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="Complemento" placeholder="Opcional" value={fiscalEnderecoComplemento} onChange={e => setFiscalEnderecoComplemento(e.target.value)} />
+                            <Input label="Bairro" placeholder="Opcional" value={fiscalEnderecoBairro} onChange={e => setFiscalEnderecoBairro(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <Input label="Cidade" placeholder="Opcional" value={fiscalEnderecoCidade} onChange={e => setFiscalEnderecoCidade(e.target.value)} />
+                            <Input label="UF" placeholder="Opcional" maxLength={2} value={fiscalEnderecoUf} onChange={e => setFiscalEnderecoUf(e.target.value.toUpperCase())} />
+                            <Input label="CEP" placeholder="Opcional" value={fiscalEnderecoCep} onChange={e => setFiscalEnderecoCep(e.target.value)} />
+                        </div>
+                    </div>
+
+                    {/* Padrões de impostos (migration 025) — default por
+                        loja, não classificação por produto/NCM. */}
+                    <div className="pt-4 border-t border-[var(--border)] space-y-3">
+                        <div>
+                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Padrões de impostos</p>
+                            <p className="text-xs text-[var(--text-muted)]">Códigos conforme tabela da contabilidade/SEFAZ.</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="CST/CSOSN Padrão" placeholder="Ex: 102" value={fiscalCstCsosnPadrao} onChange={e => setFiscalCstCsosnPadrao(e.target.value)} />
+                            <Input label="CST/PIS Padrão" placeholder="Ex: 49" value={fiscalCstPisPadrao} onChange={e => setFiscalCstPisPadrao(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="CST/COFINS Padrão" placeholder="Ex: 49" value={fiscalCstCofinsPadrao} onChange={e => setFiscalCstCofinsPadrao(e.target.value)} />
+                            <Input label="CST/IPI Padrão" placeholder="Ex: 53" value={fiscalCstIpiPadrao} onChange={e => setFiscalCstIpiPadrao(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="Frete Padrão" placeholder="Ex: 9 - Sem frete" value={fiscalFretePadrao} onChange={e => setFiscalFretePadrao(e.target.value)} />
+                            <Input label="Tipo de Pagamento Padrão" placeholder="Ex: 01 - Dinheiro" value={fiscalTipoPagamentoPadrao} onChange={e => setFiscalTipoPagamentoPadrao(e.target.value)} />
+                        </div>
+                        <Input label="Natureza de Operação Padrão" placeholder="Ex: 0 - Emitente" value={fiscalNaturezaOperacaoPadrao} onChange={e => setFiscalNaturezaOperacaoPadrao(e.target.value)} />
+                    </div>
+
+                    <Button variant="secondary" className="w-full" onClick={handleSaveFiscalConfig} isLoading={isSavingFiscalConfig}>
+                        Salvar Configuração Fiscal
+                    </Button>
                 </div>
             </section>
 
