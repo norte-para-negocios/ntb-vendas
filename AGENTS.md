@@ -650,38 +650,62 @@ falta de credencial** (ver "Bloqueio pendente" abaixo):
   assinatura de nenhuma das duas (nenhum call-site em `StoreModule.tsx`
   precisou mudar). Typecheck limpo.
 
-**Bloqueio pendente (não é decisão de produto, é credencial faltando):**
-não tenho acesso a banco/deploy do `ntb-estoque` nessa máquina — só achei o
-`VERCEL_OIDC_TOKEN` (token de workload, não serve pra `vercel env pull`) em
-`.env.local`; MCP do Supabase e da Vercel conectados aqui são de outra
-conta/team (não veem o projeto `ntb-estoque` / team
-`team_tqHCGgJLyvjpDMsRbqRQRp0V`); Supabase CLI local não está logada.
-Sem isso, faltam 3 passos mecânicos antes do teste ponta-a-ponta real:
-1. Aplicar a migration 061 no `ntb-estoque` (adiciona a coluna + gera a
-   chave da Vieras e Vinhos).
-2. Aplicar a migration 027 no `ntb-vendas` (já tenho acesso a esse banco —
-   só falta saber a URL pública do deploy do `ntb-estoque` pra preencher
-   `store_ntb_estoque_secrets.ntb_estoque_url` junto com a chave gerada no
-   passo 1).
-3. Deploy da rota nova do `ntb-estoque` (`git push` + Vercel já publica).
-Desbloqueio mais rápido: rodar `! npx vercel login` (abre o navegador) e
-depois `! npx vercel env pull .env.local` dentro de
-`C:\Users\media\workspace\norte\ntb-estoque` — com isso eu termino sozinho
-o resto (aplicar as duas migrations, gerar+gravar a chave nos dois bancos,
-testar de ponta a ponta).
+**FUNCIONANDO DE PONTA A PONTA (2026-07-07, testado ao vivo com dado
+real):** o bloqueio de credencial acima foi resolvido no mesmo dia (Joaquim
+pegou URL/service_role key do Supabase do `ntb-estoque` direto no
+dashboard). Passos aplicados:
+1. Migration 061 aplicada no `ntb-estoque` (`lojas.integracao_api_key`).
+   Loja Vieras e Vinhos (`id=7` — nome real na tabela é "VINHAS & VINHETOS
+   DISTRIBUIDORAS LTDA", não bate com filtro `ilike '%vinhos%'` da
+   migration por causa do "VINHETOS"; chave gerada manualmente pra essa
+   loja depois).
+2. **Achado novo:** `proxy.ts` do `ntb-estoque` (é o nome que o Next.js 16
+   usa agora pro que era `middleware.ts` — mudança real da versão, não
+   confundir com o texto suspeito do AGENTS.md daquele repo) exige sessão
+   logada em TODA rota por padrão, com uma lista de exceções
+   (`/api/webhook`, `/api/cron`). Precisou adicionar `/api/integracao`
+   nessa lista (commit `661a3bd`) — sem isso a rota nova respondia sempre
+   307 pro `/login`.
+3. Migration 027 aplicada no `ntb-vendas` + migration 028 nova (
+   `supabase/migrations/028_omie_codigo_em_selected_options.sql`):
+   `create_order_secure` agora também grava `omie_codigo` dentro do
+   snapshot de `selected_options` — sem isso, adicionais/opcionais (ex.:
+   borda de pizza) nunca disparavam Ordem de Produção própria, só o
+   produto principal. Era exatamente o cenário original ("até no local de
+   extras eu tenho que colocar um produto que tenha código").
+4. `store_ntb_estoque_secrets` da Vieras e Vinhos preenchido com a URL de
+   produção real (`https://ntb-estoque.vercel.app`, achada no próprio
+   código como fallback de `NEXT_PUBLIC_APP_URL` em
+   `app/(app)/loja/page.tsx`) + a chave gerada no passo 1.
+5. **Teste real ponta a ponta**: pedido de teste criado direto via SQL
+   (não pelo checkout, pra não gerar ruído em mesa/KDS/etc.) com 1 produto
+   (Batata Frita 350g, `omie_codigo "90156"`) + 1 opcional simulado
+   (Catupiry, `"90153"`), chamando a rota do `ntb-vendas` com o `orderId`.
+   Resultado: **Batata Frita 350g TINHA estrutura configurada no Omie** —
+   a Ordem de Produção foi criada e concluída de verdade (`nCodOP
+   8494038079`, `2026/00122`), confirmando que a cadeia completa funciona
+   (auth → resolução de código → Omie). Catupiry bateu no erro já
+   conhecido de "sem estrutura", como esperado. **Ambos os resultados
+   revertidos imediatamente**: `ReverterOrdemProducao` +
+   `ExcluirOrdemProducao` no Omie (confirmado: "Os movimentos de estoque
+   gerados também já foram excluídos automaticamente"), linha órfã em
+   `ordens_producao` (ntb-estoque) apagada, pedido de teste apagado no
+   `ntb-vendas`.
+6. **Implicação importante pro Joaquim**: nem todo produto está sem
+   estrutura — pelo menos "Batata Frita 350g" já tem receita cadastrada de
+   verdade no `ntb-estoque`. Vale conferir com quem administra o estoque
+   da Vieras e Vinhos quantos dos 224 produtos linkados já têm estrutura
+   pronta — a integração já vai funcionar de verdade pra esses assim que
+   uma venda real acontecer, sem precisar de mais nada.
 
-**Continua pendente independente do bloqueio acima** (próximos passos, sem
-mudança nesta sessão):
+**Continua pendente** (próximos passos, nenhum é bloqueio de credencial):
 1. UI no `ntb-vendas` pra ver/editar `omie_codigo` por produto/opcional
    (hoje só existe a coluna, populada via script — não editável pela tela).
 2. Resolver os 19+1 produtos/opcionais sem match (revisão manual de nome).
-3. Pré-requisito conhecido desde a reunião do dia 6 (ainda não resolvido,
-   não é código): os produtos da Vieras e Vinhos não têm "estrutura"
-   (receita/consumo de ingrediente) cadastrada no `ntb-estoque` — sem
-   isso, mesmo com a integração pronta e testada, a Ordem de Produção
-   falha com o erro real já reproduzido do Omie ("Este produto não possui
-   nenhum item na sua estrutura..."). Cadastro manual, feito por quem
-   administra o estoque dessa loja — não é algo que código resolve.
+3. Para os produtos sem estrutura (número exato desconhecido — ver item 6
+   acima): cadastro manual de receita/consumo de ingrediente no
+   `ntb-estoque`, feito por quem administra o estoque dessa loja — não é
+   código.
 
 ## Conta universal (`universal_users`, migration 015)
 
