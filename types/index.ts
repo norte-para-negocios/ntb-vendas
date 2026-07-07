@@ -205,6 +205,30 @@ export interface StoreFiscalCertificateStatus {
   expires_at: string | null;
 }
 
+// Campos não-sigilosos de configuração do emissor fiscal (ambiente, série e
+// numeração por tipo de documento etc.) — ver
+// supabase/migrations/024_config_emissor_fiscal.sql. CSC/CSCID ficam numa
+// tabela separada write-only (store_fiscal_config_secrets), não têm leitura
+// via client, por isso não aparecem aqui.
+export interface StoreFiscalConfig {
+  store_id: string;
+  ambiente: 'homologacao' | 'producao';
+  nfe_serie: number | null;
+  nfce_serie: number | null;
+  cte_serie: number | null;
+  mdfe_serie: number | null;
+  nfe_ultimo_numero: number;
+  nfce_ultimo_numero: number;
+  cte_ultimo_numero: number;
+  mdfe_ultimo_numero: number;
+  inscricao_municipal: string | null;
+  casas_decimais: number;
+  cnpj_autorizado: string | null;
+  observacao_nfe: string | null;
+  observacao_pedido: string | null;
+  updated_at: string;
+}
+
 export interface OrderRating {
   id: string;
   order_id: string;

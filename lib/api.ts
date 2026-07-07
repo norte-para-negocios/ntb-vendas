@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, OrderRating, UniversalUser, ProductOptionGroup } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup } from '@/types';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -906,6 +906,56 @@ export const fetchStoreCertificateStatus = async (storeId: string): Promise<Stor
   const { data, error } = await supabase
     .from('store_fiscal_certificates')
     .select('original_filename, uploaded_at, expires_at')
+    .eq('store_id', storeId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data;
+};
+
+// Configuração do emissor fiscal (ambiente, série/numeração, CSC/CSCID —
+// ver supabase/migrations/024_config_emissor_fiscal.sql e "Certificado
+// digital fiscal" em AGENTS.md). Todos os campos são opcionais: só os que
+// vierem preenchidos aqui são enviados pro FormData, e a rota só sobrescreve
+// o que veio (mesmo princípio de uploadStoreCertificate/
+// saveStoreCertificateSecret acima).
+export interface UpdateStoreFiscalConfigParams {
+  ambiente?: 'homologacao' | 'producao';
+  nfeSerie?: number;
+  nfceSerie?: number;
+  cteSerie?: number;
+  mdfeSerie?: number;
+  nfeUltimoNumero?: number;
+  nfceUltimoNumero?: number;
+  cteUltimoNumero?: number;
+  mdfeUltimoNumero?: number;
+  inscricaoMunicipal?: string;
+  casasDecimais?: number;
+  cnpjAutorizado?: string;
+  observacaoNfe?: string;
+  observacaoPedido?: string;
+  cscHomologacao?: string;
+  cscidHomologacao?: string;
+  cscProducao?: string;
+  cscidProducao?: string;
+}
+
+export const updateStoreFiscalConfig = async (storeId: string, config: UpdateStoreFiscalConfigParams): Promise<{ success: boolean; message?: string }> => {
+  const fields: Record<string, string> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (value === undefined || value === null) continue;
+    fields[key] = String(value);
+  }
+  return postCertificado({ storeId, ...fields });
+};
+
+// Campos não-sigilosos (público, mesmo nível de fetchStoreCertificateStatus
+// acima) — lido direto da tabela, não precisa passar pela API route.
+// `null` = loja ainda não tem nenhuma configuração salva (estado normal,
+// não é erro).
+export const fetchStoreFiscalConfig = async (storeId: string): Promise<StoreFiscalConfig | null> => {
+  const { data, error } = await supabase
+    .from('store_fiscal_config')
+    .select('*')
     .eq('store_id', storeId)
     .maybeSingle();
   if (error || !data) return null;
