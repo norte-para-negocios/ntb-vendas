@@ -133,7 +133,7 @@ export interface Product {
   // create_order_secure cobra o menor no servidor (ver getEffectivePrice
   // em lib/calc.ts). tags usa o catalogo fixo PRODUCT_TAGS (lib/labels.ts).
   promo_price?: number | null;
-  featured: boolean;
+  featured: boolean; // migration 019 — alimenta a vitrine "Destaques" no cardapio do cliente
   tags: string[];
   option_groups?: ProductOptionGroup[]; // so populado quando o Product veio de fetchMenu
   // Vende mais II (migration 020): "peca tambem" (cross-sell manual do

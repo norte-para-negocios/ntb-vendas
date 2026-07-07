@@ -324,9 +324,10 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
 - **`020_vende_mais_2.sql`**: `get_bestseller_product_ids` (function
   `security definer`, leitura agregada) + tabela `product_recommendations`
   e `sync_product_recommendations` (RPC atômica) — pacote "vende mais II",
-  ver seção dedicada abaixo.
-- **`021_fecha_rls_orders_products.sql`** e
-  **`022_revoga_anon_orders_products.sql`**: correção crítica de segurança
+  ver seção dedicada abaixo. Também cria `idx_order_items_store_product
+  (store_id, product_id)`, suporte à agregação de `get_bestseller_product_ids`.
+- **`021_fecha_rls_orders_products.sql`**, **`022_revoga_anon_orders_products.sql`**
+  e **`023_valida_mesa_da_loja.sql`**: correção crítica de segurança
   (2026-07-07), ver seção dedicada logo abaixo desta lista.
 
 Todas as migrations (001 a 022) já foram aplicadas no banco de produção e

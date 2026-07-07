@@ -13,7 +13,7 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert } from '@/lib/audioAlert';
@@ -3046,6 +3046,18 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                                         <Star size={14} className="text-[var(--warn)] fill-[var(--warn)] flex-shrink-0" aria-label="Produto em destaque" />
                                                                                     )}
                                                                                     {prod.name}
+                                                                                    {/* Achado da varredura (2026-07-07): promo_price/featured ja tinham
+                                                                                        indicador aqui, so tags ficava sem — lojista com muitos produtos
+                                                                                        nao tinha como saber quais tags estavam configuradas sem abrir o
+                                                                                        modal de edicao um a um. */}
+                                                                                    {prod.tags.length > 0 && (
+                                                                                        <span
+                                                                                            className="text-[12px]"
+                                                                                            title={prod.tags.map(t => getTagDisplay(t).label).join(', ')}
+                                                                                        >
+                                                                                            {prod.tags.map(t => getTagDisplay(t).emoji).filter(Boolean).join(' ')}
+                                                                                        </span>
+                                                                                    )}
                                                                                 </h5>
                                                                                 {(() => {
                                                                                     const effectivePrice = getEffectivePrice(prod);
