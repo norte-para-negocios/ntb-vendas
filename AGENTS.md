@@ -329,8 +329,11 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
 - **`021_fecha_rls_orders_products.sql`**, **`022_revoga_anon_orders_products.sql`**
   e **`023_valida_mesa_da_loja.sql`**: correção crítica de segurança
   (2026-07-07), ver seção dedicada logo abaixo desta lista.
+- **`024_config_emissor_fiscal.sql`**: `store_fiscal_config` (público) +
+  `store_fiscal_config_secrets` (write-only, CSC/CSCID por ambiente) —
+  configuração do emissor fiscal, ver seção dedicada.
 
-Todas as migrations (001 a 022) já foram aplicadas no banco de produção e
+Todas as migrations (001 a 024) já foram aplicadas no banco de produção e
 verificadas (`authenticate_admin_secure`, `authenticate_store_user_secure`,
 `create_order_secure` com e sem adicionais e com e sem promoção,
 `open_table_session`, rate-limit de login e de PIN, bucket
@@ -479,6 +482,55 @@ chave anônima nunca mais toca `storage.objects`/`storage.buckets` nem
 estar configurada nas env vars do projeto na Vercel (não só no
 `.env.local` local), sem ela `/api/certificado` falha em produção com
 credencial ausente. Não verificado nesta sessão se já está configurada lá.
+
+## Configuração do emissor fiscal (`store_fiscal_config`, migration 024)
+
+Campos pra configurar a emissão de NF-e/NFC-e por loja — origem: cruzamento
+de um vídeo de referência (WinPro, sistema concorrente) com a gravação de
+uma reunião real (2026-07-06) onde esses mesmos campos foram confirmados
+como necessários. **Escopo explícito: só armazenamento/configuração, igual
+ao certificado acima — nenhuma lógica de emissão de NFC-e de verdade foi
+implementada.** Editável pelo Master Admin em "Editar Loja", logo abaixo da
+seção do certificado.
+
+Mesmos dois padrões de sensibilidade já usados pro certificado, aplicados
+de novo aqui:
+
+- **`store_fiscal_config`** (público, RLS `allow_all_anon`, mesmo nível de
+  `store_fiscal_certificates`): `ambiente` (`'homologacao'`/`'producao'`,
+  default homologação — nunca começa em produção por acidente), série e
+  último número emitido por tipo de documento (`nfe_serie`/
+  `nfe_ultimo_numero`, idem pra `nfce`/`cte`/`mdfe` — CT-e/MDF-e existem no
+  schema mas ficam num bloco "Avançado" colapsado na UI, não são
+  prioridade agora), `inscricao_municipal`, `casas_decimais` (default 2),
+  `cnpj_autorizado`, `observacao_nfe`/`observacao_pedido`.
+- **`store_fiscal_config_secrets`** (write-only de verdade, mesma
+  sensibilidade da senha do certificado): `csc_homologacao`/
+  `cscid_homologacao`/`csc_producao`/`cscid_producao` — CSC (Código de
+  Segurança do Contribuinte) é o segredo compartilhado com a SEFAZ usado
+  pra gerar o hash do QR Code da NFC-e; cada ambiente (homologação/
+  produção) tem o próprio par CSC+CSCID, os dois ficam salvos ao mesmo
+  tempo pra poder alternar `ambiente` sem precisar reconfigurar. Sem
+  NENHUMA policy de SELECT — só grava via `app/api/certificado` (mesma
+  rota do certificado, ganhou mais um bloco de escrita com service role
+  key, não virou rota nova).
+
+`lib/api.ts`: `fetchStoreFiscalConfig(storeId)` lê `store_fiscal_config`
+direto (não é sigiloso, não passa pela API route) — devolve `null` quando
+a loja nunca configurou nada (estado normal, não é erro). Nunca existe uma
+função pra ler CSC de volta — write-only significa write-only mesmo; a UI
+mostra os campos de CSC sempre vazios, e o Master Admin não tem como saber
+"já tem CSC configurado ou não" sem perguntar pra quem configurou (decisão
+consciente, ver plano). `updateStoreFiscalConfig(storeId, config)` só
+manda pro servidor os campos que vieram preenchidos — um upsert parcial
+nunca sobrescreve o resto da linha com null (mesmo princípio já usado na
+senha do certificado).
+
+Testado ao vivo em 2026-07-07 (Playwright, Bistrô Demo): preencher
+ambiente/série/número/inscrição municipal/CSC, salvar, fechar e reabrir o
+modal — campos não-sigilosos vêm de volta preenchidos, campos de CSC vêm
+vazios (esperado), e conferido direto no banco que o CSC foi mesmo
+persistido (só não é lido de volta pela UI). Dado de teste limpo depois.
 
 Tabelas principais: `stores`, `store_users`, `system_admins`, `universal_users`
 (ver "Conta universal" abaixo), `categories`, `products`,
