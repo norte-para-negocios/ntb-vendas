@@ -248,3 +248,40 @@ $$;
 grant execute on function public.fetch_sales_history_secure(uuid, timestamptz, timestamptz) to anon, authenticated;
 
 
+
+-- Achados adicionais durante a migracao do lib/api.ts (nao previstos no
+-- plano original): mais 3 pontos de escrita direta em orders/products que
+-- so' apareceram ao mapear TODO o arquivo, nao so' os 15 citados no plano.
+
+-- Master Admin: apaga historico de vendas de uma loja (Historico > Limpar).
+create or replace function public.clear_sales_history_secure(p_store_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from orders where store_id = p_store_id;
+end;
+$$;
+grant execute on function public.clear_sales_history_secure(uuid) to anon, authenticated;
+
+-- Cancela itens pendentes/aceitos de uma mesa (usado ao mover/cancelar mesa).
+create or replace function public.cancel_pending_table_items_secure(p_table_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update order_items set status = 'canceled'
+  where order_id in (select id from orders where table_id = p_table_id and status != 'delivered')
+    and status in ('pending', 'accepted');
+end;
+$$;
+grant execute on function public.cancel_pending_table_items_secure(uuid) to anon, authenticated;
+
+-- Master Admin: duplicar loja (duplicateStore em lib/api.ts) insere produtos
+-- em lote pra loja nova clonada.
+create or replace function public.duplicate_products_secure(p_store_id uuid, p_products jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into products (store_id, category_id, name, description, price, image_url, available, prep_time_minutes)
+  select p_store_id, (elem->>'category_id')::uuid, elem->>'name', elem->>'description',
+    (elem->>'price')::numeric, elem->>'image_url', (elem->>'available')::boolean, (elem->>'prep_time_minutes')::int
+  from jsonb_array_elements(p_products) as elem;
+end;
+$$;
+grant execute on function public.duplicate_products_secure(uuid, jsonb) to anon, authenticated;
