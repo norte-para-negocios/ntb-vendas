@@ -323,12 +323,22 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
     // carregada — produto recomendado que não existe mais na lista (ex.:
     // ficou indisponível, foi excluído) é filtrado silenciosamente, não
     // quebra o cardápio.
+    // Achado real (varredura 2026-07-07): a versao anterior montava `byId` a
+    // partir do array `products` ORIGINAL (sem recommended_products ainda),
+    // entao "Peca tambem" em cadeia quebrava — se A recomenda B, o objeto de
+    // B dentro de A.recommended_products nunca tinha recommended_products
+    // preenchido (undefined), entao o modal de B nunca mostrava a propria
+    // secao. Corrigido criando os objetos finais primeiro e populando
+    // recommended_products por cima dos MESMOS objetos (referencia
+    // compartilhada) — funciona ate com ciclo A->B->A, porque cada produto
+    // referenciado dentro de outro e' o mesmo objeto vivo, nao uma copia.
     const resolveRecommended = (products: Product[]): Product[] => {
-      const byId = new Map(products.map(p => [p.id, p]));
-      return products.map(p => ({
-        ...p,
-        recommended_products: (recommendedByProduct.get(p.id) || []).map(id => byId.get(id)).filter(Boolean) as Product[],
-      }));
+      const resolved = products.map(p => ({ ...p, recommended_products: [] as Product[] }));
+      const byId = new Map(resolved.map(p => [p.id, p]));
+      resolved.forEach(p => {
+        p.recommended_products = (recommendedByProduct.get(p.id) || []).map(id => byId.get(id)).filter(Boolean) as Product[];
+      });
+      return resolved;
     };
 
     if (prods.error && (prods.error.code === '42703' || prods.error.message?.includes('column') || prods.error.message?.includes('does not exist'))) {
