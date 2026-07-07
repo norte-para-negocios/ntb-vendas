@@ -741,7 +741,13 @@ const ProductModal: React.FC<{
     onSelectRecommended: (product: Product) => void,
     isFavorite: boolean,
     onToggleFavorite: (productId: string) => void,
-}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite }) => {
+    // Achado da varredura (2026-07-07): "Peça também" não respeitava o
+    // horário da categoria do produto recomendado (migration 018) — um
+    // produto de categoria fechada no momento podia aparecer aqui, ao
+    // contrário da vitrine de Destaques, que já filtra por isso. Mesmo
+    // conjunto de ids que `visibleCategories` já calcula no ClientModule.
+    visibleCategoryIds: Set<string>,
+}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -769,6 +775,13 @@ const ProductModal: React.FC<{
     if (!product) return null;
 
     const groups = product.option_groups || [];
+
+    // "Peça também": só sugere produto de categoria disponível agora (mesma
+    // regra da vitrine de Destaques) — produto órfão (sem categoria) não tem
+    // restrição de horário, então continua sugerido normalmente.
+    const availableRecommended = (product.recommended_products || []).filter(
+        rec => rec.category_id == null || visibleCategoryIds.has(rec.category_id)
+    );
 
     const toggleOption = (group: ProductOptionGroup, optionId: string) => {
         setSelections(prev => {
@@ -857,13 +870,13 @@ const ProductModal: React.FC<{
                     Cards compactos em linha rolável; clicar troca o produto do
                     próprio modal (onSelectRecommended -> setSelectedProduct no
                     ClientModule, mesmo mecanismo de estado de sempre). */}
-                {!!product.recommended_products?.length && (
+                {!!availableRecommended.length && (
                     <div>
                         <h4 className="text-[13px] font-semibold text-[var(--text)] mb-2 flex items-center gap-1.5">
                             <Sparkles size={13} style={{ color: WINE_GOLD }} /> Peça também
                         </h4>
                         <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
-                            {product.recommended_products.map(rec => (
+                            {availableRecommended.map(rec => (
                                 <button
                                     key={rec.id}
                                     type="button"
@@ -1844,10 +1857,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
 
         // Sorting Logic
+        // getEffectivePrice (migration 019): produto com promoção ativa tem que
+        // ordenar pelo preço que o cliente realmente paga, não o cheio — senão
+        // um item em promoção pode aparecer fora de ordem em "menor preço".
         if (sortBy === 'price_asc') {
-            prods.sort((a, b) => a.price - b.price);
+            prods.sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
         } else if (sortBy === 'price_desc') {
-            prods.sort((a, b) => b.price - a.price);
+            prods.sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
         } else if (sortBy === 'name_asc') {
             prods.sort((a, b) => a.name.localeCompare(b.name));
         }
@@ -1865,6 +1881,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         () => products.filter(p => p.featured && (p.category_id == null || visibleCategories.some(c => c.id === p.category_id))),
         [products, visibleCategories]
     );
+
+    // Achado da varredura (2026-07-07): mesmo Set usado pra "Peça também"
+    // respeitar horário de categoria (ver ProductModal), sem repetir o
+    // .some() de featuredProducts em cada render do modal.
+    const visibleCategoryIds = useMemo(() => new Set(visibleCategories.map(c => c.id)), [visibleCategories]);
 
     const categoryIconById = useMemo(() => {
         const map: Record<string, ReturnType<typeof categoryIcon>> = {};
@@ -2229,6 +2250,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 onSelectRecommended={setSelectedProduct}
                 isFavorite={!!selectedProduct && favoriteIds.has(selectedProduct.id)}
                 onToggleFavorite={toggleFavorite}
+                visibleCategoryIds={visibleCategoryIds}
             />
 
             <CounterConfirmModal
