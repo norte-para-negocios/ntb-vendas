@@ -76,14 +76,28 @@ export async function POST(request: NextRequest) {
 
   const { data: items } = await admin
     .from('order_items')
-    .select('quantity, status, product:products(omie_codigo)')
+    .select('quantity, status, selected_options, product:products(omie_codigo)')
     .in('order_id', orderIds);
 
+  // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
+  // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot
+  // gravado em selected_options pela create_order_secure (migration 028), não
+  // precisa de join extra. Pedidos anteriores a essa migration simplesmente
+  // não têm o campo (undefined), tratados como sem código.
   const porCodigo = new Map<string, number>();
   for (const item of items ?? []) {
-    const codigo = (item as any).product?.omie_codigo as string | null | undefined;
-    if (!codigo || item.status === 'canceled') continue;
-    porCodigo.set(codigo, (porCodigo.get(codigo) ?? 0) + item.quantity);
+    if (item.status === 'canceled') continue;
+
+    const codigoProduto = (item as any).product?.omie_codigo as string | null | undefined;
+    if (codigoProduto) {
+      porCodigo.set(codigoProduto, (porCodigo.get(codigoProduto) ?? 0) + item.quantity);
+    }
+
+    const opcoes = (item.selected_options ?? []) as { omie_codigo?: string | null }[];
+    for (const opcao of opcoes) {
+      if (!opcao.omie_codigo) continue;
+      porCodigo.set(opcao.omie_codigo, (porCodigo.get(opcao.omie_codigo) ?? 0) + item.quantity);
+    }
   }
 
   if (!porCodigo.size) {
