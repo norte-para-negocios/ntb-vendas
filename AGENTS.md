@@ -613,21 +613,75 @@ Leblanc Brut Blanc de Blancs - FR" no Omie tem espaço duplo antes do
 resolver o código à mão) — lista completa dos 19 nomes está no commit da
 migration 026.
 
-**Explicitamente NÃO implementado ainda** (próximos passos, nessa ordem):
+**Mecanismo completo construído (2026-07-07, segunda parte da sessão)** —
+código pronto dos dois lados, aplicação/teste ao vivo **bloqueados só por
+falta de credencial** (ver "Bloqueio pendente" abaixo):
+
+- **`ntb-estoque`** ganhou `supabase/migrations/061_integracao_api_key.sql`
+  (coluna `lojas.integracao_api_key`, gerada via `gen_random_bytes` — chave
+  só pra autenticar a rota nova, não é a `omie_app_key`) e
+  `app/api/integracao/ordem-producao/route.ts`: rota HTTP nova (fora de
+  sessão, autenticada por `Authorization: Bearer <integracao_api_key>`),
+  recebe `{ itens: [{codigo, quantidade}], pedidoRef? }`, resolve cada
+  `codigo` (SKU, o mesmo valor salvo em `omie_codigo` do lado do
+  `ntb-vendas`) pro `codigo_produto` (ID interno numérico que a API do Omie
+  realmente exige — achado técnico real desta sessão: são dois campos
+  diferentes, `nCodProduto` do `IncluirOrdemProducao` quer o segundo, não o
+  primeiro) via lookup na tabela local `produtos` (já sincronizada do Omie,
+  sem chamada extra), chama `incluirOrdemProducao` **e já
+  `concluirOrdemProducao`** em seguida (auto-conclusão, como pedido) por
+  item, sequencial (não paralelo, evita "consumo redundante" do Omie). Erro
+  de um item (ex.: "sem estrutura") não derruba os outros — cada item volta
+  `{codigo, ok, nCodOP | erro}` independente. Typecheck limpo.
+- **`ntb-vendas`** ganhou `supabase/migrations/027_ntb_estoque_integracao.sql`
+  (`store_ntb_estoque_secrets`: `store_id`, `ntb_estoque_url`,
+  `ntb_estoque_api_key` — **write-only de verdade, zero policy de select**,
+  mesmo princípio de `store_fiscal_config_secrets`; a `stores` normal
+  continua com `allow_all_anon`, então essa chave NUNCA poderia ir lá
+  direto — seria a mesma classe de vazamento corrigida em 021/022) e
+  `app/api/integracao/ordem-producao/route.ts`: rota interna (service
+  role, mesmo padrão de `/api/certificado`) que recebe `{orderId}` ou
+  `{tableId}` do browser, resolve loja+itens+`omie_codigo` **server-side**
+  (o browser não teria como montar isso sozinho de qualquer forma — orders/
+  order_items não têm mais select público desde 022) e repassa pro
+  `ntb-estoque`. `lib/api.ts` chama essa rota interna via
+  `triggerOrdemProducao()` — fire-and-forget (`.catch()` só loga, nunca
+  lança) — no fim de `closeCounterOrder` e `closeTableSession`, sem mudar a
+  assinatura de nenhuma das duas (nenhum call-site em `StoreModule.tsx`
+  precisou mudar). Typecheck limpo.
+
+**Bloqueio pendente (não é decisão de produto, é credencial faltando):**
+não tenho acesso a banco/deploy do `ntb-estoque` nessa máquina — só achei o
+`VERCEL_OIDC_TOKEN` (token de workload, não serve pra `vercel env pull`) em
+`.env.local`; MCP do Supabase e da Vercel conectados aqui são de outra
+conta/team (não veem o projeto `ntb-estoque` / team
+`team_tqHCGgJLyvjpDMsRbqRQRp0V`); Supabase CLI local não está logada.
+Sem isso, faltam 3 passos mecânicos antes do teste ponta-a-ponta real:
+1. Aplicar a migration 061 no `ntb-estoque` (adiciona a coluna + gera a
+   chave da Vieras e Vinhos).
+2. Aplicar a migration 027 no `ntb-vendas` (já tenho acesso a esse banco —
+   só falta saber a URL pública do deploy do `ntb-estoque` pra preencher
+   `store_ntb_estoque_secrets.ntb_estoque_url` junto com a chave gerada no
+   passo 1).
+3. Deploy da rota nova do `ntb-estoque` (`git push` + Vercel já publica).
+Desbloqueio mais rápido: rodar `! npx vercel login` (abre o navegador) e
+depois `! npx vercel env pull .env.local` dentro de
+`C:\Users\media\workspace\norte\ntb-estoque` — com isso eu termino sozinho
+o resto (aplicar as duas migrations, gerar+gravar a chave nos dois bancos,
+testar de ponta a ponta).
+
+**Continua pendente independente do bloqueio acima** (próximos passos, sem
+mudança nesta sessão):
 1. UI no `ntb-vendas` pra ver/editar `omie_codigo` por produto/opcional
    (hoje só existe a coluna, populada via script — não editável pela tela).
 2. Resolver os 19+1 produtos/opcionais sem match (revisão manual de nome).
-3. Nova rota autenticada no `ntb-estoque` que o `ntb-vendas` possa chamar.
-4. Chamada de verdade em `create_order_secure`/`closeCounterOrder`/
-   `closeTableSession` (quando um pedido é concluído) pra essa rota nova,
-   passando produto+opcional+quantidade — cria (e já conclui) a Ordem de
-   Produção correspondente no `ntb-estoque`.
-5. Pré-requisito conhecido desde a reunião do dia 6 (ainda não resolvido,
+3. Pré-requisito conhecido desde a reunião do dia 6 (ainda não resolvido,
    não é código): os produtos da Vieras e Vinhos não têm "estrutura"
    (receita/consumo de ingrediente) cadastrada no `ntb-estoque` — sem
-   isso, mesmo com a integração pronta, a Ordem de Produção não consome
-   nada de verdade. Cadastro manual, feito por quem administra o estoque
-   dessa loja.
+   isso, mesmo com a integração pronta e testada, a Ordem de Produção
+   falha com o erro real já reproduzido do Omie ("Este produto não possui
+   nenhum item na sua estrutura..."). Cadastro manual, feito por quem
+   administra o estoque dessa loja — não é algo que código resolve.
 
 ## Conta universal (`universal_users`, migration 015)
 

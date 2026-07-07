@@ -643,6 +643,21 @@ export const sendOrderToKitchen = async (orderId: string) => {
 export const closeCounterOrder = async (orderId: string) => {
   const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
   if (error) throw error;
+  triggerOrdemProducao({ orderId });
+};
+
+// Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
+// rota interna (service role, nunca vê chave nem RLS do lado do browser) que
+// cria+conclui a Ordem de Produção correspondente no ntb-estoque. Só lojas
+// com store_ntb_estoque_secrets configurado participam — as demais recebem
+// { skipped: true } e não acontece nada. Fire-and-forget de propósito: um
+// erro aqui nunca pode impedir o fechamento do pedido, que já aconteceu.
+const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
+  fetch('/api/integracao/ordem-producao', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch((e) => console.error('Integração ntb-estoque (Ordem de Produção) falhou:', e));
 };
 
 export const callWaiter = async (tableId: string) => {
@@ -799,6 +814,7 @@ export const closeTableSession = async (
     }
 
     await closeOpenTableSession(tableId);
+    triggerOrdemProducao({ tableId });
 
     return { success: true, message: warningMessage };
   } catch (e: any) {
