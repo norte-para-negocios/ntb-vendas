@@ -366,33 +366,29 @@ export const deleteCategory = async (id: string) => {
   if (error) throw error;
 };
 
+// Achado critico de seguranca (2026-07-07): insert direto em `products`
+// dependia so' de RLS `allow_all_anon`, que tambem liberava UPDATE/DELETE
+// pra qualquer um com a anon key publica (confirmado explorando ao vivo).
+// Migration 021 criou create_product_secure/update_product_secure/
+// delete_product_secure (security definer) — migration 022 revoga o
+// insert/update/delete direto de anon na tabela. Ver
+// docs/plans/2026-07-07-fecha-rls-orders-products-plan.md.
 export const createProduct = async (storeId: string, categoryId: string, product: Partial<Product>): Promise<string> => {
-  const { data: maxOrderData, error: maxOrderError } = await supabase.from('products').select('order').eq('category_id', categoryId).order('order', { ascending: false }).limit(1);
-  const nextOrder = maxOrderError ? 1 : ((maxOrderData?.[0]?.order || 0) + 1);
-
-  const { data, error } = await supabase.from('products').insert({
-    store_id: storeId, category_id: categoryId, name: product.name, description: product.description,
-    price: product.price, image_url: product.image_url, prep_time_minutes: product.prep_time_minutes || 15,
-    available: true, order: nextOrder, destination: product.destination || 'kitchen',
-    // Cardapio que vende (migration 019). updateProduct ja persiste esses 3
-    // de graca (passa o Partial<Product> direto pro .update); no insert
-    // precisam ser explicitos porque createProduct monta o objeto campo a campo.
-    promo_price: product.promo_price ?? null, featured: product.featured ?? false, tags: product.tags ?? [],
-  }).select('id').single();
-
-  if (error) {
-    if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-      const { data: fallbackData, error: fallbackError } = await supabase.from('products').insert({
-        store_id: storeId, category_id: categoryId, name: product.name, description: product.description,
-        price: product.price, image_url: product.image_url, prep_time_minutes: product.prep_time_minutes || 15, available: true,
-      }).select('id').single();
-      if (fallbackError) throw fallbackError;
-      if (product.destination && product.destination !== 'kitchen') throw new Error('schema cache destination');
-      return fallbackData.id;
-    }
-    throw error;
-  }
-  return data.id;
+  const { data, error } = await supabase.rpc('create_product_secure', {
+    p_store_id: storeId,
+    p_category_id: categoryId,
+    p_name: product.name,
+    p_description: product.description,
+    p_price: product.price,
+    p_image_url: product.image_url,
+    p_prep_time_minutes: product.prep_time_minutes || 15,
+    p_destination: product.destination || 'kitchen',
+    p_promo_price: product.promo_price ?? null,
+    p_featured: product.featured ?? false,
+    p_tags: product.tags ?? [],
+  });
+  if (error) throw error;
+  return data as string;
 };
 
 export interface ProductOptionGroupInput {
@@ -456,14 +452,33 @@ export const fetchBestsellerProductIds = async (storeId: string, days = 30, limi
   return (data as string[]) || [];
 };
 
-export const updateProduct = async (id: string, updates: Partial<Product>) => {
-  const { error } = await supabase.from('products').update(updates).eq('id', id);
-  if (error) {
-    if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-      if (updates.destination) throw new Error('schema cache destination');
-    }
-    throw error;
-  }
+// Achado critico de seguranca (2026-07-07): ver comentario de createProduct
+// acima. storeId virou obrigatorio aqui (nao era antes) pra RPC validar que
+// o produto pertence a loja — precisou atualizar os 3 call sites em
+// StoreModule.tsx.
+export const updateProduct = async (id: string, storeId: string, updates: Partial<Product>) => {
+  // promo_price: `null` explicito no objeto significa "o lojista limpou o
+  // campo", diferente de "a chave nem veio" (nao mexer). update_product_secure
+  // usa coalesce (null = nao mexer) pra todo o resto, entao precisa desse
+  // flag separado especificamente pra permitir zerar a promocao.
+  const clearingPromoPrice = 'promo_price' in updates && updates.promo_price == null;
+  const { error } = await supabase.rpc('update_product_secure', {
+    p_product_id: id,
+    p_store_id: storeId,
+    p_name: updates.name,
+    p_description: updates.description,
+    p_price: updates.price,
+    p_category_id: updates.category_id,
+    p_image_url: updates.image_url,
+    p_prep_time_minutes: updates.prep_time_minutes,
+    p_destination: updates.destination,
+    p_available: updates.available,
+    p_promo_price: clearingPromoPrice ? null : updates.promo_price,
+    p_clear_promo_price: clearingPromoPrice,
+    p_featured: updates.featured,
+    p_tags: updates.tags,
+  });
+  if (error) throw error;
 };
 
 export const updateCategoryOrder = async (updates: { id: string; order: number }[]) => {
@@ -492,8 +507,8 @@ export const updateProductOrder = async (updates: { id: string; order: number }[
   }
 };
 
-export const deleteProduct = async (id: string) => {
-  const { error } = await supabase.from('products').delete().eq('id', id);
+export const deleteProduct = async (id: string, storeId: string) => {
+  const { error } = await supabase.rpc('delete_product_secure', { p_product_id: id, p_store_id: storeId });
   if (error) throw error;
 };
 
@@ -531,17 +546,18 @@ export const openTableSession = async (
   return { success: data.success, message: data.message, isHost: data.is_host, table: data.table };
 };
 
+// Achado critico de seguranca (2026-07-07): as 5 funcoes de leitura abaixo
+// (fetchActiveOrdersForTables ... fetchSalesHistory) liam direto de
+// orders/order_items via RLS `allow_all_anon`, que tambem liberava SELECT
+// sem filtro nenhum pra qualquer um com a anon key publica — confirmado
+// testando ao vivo (deu pra ler nome de cliente e forma de pagamento de
+// qualquer loja da plataforma numa unica chamada). Migration 021 criou RPCs
+// `security definer` que devolvem o mesmo formato jsonb que o `.select()`
+// aninhado ja devolvia (pra nao precisar mudar quem consome o retorno);
+// migration 022 revoga o select direto. Ver
+// docs/plans/2026-07-07-fecha-rls-orders-products-plan.md.
 export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order[]> => {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, order_items(*, product:products(*))')
-    .eq('store_id', storeId)
-    .eq('order_type', 'table')
-    .neq('status', OrderStatus.DELIVERED)
-    .neq('status', OrderStatus.CANCELED)
-    .order('created_at')
-    .limit(500);
-
+  const { data, error } = await supabase.rpc('fetch_active_table_orders_secure', { p_store_id: storeId });
   if (error) { console.error('Fetch Active Table Orders Error', error); return []; }
 
   const orders = (data as any) || [];
@@ -552,87 +568,29 @@ export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order
 };
 
 export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: number; items: any[] }> => {
-  const { data: orders, error } = await supabase
-    .from('orders')
-    .select('*, order_items(*, product:products(*))')
-    .eq('table_id', tableId)
-    .neq('status', OrderStatus.DELIVERED)
-    .neq('status', OrderStatus.CANCELED)
-    .limit(500);
-
-  if (error || !orders) return { total: 0, items: [] };
-
-  let total = 0;
-  const allItems: any[] = [];
-
-  orders.forEach((order: any) => {
-    if (order.order_items) {
-      order.order_items.forEach((item: any) => {
-        if (item.status !== OrderStatus.CANCELED && item.product) {
-          total += item.price_at_time * item.quantity;
-          allItems.push(item);
-        }
-      });
-    }
-  });
-
-  return { total, items: allItems };
+  const { data, error } = await supabase.rpc('fetch_table_order_summary_secure', { p_table_id: tableId });
+  if (error || !data) return { total: 0, items: [] };
+  return { total: Number((data as any).total) || 0, items: (data as any).items || [] };
 };
 
 export const fetchKitchenOrders = async (storeId: string, destination: 'kitchen' | 'bar' = 'kitchen'): Promise<OrderItem[]> => {
-  const { data, error } = await supabase
-    .from('order_items')
-    // products!inner (não só products) é obrigatório aqui: sem o !inner o Postgrest só
-    // zera o campo embutido de quem não bate o filtro, mas continua lendo/contando as
-    // linhas de order_items de TODAS as lojas da plataforma (confirmado testando direto
-    // na API - sem !inner vinham 179 linhas incluindo de outras lojas, com !inner só 26,
-    // as reais da loja filtrada).
-    .select('*, product:products!inner(*), order:orders(*, tables(number))')
-    .eq('product.store_id', storeId)
-    .neq('status', OrderStatus.DELIVERED)
-    .neq('status', OrderStatus.CANCELED)
-    .order('created_at', { ascending: true })
-    .limit(500);
-
+  const { data, error } = await supabase.rpc('fetch_kitchen_orders_secure', { p_store_id: storeId, p_destination: destination });
   if (error) { console.error('Kitchen fetch error:', error); return []; }
-
-  const filtered = (data as any).filter((item: any) => {
-    if (!item.product) return false;
-    if ((item.product.destination || 'kitchen') !== destination) return false;
-    if (item.order?.order_type === 'counter' && item.status === 'pending') return false;
-    return true;
-  });
-
-  return filtered;
+  return (data as any) || [];
 };
 
 export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, order_items(*, product:products(*))')
-    .eq('store_id', storeId)
-    .eq('order_type', 'counter')
-    .neq('status', 'delivered')
-    .order('created_at', { ascending: false })
-    .limit(500);
-
+  const { data, error } = await supabase.rpc('fetch_counter_orders_secure', { p_store_id: storeId });
   if (error) { console.error('Fetch Counter Orders Error', error); return []; }
   return (data as any) || [];
 };
 
 export const fetchSalesHistory = async (storeId: string, startDate?: string, endDate?: string): Promise<Order[]> => {
-  let query = supabase
-    .from('orders')
-    .select('*, order_items(*, product:products(*)), tables(*)')
-    .eq('store_id', storeId)
-    .eq('status', OrderStatus.DELIVERED)
-    .order('created_at', { ascending: false })
-    .limit(2000);
-
-  if (startDate) query = query.gte('created_at', startDate);
-  if (endDate) query = query.lte('created_at', endDate);
-
-  const { data, error } = await query;
+  const { data, error } = await supabase.rpc('fetch_sales_history_secure', {
+    p_store_id: storeId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+  });
   if (error) { console.error('Fetch Sales History Error', error); return []; }
   return (data as any) || [];
 };
@@ -653,56 +611,28 @@ export const fetchTableSessions = async (storeId: string, sinceDate?: string): P
   return (data as any) || [];
 };
 
+// Achado critico de seguranca (2026-07-07): delete direto em `orders` pela
+// mesma RLS aberta que permitia SELECT/INSERT sem filtro (ver comentario
+// grande acima de fetchActiveOrdersForTables). order_items.order_id
+// continua "on delete cascade", so' que agora dentro da RPC.
 export const clearSalesHistory = async (storeId: string) => {
-  // order_items.order_id tem "on delete cascade" (001_schema_inicial.sql), entao apagar as
-  // orders ja cuida dos itens - nao precisa (nem precisava) apagar order_items manualmente.
-  // Pagina desde o inicio em vez de tentar um DELETE sem limite pra loja inteira de uma vez.
-  const chunkSize = 200;
-  while (true) {
-    const { data: orders, error: fetchError } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('store_id', storeId)
-      .limit(chunkSize);
-    if (fetchError) throw fetchError;
-    if (!orders || orders.length === 0) break;
-
-    const { error: deleteError } = await supabase
-      .from('orders')
-      .delete()
-      .in('id', orders.map((o) => o.id));
-    if (deleteError) throw deleteError;
-
-    if (orders.length < chunkSize) break;
-  }
+  const { error } = await supabase.rpc('clear_sales_history_secure', { p_store_id: storeId });
+  if (error) throw error;
 };
 
 export const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
-  const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+  const { error } = await supabase.rpc('update_order_status_secure', { p_order_id: orderId, p_status: status });
   if (error) throw error;
 };
 
 export const sendOrderToKitchen = async (orderId: string) => {
-  const { error: orderError } = await supabase.from('orders').update({ status: OrderStatus.ACCEPTED }).eq('id', orderId);
-  if (orderError) throw orderError;
-  const { error: itemsError } = await supabase.from('order_items').update({ status: OrderStatus.ACCEPTED }).eq('order_id', orderId);
-  if (itemsError) throw itemsError;
+  const { error } = await supabase.rpc('send_order_to_kitchen_secure', { p_order_id: orderId });
+  if (error) throw error;
 };
 
 export const closeCounterOrder = async (orderId: string) => {
-  const { error } = await supabase
-    .from('orders')
-    .update({ status: OrderStatus.DELIVERED, updated_at: new Date().toISOString() })
-    .eq('id', orderId);
-
-  if (error) {
-    if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-      throw new Error('schema cache updated_at');
-    }
-    throw error;
-  }
-
-  await supabase.from('order_items').update({ status: OrderStatus.DELIVERED }).eq('order_id', orderId);
+  const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
+  if (error) throw error;
 };
 
 export const callWaiter = async (tableId: string) => {
@@ -774,13 +704,13 @@ export const createOrder = async (
 };
 
 export const fetchOrderById = async (orderId: string): Promise<Order | null> => {
-  const { data, error } = await supabase.from('orders').select('*').eq('id', orderId).single();
-  if (error) return null;
-  return data;
+  const { data, error } = await supabase.rpc('fetch_order_by_id_secure', { p_order_id: orderId });
+  if (error || !data) return null;
+  return data as Order;
 };
 
 export const updateOrderItemStatus = async (itemId: string, status: OrderStatus): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.from('order_items').update({ status }).eq('id', itemId);
+  const { error } = await supabase.rpc('update_order_item_status_secure', { p_item_id: itemId, p_status: status });
   if (error) {
     console.error('Update Order Item Status Error:', error);
     return { success: false, message: error.message };
@@ -789,7 +719,7 @@ export const updateOrderItemStatus = async (itemId: string, status: OrderStatus)
 };
 
 export const cancelSpecificOrderItem = async (itemId: string) => {
-  await supabase.from('order_items').update({ status: OrderStatus.CANCELED }).eq('id', itemId);
+  await supabase.rpc('cancel_order_item_secure', { p_item_id: itemId });
 };
 
 export const updateTableStatus = async (tableId: string, status: TableStatus, hostName?: string) => {
@@ -819,21 +749,7 @@ export const requestTableBill = async (tableId: string) => {
 };
 
 export const cancelPendingTableItems = async (tableId: string) => {
-  const { data: orders } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('table_id', tableId)
-    .neq('status', OrderStatus.DELIVERED)
-    .limit(200);
-
-  if (!orders || orders.length === 0) return;
-  const orderIds = orders.map((o) => o.id);
-
-  await supabase
-    .from('order_items')
-    .update({ status: OrderStatus.CANCELED })
-    .in('order_id', orderIds)
-    .in('status', [OrderStatus.PENDING, OrderStatus.ACCEPTED]);
+  await supabase.rpc('cancel_pending_table_items_secure', { p_table_id: tableId });
 };
 
 export const closeTableSession = async (
@@ -842,47 +758,16 @@ export const closeTableSession = async (
 ): Promise<{ success: boolean; message?: string }> => {
   let warningMessage = '';
   try {
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('table_id', tableId)
-      .neq('status', OrderStatus.DELIVERED)
-      .neq('status', OrderStatus.CANCELED)
-      .limit(200);
+    const paymentMethod = paymentData
+      ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
+      : null;
 
-    if (orders && orders.length > 0) {
-      const orderIds = orders.map((o) => o.id);
-      const updatePayload: any = { status: OrderStatus.DELIVERED };
-
-      if (paymentData) {
-        const primaryMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
-        updatePayload.payment_method = primaryMethod;
-        updatePayload.payment_details = paymentData;
-      }
-      updatePayload.updated_at = new Date().toISOString();
-
-      const { error: orderErr } = await supabase.from('orders').update(updatePayload).in('id', orderIds);
-
-      if (orderErr) {
-        if (orderErr.code === '42703' || orderErr.message?.includes('column') || orderErr.message?.includes('does not exist')) {
-          if (orderErr.message?.includes('updated_at')) throw new Error('schema cache updated_at');
-          const fallbackPayload = { status: OrderStatus.DELIVERED };
-          const { error: fallbackErr } = await supabase.from('orders').update(fallbackPayload).in('id', orderIds);
-          if (fallbackErr) throw new Error('Falha ao fechar pedidos: ' + fallbackErr.message);
-          warningMessage = 'Aviso: Detalhes do pagamento não foram salvos.';
-        } else {
-          throw new Error('Falha ao fechar pedidos da mesa: ' + orderErr.message);
-        }
-      }
-
-      const { error: itemsErr } = await supabase
-        .from('order_items')
-        .update({ status: OrderStatus.DELIVERED })
-        .in('order_id', orderIds)
-        .neq('status', OrderStatus.CANCELED);
-
-      if (itemsErr) throw new Error('Falha ao atualizar itens.');
-    }
+    const { error: closeErr } = await supabase.rpc('close_table_orders_secure', {
+      p_table_id: tableId,
+      p_payment_method: paymentMethod,
+      p_payment_details: paymentData || null,
+    });
+    if (closeErr) throw new Error('Falha ao fechar pedidos da mesa: ' + closeErr.message);
 
     const newPin = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -1093,11 +978,14 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
     const { data: products } = await supabase.from('products').select('*').eq('store_id', storeId);
     if (products && products.length > 0) {
       const productsToInsert = products.map((prod) => ({
-        store_id: newStore.id, category_id: prod.category_id ? categoryMap[prod.category_id] : null,
+        category_id: prod.category_id ? categoryMap[prod.category_id] : null,
         name: prod.name, description: prod.description, price: prod.price, image_url: prod.image_url,
         available: prod.available, prep_time_minutes: prod.prep_time_minutes,
       }));
-      await supabase.from('products').insert(productsToInsert);
+      // Achado critico de seguranca (2026-07-07): insert em lote direto em
+      // products, mesma classe do resto (ver comentario de createProduct).
+      const { error: dupErr } = await supabase.rpc('duplicate_products_secure', { p_store_id: newStore.id, p_products: productsToInsert });
+      if (dupErr) throw dupErr;
     }
 
     const { data: tables } = await supabase.from('tables').select('*').eq('store_id', storeId);

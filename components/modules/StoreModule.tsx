@@ -2502,7 +2502,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
                 try {
                     // Update category_id for the moved product
-                    await updateProduct(moved.id, { category_id: newCategoryId });
+                    await updateProduct(moved.id, storeId, { category_id: newCategoryId });
 
                     // Update orders for both categories
                     await updateProductOrder([
@@ -2658,7 +2658,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
             let productId: string;
             if (editingProduct) {
-                await updateProduct(editingProduct.id, productData);
+                await updateProduct(editingProduct.id, storeId, productData);
                 productId = editingProduct.id;
             } else {
                 productId = await createProduct(storeId, pCat, productData);
@@ -2702,13 +2702,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     const handleDeleteProduct = async (id: string) => {
         if (await confirm({ message: 'Excluir produto?', variant: 'danger', confirmLabel: 'Excluir' })) {
-            await deleteProduct(id);
+            await deleteProduct(id, storeId);
             loadMenu();
         }
     };
 
     const handleToggleAvailability = async (product: Product) => {
-        await updateProduct(product.id, { available: !product.available });
+        await updateProduct(product.id, storeId, { available: !product.available });
         loadMenu();
     }
 

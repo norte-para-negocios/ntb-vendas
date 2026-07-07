@@ -222,20 +222,26 @@ export const deleteCategory = async (id: string) => {
   products = products.filter(p => p.category_id !== id);
 };
 
-export const createProduct = async (storeId: string, categoryId: string, product: Partial<Product>) => {
+export const createProduct = async (storeId: string, categoryId: string, product: Partial<Product>): Promise<string> => {
   await delay();
   const maxOrder = Math.max(0, ...products.filter(p => p.category_id === categoryId).map(p => p.order || 0));
+  const id = uid();
   products.push({
-    id: uid(), store_id: storeId, category_id: categoryId,
+    id, store_id: storeId, category_id: categoryId,
     name: product.name || '', description: product.description || '',
     price: product.price || 0, image_url: product.image_url || null,
     available: true, prep_time_minutes: product.prep_time_minutes || 15,
     order: maxOrder + 1, destination: product.destination || 'kitchen',
     promo_price: product.promo_price ?? null, featured: product.featured ?? false, tags: product.tags ?? [],
   });
+  return id;
 };
 
-export const updateProduct = async (id: string, updates: Partial<Product>) => {
+// storeId (2026-07-07): assinatura real ganhou esse parametro pra RPC
+// validar loja (ver correcao critica de RLS em lib/api.ts) — mock nao
+// precisa validar nada, so' segue a mesma assinatura pra nao quebrar os
+// call sites em StoreModule.tsx.
+export const updateProduct = async (id: string, _storeId: string, updates: Partial<Product>) => {
   await delay();
   const p = products.find(p => p.id === id);
   if (p) Object.assign(p, updates);
@@ -251,9 +257,22 @@ export const updateProductOrder = async (updates: { id: string; order: number }[
   updates.forEach(u => { const p = products.find(p => p.id === u.id); if (p) p.order = u.order; });
 };
 
-export const deleteProduct = async (id: string) => {
+export const deleteProduct = async (id: string, _storeId: string) => {
   await delay();
   products = products.filter(p => p.id !== id);
+};
+
+// Vende mais II (migration 020) — faltavam no mock (achado em varredura
+// 2026-07-07): com USE_MOCK=true, ligar "mostrar mais vendidos" chamava uma
+// funcao undefined fora de try/catch e travava o carregamento do cardapio
+// inteiro. Mock simples: nunca ha "mais vendido" nem recomendacao real.
+export const fetchBestsellerProductIds = async (_storeId: string, _days = 30, _limit = 5): Promise<string[]> => {
+  await delay();
+  return [];
+};
+
+export const updateProductRecommendations = async (_productId: string, _storeId: string, _recommendedIds: string[]): Promise<void> => {
+  await delay();
 };
 
 export const fetchTables = async (storeId: string): Promise<Table[]> => {
