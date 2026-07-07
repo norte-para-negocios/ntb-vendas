@@ -827,7 +827,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
             return opt ? [{ group_id: g.id, option_id: opt.id, name: opt.name, price_delta: opt.price_delta }] : [];
         })
     );
-    const unitPrice = product.price + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
+    const unitPrice = getEffectivePrice(product) + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
     const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
     return (
@@ -840,7 +840,23 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                     <div>
                         <h4 className="font-bold text-lg">{product.name}</h4>
                         <p className="text-[var(--text-muted)] text-sm line-clamp-2">{product.description}</p>
-                        <span className="text-[var(--brand)] font-bold mt-1 block">R$ {product.price.toFixed(2)}</span>
+                        {/* Preço promocional (migration 019): garçom precisa ver/calcular
+                            o mesmo preço efetivo que create_order_secure cobra no servidor,
+                            senão diverge do que é dito ao cliente na mesa. Mesmo padrão
+                            visual (cheio riscado + efetivo em destaque) já usado na
+                            listagem de produtos do MenuManagementView acima. */}
+                        {(() => {
+                            const effectivePrice = getEffectivePrice(product);
+                            const hasActivePromo = effectivePrice < product.price;
+                            return hasActivePromo ? (
+                                <span className="flex items-baseline gap-1.5 mt-1">
+                                    <span className="text-xs text-[var(--text-muted)] line-through">R$ {product.price.toFixed(2)}</span>
+                                    <span className="text-[var(--brand)] font-bold">R$ {effectivePrice.toFixed(2)}</span>
+                                </span>
+                            ) : (
+                                <span className="text-[var(--brand)] font-bold mt-1 block">R$ {product.price.toFixed(2)}</span>
+                            );
+                        })()}
                     </div>
                 </div>
 
@@ -951,7 +967,18 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         )}
                         <div>
                             <h4 className="font-bold text-sm text-[var(--text)] leading-tight line-clamp-1">{product.name}</h4>
-                            <span className="text-[var(--brand)] font-bold text-xs">R$ {product.price.toFixed(2)}</span>
+                            {(() => {
+                                const effectivePrice = getEffectivePrice(product);
+                                const hasActivePromo = effectivePrice < product.price;
+                                return hasActivePromo ? (
+                                    <span className="flex items-baseline gap-1">
+                                        <span className="text-[10px] text-[var(--text-muted)] line-through">R$ {product.price.toFixed(2)}</span>
+                                        <span className="text-[var(--brand)] font-bold text-xs">R$ {effectivePrice.toFixed(2)}</span>
+                                    </span>
+                                ) : (
+                                    <span className="text-[var(--brand)] font-bold text-xs">R$ {product.price.toFixed(2)}</span>
+                                );
+                            })()}
                         </div>
                     </Card>
                 ))}
@@ -3144,11 +3171,14 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             {Object.entries(PRODUCT_TAGS).map(([key, tag]) => (
                                 <label
                                     key={key}
-                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer u-motion ${
+                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer u-motion has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--brand)] has-[:focus-visible]:ring-offset-1 ${
                                         pTags.includes(key) ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
                                     }`}
                                 >
-                                    <input type="checkbox" className="hidden" checked={pTags.includes(key)} onChange={() => toggleProductTag(key)} />
+                                    {/* sr-only (não `hidden`/display:none) pra continuar focável via
+                                        Tab/Espaço — checkbox escondido só visualmente, o <label> em
+                                        volta mostra o foco via has-[:focus-visible] acima. */}
+                                    <input type="checkbox" className="sr-only" checked={pTags.includes(key)} onChange={() => toggleProductTag(key)} />
                                     <span aria-hidden="true">{tag.emoji}</span> {tag.label}
                                 </label>
                             ))}
@@ -3186,7 +3216,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                     <label
                                         key={p.id}
                                         title={limitReached ? `Limite de ${MAX_RECOMMENDATIONS} produtos recomendados atingido — desmarque algum pra trocar.` : undefined}
-                                        className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm u-motion ${
+                                        className={`flex items-center gap-2 px-2 py-1.5 min-h-11 rounded-md text-sm u-motion ${
                                             limitReached ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--surface)]'
                                         } ${checked ? 'text-[var(--brand)] font-semibold' : 'text-[var(--text)]'}`}
                                     >
