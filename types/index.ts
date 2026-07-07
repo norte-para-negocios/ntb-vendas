@@ -226,6 +226,24 @@ export interface StoreFiscalConfig {
   cnpj_autorizado: string | null;
   observacao_nfe: string | null;
   observacao_pedido: string | null;
+  razao_social: string | null;
+  nome_fantasia: string | null;
+  tipo_pessoa: 'juridica' | 'fisica';
+  inscricao_estadual: string | null;
+  endereco_logradouro: string | null;
+  endereco_numero: string | null;
+  endereco_complemento: string | null;
+  endereco_bairro: string | null;
+  endereco_cidade: string | null;
+  endereco_uf: string | null;
+  endereco_cep: string | null;
+  cst_csosn_padrao: string | null;
+  cst_pis_padrao: string | null;
+  cst_cofins_padrao: string | null;
+  cst_ipi_padrao: string | null;
+  frete_padrao: string | null;
+  tipo_pagamento_padrao: string | null;
+  natureza_operacao_padrao: string | null;
   updated_at: string;
 }
 

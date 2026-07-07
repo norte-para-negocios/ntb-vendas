@@ -937,6 +937,24 @@ export interface UpdateStoreFiscalConfigParams {
   cscidHomologacao?: string;
   cscProducao?: string;
   cscidProducao?: string;
+  razaoSocial?: string;
+  nomeFantasia?: string;
+  tipoPessoa?: string;
+  inscricaoEstadual?: string;
+  enderecoLogradouro?: string;
+  enderecoNumero?: string;
+  enderecoComplemento?: string;
+  enderecoBairro?: string;
+  enderecoCidade?: string;
+  enderecoUf?: string;
+  enderecoCep?: string;
+  cstCsosnPadrao?: string;
+  cstPisPadrao?: string;
+  cstCofinsPadrao?: string;
+  cstIpiPadrao?: string;
+  fretePadrao?: string;
+  tipoPagamentoPadrao?: string;
+  naturezaOperacaoPadrao?: string;
 }
 
 export const updateStoreFiscalConfig = async (storeId: string, config: UpdateStoreFiscalConfigParams): Promise<{ success: boolean; message?: string }> => {

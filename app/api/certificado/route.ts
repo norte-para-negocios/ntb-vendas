@@ -126,6 +126,47 @@ export async function POST(req: NextRequest) {
     const observacaoPedido = readOptionalString(form, 'observacaoPedido');
     if (observacaoPedido !== undefined) configFields.observacao_pedido = observacaoPedido;
 
+    // Identificação da empresa + endereço + padrões de impostos (migration
+    // 025) — mesmo princípio acima, upsert parcial só com o que veio.
+    const razaoSocial = readOptionalString(form, 'razaoSocial');
+    if (razaoSocial !== undefined) configFields.razao_social = razaoSocial;
+    const nomeFantasia = readOptionalString(form, 'nomeFantasia');
+    if (nomeFantasia !== undefined) configFields.nome_fantasia = nomeFantasia;
+    const tipoPessoa = readOptionalString(form, 'tipoPessoa');
+    if (tipoPessoa === 'juridica' || tipoPessoa === 'fisica') configFields.tipo_pessoa = tipoPessoa;
+    const inscricaoEstadual = readOptionalString(form, 'inscricaoEstadual');
+    if (inscricaoEstadual !== undefined) configFields.inscricao_estadual = inscricaoEstadual;
+
+    const enderecoLogradouro = readOptionalString(form, 'enderecoLogradouro');
+    if (enderecoLogradouro !== undefined) configFields.endereco_logradouro = enderecoLogradouro;
+    const enderecoNumero = readOptionalString(form, 'enderecoNumero');
+    if (enderecoNumero !== undefined) configFields.endereco_numero = enderecoNumero;
+    const enderecoComplemento = readOptionalString(form, 'enderecoComplemento');
+    if (enderecoComplemento !== undefined) configFields.endereco_complemento = enderecoComplemento;
+    const enderecoBairro = readOptionalString(form, 'enderecoBairro');
+    if (enderecoBairro !== undefined) configFields.endereco_bairro = enderecoBairro;
+    const enderecoCidade = readOptionalString(form, 'enderecoCidade');
+    if (enderecoCidade !== undefined) configFields.endereco_cidade = enderecoCidade;
+    const enderecoUf = readOptionalString(form, 'enderecoUf');
+    if (enderecoUf !== undefined) configFields.endereco_uf = enderecoUf;
+    const enderecoCep = readOptionalString(form, 'enderecoCep');
+    if (enderecoCep !== undefined) configFields.endereco_cep = enderecoCep;
+
+    const cstCsosnPadrao = readOptionalString(form, 'cstCsosnPadrao');
+    if (cstCsosnPadrao !== undefined) configFields.cst_csosn_padrao = cstCsosnPadrao;
+    const cstPisPadrao = readOptionalString(form, 'cstPisPadrao');
+    if (cstPisPadrao !== undefined) configFields.cst_pis_padrao = cstPisPadrao;
+    const cstCofinsPadrao = readOptionalString(form, 'cstCofinsPadrao');
+    if (cstCofinsPadrao !== undefined) configFields.cst_cofins_padrao = cstCofinsPadrao;
+    const cstIpiPadrao = readOptionalString(form, 'cstIpiPadrao');
+    if (cstIpiPadrao !== undefined) configFields.cst_ipi_padrao = cstIpiPadrao;
+    const fretePadrao = readOptionalString(form, 'fretePadrao');
+    if (fretePadrao !== undefined) configFields.frete_padrao = fretePadrao;
+    const tipoPagamentoPadrao = readOptionalString(form, 'tipoPagamentoPadrao');
+    if (tipoPagamentoPadrao !== undefined) configFields.tipo_pagamento_padrao = tipoPagamentoPadrao;
+    const naturezaOperacaoPadrao = readOptionalString(form, 'naturezaOperacaoPadrao');
+    if (naturezaOperacaoPadrao !== undefined) configFields.natureza_operacao_padrao = naturezaOperacaoPadrao;
+
     if (Object.keys(configFields).length > 0) {
       const { error } = await supabaseAdmin.from('store_fiscal_config').upsert(
         { store_id: storeId, ...configFields, updated_at: new Date().toISOString() },
