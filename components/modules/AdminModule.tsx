@@ -212,6 +212,26 @@ export const AdminModule: React.FC = () => {
   const [fiscalCscidHomologacao, setFiscalCscidHomologacao] = useState('');
   const [fiscalCscProducao, setFiscalCscProducao] = useState('');
   const [fiscalCscidProducao, setFiscalCscidProducao] = useState('');
+  // Identificação da empresa
+  const [fiscalRazaoSocial, setFiscalRazaoSocial] = useState('');
+  const [fiscalNomeFantasia, setFiscalNomeFantasia] = useState('');
+  const [fiscalTipoPessoa, setFiscalTipoPessoa] = useState<'juridica' | 'fisica'>('juridica');
+  const [fiscalInscricaoEstadual, setFiscalInscricaoEstadual] = useState('');
+  const [fiscalEnderecoLogradouro, setFiscalEnderecoLogradouro] = useState('');
+  const [fiscalEnderecoNumero, setFiscalEnderecoNumero] = useState('');
+  const [fiscalEnderecoComplemento, setFiscalEnderecoComplemento] = useState('');
+  const [fiscalEnderecoBairro, setFiscalEnderecoBairro] = useState('');
+  const [fiscalEnderecoCidade, setFiscalEnderecoCidade] = useState('');
+  const [fiscalEnderecoUf, setFiscalEnderecoUf] = useState('');
+  const [fiscalEnderecoCep, setFiscalEnderecoCep] = useState('');
+  // Padrões de impostos
+  const [fiscalCstCsosnPadrao, setFiscalCstCsosnPadrao] = useState('');
+  const [fiscalCstPisPadrao, setFiscalCstPisPadrao] = useState('');
+  const [fiscalCstCofinsPadrao, setFiscalCstCofinsPadrao] = useState('');
+  const [fiscalCstIpiPadrao, setFiscalCstIpiPadrao] = useState('');
+  const [fiscalFretePadrao, setFiscalFretePadrao] = useState('');
+  const [fiscalTipoPagamentoPadrao, setFiscalTipoPagamentoPadrao] = useState('');
+  const [fiscalNaturezaOperacaoPadrao, setFiscalNaturezaOperacaoPadrao] = useState('');
   const [isSavingFiscalConfig, setIsSavingFiscalConfig] = useState(false);
 
   // User Form State
@@ -292,6 +312,24 @@ export const AdminModule: React.FC = () => {
       setFiscalCscidHomologacao('');
       setFiscalCscProducao('');
       setFiscalCscidProducao('');
+      setFiscalRazaoSocial('');
+      setFiscalNomeFantasia('');
+      setFiscalTipoPessoa('juridica');
+      setFiscalInscricaoEstadual('');
+      setFiscalEnderecoLogradouro('');
+      setFiscalEnderecoNumero('');
+      setFiscalEnderecoComplemento('');
+      setFiscalEnderecoBairro('');
+      setFiscalEnderecoCidade('');
+      setFiscalEnderecoUf('');
+      setFiscalEnderecoCep('');
+      setFiscalCstCsosnPadrao('');
+      setFiscalCstPisPadrao('');
+      setFiscalCstCofinsPadrao('');
+      setFiscalCstIpiPadrao('');
+      setFiscalFretePadrao('');
+      setFiscalTipoPagamentoPadrao('');
+      setFiscalNaturezaOperacaoPadrao('');
   };
 
   const resetUserForm = () => {
@@ -349,6 +387,24 @@ export const AdminModule: React.FC = () => {
           setFiscalCscidHomologacao('');
           setFiscalCscProducao('');
           setFiscalCscidProducao('');
+          setFiscalRazaoSocial(fiscalConfig.razao_social || '');
+          setFiscalNomeFantasia(fiscalConfig.nome_fantasia || '');
+          setFiscalTipoPessoa(fiscalConfig.tipo_pessoa || 'juridica');
+          setFiscalInscricaoEstadual(fiscalConfig.inscricao_estadual || '');
+          setFiscalEnderecoLogradouro(fiscalConfig.endereco_logradouro || '');
+          setFiscalEnderecoNumero(fiscalConfig.endereco_numero || '');
+          setFiscalEnderecoComplemento(fiscalConfig.endereco_complemento || '');
+          setFiscalEnderecoBairro(fiscalConfig.endereco_bairro || '');
+          setFiscalEnderecoCidade(fiscalConfig.endereco_cidade || '');
+          setFiscalEnderecoUf(fiscalConfig.endereco_uf || '');
+          setFiscalEnderecoCep(fiscalConfig.endereco_cep || '');
+          setFiscalCstCsosnPadrao(fiscalConfig.cst_csosn_padrao || '');
+          setFiscalCstPisPadrao(fiscalConfig.cst_pis_padrao || '');
+          setFiscalCstCofinsPadrao(fiscalConfig.cst_cofins_padrao || '');
+          setFiscalCstIpiPadrao(fiscalConfig.cst_ipi_padrao || '');
+          setFiscalFretePadrao(fiscalConfig.frete_padrao || '');
+          setFiscalTipoPagamentoPadrao(fiscalConfig.tipo_pagamento_padrao || '');
+          setFiscalNaturezaOperacaoPadrao(fiscalConfig.natureza_operacao_padrao || '');
       } else {
           // Loja nunca configurou nada — volta pros defaults (ambiente
           // homologação, números vazios/zero), mesma lógica de resetFiscalConfigForm.
@@ -458,6 +514,24 @@ export const AdminModule: React.FC = () => {
           if (fiscalCscidHomologacao) params.cscidHomologacao = fiscalCscidHomologacao;
           if (fiscalCscProducao) params.cscProducao = fiscalCscProducao;
           if (fiscalCscidProducao) params.cscidProducao = fiscalCscidProducao;
+          if (fiscalRazaoSocial) params.razaoSocial = fiscalRazaoSocial;
+          if (fiscalNomeFantasia) params.nomeFantasia = fiscalNomeFantasia;
+          if (fiscalTipoPessoa) params.tipoPessoa = fiscalTipoPessoa;
+          if (fiscalInscricaoEstadual) params.inscricaoEstadual = fiscalInscricaoEstadual;
+          if (fiscalEnderecoLogradouro) params.enderecoLogradouro = fiscalEnderecoLogradouro;
+          if (fiscalEnderecoNumero) params.enderecoNumero = fiscalEnderecoNumero;
+          if (fiscalEnderecoComplemento) params.enderecoComplemento = fiscalEnderecoComplemento;
+          if (fiscalEnderecoBairro) params.enderecoBairro = fiscalEnderecoBairro;
+          if (fiscalEnderecoCidade) params.enderecoCidade = fiscalEnderecoCidade;
+          if (fiscalEnderecoUf) params.enderecoUf = fiscalEnderecoUf;
+          if (fiscalEnderecoCep) params.enderecoCep = fiscalEnderecoCep;
+          if (fiscalCstCsosnPadrao) params.cstCsosnPadrao = fiscalCstCsosnPadrao;
+          if (fiscalCstPisPadrao) params.cstPisPadrao = fiscalCstPisPadrao;
+          if (fiscalCstCofinsPadrao) params.cstCofinsPadrao = fiscalCstCofinsPadrao;
+          if (fiscalCstIpiPadrao) params.cstIpiPadrao = fiscalCstIpiPadrao;
+          if (fiscalFretePadrao) params.fretePadrao = fiscalFretePadrao;
+          if (fiscalTipoPagamentoPadrao) params.tipoPagamentoPadrao = fiscalTipoPagamentoPadrao;
+          if (fiscalNaturezaOperacaoPadrao) params.naturezaOperacaoPadrao = fiscalNaturezaOperacaoPadrao;
 
           const result = await updateStoreFiscalConfig(editingId, params);
           if (!result.success) throw new Error(result.message);
@@ -934,6 +1008,63 @@ export const AdminModule: React.FC = () => {
                               <p className="text-sm text-[var(--warn)]">
                                   ⚠️ Sempre configure e teste em Homologação primeiro. Nunca emita nota fiscal real durante testes.
                               </p>
+                          </div>
+
+                          <div className="space-y-3">
+                              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Identificação da empresa</p>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="Razão Social" placeholder="Opcional" value={fiscalRazaoSocial} onChange={e => setFiscalRazaoSocial(e.target.value)} />
+                                  <Input label="Nome Fantasia" placeholder="Opcional" value={fiscalNomeFantasia} onChange={e => setFiscalNomeFantasia(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="flex flex-col gap-1.5">
+                                      <label className="text-sm font-semibold text-[var(--text)]">Tipo</label>
+                                      <select
+                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                        value={fiscalTipoPessoa}
+                                        onChange={e => setFiscalTipoPessoa(e.target.value as 'juridica' | 'fisica')}
+                                      >
+                                          <option value="juridica">Jurídica</option>
+                                          <option value="fisica">Física</option>
+                                      </select>
+                                  </div>
+                                  <Input label="Inscrição Estadual" placeholder="Opcional" value={fiscalInscricaoEstadual} onChange={e => setFiscalInscricaoEstadual(e.target.value)} />
+                              </div>
+
+                              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Endereço</p>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="Logradouro" placeholder="Opcional" value={fiscalEnderecoLogradouro} onChange={e => setFiscalEnderecoLogradouro(e.target.value)} />
+                                  <Input label="Número" placeholder="Opcional" value={fiscalEnderecoNumero} onChange={e => setFiscalEnderecoNumero(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="Complemento" placeholder="Opcional" value={fiscalEnderecoComplemento} onChange={e => setFiscalEnderecoComplemento(e.target.value)} />
+                                  <Input label="Bairro" placeholder="Opcional" value={fiscalEnderecoBairro} onChange={e => setFiscalEnderecoBairro(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="Cidade" placeholder="Opcional" value={fiscalEnderecoCidade} onChange={e => setFiscalEnderecoCidade(e.target.value)} />
+                                  <Input label="UF" placeholder="Ex: BA" maxLength={2} value={fiscalEnderecoUf} onChange={e => setFiscalEnderecoUf(e.target.value.toUpperCase())} />
+                              </div>
+                              <Input label="CEP" placeholder="Opcional" value={fiscalEnderecoCep} onChange={e => setFiscalEnderecoCep(e.target.value)} />
+                          </div>
+
+                          <div className="space-y-3">
+                              <div>
+                                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Padrões de impostos</p>
+                                  <p className="text-xs text-[var(--text-muted)]">Códigos conforme tabela da contabilidade/SEFAZ.</p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="CST/CSOSN Padrão" placeholder="Opcional" value={fiscalCstCsosnPadrao} onChange={e => setFiscalCstCsosnPadrao(e.target.value)} />
+                                  <Input label="CST/PIS Padrão" placeholder="Opcional" value={fiscalCstPisPadrao} onChange={e => setFiscalCstPisPadrao(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="CST/COFINS Padrão" placeholder="Opcional" value={fiscalCstCofinsPadrao} onChange={e => setFiscalCstCofinsPadrao(e.target.value)} />
+                                  <Input label="CST/IPI Padrão" placeholder="Opcional" value={fiscalCstIpiPadrao} onChange={e => setFiscalCstIpiPadrao(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <Input label="Frete Padrão" placeholder="Opcional" value={fiscalFretePadrao} onChange={e => setFiscalFretePadrao(e.target.value)} />
+                                  <Input label="Tipo de Pagamento Padrão" placeholder="Opcional" value={fiscalTipoPagamentoPadrao} onChange={e => setFiscalTipoPagamentoPadrao(e.target.value)} />
+                              </div>
+                              <Input label="Natureza de Operação Padrão" placeholder="Opcional" value={fiscalNaturezaOperacaoPadrao} onChange={e => setFiscalNaturezaOperacaoPadrao(e.target.value)} />
                           </div>
 
                           <div className="flex flex-col gap-1.5">
