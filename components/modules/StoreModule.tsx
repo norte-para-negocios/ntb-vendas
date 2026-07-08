@@ -3550,7 +3550,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                          </div>
                     </div>
                     <Input label="Descrição" value={pDesc} onChange={e => setPDesc(e.target.value)} />
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="Preço (R$)" type="number" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
                         <Input
                             label="Preço promocional (opcional)"
