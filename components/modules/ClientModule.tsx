@@ -2040,8 +2040,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
                                         onSelect={setSelectedProduct}
                                         onQuickAdd={(p) => {
-                                            const hasRequiredGroup = (p.option_groups || []).some(g => g.required);
-                                            if (hasRequiredGroup) { setSelectedProduct(p); return; }
+                                            if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
                                             addToCart(p, 1, '', []);
                                             toast.success(`${p.name} adicionado`);
                                         }}
@@ -2163,10 +2162,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
                             onSelect={setSelectedProduct}
                             onQuickAdd={(p) => {
-                                // Produto com grupo obrigatorio nao pode pular a escolha:
-                                // abre o modal completo em vez de adicionar direto.
-                                const hasRequiredGroup = (p.option_groups || []).some(g => g.required);
-                                if (hasRequiredGroup) { setSelectedProduct(p); return; }
+                                // Qualquer grupo de opção (obrigatório ou não) abre o modal
+                                // completo em vez de adicionar direto — extras opcionais
+                                // (ex.: borda de pizza) também são upsell/vinculados ao
+                                // omie_codigo da integração, não podem ser pulados no "+".
+                                if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
                                 addToCart(p, 1, '', []);
                                 toast.success(`${p.name} adicionado`);
                             }}
