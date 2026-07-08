@@ -53,6 +53,21 @@ export function playReadyAlert() {
   }
 }
 
+// Alerta pro LOJISTA (cozinha/bar/mesas) quando chega pedido novo pra agir --
+// timbre grave e repetido, bem diferente dos tons agudos do cliente (preparo/
+// pronto), pra não confundir quem ouve as duas telas perto uma da outra.
+export function playNewOrderAlert() {
+  try {
+    const audioCtx = getContext();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    tone(audioCtx, 523, 0, 0.12);
+    tone(audioCtx, 523, 0.18, 0.12);
+  } catch {
+    // autoplay bloqueado ou API indisponível
+  }
+}
+
 export function vibrateAlert(pattern: number[]) {
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
     try { navigator.vibrate(pattern); } catch {}

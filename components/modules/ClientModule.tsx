@@ -96,6 +96,54 @@ const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onCo
     );
 };
 
+// Alerta global de status para pedidos de MESA (achado 2026-07-08: o cliente
+// numa mesa continua navegando o cardápio pra pedir mais rodadas -- NUNCA
+// entra no OrderTracker, que só é montado no fluxo de Balcão (pedido único).
+// Resultado: som/toast de "entrou em preparo"/"ficou pronto" nunca disparava
+// pra mesa, só pro balcão. Aqui a mesma lógica de alerta roda em background,
+// pro pedido inteiro da sessão, não importa em qual tela o cliente estiver.
+function useMesaOrderAlerts(storeId: string | undefined, orderIds: string[]) {
+    const prevStatusRef = useRef<Map<string, OrderStatus>>(new Map());
+    const orderIdsRef = useRef<string[]>(orderIds);
+    orderIdsRef.current = orderIds;
+
+    useEffect(() => {
+        if (!storeId) return;
+
+        const checkOrder = async (orderId: string) => {
+            const items = await fetchOrderItemsById(orderId);
+            if (!items.length) return;
+            const allReady = items.every(i => i.status === OrderStatus.READY || i.status === OrderStatus.DELIVERED);
+            const isWorking = items.some(i => i.status === OrderStatus.PREPARING || i.status === OrderStatus.READY);
+            const status = allReady ? OrderStatus.READY : isWorking ? OrderStatus.PREPARING : OrderStatus.ACCEPTED;
+
+            const prev = prevStatusRef.current.get(orderId);
+            prevStatusRef.current.set(orderId, status);
+            // Baseline (1ª checagem desse orderId): não alerta, só registra.
+            if (!prev || prev === status) return;
+
+            if (status === OrderStatus.PREPARING) {
+                playPreparingAlert();
+                vibrateAlert([120]);
+                toast.info('Seu pedido está sendo preparado! 👨‍🍳');
+            } else if (status === OrderStatus.READY) {
+                playReadyAlert();
+                vibrateAlert([120, 80, 120]);
+                toast.success('Seu pedido está pronto! 🔔');
+            }
+        };
+
+        const channel = supabase.channel(`mesa_alerts_${storeId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, (payload: any) => {
+                const orderId = payload.new?.order_id ?? payload.old?.order_id;
+                if (orderId && orderIdsRef.current.includes(orderId)) checkOrder(orderId);
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [storeId]);
+}
+
 const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: () => void }> = ({ orderId, onReset, onLogout }) => {
     const [order, setOrder] = useState<Order | null>(null);
     const [items, setItems] = useState<OrderItem[]>([]);
@@ -1569,6 +1617,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // Tracker State
     const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
     const [isCounterConfirmOpen, setIsCounterConfirmOpen] = useState(false);
+    // Pedidos enviados NESTA sessão de mesa (várias rodadas possíveis) -- usado
+    // só pra disparar alerta global de status, não persiste entre reloads.
+    const [mesaOrderIds, setMesaOrderIds] = useState<string[]>([]);
 
     const {
         clientName, setClientName,
@@ -1577,6 +1628,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         addToCart, removeFromCart, cart, clearCart,
         setIsHost, isHost
     } = useApp();
+
+    useMesaOrderAlerts(currentStore?.id, mesaOrderIds);
 
     // Carrega loja + cardápio. Extraído do useEffect pra poder ser reusado pelo
     // botão "Tentar de novo" da tela de erro de conexão (achado de UX #4).
@@ -1751,6 +1804,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         if(force || await confirm("Deseja realmente sair? Se você for o anfitrião, a mesa continuará aberta.")) {
             localStorage.removeItem(`session_${slug}`);
             setTrackedOrderId(null);
+            setMesaOrderIds([]);
 
             setHasAccess(false);
             setClientName('');
@@ -1791,6 +1845,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                      setTrackedOrderId(result.orderId);
                      setIsCounterConfirmOpen(false); // Close the counter alert
                  } else {
+                     if (result.orderId) setMesaOrderIds(prev => [...prev, result.orderId!]);
                      toast.success('Pedido enviado para a cozinha!');
                  }
             }

@@ -17,7 +17,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
-import { playPreparingAlert } from '@/lib/audioAlert';
+import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem, getEffectivePrice } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
@@ -238,12 +238,15 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
 
 const useStoreNotifications = (storeId: string | undefined) => {
     const [counts, setCounts] = useState({ tables: 0, kitchen: 0, bar: 0 });
+    // Baseline pra so' tocar som quando o total AUMENTA (pedido novo chegando),
+    // nunca ao abrir a tela nem quando o total cai (item concluido/entregue).
+    const prevTotalRef = useRef<number | null>(null);
 
     useEffect(() => {
         if (!storeId) return;
-        
+
         let isMounted = true;
-        
+
         const loadCounts = async () => {
             try {
                 // Fetch tables and active orders
@@ -272,35 +275,28 @@ const useStoreNotifications = (storeId: string | undefined) => {
                     }
                 });
 
-                // Fetch kitchen & bar orders (filtrado por loja no banco via products!inner, nao so no
-                // client - antes essa query trazia os order_items pendentes de TODAS as lojas da
-                // plataforma; sem o !inner o Postgrest so zera o campo embutido, nao restringe as linhas)
-                const { data: allItems } = await supabase
-                    .from('order_items')
-                    .select('*, product:products!inner(*), order:orders(*)')
-                    .eq('product.store_id', storeId)
-                    .neq('status', 'delivered')
-                    .neq('status', 'canceled')
-                    .limit(500);
-                
-                let kitchenCount = 0;
-                let barCount = 0;
+                // Fetch kitchen & bar orders via RPC segura (fetch_kitchen_orders_secure) --
+                // antes usava supabase.from('order_items') direto, que desde a correcao de
+                // seguranca 021/022 (RLS sem select publico) sempre voltava vazio: o badge
+                // de notificacao da Cozinha/Bar nunca acendia, mesmo com pedido esperando.
+                const needsAction = (item: any) =>
+                    item.status === 'pending' || (item.order?.order_type === 'counter' && item.status === 'accepted');
 
-                if (allItems) {
-                    allItems.forEach((item: any) => {
-                        if (!item.product || item.product.store_id !== storeId) return;
-                        
-                        const isCounterAndPending = item.order?.order_type === 'counter' && item.status === 'pending';
-                        if (isCounterAndPending) return; // Ignore pending counter items
+                const [kitchenItems, barItems] = await Promise.all([
+                    fetchKitchenOrders(storeId, 'kitchen'),
+                    fetchKitchenOrders(storeId, 'bar'),
+                ]);
 
-                        const needsAction = item.status === 'pending' || (item.order?.order_type === 'counter' && item.status === 'accepted');
+                const kitchenCount = kitchenItems.filter(needsAction).length;
+                const barCount = barItems.filter(needsAction).length;
 
-                        if (needsAction) {
-                            const dest = item.product.destination || 'kitchen';
-                            if (dest === 'kitchen') kitchenCount++;
-                            if (dest === 'bar') barCount++;
-                        }
-                    });
+                const total = kitchenCount + barCount;
+                const prevTotal = prevTotalRef.current;
+                prevTotalRef.current = total;
+                if (prevTotal !== null && total > prevTotal) {
+                    playNewOrderAlert();
+                    vibrateAlert([100, 60, 100]);
+                    toast.info('Novo pedido chegou! 🔔');
                 }
 
                 if (isMounted) setCounts({ tables: tableCount, kitchen: kitchenCount, bar: barCount });
