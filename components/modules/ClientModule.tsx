@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
@@ -96,32 +96,131 @@ const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onCo
     );
 };
 
-// Alerta global de status para pedidos de MESA (achado 2026-07-08: o cliente
+// Deriva o status "visual" do pedido a partir do status bruto + status dos
+// itens (o pedido em si só tem pending/accepted/delivered/canceled;
+// preparing/ready são estados por ITEM que a UI precisa agregar). Compartilhado
+// entre o OrderTracker (Balcão, tela cheia) e useMesaOrders (Mesa, painel).
+function deriveOrderStatus(order: Order | null, items: OrderItem[]): OrderStatus {
+    if (!order) return OrderStatus.PENDING;
+    if (order.status === OrderStatus.DELIVERED) return OrderStatus.DELIVERED;
+    if (order.status === OrderStatus.CANCELED) return OrderStatus.CANCELED;
+
+    if (items.length > 0) {
+        // Só fica PRONTO se TODOS os itens estiverem prontos ou entregues.
+        const allReady = items.every(i => i.status === OrderStatus.READY || i.status === OrderStatus.DELIVERED);
+        if (allReady) return OrderStatus.READY;
+
+        // Se algum estiver preparando OU pronto (mas não todos), mostra Preparando.
+        const isWorking = items.some(i => i.status === OrderStatus.PREPARING || i.status === OrderStatus.READY);
+        if (isWorking) return OrderStatus.PREPARING;
+
+        const isAccepted = items.some(i => i.status === OrderStatus.ACCEPTED);
+        if (isAccepted) return OrderStatus.ACCEPTED;
+    }
+
+    return order.status;
+}
+
+const ORDER_STEPS = [
+    { status: OrderStatus.PENDING, label: 'Enviado', icon: CheckCircle },
+    { status: OrderStatus.ACCEPTED, label: 'Aceito', icon: ChefHat },
+    { status: OrderStatus.PREPARING, label: 'Preparando', icon: Clock },
+    { status: OrderStatus.READY, label: 'Pronto!', icon: BellRing },
+];
+
+function getItemStatusBadge(status: OrderStatus) {
+    switch (status) {
+        case OrderStatus.PENDING: return <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]"><Clock size={12} className="mr-1"/> Enviado</Badge>;
+        case OrderStatus.ACCEPTED: return <Badge color="bg-[var(--warn)]/15 text-[var(--warn)]"><ChefHat size={12} className="mr-1"/> Aceito</Badge>;
+        case OrderStatus.PREPARING: return <Badge color="bg-[var(--info)]/10 text-[var(--info)]"><UtensilsCrossed size={12} className="mr-1"/> Preparando</Badge>;
+        case OrderStatus.READY: return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><BellRing size={12} className="mr-1"/> Pronto</Badge>;
+        case OrderStatus.DELIVERED: return <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]"><CheckCircle size={12} className="mr-1"/> Entregue</Badge>;
+        default: return null;
+    }
+}
+
+// Linha do tempo (Enviado→Aceito→Preparando→Pronto) + lista de itens com
+// status individual. Usado pelo OrderTracker (Balcão) e pelo OrderStatusModal
+// (Mesa) — a MESMA visualização nos dois lugares, só muda a moldura em volta.
+function OrderProgressView({ status, items }: { status: OrderStatus; items: OrderItem[] }) {
+    const currentStepIndex = ORDER_STEPS.findIndex(s => s.status === status) !== -1
+        ? ORDER_STEPS.findIndex(s => s.status === status)
+        : (status === OrderStatus.DELIVERED ? 4 : 0);
+    const isReady = status === OrderStatus.READY;
+
+    return (
+        <>
+            <div className="w-full max-w-md mx-auto space-y-6 relative pb-6 border-b border-[var(--border)]">
+                <div className="absolute left-6 top-6 bottom-6 w-1 bg-[var(--border)] -z-10"></div>
+
+                {ORDER_STEPS.map((step, idx) => {
+                    const isCompleted = currentStepIndex >= idx;
+                    const isCurrent = currentStepIndex === idx;
+
+                    return (
+                        <div key={idx} className={`flex items-center gap-4 transition-all duration-500 ${isCompleted ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center border-4 transition-all z-10 ${
+                                isCompleted ? (step.status === OrderStatus.READY ? 'bg-[var(--ok)] border-[var(--ok)]/30 text-white' : 'bg-[var(--brand)] border-[var(--brand)]/30 text-white') : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
+                            } ${isCurrent && !isReady ? 'animate-pulse' : ''}`}>
+                                <step.icon size={20} />
+                            </div>
+                            <div>
+                                <h3 className={`font-bold text-lg ${isCompleted ? 'text-[var(--text)]' : 'text-[var(--text-muted)]'}`}>{step.label}</h3>
+                                {isCurrent && <p className="text-xs text-[var(--brand)] font-medium animate-pulse">Em andamento...</p>}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="w-full max-w-md mx-auto bg-[var(--surface)] rounded-[var(--r-lg)] shadow-sm border border-[var(--border)] overflow-hidden">
+                <div className="bg-[var(--surface-2)] px-4 py-3 border-b border-[var(--border)]">
+                    <h3 className="font-bold text-[var(--text)] text-sm">Status dos Itens</h3>
+                </div>
+                <div className="divide-y divide-[var(--border)]">
+                    {items.map(item => (
+                        <div key={item.id} className="p-3 flex items-center justify-between">
+                            <div className="text-sm">
+                                <span className="font-bold text-[var(--text)]">{item.quantity}x</span> {getOrderItemDisplayName(item, 'Item')}
+                            </div>
+                            <div className="flex-shrink-0 ml-2">
+                                {getItemStatusBadge(item.status)}
+                            </div>
+                        </div>
+                    ))}
+                    {items.length === 0 && <p className="p-4 text-center text-[var(--text-muted)] text-sm">Carregando itens...</p>}
+                </div>
+            </div>
+        </>
+    );
+}
+
+export type MesaOrderState = {
+    orderId: string;
+    order: Order | null;
+    items: OrderItem[];
+    status: OrderStatus;
+};
+
+// Estado + alerta de status pra pedidos de MESA (achado 2026-07-08: o cliente
 // numa mesa continua navegando o cardápio pra pedir mais rodadas -- NUNCA
-// entra no OrderTracker, que só é montado no fluxo de Balcão (pedido único).
-// Resultado: som/toast de "entrou em preparo"/"ficou pronto" nunca disparava
-// pra mesa, só pro balcão. Aqui a mesma lógica de alerta roda em background,
-// pro pedido inteiro da sessão, não importa em qual tela o cliente estiver.
-function useMesaOrderAlerts(storeId: string | undefined, orderIds: string[]) {
+// entrava no OrderTracker, que só é montado no fluxo de Balcão/pedido único).
+// Além de disparar o alerta (som/toast) na transição, expõe o estado de cada
+// rodada da sessão pro OrderStatusPill/OrderStatusModal renderizarem.
+function useMesaOrders(storeId: string | undefined, orderIds: string[]) {
+    const [ordersMap, setOrdersMap] = useState<Map<string, MesaOrderState>>(new Map());
     const prevStatusRef = useRef<Map<string, OrderStatus>>(new Map());
     const orderIdsRef = useRef<string[]>(orderIds);
     orderIdsRef.current = orderIds;
 
-    useEffect(() => {
-        if (!storeId) return;
+    const refreshOrder = useCallback(async (orderId: string) => {
+        const [order, items] = await Promise.all([fetchOrderById(orderId), fetchOrderItemsById(orderId)]);
+        const status = deriveOrderStatus(order, items);
 
-        const checkOrder = async (orderId: string) => {
-            const items = await fetchOrderItemsById(orderId);
-            if (!items.length) return;
-            const allReady = items.every(i => i.status === OrderStatus.READY || i.status === OrderStatus.DELIVERED);
-            const isWorking = items.some(i => i.status === OrderStatus.PREPARING || i.status === OrderStatus.READY);
-            const status = allReady ? OrderStatus.READY : isWorking ? OrderStatus.PREPARING : OrderStatus.ACCEPTED;
-
-            const prev = prevStatusRef.current.get(orderId);
-            prevStatusRef.current.set(orderId, status);
-            // Baseline (1ª checagem desse orderId): não alerta, só registra.
-            if (!prev || prev === status) return;
-
+        const prev = prevStatusRef.current.get(orderId);
+        prevStatusRef.current.set(orderId, status);
+        // Baseline (1ª checagem desse orderId): não alerta, só registra.
+        if (prev && prev !== status) {
             if (status === OrderStatus.PREPARING) {
                 playPreparingAlert();
                 vibrateAlert([120]);
@@ -131,17 +230,43 @@ function useMesaOrderAlerts(storeId: string | undefined, orderIds: string[]) {
                 vibrateAlert([120, 80, 120]);
                 toast.success('Seu pedido está pronto! 🔔');
             }
-        };
+        }
+
+        setOrdersMap(prevMap => {
+            const next = new Map(prevMap);
+            next.set(orderId, { orderId, order, items, status });
+            return next;
+        });
+    }, []);
+
+    // Carrega cada pedido novo assim que entra na sessão (1º fetch, sem esperar
+    // ping) -- senão o pill/painel ficam vazios até a 1ª mudança real de status.
+    useEffect(() => {
+        for (const id of orderIds) {
+            if (!prevStatusRef.current.has(id)) {
+                prevStatusRef.current.set(id, OrderStatus.PENDING); // reserva a baseline antes do fetch resolver, evita corrida
+                refreshOrder(id);
+            }
+        }
+    }, [orderIds, refreshOrder]);
+
+    useEffect(() => {
+        if (!storeId) return;
 
         const channel = supabase.channel(`mesa_alerts_${storeId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, (payload: any) => {
                 const orderId = payload.new?.order_id ?? payload.old?.order_id;
-                if (orderId && orderIdsRef.current.includes(orderId)) checkOrder(orderId);
+                if (orderId && orderIdsRef.current.includes(orderId)) refreshOrder(orderId);
             })
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [storeId]);
+    }, [storeId, refreshOrder]);
+
+    const orders = orderIds.map(id => ordersMap.get(id)).filter((o): o is MesaOrderState => !!o);
+    const latest = [...orders].reverse().find(o => o.status !== OrderStatus.DELIVERED && o.status !== OrderStatus.CANCELED) ?? null;
+
+    return { orders, latest };
 }
 
 const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: () => void }> = ({ orderId, onReset, onLogout }) => {
@@ -215,29 +340,8 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         };
     }, [orderId]);
 
-    // DERIVE STATUS LOGIC
-    const derivedStatus = useMemo(() => {
-        if (!order) return OrderStatus.PENDING;
-        if (order.status === OrderStatus.DELIVERED) return OrderStatus.DELIVERED;
-        if (order.status === OrderStatus.CANCELED) return OrderStatus.CANCELED;
-
-        // If items exist, check their status to advance the bar
-        if (items.length > 0) {
-            // LÓGICA CORRIGIDA: Só fica PRONTO se TODOS os itens estiverem prontos ou entregues
-            const allReady = items.every(i => i.status === OrderStatus.READY || i.status === OrderStatus.DELIVERED);
-            if (allReady) return OrderStatus.READY;
-
-            // Se algum estiver preparando OU pronto (mas não todos), mostra Preparando
-            const isWorking = items.some(i => i.status === OrderStatus.PREPARING || i.status === OrderStatus.READY);
-            if (isWorking) return OrderStatus.PREPARING;
-
-            // Se algum foi aceito
-            const isAccepted = items.some(i => i.status === OrderStatus.ACCEPTED);
-            if (isAccepted) return OrderStatus.ACCEPTED;
-        }
-
-        return order.status; // Fallback to order status (Pending/Accepted)
-    }, [order, items]);
+    // DERIVE STATUS LOGIC (compartilhada com useMesaOrders, ver deriveOrderStatus)
+    const derivedStatus = useMemo(() => deriveOrderStatus(order, items), [order, items]);
 
     // ALERTA AGREGADO (som + vibração): só na TRANSIÇÃO pra preparing/ready,
     // nunca no carregamento inicial. prevAggregateStatusRef começa null;
@@ -280,17 +384,6 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         return () => clearInterval(interval);
     }, [isDelivered, onLogout]);
 
-    const getItemStatusIcon = (status: OrderStatus) => {
-        switch (status) {
-            case OrderStatus.PENDING: return <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]"><Clock size={12} className="mr-1"/> Enviado</Badge>;
-            case OrderStatus.ACCEPTED: return <Badge color="bg-[var(--warn)]/15 text-[var(--warn)]"><ChefHat size={12} className="mr-1"/> Aceito</Badge>;
-            case OrderStatus.PREPARING: return <Badge color="bg-[var(--info)]/10 text-[var(--info)]"><UtensilsCrossed size={12} className="mr-1"/> Preparando</Badge>;
-            case OrderStatus.READY: return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><BellRing size={12} className="mr-1"/> Pronto</Badge>;
-            case OrderStatus.DELIVERED: return <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]"><CheckCircle size={12} className="mr-1"/> Entregue</Badge>;
-            default: return null;
-        }
-    };
-
     const handleSendRating = async () => {
         if (ratingStars === 0 || !order) return;
         setIsSendingRating(true);
@@ -314,17 +407,6 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
     };
 
     if (!order) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><div className="animate-pulse text-[var(--brand)] font-bold">Carregando status...</div></div>;
-
-    const steps = [
-        { status: OrderStatus.PENDING, label: 'Enviado', icon: CheckCircle },
-        { status: OrderStatus.ACCEPTED, label: 'Aceito', icon: ChefHat },
-        { status: OrderStatus.PREPARING, label: 'Preparando', icon: Clock },
-        { status: OrderStatus.READY, label: 'Pronto!', icon: BellRing },
-    ];
-
-    const currentStepIndex = steps.findIndex(s => s.status === derivedStatus) !== -1
-        ? steps.findIndex(s => s.status === derivedStatus)
-        : (derivedStatus === OrderStatus.DELIVERED ? 4 : 0);
 
     const isReady = derivedStatus === OrderStatus.READY;
     const isCanceled = derivedStatus === OrderStatus.CANCELED;
@@ -397,49 +479,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                      </div>
                 ) : (
                     <>
-                        {/* Linha do Tempo */}
-                        <div className="w-full max-w-md space-y-6 relative pb-6 border-b border-[var(--border)]">
-                             <div className="absolute left-6 top-6 bottom-6 w-1 bg-[var(--border)] -z-10"></div>
-
-                             {steps.map((step, idx) => {
-                                 const isCompleted = currentStepIndex >= idx;
-                                 const isCurrent = currentStepIndex === idx;
-
-                                 return (
-                                     <div key={idx} className={`flex items-center gap-4 transition-all duration-500 ${isCompleted ? 'opacity-100' : 'opacity-40'}`}>
-                                         <div className={`w-12 h-12 rounded-full flex items-center justify-center border-4 transition-all z-10 ${
-                                             isCompleted ? (step.status === OrderStatus.READY ? 'bg-[var(--ok)] border-[var(--ok)]/30 text-white' : 'bg-[var(--brand)] border-[var(--brand)]/30 text-white') : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
-                                         } ${isCurrent && !isReady ? 'animate-pulse' : ''}`}>
-                                             <step.icon size={20} />
-                                         </div>
-                                         <div>
-                                             <h3 className={`font-bold text-lg ${isCompleted ? 'text-[var(--text)]' : 'text-[var(--text-muted)]'}`}>{step.label}</h3>
-                                             {isCurrent && <p className="text-xs text-[var(--brand)] font-medium animate-pulse">Em andamento...</p>}
-                                         </div>
-                                     </div>
-                                 );
-                             })}
-                        </div>
-
-                        {/* Lista de Itens Detalhada */}
-                        <div className="w-full max-w-md bg-[var(--surface)] rounded-[var(--r-lg)] shadow-sm border border-[var(--border)] overflow-hidden">
-                            <div className="bg-[var(--surface-2)] px-4 py-3 border-b border-[var(--border)]">
-                                <h3 className="font-bold text-[var(--text)] text-sm">Status dos Itens</h3>
-                            </div>
-                            <div className="divide-y divide-[var(--border)]">
-                                {items.map(item => (
-                                    <div key={item.id} className="p-3 flex items-center justify-between">
-                                        <div className="text-sm">
-                                            <span className="font-bold text-[var(--text)]">{item.quantity}x</span> {getOrderItemDisplayName(item, 'Item')}
-                                        </div>
-                                        <div className="flex-shrink-0 ml-2">
-                                            {getItemStatusIcon(item.status)}
-                                        </div>
-                                    </div>
-                                ))}
-                                {items.length === 0 && <p className="p-4 text-center text-[var(--text-muted)] text-sm">Carregando itens...</p>}
-                            </div>
-                        </div>
+                        <OrderProgressView status={derivedStatus} items={items} />
 
                         <div className="p-2 text-center text-xs text-[var(--text-muted)]">
                              Aguarde chamar seu nome ou número no painel.
@@ -450,6 +490,122 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
         </div>
     );
 };
+
+// Botão flutuante da MESA (achado 2026-07-08: cliente pediu uma tela de
+// status clicável a partir do cardápio, sem sair dele). Mostra a rodada mais
+// recente ainda não entregue; ao tocar, abre o OrderStatusModal.
+const PILL_CONFIG: Partial<Record<OrderStatus, { label: string; icon: any }>> = {
+    [OrderStatus.PENDING]: { label: 'Pedido enviado', icon: Clock },
+    [OrderStatus.ACCEPTED]: { label: 'Pedido aceito pela cozinha', icon: ChefHat },
+    [OrderStatus.PREPARING]: { label: 'Preparando seu pedido...', icon: UtensilsCrossed },
+    [OrderStatus.READY]: { label: 'Seu pedido está pronto! 🔔', icon: BellRing },
+};
+
+function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: () => void }) {
+    const c = PILL_CONFIG[order.status] ?? PILL_CONFIG[OrderStatus.PENDING]!;
+    const Icon = c.icon;
+    const isReady = order.status === OrderStatus.READY;
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-[var(--r-lg)] border text-left transition-transform active:scale-[0.98] ${
+                isReady ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 animate-pulse' : 'border-white/10 text-white'
+            }`}
+            style={isReady ? undefined : { background: 'var(--ink)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
+        >
+            <div
+                className={`p-2 rounded-full shrink-0 ${isReady ? 'bg-[var(--ok)]/15 text-[var(--ok)]' : ''}`}
+                style={isReady ? undefined : { background: 'rgba(212,175,92,0.15)', color: WINE_GOLD }}
+            >
+                <Icon size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className={`text-[13px] font-bold truncate ${isReady ? 'text-[var(--ok)]' : 'text-white'}`}>{c.label}</p>
+                <p className={`text-[11px] ${isReady ? 'text-[var(--ok)]/70' : 'text-white/50'}`}>Toque pra ver detalhes</p>
+            </div>
+            <ChevronRight size={16} className={isReady ? 'text-[var(--ok)]' : 'text-white/50'} />
+        </button>
+    );
+}
+
+// Painel deslizante (mesmo padrão visual do CartModal/"Ver Comanda"): tela de
+// acompanhamento acessível a qualquer momento sem sair do cardápio. Mostra a
+// rodada ativa (reaproveitando OrderProgressView, igual ao Balcão) + histórico
+// das rodadas já entregues nesta visita.
+function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClose: () => void; orders: MesaOrderState[] }) {
+    if (!isOpen) return null;
+
+    const active = [...orders].reverse().find(o => o.status !== OrderStatus.DELIVERED && o.status !== OrderStatus.CANCELED) ?? null;
+    const history = orders.filter(o => o.orderId !== active?.orderId && o.status === OrderStatus.DELIVERED);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-[fadeIn_0.2s_ease-out]" onClick={onClose}>
+            <div
+                className="w-full max-w-md bg-[var(--bg)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)] flex flex-col max-h-[85vh]"
+                style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] bg-[var(--surface)]">
+                    <div className="flex items-center gap-2.5">
+                        <BellRing size={18} className="text-[var(--brand)]" />
+                        <h3 className="text-[15px] font-semibold text-[var(--text)]">Acompanhar Pedido</h3>
+                    </div>
+                    <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-1.5 rounded-[var(--r-sm)] u-motion">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    {active ? (
+                        <OrderProgressView status={active.status} items={active.items} />
+                    ) : (
+                        <div className="text-center py-10 text-[var(--text-muted)]">
+                            <CheckCircle size={36} className="mx-auto mb-3 opacity-20" />
+                            <p className="text-sm">Nenhum pedido em andamento no momento.</p>
+                        </div>
+                    )}
+
+                    {history.length > 0 && (
+                        <div>
+                            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2 px-1">Pedidos anteriores desta visita</h4>
+                            <div className="space-y-2">
+                                {history.map(h => (
+                                    <div key={h.orderId} className="flex items-center justify-between gap-2 p-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)]">
+                                        <div className="text-sm text-[var(--text)] min-w-0 truncate">
+                                            {h.items.map(i => `${i.quantity}x ${getOrderItemDisplayName(i, 'Item')}`).join(', ')}
+                                        </div>
+                                        <div className="shrink-0">{getItemStatusBadge(OrderStatus.DELIVERED)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Sinaliza (via Supabase Realtime Presence — nenhum dado gravado no banco)
+// que o cliente está com o painel de acompanhamento aberto, pro lojista ver
+// um indicador "cliente acompanhando" no card da mesa (StoreModule/TablesView,
+// mesmo canal `presence_${storeId}` lido lá via useWatchedTables).
+function useWatchingPresence(storeId: string | undefined, tableId: string | undefined, watching: boolean) {
+    useEffect(() => {
+        if (!storeId || !tableId || !watching) return;
+        const channel = supabase.channel(`presence_${storeId}`, {
+            config: { presence: { key: `${tableId}_${Math.random().toString(36).slice(2)}` } },
+        });
+        channel.subscribe(async (status: string) => {
+            if (status === 'SUBSCRIBED') {
+                await channel.track({ tableId, watching: true, at: Date.now() });
+            }
+        });
+        return () => { supabase.removeChannel(channel); };
+    }, [storeId, tableId, watching]);
+}
 
 const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, isHost?: boolean, table?: Table | null) => void, storeSlug: string, store: Store | null }> = ({ onLogin, storeSlug, store }) => {
     const [name, setName] = useState('');
@@ -1617,9 +1773,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // Tracker State
     const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
     const [isCounterConfirmOpen, setIsCounterConfirmOpen] = useState(false);
-    // Pedidos enviados NESTA sessão de mesa (várias rodadas possíveis) -- usado
-    // só pra disparar alerta global de status, não persiste entre reloads.
+    // Pedidos enviados NESTA sessão de mesa (várias rodadas possíveis) --
+    // não persiste entre reloads (aceitável: só perde o histórico do painel).
     const [mesaOrderIds, setMesaOrderIds] = useState<string[]>([]);
+    const [isOrderStatusOpen, setIsOrderStatusOpen] = useState(false);
 
     const {
         clientName, setClientName,
@@ -1629,7 +1786,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         setIsHost, isHost
     } = useApp();
 
-    useMesaOrderAlerts(currentStore?.id, mesaOrderIds);
+    const { orders: mesaOrders, latest: latestMesaOrder } = useMesaOrders(currentStore?.id, mesaOrderIds);
+    useWatchingPresence(currentStore?.id, currentTable?.id, isOrderStatusOpen);
 
     // Carrega loja + cardápio. Extraído do useEffect pra poder ser reusado pelo
     // botão "Tentar de novo" da tela de erro de conexão (achado de UX #4).
@@ -1805,6 +1963,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             localStorage.removeItem(`session_${slug}`);
             setTrackedOrderId(null);
             setMesaOrderIds([]);
+            setIsOrderStatusOpen(false);
 
             setHasAccess(false);
             setClientName('');
@@ -2248,29 +2407,34 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 ) : null}
             </div>
 
-            {/* Floating Cart Button */}
-            {cart.length > 0 && !isWaitingBill && (
-                <div className="fixed bottom-4 left-4 right-4 z-40 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
-                    <div className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border" style={{ background: 'var(--ink)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}>
-                        <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
-                                    <Wine size={16} style={{ color: WINE_GOLD }} />
+            {/* Floating Cart Button + Status da Mesa (empilham: Comanda em cima, Status embaixo) */}
+            {!isWaitingBill && (cart.length > 0 || latestMesaOrder) && (
+                <div className="fixed bottom-4 left-4 right-4 z-40 flex flex-col gap-3 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
+                    {cart.length > 0 && (
+                        <div className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border" style={{ background: 'var(--ink)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}>
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
+                                        <Wine size={16} style={{ color: WINE_GOLD }} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
+                                        <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
-                                    <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
-                                </div>
+                                <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
                             </div>
-                            <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
+                            <Button
+                                className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white"
+                                onClick={() => setIsCartOpen(true)}
+                            >
+                                Ver Comanda
+                            </Button>
                         </div>
-                        <Button
-                            className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white"
-                            onClick={() => setIsCartOpen(true)}
-                        >
-                            Ver Comanda
-                        </Button>
-                    </div>
+                    )}
+                    {latestMesaOrder && (
+                        <OrderStatusPill order={latestMesaOrder} onClick={() => setIsOrderStatusOpen(true)} />
+                    )}
                 </div>
             )}
 
@@ -2324,6 +2488,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isLoading={isLoading}
                 onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
                 onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
+            />
+
+            <OrderStatusModal
+                isOpen={isOrderStatusOpen}
+                onClose={() => setIsOrderStatusOpen(false)}
+                orders={mesaOrders}
             />
 
             {showBill && currentTable && currentStore && (

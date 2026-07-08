@@ -321,6 +321,34 @@ const useStoreNotifications = (storeId: string | undefined) => {
     return counts;
 };
 
+// Lê o canal de Presence que o cliente na mesa usa (ClientModule,
+// useWatchingPresence) pra sinalizar "painel de acompanhamento aberto" --
+// nenhum dado gravado no banco, só estado efêmero da conexão websocket.
+// Devolve o conjunto de table_id sendo observados agora, pro card da mesa
+// mostrar um indicador "cliente acompanhando".
+function useWatchedTables(storeId: string | undefined): Set<string> {
+    const [watched, setWatched] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (!storeId) return;
+        const channel = supabase.channel(`presence_${storeId}`);
+
+        const sync = () => {
+            const state = channel.presenceState<{ tableId: string; watching: boolean }>();
+            const tableIds = new Set<string>();
+            Object.values(state).forEach((presences) => {
+                presences.forEach((p) => { if (p.tableId) tableIds.add(p.tableId); });
+            });
+            setWatched(tableIds);
+        };
+
+        channel.on('presence', { event: 'sync' }, sync).subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [storeId]);
+
+    return watched;
+}
+
 const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store } }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -997,6 +1025,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
     const serviceFeeRate = store.config?.service_fee_rate ?? 0.10;
+    const watchedTables = useWatchedTables(storeId);
     const isFinishingRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -1546,6 +1575,11 @@ NOTIFY pgrst, 'reload schema';`;
                                 <span className="font-bold truncate max-w-[150px]">
                                     {isOccupied ? (table.current_host_name || 'Lojista') : '—'}
                                 </span>
+                                {isOccupied && watchedTables.has(table.id) && (
+                                    <span className="flex items-center gap-1 text-[var(--info)]" title="Cliente acompanhando o pedido agora">
+                                        <Eye size={12} />
+                                    </span>
+                                )}
                             </div>
 
                             {/* Content Area: Items or Empty State */}
