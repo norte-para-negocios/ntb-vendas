@@ -734,6 +734,15 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
   return data as Order;
 };
 
+// OrderTracker (ClientModule) buscava order_items direto via .from() — desde
+// a correcao de seguranca de 021/022 isso voltava sempre vazio (RLS bloqueia
+// select anon). Migration 029 adicionou esta RPC segura equivalente.
+export const fetchOrderItemsById = async (orderId: string): Promise<OrderItem[]> => {
+  const { data, error } = await supabase.rpc('fetch_order_items_secure', { p_order_id: orderId });
+  if (error || !data) return [];
+  return data as OrderItem[];
+};
+
 export const updateOrderItemStatus = async (itemId: string, status: OrderStatus): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.rpc('update_order_item_status_secure', { p_item_id: itemId, p_status: status });
   if (error) {

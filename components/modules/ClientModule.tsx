@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabaseClient';
@@ -134,36 +134,36 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
             }
 
             // Fetch items immediately to determine detailed status
-            const { data: itemsData } = await supabase.from('order_items').select('*, product:products(*)').eq('order_id', orderId);
+            const itemsData = await fetchOrderItemsById(orderId);
             if (itemsData) {
                 // Baseline do load inicial: guarda o snapshot sem disparar toast.
-                prevItemsRef.current = itemsData as OrderItem[];
-                setItems(itemsData as OrderItem[]);
+                prevItemsRef.current = itemsData;
+                setItems(itemsData);
             }
         };
         load();
 
-        // Listen to Order Changes
-        const orderChannel = supabase.channel(`tracker_order_${orderId}`)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, (payload) => {
-                setOrder(payload.new as Order);
-            })
-            .subscribe();
+        // order_change_pings (migration 029): orders/order_items não têm mais
+        // select público pra anon (correção de segurança 021/022) — o Realtime
+        // só entrega postgres_changes pra quem tem visibilidade via RLS, então
+        // não dá mais pra assinar as tabelas reais direto. Assina a tabela de
+        // "ping" (sem dado sensível, só order_id+store_id+timestamp) e, ao
+        // receber um ping, busca o dado de verdade pela RPC segura.
+        const pingChannel = supabase.channel(`tracker_ping_${orderId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `order_id=eq.${orderId}` }, async () => {
+                const data = await fetchOrderById(orderId);
+                if (data) setOrder(data);
 
-        // Listen to Item Changes (To update sequence correctly based on Kitchen actions)
-        const itemsChannel = supabase.channel(`tracker_items_${orderId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${orderId}` }, async () => {
-                 const { data: itemsData } = await supabase.from('order_items').select('*, product:products(*)').eq('order_id', orderId);
-                 if (itemsData) {
-                     notifyItemTransitions(itemsData as OrderItem[]);
-                     setItems(itemsData as OrderItem[]);
-                 }
+                const itemsData = await fetchOrderItemsById(orderId);
+                if (itemsData) {
+                    notifyItemTransitions(itemsData);
+                    setItems(itemsData);
+                }
             })
             .subscribe();
 
         return () => {
-            supabase.removeChannel(orderChannel);
-            supabase.removeChannel(itemsChannel);
+            supabase.removeChannel(pingChannel);
         };
     }, [orderId]);
 
@@ -1129,7 +1129,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
         loadBill();
 
         const channel = supabase.channel(`bill_${tableId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `store_id=eq.${storeId}` }, () => loadBill())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => loadBill())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `id=eq.${tableId}` }, () => loadBill())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'stores', filter: `id=eq.${storeId}` }, () => loadBill())
             .subscribe();
