@@ -2199,6 +2199,21 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
         }
     }
 
+    // Achado real (2026-07-07, testando na pratica): pedido de balcao nasce
+    // 'pending', e fetch_kitchen_orders_secure EXCLUI de proposito item
+    // pending de order_type='counter' (migration 021) -- sem essa acao ele
+    // nunca aparece na Cozinha/Bar, nunca entra em preparo, nunca notifica
+    // ninguem. sendOrderToKitchen ja existia em lib/api.ts mas nenhum botao
+    // chamava -- ficou "morto" desde sempre, nao e regressao desta sessao.
+    const handleSendToKitchen = async (orderId: string) => {
+        try {
+            await sendOrderToKitchen(orderId);
+            load();
+        } catch (e: any) {
+            toast.error("Erro ao enviar para a cozinha: " + e.message);
+        }
+    }
+
     const getStatusColor = (status: OrderStatus) => {
         switch(status) {
             case OrderStatus.PENDING: return 'bg-[var(--warn)]/8 border-[var(--warn)]/25 text-[var(--warn)]';
@@ -2280,9 +2295,15 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
                              >
                                  <Printer size={18} />
                              </button>
-                             <Button onClick={() => handleClose(order.id)} variant="primary" className="h-10 text-sm shrink-0">
-                                 <CheckCircle size={16} className="mr-1"/> Entregar
-                             </Button>
+                             {status === OrderStatus.PENDING ? (
+                                 <Button onClick={() => handleSendToKitchen(order.id)} variant="primary" className="h-10 text-sm shrink-0">
+                                     <ChefHat size={16} className="mr-1"/> Enviar p/ Cozinha
+                                 </Button>
+                             ) : (
+                                 <Button onClick={() => handleClose(order.id)} variant="primary" className="h-10 text-sm shrink-0">
+                                     <CheckCircle size={16} className="mr-1"/> Entregar
+                                 </Button>
+                             )}
                          </div>
                     </Card>
                 );
