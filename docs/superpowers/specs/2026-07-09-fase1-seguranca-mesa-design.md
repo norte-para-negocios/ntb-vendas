@@ -49,7 +49,28 @@ Fora do escopo desta fase (não resolvido aqui, por design):
 
 ## Arquitetura
 
-### Bloco A — Migration `029_fecha_rls_tables.sql`
+### Bloco A0 — Realtime de `tables` precisa de ping antes de fechar a RLS
+
+Confirmado: `tables` é assinada via `postgres_changes` em 4 pontos
+(`StoreModule.tsx:311,1215`, `ClientModule.tsx:1337,1864`). Fechar a RLS com
+`select using (false)` sem tratar isso quebraria o realtime de mesas
+silenciosamente — o mesmo bug que já ocorreu com `orders`/`order_items` em
+07/07, corrigido na migration `029_conserta_realtime_pos_seguranca.sql` com
+uma tabela de "ping" pública (`order_change_pings`, sem dado sensível) que os
+clients assinam no lugar da tabela real.
+
+Solução: estender esse padrão já existente. Adicionar um trigger em `tables`
+que popula `order_change_pings`-like ping (nova tabela `table_change_pings`
+com só `table_id` + `store_id` + `changed_at`, sem `pin`/`current_host_name`/
+nada sensível) a cada `UPDATE`/`INSERT`/`DELETE`. Trocar as 4 assinaturas
+Realtime de `table` para `table_change_pings`, mantendo o mesmo fetch via RPC
+segura (`get_tables_secure`/`get_table_pin_secure`) que já vamos criar no
+Bloco A.
+
+### Bloco A — Migration `030_fecha_rls_tables.sql`
+
+(Numeração corrigida: `029` já existe no repo —
+`029_conserta_realtime_pos_seguranca.sql`.)
 
 RPCs `security definer` novas (uma por ação de negócio, mesmo padrão da migration 021):
 
