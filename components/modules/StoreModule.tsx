@@ -1340,6 +1340,15 @@ NOTIFY pgrst, 'reload schema';`;
 
         try {
             const summary = getTableSummary(selectedTable.id);
+
+            const pendingCount = summary.allItems.filter(
+                (item) => item.status !== OrderStatus.DELIVERED && item.status !== OrderStatus.CANCELED
+            ).length;
+            if (pendingCount > 0) {
+                toast.error(`Ainda tem ${pendingCount} item(ns) em preparo — marque como entregue ou cancele antes de fechar a mesa.`);
+                return;
+            }
+
             const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
 
             if (totalPaid < summary.total - 0.01) { // Tolerance for float
