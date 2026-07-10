@@ -1,0 +1,96 @@
+-- Fase 1 de melhorias (varredura 2026-07-09): fecha o mesmo tipo de achado
+-- critico ja corrigido em orders/order_items/products (migrations 021/022) --
+-- agora para tables/table_sessions. Hoje a policy allow_all_anon
+-- (001_schema_inicial.sql / 004_table_sessions.sql) permite SELECT/UPDATE/
+-- INSERT/DELETE sem filtro nenhum com a anon key publica: da pra ler o pin
+-- em texto puro de qualquer mesa de qualquer loja da plataforma. Ver
+-- docs/superpowers/specs/2026-07-09-fase1-seguranca-mesa-design.md.
+--
+-- Antes de fechar a RLS (proxima migration), esta cria as RPCs security
+-- definer que substituem todo acesso direto e a tabela de ping que evita
+-- quebrar o Realtime -- mesmo problema que ja aconteceu com orders/
+-- order_items em 07/07 (corrigido na migration 029): postgres_changes so'
+-- entrega evento pra quem tem visibilidade via RLS na tabela.
+
+create table if not exists table_change_pings (
+  table_id uuid primary key,
+  store_id uuid not null,
+  changed_at timestamptz not null default now()
+);
+create index if not exists idx_table_change_pings_store on table_change_pings(store_id);
+
+alter table table_change_pings enable row level security;
+drop policy if exists "allow_all_anon" on table_change_pings;
+create policy "allow_all_anon" on table_change_pings
+  for select to anon, authenticated using (true);
+
+create or replace function public.ping_table_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_table_id uuid;
+  v_store_id uuid;
+begin
+  v_table_id := coalesce(new.id, old.id);
+  v_store_id := coalesce(new.store_id, old.store_id);
+
+  insert into table_change_pings (table_id, store_id, changed_at)
+  values (v_table_id, v_store_id, now())
+  on conflict (table_id) do update set changed_at = excluded.changed_at, store_id = excluded.store_id;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists trg_ping_tables on tables;
+create trigger trg_ping_tables after insert or update or delete on tables
+  for each row execute function public.ping_table_change();
+
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'table_change_pings') then
+    alter publication supabase_realtime add table table_change_pings;
+  end if;
+end $$;
+
+-- RPCs de leitura. get_tables_secure inclui `pin` (uso do lojista/admin,
+-- mesmo dado que fetchTables ja devolvia). get_tables_public_secure e
+-- get_table_public_by_id_secure NUNCA incluem `pin` (uso do cliente final).
+create or replace function public.get_tables_secure(p_store_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(row_to_json(t) order by t.number), '[]'::jsonb)
+  from tables t where t.store_id = p_store_id;
+$$;
+grant execute on function public.get_tables_secure(uuid) to anon, authenticated;
+
+create or replace function public.get_tables_public_secure(p_store_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(row_to_json(t) order by t.number), '[]'::jsonb)
+  from (
+    select id, store_id, number, status, current_host_name, guest_count, waiter_requested, service_fee_removed
+    from tables where store_id = p_store_id
+  ) t;
+$$;
+grant execute on function public.get_tables_public_secure(uuid) to anon, authenticated;
+
+create or replace function public.get_table_public_by_id_secure(p_table_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select to_jsonb(t) from (
+    select id, store_id, number, status, current_host_name, guest_count, waiter_requested, service_fee_removed
+    from tables where id = p_table_id
+  ) t;
+$$;
+grant execute on function public.get_table_public_by_id_secure(uuid) to anon, authenticated;
+
+create or replace function public.fetch_table_sessions_secure(p_store_id uuid, p_since_date timestamptz default null) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(row_to_json(t) order by t.opened_at desc), '[]'::jsonb)
+  from (
+    select * from table_sessions
+    where store_id = p_store_id
+      and closed_at is not null
+      and (p_since_date is null or opened_at >= p_since_date)
+    order by opened_at desc
+    limit 2000
+  ) t;
+$$;
+grant execute on function public.fetch_table_sessions_secure(uuid, timestamptz) to anon, authenticated;
