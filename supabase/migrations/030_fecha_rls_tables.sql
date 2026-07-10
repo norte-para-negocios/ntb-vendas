@@ -94,3 +94,50 @@ language sql stable security definer set search_path = public as $$
   ) t;
 $$;
 grant execute on function public.fetch_table_sessions_secure(uuid, timestamptz) to anon, authenticated;
+
+create or replace function public.request_waiter_secure(p_table_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update tables set waiter_requested = true where id = p_table_id;
+end;
+$$;
+grant execute on function public.request_waiter_secure(uuid) to anon, authenticated;
+
+create or replace function public.cancel_waiter_request_secure(p_table_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update tables set waiter_requested = false where id = p_table_id;
+end;
+$$;
+grant execute on function public.cancel_waiter_request_secure(uuid) to anon, authenticated;
+
+create or replace function public.toggle_service_fee_secure(p_table_id uuid, p_removed boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update tables set service_fee_removed = p_removed where id = p_table_id;
+end;
+$$;
+grant execute on function public.toggle_service_fee_secure(uuid, boolean) to anon, authenticated;
+
+create or replace function public.toggle_table_block_secure(p_table_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_current text;
+begin
+  select status into v_current from tables where id = p_table_id;
+  if v_current = 'blocked' then
+    update tables set status = 'available' where id = p_table_id;
+  else
+    update tables set status = 'blocked' where id = p_table_id;
+  end if;
+end;
+$$;
+grant execute on function public.toggle_table_block_secure(uuid) to anon, authenticated;
+
+create or replace function public.request_table_bill_secure(p_table_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update tables set status = 'waiting_bill' where id = p_table_id;
+end;
+$$;
+grant execute on function public.request_table_bill_secure(uuid) to anon, authenticated;
