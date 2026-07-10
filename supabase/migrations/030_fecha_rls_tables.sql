@@ -141,3 +141,12 @@ begin
 end;
 $$;
 grant execute on function public.request_table_bill_secure(uuid) to anon, authenticated;
+
+create or replace function public.open_table_manually_secure(p_table_id uuid, p_store_id uuid, p_host_name text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update tables set status = 'occupied', current_host_name = p_host_name where id = p_table_id;
+  insert into table_sessions (table_id, store_id, host_name) values (p_table_id, p_store_id, p_host_name);
+end;
+$$;
+grant execute on function public.open_table_manually_secure(uuid, uuid, text) to anon, authenticated;
