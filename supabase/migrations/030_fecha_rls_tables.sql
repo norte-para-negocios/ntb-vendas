@@ -150,3 +150,51 @@ begin
 end;
 $$;
 grant execute on function public.open_table_manually_secure(uuid, uuid, text) to anon, authenticated;
+
+-- Corrige bug real descoberto nesta investigacao: moveTable (lib/api.ts)
+-- fazia UPDATE direto em orders.table_id -- a migration 022 revogou todo
+-- INSERT/UPDATE/DELETE anonimo em orders sem criar RPC substituta pra mover
+-- pedidos entre mesas. Mover mesa esta quebrado silenciosamente desde
+-- 2026-07-07 (RLS bloqueia o update, sem erro visivel).
+create or replace function public.move_table_secure(p_source_table_id uuid, p_target_table_id uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_target_status text;
+  v_source record;
+  v_new_pin text;
+begin
+  select status into v_target_status from tables where id = p_target_table_id;
+  if v_target_status is null then
+    return jsonb_build_object('success', false, 'message', 'Mesa de destino não encontrada.');
+  end if;
+  if v_target_status != 'available' then
+    return jsonb_build_object('success', false, 'message', 'Mesa de destino não está disponível.');
+  end if;
+
+  select * into v_source from tables where id = p_source_table_id;
+  if v_source is null then
+    return jsonb_build_object('success', false, 'message', 'Mesa de origem não encontrada.');
+  end if;
+
+  update orders set table_id = p_target_table_id
+  where table_id = p_source_table_id and status not in ('delivered', 'canceled');
+
+  update tables set
+    status = v_source.status,
+    current_host_name = v_source.current_host_name,
+    waiter_requested = v_source.waiter_requested,
+    guest_count = v_source.guest_count
+  where id = p_target_table_id;
+
+  v_new_pin := lpad(floor(random() * 9000 + 1000)::text, 4, '0');
+  update tables set
+    status = 'available', current_host_name = null, waiter_requested = false, guest_count = 0, pin = v_new_pin
+  where id = p_source_table_id;
+
+  update table_sessions set table_id = p_target_table_id
+  where table_id = p_source_table_id and closed_at is null;
+
+  return jsonb_build_object('success', true);
+end;
+$$;
+grant execute on function public.move_table_secure(uuid, uuid) to anon, authenticated;
