@@ -308,7 +308,7 @@ const useStoreNotifications = (storeId: string | undefined) => {
         loadCounts();
         
         const channel = supabase.channel(`notifications_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `store_id=eq.${storeId}` }, loadCounts)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, loadCounts)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, loadCounts)
             .subscribe();
 
@@ -1212,7 +1212,7 @@ NOTIFY pgrst, 'reload schema';`;
         loadData();
         // Subscribe to relevant tables to keep card summary updated
         const channel = supabase.channel(`tables_dashboard_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `store_id=eq.${storeId}` }, () => loadData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => loadData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => loadData())
             .subscribe();
         return () => { supabase.removeChannel(channel); };

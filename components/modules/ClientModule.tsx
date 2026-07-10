@@ -1306,9 +1306,9 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             const data = await fetchTableOrderSummary(tableId);
 
             // Fetch fresh table and store data to ensure we have the latest config.
-            // Colunas explícitas (SEM `pin`) — select('*') aqui vazava o PIN da mesa
-            // pra qualquer convidado que abrisse "Dividir Conta", não só o anfitrião.
-            const { data: tableData } = await supabase.from('tables').select('id, store_id, number, status, current_host_name, guest_count, waiter_requested, service_fee_removed').eq('id', tableId).single();
+            // RPC nunca inclui `pin` — antes disso o select('*') direto vazava o PIN
+            // da mesa pra qualquer convidado que abrisse "Dividir Conta".
+            const { data: tableData } = await supabase.rpc('get_table_public_by_id_secure', { p_table_id: tableId });
             let storeConfig = currentStore?.config;
             if (tableData?.store_id) {
                 const { data: storeData } = await supabase.from('stores').select('config').eq('id', tableData.store_id).single();
@@ -1334,7 +1334,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
 
         const channel = supabase.channel(`bill_${tableId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => loadBill())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `id=eq.${tableId}` }, () => loadBill())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `table_id=eq.${tableId}` }, () => loadBill())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'stores', filter: `id=eq.${storeId}` }, () => loadBill())
             .subscribe();
 
@@ -1857,16 +1857,19 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         });
     }, [currentStore?.id]);
 
-    // Realtime Table Status Listener
+    // Realtime Table Status Listener — assina a tabela de ping (sem dado
+    // sensivel) e busca o estado real via RPC segura, que nunca inclui `pin`.
+    // Antes disso o listener usava payload.new direto: o pin da PROPRIA mesa
+    // do cliente trafegava pela rede (carga do websocket) antes de ser
+    // descartado no state, mesmo so' sendo usado por quem ja tinha acesso.
     useEffect(() => {
         if (currentTable) {
             const channel = supabase.channel(`table_status_${currentTable.id}`)
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${currentTable.id}` },
-                (payload) => {
-                    // O Realtime manda a linha inteira (incluindo pin) em todo UPDATE;
-                    // removemos aqui como defesa em profundidade para não deixar o PIN
-                    // real acessível no estado React de um convidado (não-host).
-                    const newTable = { ...(payload.new as Table), pin: undefined as any };
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `table_id=eq.${currentTable.id}` },
+                async () => {
+                    const { data } = await supabase.rpc('get_table_public_by_id_secure', { p_table_id: currentTable.id });
+                    if (!data) return;
+                    const newTable = data as Table;
                     setGlobalTable(newTable);
 
                     // If session closed, force logout
