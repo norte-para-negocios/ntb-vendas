@@ -198,3 +198,23 @@ begin
 end;
 $$;
 grant execute on function public.move_table_secure(uuid, uuid) to anon, authenticated;
+
+create or replace function public.finalize_table_secure(p_table_id uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_new_pin text;
+begin
+  v_new_pin := lpad(floor(random() * 9000 + 1000)::text, 4, '0');
+
+  update tables set
+    status = 'available', current_host_name = null, pin = v_new_pin,
+    waiter_requested = false, service_fee_removed = false
+  where id = p_table_id;
+
+  update table_sessions set closed_at = now()
+  where table_id = p_table_id and closed_at is null;
+
+  return v_new_pin;
+end;
+$$;
+grant execute on function public.finalize_table_secure(uuid) to anon, authenticated;
