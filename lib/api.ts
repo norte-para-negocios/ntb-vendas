@@ -523,20 +523,16 @@ export const deleteProduct = async (id: string, storeId: string) => {
 };
 
 export const fetchTables = async (storeId: string): Promise<Table[]> => {
-  const { data, error } = await supabase.from('tables').select('*').eq('store_id', storeId).order('number');
-  if (error) console.error(error);
-  return data || [];
+  const { data, error } = await supabase.rpc('get_tables_secure', { p_store_id: storeId });
+  if (error) { console.error(error); return []; }
+  return (data as any) || [];
 };
 
 // Igual a fetchTables, mas sem a coluna `pin` — usada pelo cardápio do cliente
 // (ClientModule), que não deve receber o PIN de mesas que não são as dele.
 export const fetchTablesPublic = async (storeId: string): Promise<Table[]> => {
-  const { data, error } = await supabase
-    .from('tables')
-    .select('id, store_id, number, status, current_host_name, guest_count, waiter_requested, service_fee_removed')
-    .eq('store_id', storeId)
-    .order('number');
-  if (error) console.error(error);
+  const { data, error } = await supabase.rpc('get_tables_public_secure', { p_store_id: storeId });
+  if (error) { console.error(error); return []; }
   return (data as any) || [];
 };
 
@@ -606,17 +602,10 @@ export const fetchSalesHistory = async (storeId: string, startDate?: string, end
 };
 
 export const fetchTableSessions = async (storeId: string, sinceDate?: string): Promise<TableSession[]> => {
-  let query = supabase
-    .from('table_sessions')
-    .select('*')
-    .eq('store_id', storeId)
-    .not('closed_at', 'is', null)
-    .order('opened_at', { ascending: false })
-    .limit(2000);
-
-  if (sinceDate) query = query.gte('opened_at', sinceDate);
-
-  const { data, error } = await query;
+  const { data, error } = await supabase.rpc('fetch_table_sessions_secure', {
+    p_store_id: storeId,
+    p_since_date: sinceDate || null,
+  });
   if (error) { console.error('Fetch Table Sessions Error', error); return []; }
   return (data as any) || [];
 };
@@ -661,23 +650,18 @@ const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
 };
 
 export const callWaiter = async (tableId: string) => {
-  const { error } = await supabase.from('tables').update({ waiter_requested: true }).eq('id', tableId);
+  const { error } = await supabase.rpc('request_waiter_secure', { p_table_id: tableId });
   if (error) { console.error('Erro ao chamar garçom:', error); throw error; }
 };
 
 export const dismissWaiterRequest = async (tableId: string) => {
-  const { error } = await supabase.from('tables').update({ waiter_requested: false }).eq('id', tableId);
+  const { error } = await supabase.rpc('cancel_waiter_request_secure', { p_table_id: tableId });
   if (error) throw error;
 };
 
 export const toggleTableServiceFee = async (tableId: string, removed: boolean) => {
-  const { error } = await supabase.from('tables').update({ service_fee_removed: removed }).eq('id', tableId);
-  if (error) {
-    if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-      throw new Error('schema cache');
-    }
-    throw error;
-  }
+  const { error } = await supabase.rpc('toggle_service_fee_secure', { p_table_id: tableId, p_removed: removed });
+  if (error) throw error;
 };
 
 // Pedido criado via function Postgres security definer create_order_secure
@@ -756,24 +740,16 @@ export const cancelSpecificOrderItem = async (itemId: string) => {
   await supabase.rpc('cancel_order_item_secure', { p_item_id: itemId });
 };
 
-// Fecha a sessão de ocupação em aberto de uma mesa (usada ao fechar conta / mover mesa).
-export const closeOpenTableSession = async (tableId: string) => {
-  await supabase
-    .from('table_sessions')
-    .update({ closed_at: new Date().toISOString() })
-    .eq('table_id', tableId)
-    .is('closed_at', null);
-};
-
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
 // mas ainda grava a sessão para entrar na métrica de tempo médio de ocupação.
 export const openTableManually = async (tableId: string, storeId: string, hostName: string) => {
-  await supabase.from('tables').update({ status: TableStatus.OCCUPIED, current_host_name: hostName }).eq('id', tableId);
-  await supabase.from('table_sessions').insert({ table_id: tableId, store_id: storeId, host_name: hostName });
+  const { error } = await supabase.rpc('open_table_manually_secure', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
+  if (error) throw error;
 };
 
 export const requestTableBill = async (tableId: string) => {
-  await supabase.from('tables').update({ status: TableStatus.WAITING_BILL }).eq('id', tableId);
+  const { error } = await supabase.rpc('request_table_bill_secure', { p_table_id: tableId });
+  if (error) throw error;
 };
 
 export const cancelPendingTableItems = async (tableId: string) => {
@@ -784,7 +760,6 @@ export const closeTableSession = async (
   tableId: string,
   paymentData?: { total: number; methods: { method: string; amount: number }[] },
 ): Promise<{ success: boolean; message?: string }> => {
-  let warningMessage = '';
   try {
     const paymentMethod = paymentData
       ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
@@ -795,77 +770,31 @@ export const closeTableSession = async (
       p_payment_method: paymentMethod,
       p_payment_details: paymentData || null,
     });
-    if (closeErr) throw new Error('Falha ao fechar pedidos da mesa: ' + closeErr.message);
+    if (closeErr) return { success: false, message: 'Falha ao fechar pedidos da mesa: ' + closeErr.message };
 
-    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+    const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: tableId });
+    if (finalizeErr) return { success: false, message: finalizeErr.message };
 
-    const { error: tableErr } = await supabase
-      .from('tables')
-      .update({ status: TableStatus.AVAILABLE, current_host_name: null, pin: newPin, waiter_requested: false, service_fee_removed: false })
-      .eq('id', tableId);
-
-    if (tableErr) {
-      if (tableErr.code === '42703' || tableErr.message?.includes('column') || tableErr.message?.includes('does not exist')) {
-        const { error: fallbackTableErr } = await supabase
-          .from('tables')
-          .update({ status: TableStatus.AVAILABLE, current_host_name: null, pin: newPin })
-          .eq('id', tableId);
-        if (fallbackTableErr) return { success: false, message: fallbackTableErr.message };
-      } else {
-        return { success: false, message: tableErr.message };
-      }
-    }
-
-    await closeOpenTableSession(tableId);
     triggerOrdemProducao({ tableId });
-
-    return { success: true, message: warningMessage };
-  } catch (e: any) {
-    return { success: false, message: e.message || 'Erro desconhecido.' };
-  }
-};
-
-export const toggleTableBlock = async (tableId: string, currentStatus: TableStatus) => {
-  const newStatus = currentStatus === TableStatus.BLOCKED ? TableStatus.AVAILABLE : TableStatus.BLOCKED;
-  await supabase.from('tables').update({ status: newStatus }).eq('id', tableId);
-};
-
-export const moveTable = async (sourceTableId: string, targetTableId: string): Promise<{ success: boolean; message?: string }> => {
-  try {
-    const { data: targetTable, error: targetErr } = await supabase.from('tables').select('status').eq('id', targetTableId).single();
-    if (targetErr || !targetTable) return { success: false, message: 'Mesa de destino não encontrada.' };
-    if (targetTable.status !== TableStatus.AVAILABLE) return { success: false, message: 'Mesa de destino não está disponível.' };
-
-    const { data: sourceTable, error: sourceErr } = await supabase.from('tables').select('*').eq('id', sourceTableId).single();
-    if (sourceErr || !sourceTable) return { success: false, message: 'Mesa de origem não encontrada.' };
-
-    const { error: moveErr } = await supabase
-      .from('orders')
-      .update({ table_id: targetTableId })
-      .eq('table_id', sourceTableId)
-      .neq('status', OrderStatus.DELIVERED)
-      .neq('status', OrderStatus.CANCELED);
-
-    if (moveErr) return { success: false, message: 'Falha ao mover pedidos.' };
-
-    const { error: updateTargetErr } = await supabase
-      .from('tables')
-      .update({ status: sourceTable.status, current_host_name: sourceTable.current_host_name, waiter_requested: sourceTable.waiter_requested, guest_count: sourceTable.guest_count })
-      .eq('id', targetTableId);
-
-    if (updateTargetErr) return { success: false, message: 'Falha ao atualizar mesa de destino.' };
-
-    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-    await supabase.from('tables').update({ status: TableStatus.AVAILABLE, current_host_name: null, waiter_requested: false, guest_count: 0, pin: newPin }).eq('id', sourceTableId);
-
-    // A ocupação continua, só muda de mesa física: transfere a sessão em aberto
-    // (mantém o opened_at real) em vez de fechar e perder o tempo já decorrido.
-    await supabase.from('table_sessions').update({ table_id: targetTableId }).eq('table_id', sourceTableId).is('closed_at', null);
 
     return { success: true };
   } catch (e: any) {
     return { success: false, message: e.message || 'Erro desconhecido.' };
   }
+};
+
+export const toggleTableBlock = async (tableId: string, _currentStatus: TableStatus) => {
+  const { error } = await supabase.rpc('toggle_table_block_secure', { p_table_id: tableId });
+  if (error) throw error;
+};
+
+export const moveTable = async (sourceTableId: string, targetTableId: string): Promise<{ success: boolean; message?: string }> => {
+  const { data, error } = await supabase.rpc('move_table_secure', {
+    p_source_table_id: sourceTableId,
+    p_target_table_id: targetTableId,
+  });
+  if (error) return { success: false, message: error.message };
+  return (data as any) || { success: false, message: 'Erro desconhecido.' };
 };
 
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dmxucnk9a/image/upload';
@@ -1029,11 +958,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
     }
 
     if (params.contractType === 'balcao_mesas' && params.tableCount > 0) {
-      const tablesToInsert = [];
-      for (let i = 1; i <= params.tableCount; i++) {
-        tablesToInsert.push({ store_id: storeData.id, number: i, pin: Math.floor(1000 + Math.random() * 9000).toString(), status: TableStatus.AVAILABLE });
-      }
-      const { error: tablesError } = await supabase.from('tables').insert(tablesToInsert);
+      const { error: tablesError } = await supabase.rpc('sync_store_tables_secure', { p_store_id: storeData.id, p_target_count: params.tableCount });
       if (tablesError) console.error('Error creating tables:', tablesError);
     }
 
@@ -1085,10 +1010,11 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
       if (dupErr) throw dupErr;
     }
 
-    const { data: tables } = await supabase.from('tables').select('*').eq('store_id', storeId);
-    if (tables && tables.length > 0) {
-      const tablesToInsert = tables.map((t) => ({ store_id: newStore.id, number: t.number, pin: Math.floor(1000 + Math.random() * 9000).toString(), status: TableStatus.AVAILABLE }));
-      await supabase.from('tables').insert(tablesToInsert);
+    const { data: originalTables } = await supabase.rpc('get_tables_secure', { p_store_id: storeId });
+    const tableCount = (originalTables as any[])?.length || 0;
+    if (tableCount > 0) {
+      const { error: tablesError } = await supabase.rpc('sync_store_tables_secure', { p_store_id: newStore.id, p_target_count: tableCount });
+      if (tablesError) console.error('Error duplicating tables:', tablesError);
     }
 
     return { success: true };
@@ -1118,20 +1044,8 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
     }
 
     if (params.contractType === 'balcao_mesas') {
-      const { data: currentTables } = await supabase.from('tables').select('*').eq('store_id', id).order('number', { ascending: true });
-      const currentCount = currentTables?.length || 0;
-      const targetCount = params.tableCount;
-
-      if (targetCount > currentCount) {
-        const tablesToInsert = [];
-        for (let i = currentCount + 1; i <= targetCount; i++) {
-          tablesToInsert.push({ store_id: id, number: i, pin: Math.floor(1000 + Math.random() * 9000).toString(), status: TableStatus.AVAILABLE });
-        }
-        await supabase.from('tables').insert(tablesToInsert);
-      } else if (targetCount < currentCount) {
-        const tablesToDelete = currentTables!.slice(targetCount).map((t) => t.id);
-        if (tablesToDelete.length > 0) await supabase.from('tables').delete().in('id', tablesToDelete);
-      }
+      const { error: syncErr } = await supabase.rpc('sync_store_tables_secure', { p_store_id: id, p_target_count: params.tableCount });
+      if (syncErr) console.error('Error syncing tables:', syncErr);
     }
 
     return { success: true };
