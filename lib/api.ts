@@ -756,12 +756,6 @@ export const cancelSpecificOrderItem = async (itemId: string) => {
   await supabase.rpc('cancel_order_item_secure', { p_item_id: itemId });
 };
 
-export const updateTableStatus = async (tableId: string, status: TableStatus, hostName?: string) => {
-  const updateData: any = { status };
-  if (hostName !== undefined) updateData.current_host_name = hostName;
-  await supabase.from('tables').update(updateData).eq('id', tableId);
-};
-
 // Fecha a sessão de ocupação em aberto de uma mesa (usada ao fechar conta / mover mesa).
 export const closeOpenTableSession = async (tableId: string) => {
   await supabase

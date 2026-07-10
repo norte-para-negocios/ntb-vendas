@@ -218,3 +218,29 @@ begin
 end;
 $$;
 grant execute on function public.finalize_table_secure(uuid) to anon, authenticated;
+
+-- Cobre os 3 pontos que hoje inserem/deletam tables direto: createStore
+-- (0 -> N mesas), duplicateStore (clona a contagem da loja original) e
+-- updateStore (ajusta N pra mais ou pra menos). Sempre calcula a diferenca
+-- entre a contagem atual e a contagem alvo.
+create or replace function public.sync_store_tables_secure(p_store_id uuid, p_target_count int) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_current_count int;
+  v_max_number int;
+begin
+  select count(*), coalesce(max(number), 0) into v_current_count, v_max_number
+  from tables where store_id = p_store_id;
+
+  if p_target_count > v_current_count then
+    insert into tables (store_id, number, pin, status)
+    select p_store_id, v_max_number + gs, lpad(floor(random() * 9000 + 1000)::text, 4, '0'), 'available'
+    from generate_series(1, p_target_count - v_current_count) as gs;
+  elsif p_target_count < v_current_count then
+    delete from tables where id in (
+      select id from tables where store_id = p_store_id order by number desc limit (v_current_count - p_target_count)
+    );
+  end if;
+end;
+$$;
+grant execute on function public.sync_store_tables_secure(uuid, int) to anon, authenticated;
