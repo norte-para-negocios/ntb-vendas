@@ -750,9 +750,9 @@ volume crescer muito.
   Script não está neste repo (ficou em `/opt/ntb-backfill-vendas/` na VPS,
   mesmo padrão do `ntb-estoque-next`).
 
-**Dois bugs reais achados e corrigidos durante o QA desta implementação**
-(nenhum dos dois é teórico — os dois só apareceram testando de verdade, não
-em `tsc`/`build`, que passam limpo com ambos):
+**Três bugs reais achados e corrigidos durante o QA desta implementação**
+(nenhum é teórico — os três só apareceram testando de verdade, não em
+`tsc`/`build`, que passam limpo com todos):
 
 1. **Loop infinito na cópia do histórico** (`orders` nunca deixava
    `order_items` começar, apesar de "terminar" em 272/272 no contador —
@@ -780,15 +780,38 @@ em `tsc`/`build`, que passam limpo com ambos):
    `orderIds`/`storeId` resolvidos, antes de qualquer checagem de
    integração com o `ntb-estoque`. Confirmado depois da correção: pedido de
    teste na Bistrô Demo aparece no Contabo mesmo sem `store_ntb_estoque_secrets`.
+3. **Dual-write nunca completava em produção real (Vercel), mesmo com as
+   env vars corretas** — só apareceu testando contra `https://ntb-vendas.vercel.app`
+   de verdade, nunca em `next dev` local (onde sempre funcionou). Causa:
+   `void (async () => {...})()` dispara a promise sem `await` e sem
+   nenhum vínculo ao lifecycle da function serverless — em `next dev` o
+   processo Node é persistente, então a promise sempre tinha tempo de
+   terminar sozinha; em produção na Vercel, a function pode ser
+   suspensa/encerrada assim que a resposta HTTP é enviada ao cliente,
+   matando qualquer trabalho pendente não vinculado a ela. Diagnosticado
+   com uma rota de debug temporária (`app/api/debug-env`, removida depois)
+   que confirmou as env vars presentes no runtime (`hasUrl`/`hasKey: true`,
+   `vercelEnv: "production"`) enquanto o pedido de teste seguia não
+   chegando no Contabo — isolando o problema pro fire-and-forget em si, não
+   pra configuração. Corrigido trocando por `after()` (`next/server`, usa
+   `waitUntil` da plataforma por baixo) — mesma API, mas garante que o
+   bloco roda até o fim antes da function ser encerrada. **Se qualquer
+   outra rota deste projeto precisar de trabalho fire-and-forget pós-
+   resposta no futuro, usar `after()` desde o início — nunca
+   `void (async () => {})()` sozinho, ele só é confiável em dev local.**
 
-Testado ao vivo (2026-07-13): pedido de teste criado direto via SQL na
-Bistrô Demo, rota chamada localmente com o `orderId`, confirmado nos dois
-bancos (Supabase e `ntb_vendas_frio` no Contabo) via `scripts/db.mjs`/`psql`
-direto, dado de teste removido dos dois lados depois.
+Testado ao vivo (2026-07-13), duas rodadas: primeiro localmente (pedido de
+teste via SQL na Bistrô Demo, rota chamada em `next dev`, confirmado nos
+dois bancos); depois em produção real (`https://ntb-vendas.vercel.app`,
+mesmo teste) — que foi onde o bug 3 apareceu e foi corrigido. Confirmado
+de novo em produção após o fix, com `after()`: pedido chega no Contabo.
+Dado de teste removido dos dois lados em todas as rodadas.
 
-**Variáveis de ambiente** (`.env.local`, e precisam estar configuradas
-também nas Environment Variables do projeto na Vercel — Production e
-Preview — pra funcionar em produção, não só localmente):
+**Variáveis de ambiente** (`.env.local`, e também nas Environment Variables
+do projeto na Vercel — Production e Preview; **lembrar que a Vercel só
+aplica env vars novas a partir do próximo deploy, não retroativamente a um
+deployment já rodando** — se acabou de configurar, force um redeploy antes
+de considerar resolvido):
 `NTB_FRIO_API_URL` (`https://frio-api.norteparanegocios.com.br`),
 `NTB_FRIO_VENDAS_API_KEY`.
 
