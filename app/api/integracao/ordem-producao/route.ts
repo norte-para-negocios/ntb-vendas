@@ -79,6 +79,35 @@ export async function POST(request: NextRequest) {
     .select('quantity, status, selected_options, product:products(omie_codigo)')
     .in('order_id', orderIds);
 
+  // Dual-write pro Contabo (historico completo de vendas) -- fire-and-forget,
+  // nunca bloqueia nem quebra esta rota nem a integracao com o Omie abaixo.
+  if (process.env.NTB_FRIO_API_URL) {
+    void (async () => {
+      try {
+        const [{ data: ordersCompletas }, { data: itemsCompletos }] = await Promise.all([
+          admin
+            .from('orders')
+            .select('id, table_id, store_id, status, order_type, total, customer_name, payment_method, payment_details, created_at, updated_at')
+            .in('id', orderIds),
+          admin
+            .from('order_items')
+            .select('id, order_id, product_id, quantity, status, notes, price_at_time, created_at, store_id, selected_options')
+            .in('order_id', orderIds),
+        ]);
+        for (const order of ordersCompletas ?? []) {
+          const itensDoPedido = (itemsCompletos ?? []).filter((i) => i.order_id === order.id);
+          await fetch(`${process.env.NTB_FRIO_API_URL}/vendas/orders`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.NTB_FRIO_VENDAS_API_KEY! },
+            body: JSON.stringify({ order, items: itensDoPedido }),
+          });
+        }
+      } catch (e) {
+        console.error('Dual-write de venda pro Contabo falhou:', e);
+      }
+    })();
+  }
+
   // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
   // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot
   // gravado em selected_options pela create_order_secure (migration 028), não
