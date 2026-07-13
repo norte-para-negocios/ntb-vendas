@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md e a memória
 // "integracao_ntb_vendas_estoque_omie"): dispara Ordem de Produção automática
@@ -64,15 +64,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Pedido(s) não encontrado(s)' });
   }
 
-  // Dual-write pro Contabo (historico completo de vendas) -- fire-and-forget,
-  // nunca bloqueia nem quebra esta rota. Roda pra QUALQUER loja com pedido
-  // resolvido, independente de ter (ou nao) integracao com o ntb-estoque/Omie
-  // configurada -- sao duas features independentes, uma nao pode depender da
-  // outra (achado real de QA: o bloco original ficava depois do "return" de
-  // loja sem integracao, entao so a loja com Ordem de Producao configurada
-  // jamais tinha histórico salvo no Contabo).
+  // Dual-write pro Contabo (historico completo de vendas) -- roda pra
+  // QUALQUER loja com pedido resolvido, independente de ter (ou nao)
+  // integracao com o ntb-estoque/Omie configurada -- sao duas features
+  // independentes, uma nao pode depender da outra (achado real de QA: o
+  // bloco original ficava depois do "return" de loja sem integracao, entao
+  // so a loja com Ordem de Producao configurada jamais tinha histórico
+  // salvo no Contabo). Usa after() (não só "void (async () => {})()") por
+  // outro achado real de QA: em produção na Vercel, uma promise disparada
+  // sem await e sem vínculo ao lifecycle da function pode ser interrompida
+  // assim que a resposta HTTP é enviada — funcionava em `next dev` local
+  // (processo Node persistente) mas nunca completava em produção
+  // serverless. after() roda depois da resposta ser enviada ao cliente,
+  // mas ainda dentro do tempo de vida gerenciado da function (waitUntil).
   if (process.env.NTB_FRIO_API_URL) {
-    void (async () => {
+    after(async () => {
       try {
         const [{ data: ordersCompletas }, { data: itemsCompletos }] = await Promise.all([
           admin
@@ -95,7 +101,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.error('Dual-write de venda pro Contabo falhou:', e);
       }
-    })();
+    });
   }
 
   const { data: secret } = await admin
