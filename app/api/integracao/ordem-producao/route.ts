@@ -64,23 +64,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Pedido(s) não encontrado(s)' });
   }
 
-  const { data: secret } = await admin
-    .from('store_ntb_estoque_secrets')
-    .select('ntb_estoque_url, ntb_estoque_api_key')
-    .eq('store_id', storeId)
-    .maybeSingle();
-
-  if (!secret) {
-    return NextResponse.json({ skipped: true, reason: 'Loja sem integração ntb-estoque configurada' });
-  }
-
-  const { data: items } = await admin
-    .from('order_items')
-    .select('quantity, status, selected_options, product:products(omie_codigo)')
-    .in('order_id', orderIds);
-
   // Dual-write pro Contabo (historico completo de vendas) -- fire-and-forget,
-  // nunca bloqueia nem quebra esta rota nem a integracao com o Omie abaixo.
+  // nunca bloqueia nem quebra esta rota. Roda pra QUALQUER loja com pedido
+  // resolvido, independente de ter (ou nao) integracao com o ntb-estoque/Omie
+  // configurada -- sao duas features independentes, uma nao pode depender da
+  // outra (achado real de QA: o bloco original ficava depois do "return" de
+  // loja sem integracao, entao so a loja com Ordem de Producao configurada
+  // jamais tinha histórico salvo no Contabo).
   if (process.env.NTB_FRIO_API_URL) {
     void (async () => {
       try {
@@ -107,6 +97,21 @@ export async function POST(request: NextRequest) {
       }
     })();
   }
+
+  const { data: secret } = await admin
+    .from('store_ntb_estoque_secrets')
+    .select('ntb_estoque_url, ntb_estoque_api_key')
+    .eq('store_id', storeId)
+    .maybeSingle();
+
+  if (!secret) {
+    return NextResponse.json({ skipped: true, reason: 'Loja sem integração ntb-estoque configurada' });
+  }
+
+  const { data: items } = await admin
+    .from('order_items')
+    .select('quantity, status, selected_options, product:products(omie_codigo)')
+    .in('order_id', orderIds);
 
   // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
   // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot

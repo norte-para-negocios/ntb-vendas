@@ -707,6 +707,91 @@ dashboard). Passos aplicados:
    `ntb-estoque`, feito por quem administra o estoque dessa loja — não é
    código.
 
+## Histórico completo no Contabo (dual-write, 2026-07-13)
+
+Réplica do mesmo padrão já usado no `ntb-estoque-next` (ver AGENTS.md daquele
+repo): o Supabase deste projeto (free tier) guarda o operacional recente, e
+um Postgres próprio na VPS Contabo (`185.193.66.240`, banco `ntb_vendas_frio`,
+mesmo servidor que já hospeda `ntb_frio` do `ntb-estoque-next` — processo
+Node único, `ntb-frio-api`, atende os dois via pools separados) guarda cópia
+permanente de todo pedido fechado. **Diferente do `ntb-estoque-next`, aqui é
+só dual-write + cópia histórica — sem leitura híbrida nem poda do Supabase**:
+o volume real (14MB, 272 pedidos/655 itens em 5 meses) não tem nenhuma
+pressão de espaço, então não há por enquanto necessidade de ler do Contabo
+nem de apagar nada do Supabase. Decisão explícita do usuário: manter
+consistência arquitetural e nunca perder histórico, sem o custo de construir
+a parte de leitura híbrida antes de ela ser necessária — revisitar se o
+volume crescer muito.
+
+- **Tabelas replicadas**: `orders`, `order_items` (mesmas colunas do
+  Supabase, sem RLS — servidor próprio, só acessível via API key).
+- **Ponto de interceptação**: `app/api/integracao/ordem-producao/route.ts` —
+  a mesma rota que já existia pra disparar Ordem de Produção no
+  `ntb-estoque` (ver seção acima), porque é o único lugar server-side que já
+  recebe `orderId`/`tableId` no fechamento de balcão/mesa (`lib/api.ts`
+  chama essa rota via `triggerOrdemProducao()`, fire-and-forget, no fim de
+  `closeCounterOrder`/`closeTableSession`). Não existe rota própria só pro
+  dual-write — reaproveitada a existente.
+- **Fire-and-forget de verdade**: dentro da rota, o bloco de dual-write
+  (`void (async () => {...})()`) roda em paralelo, nunca com `await` no
+  corpo principal — erro de rede/Contabo fora do ar cai só no
+  `console.error`, nunca derruba a resposta da rota nem a integração com o
+  Omie que roda depois.
+- **Endpoint no Contabo**: `POST /vendas/orders` (novo em `server.js`,
+  `checkAuthVendas`/`VENDAS_API_KEY` própria, pool `poolVendas` separado do
+  pool do `ntb-estoque`) — recebe `{order, items}` já resolvidos (a rota do
+  `ntb-vendas` busca as colunas completas com `service role`, ignora RLS) e
+  faz upsert transacional (`begin`/`insert ... on conflict do update`/
+  `commit`) de 1 order + N items por chamada.
+- **Cópia do histórico pré-existente**: rodada uma única vez com um script
+  adaptado de `copiar-tabelas.mjs` do `ntb-estoque-next`, adaptado pra
+  paginação por `(created_at, id) > ($1, $2)` (keyset) em vez de `id > $1`,
+  já que aqui os IDs são `uuid` (`gen_random_uuid()`), não bigint sequencial.
+  Script não está neste repo (ficou em `/opt/ntb-backfill-vendas/` na VPS,
+  mesmo padrão do `ntb-estoque-next`).
+
+**Dois bugs reais achados e corrigidos durante o QA desta implementação**
+(nenhum dos dois é teórico — os dois só apareceram testando de verdade, não
+em `tsc`/`build`, que passam limpo com ambos):
+
+1. **Loop infinito na cópia do histórico** (`orders` nunca deixava
+   `order_items` começar, apesar de "terminar" em 272/272 no contador —
+   o script continuava rodando silenciosamente além do total, repetindo a
+   mesma última linha pra sempre). Causa: `timestamptz` (OID 1184) vem do
+   driver `pg` como objeto `Date` do JS, que trunca a precisão de
+   microssegundos do Postgres pra milissegundos. Usado como cursor de
+   paginação `(created_at, id) > ($1, $2)`, o valor truncado reenviado como
+   parâmetro fica sempre *menor* que o `created_at` real da própria linha
+   no banco — então essa linha (e qualquer outra com o mesmo timestamp)
+   volta a bater no `> $1` pra sempre, mesmo com a comparação de tupla por
+   `id` correta. Mesma classe de bug já documentada no `ntb-estoque-next`
+   pro tipo `date` (OID 1082) — aqui é a variante `timestamptz`. Corrigido
+   com `pg.types.setTypeParser(1184, val => val)` no script de cópia
+   (mantém a string bruta do Postgres, sem truncar).
+2. **Dual-write nunca rodava pra loja sem integração `ntb-estoque`
+   configurada** (achado testando com a Bistrô Demo, que não tem
+   `store_ntb_estoque_secrets`) — o bloco de dual-write tinha sido inserido
+   *depois* do `return` antecipado de "Loja sem integração ntb-estoque
+   configurada" na rota, então só a loja com Ordem de Produção configurada
+   (hoje só a Vieras e Vinhos) jamais teria pedido nenhum salvo no Contabo.
+   São duas features independentes (histórico permanente vs. Ordem de
+   Produção automática via Omie) — uma não pode depender da outra estar
+   configurada. Corrigido movendo o bloco de dual-write pra logo depois de
+   `orderIds`/`storeId` resolvidos, antes de qualquer checagem de
+   integração com o `ntb-estoque`. Confirmado depois da correção: pedido de
+   teste na Bistrô Demo aparece no Contabo mesmo sem `store_ntb_estoque_secrets`.
+
+Testado ao vivo (2026-07-13): pedido de teste criado direto via SQL na
+Bistrô Demo, rota chamada localmente com o `orderId`, confirmado nos dois
+bancos (Supabase e `ntb_vendas_frio` no Contabo) via `scripts/db.mjs`/`psql`
+direto, dado de teste removido dos dois lados depois.
+
+**Variáveis de ambiente** (`.env.local`, e precisam estar configuradas
+também nas Environment Variables do projeto na Vercel — Production e
+Preview — pra funcionar em produção, não só localmente):
+`NTB_FRIO_API_URL` (`https://frio-api.norteparanegocios.com.br`),
+`NTB_FRIO_VENDAS_API_KEY`.
+
 ## Conta universal (`universal_users`, migration 015)
 
 Um único email/senha (ex.: `equipe@norteparanegocios.com.br`) acessa
