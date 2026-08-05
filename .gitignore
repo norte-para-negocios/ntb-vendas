@@ -42,3 +42,6 @@ next-env.d.ts
 
 # scripts cache
 scripts/.pooler-host
+
+# git worktrees (superpowers:using-git-worktrees)
+/.worktrees
