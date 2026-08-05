@@ -140,6 +140,11 @@ export interface Product {
   // lojista). Anexado em runtime por fetchMenu, nao e coluna de banco
   // (mesmo padrao de option_groups).
   recommended_products?: Product[];
+  // NCM (Nomenclatura Comum do Mercosul, migration 032) — classificacao
+  // fiscal do produto, exigida em qualquer item de NFC-e/NF-e. Nullable:
+  // produto pode nao ter NCM configurado ainda (emissao fiscal automatica
+  // e' feature futura, cadastro do campo vem antes).
+  ncm: string | null;
 }
 
 export interface Order {

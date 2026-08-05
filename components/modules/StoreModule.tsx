@@ -2431,6 +2431,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pCat, setPCat] = useState('');
     const [pTime, setPTime] = useState('15');
     const [pDestination, setPDestination] = useState<'kitchen' | 'bar'>('kitchen');
+    // NCM (migration 032/033) — classificacao fiscal do produto. Texto livre
+    // (o codigo tem digitos e as vezes pontuacao), mesmo padrao dos outros
+    // campos de texto opcionais deste form (nao ha catalogo fechado, ao
+    // contrario de PRODUCT_TAGS).
+    const [pNcm, setPNcm] = useState('');
     const [pFile, setPFile] = useState<File | null>(null);
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -2888,6 +2893,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPFeatured(product.featured ?? false);
             setPTags(product.tags ?? []);
             setPRecommendedIds((product.recommended_products || []).map(rp => rp.id));
+            setPNcm(product.ncm ?? '');
         } else {
             setEditingProduct(null);
             setPName('');
@@ -2902,6 +2908,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPFeatured(false);
             setPTags([]);
             setPRecommendedIds([]);
+            setPNcm('');
         }
         setPRecommendationSearch('');
         setPFile(null);
@@ -2957,6 +2964,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 promo_price: promoPriceNum,
                 featured: pFeatured,
                 tags: pTags,
+                ncm: pNcm.trim() || null,
             };
 
             let productId: string;
@@ -3623,6 +3631,12 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                  <option value="bar">Bar</option>
                              </select>
                          </div>
+                         <Input
+                             label="NCM (opcional)"
+                             placeholder="Ex: 2106.90.10"
+                             value={pNcm}
+                             onChange={e => setPNcm(e.target.value)}
+                         />
                     </div>
 
                     {/* Destaque e etiquetas (migration 019, cardapio que vende) —

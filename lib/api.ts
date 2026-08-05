@@ -396,6 +396,7 @@ export const createProduct = async (storeId: string, categoryId: string, product
     p_promo_price: product.promo_price ?? null,
     p_featured: product.featured ?? false,
     p_tags: product.tags ?? [],
+    p_ncm: product.ncm ?? null,
   });
   if (error) throw error;
   return data as string;
@@ -487,6 +488,7 @@ export const updateProduct = async (id: string, storeId: string, updates: Partia
     p_clear_promo_price: clearingPromoPrice,
     p_featured: updates.featured,
     p_tags: updates.tags,
+    p_ncm: updates.ncm,
   });
   if (error) throw error;
 };
