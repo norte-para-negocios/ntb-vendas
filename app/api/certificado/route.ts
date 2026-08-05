@@ -65,42 +65,6 @@ export async function POST(req: NextRequest) {
       const path = `${storeId}/certificado.pfx`;
       const { error } = await supabaseAdmin.storage.from(CERT_BUCKET).upload(path, file, { upsert: true });
       if (error) throw new Error(error.message);
-
-      // Resolve a cadeia da AC intermediária uma vez, no upload — não em toda
-      // emissão. A senha pode não ter vindo nesta mesma requisição (upload de
-      // arquivo separado da troca de senha, no form do admin/lojista — ver
-      // uploadStoreCertificate/saveStoreCertificateSecret em lib/api.ts, são
-      // chamadas HTTP distintas) — nesse caso, tenta ler a senha já salva
-      // antes de desistir de montar a cadeia.
-      let senhaParaCadeia = typeof password === 'string' && password ? password : undefined;
-      if (!senhaParaCadeia) {
-        const { data: secretExistente } = await supabaseAdmin
-          .from('store_fiscal_certificate_secrets')
-          .select('password')
-          .eq('store_id', storeId)
-          .maybeSingle();
-        senhaParaCadeia = secretExistente?.password;
-      }
-
-      if (senhaParaCadeia) {
-        try {
-          const buffer = Buffer.from(await file.arrayBuffer());
-          const { urlCaIssuer } = extrairCertificado(buffer, senhaParaCadeia);
-          if (urlCaIssuer) {
-            const chainPem = await resolverCadeiaCertificado(urlCaIssuer);
-            await supabaseAdmin
-              .from('store_fiscal_certificates')
-              .update({ chain_pem: chainPem })
-              .eq('store_id', storeId);
-          }
-        } catch (e) {
-          // Não falha o upload do certificado por isso — a cadeia pode ser
-          // resolvida de novo depois (ex.: reenviando o certificado, ou numa
-          // futura tela de "recalcular cadeia"). Só loga, nunca o valor
-          // sigiloso (senha/chave/certificado), só a mensagem de erro.
-          console.error('Falha ao resolver cadeia do certificado:', e);
-        }
-      }
     }
 
     if (typeof originalFilename === 'string' && originalFilename) {
@@ -124,6 +88,65 @@ export async function POST(req: NextRequest) {
         { onConflict: 'store_id' }
       );
       if (error) throw new Error(error.message);
+    }
+
+    // Resolve a cadeia da AC intermediária uma vez, quando o certificado
+    // (arquivo) ou a senha mudam nesta requisição — não em toda emissão. O
+    // form do admin/lojista manda arquivo, metadados e senha em 3 POSTs
+    // sequenciais separados pra essa mesma rota (ver
+    // uploadStoreCertificate/saveStoreCertificateMetadata/
+    // saveStoreCertificateSecret em lib/api.ts), então isso cobre tanto
+    // "arquivo acabou de subir, senha ainda não chegou" (usa a senha já
+    // salva, se houver — cadastro no meio do fluxo, senha vem depois; ou
+    // renovação, senha já existe de antes) quanto "senha acabou de chegar,
+    // arquivo já estava salvo de uma requisição anterior" (fim do cadastro
+    // inicial: arquivo + metadados já foram, só falta a senha). Roda depois
+    // do upsert de metadados acima de propósito — garante que a linha de
+    // store_fiscal_certificates já existe antes do UPDATE de chain_pem no
+    // caso comum (2ª requisição da sequência sempre grava os metadados
+    // antes da 3ª, a da senha, chegar).
+    if (file instanceof File || (typeof password === 'string' && password)) {
+      let senhaParaCadeia = typeof password === 'string' && password ? password : undefined;
+      if (!senhaParaCadeia) {
+        const { data: secretExistente } = await supabaseAdmin
+          .from('store_fiscal_certificate_secrets')
+          .select('password')
+          .eq('store_id', storeId)
+          .maybeSingle();
+        senhaParaCadeia = secretExistente?.password;
+      }
+
+      if (senhaParaCadeia) {
+        try {
+          let pfxBuffer: Buffer | undefined;
+          if (file instanceof File) {
+            // Arquivo já está disponível nesta requisição — nem precisa
+            // esperar o upload acima terminar de "assentar" no Storage.
+            pfxBuffer = Buffer.from(await file.arrayBuffer());
+          } else {
+            // Sem arquivo nesta requisição: busca o .pfx já salvo de uma
+            // requisição anterior (o caso comum — senha chegando na 3ª
+            // requisição do fluxo).
+            const { data: pfxBlob } = await supabaseAdmin.storage.from(CERT_BUCKET).download(`${storeId}/certificado.pfx`);
+            if (pfxBlob) pfxBuffer = Buffer.from(await pfxBlob.arrayBuffer());
+          }
+
+          if (pfxBuffer) {
+            const { urlCaIssuer } = extrairCertificado(pfxBuffer, senhaParaCadeia);
+            if (urlCaIssuer) {
+              const chainPem = await resolverCadeiaCertificado(urlCaIssuer);
+              await supabaseAdmin.from('store_fiscal_certificates').update({ chain_pem: chainPem }).eq('store_id', storeId);
+            }
+          }
+        } catch (e) {
+          // Não falha a requisição (upload OU troca de senha) por isso — a
+          // cadeia pode ser resolvida de novo depois (ex.: reenviando o
+          // certificado, salvando a senha de novo, ou numa futura tela de
+          // "recalcular cadeia"). Só loga, nunca o valor sigiloso
+          // (senha/chave/certificado), só a mensagem de erro.
+          console.error('Falha ao resolver cadeia do certificado:', e);
+        }
+      }
     }
 
     // Configuração do emissor fiscal (campos não-sigilosos, migration 024) —
