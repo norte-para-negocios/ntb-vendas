@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // cliente nunca precisa nem consegue ler nenhuma das duas coisas.
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { extrairCertificado, resolverCadeiaCertificado } from '@/lib/fiscal/certificado';
 
 const CERT_BUCKET = 'store-certificates';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,6 +65,42 @@ export async function POST(req: NextRequest) {
       const path = `${storeId}/certificado.pfx`;
       const { error } = await supabaseAdmin.storage.from(CERT_BUCKET).upload(path, file, { upsert: true });
       if (error) throw new Error(error.message);
+
+      // Resolve a cadeia da AC intermediária uma vez, no upload — não em toda
+      // emissão. A senha pode não ter vindo nesta mesma requisição (upload de
+      // arquivo separado da troca de senha, no form do admin/lojista — ver
+      // uploadStoreCertificate/saveStoreCertificateSecret em lib/api.ts, são
+      // chamadas HTTP distintas) — nesse caso, tenta ler a senha já salva
+      // antes de desistir de montar a cadeia.
+      let senhaParaCadeia = typeof password === 'string' && password ? password : undefined;
+      if (!senhaParaCadeia) {
+        const { data: secretExistente } = await supabaseAdmin
+          .from('store_fiscal_certificate_secrets')
+          .select('password')
+          .eq('store_id', storeId)
+          .maybeSingle();
+        senhaParaCadeia = secretExistente?.password;
+      }
+
+      if (senhaParaCadeia) {
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const { urlCaIssuer } = extrairCertificado(buffer, senhaParaCadeia);
+          if (urlCaIssuer) {
+            const chainPem = await resolverCadeiaCertificado(urlCaIssuer);
+            await supabaseAdmin
+              .from('store_fiscal_certificates')
+              .update({ chain_pem: chainPem })
+              .eq('store_id', storeId);
+          }
+        } catch (e) {
+          // Não falha o upload do certificado por isso — a cadeia pode ser
+          // resolvida de novo depois (ex.: reenviando o certificado, ou numa
+          // futura tela de "recalcular cadeia"). Só loga, nunca o valor
+          // sigiloso (senha/chave/certificado), só a mensagem de erro.
+          console.error('Falha ao resolver cadeia do certificado:', e);
+        }
+      }
     }
 
     if (typeof originalFilename === 'string' && originalFilename) {
