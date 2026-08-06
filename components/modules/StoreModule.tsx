@@ -7,8 +7,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, StoreFiscalConfig } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, StoreFiscalConfig, FiscalNota } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -4054,7 +4054,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
 const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     const storeId = store.id;
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -4301,6 +4301,12 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 >
                     Meu Link / QR Code
                 </button>
+                <button
+                    onClick={() => setActiveTab('fiscal')}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'fiscal' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                >
+                    Notas Fiscais
+                </button>
             </div>
 
             {activeTab === 'dashboard' && <StoreDashboardView sales={sales} tableSessions={tableSessions} ratings={ratings} />}
@@ -4308,6 +4314,8 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
             {activeTab === 'users' && <UserManagementView storeId={storeId} />}
 
             {activeTab === 'link' && <MeuLinkView store={store} />}
+
+            {activeTab === 'fiscal' && <FiscalNotasView storeId={storeId} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">
@@ -4605,6 +4613,206 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                     </div>
                 )}
             </Modal>
+        </div>
+    );
+};
+
+// --- SUB-MODULE: NOTAS FISCAIS ---
+
+const FISCAL_STATUS_LABELS: Record<string, string> = {
+    autorizada: 'Autorizada',
+    pendente: 'Pendente',
+    rejeitada: 'Rejeitada',
+    erro: 'Erro',
+};
+
+const fiscalStatusBadgeColor = (status: string): string => {
+    switch (status) {
+        case 'autorizada': return 'bg-[var(--ok)]/10 text-[var(--ok)] border border-[var(--ok)]/20';
+        case 'pendente': return 'bg-[var(--info)]/10 text-[var(--info)] border border-[var(--info)]/20';
+        default: return 'bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/20'; // 'erro'/'rejeitada'
+    }
+};
+
+// Só 'erro'/'rejeitada' podem ser reemitidas com sucesso hoje: a guarda de
+// idempotência de app/api/fiscal/emitir/route.ts bloqueia 'autorizada' E
+// 'pendente' (linha 1.5 da rota, ver comentário lá) com
+// {skipped:true, reason:'Nota já existe para esta venda'} antes de rodar
+// qualquer coisa — mostrar "Reemitir" nesses dois status faria o botão
+// parecer funcional mas nunca emitir nada novo, só confundir o lojista.
+// 'pendente' nunca é gravado por nenhum caminho de código hoje (ver
+// comentário em types/index.ts sobre FiscalNota), mas fica de fora da lista
+// por segurança mesmo assim — não é o texto do plano original (que dizia
+// 'erro'/'pendente'), é a checagem real da rota depois da correção do
+// Task 13.
+const RETRYABLE_FISCAL_STATUSES = ['erro', 'rejeitada'];
+
+const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
+    const [notas, setNotas] = useState<FiscalNota[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+    const [retryingId, setRetryingId] = useState<string | null>(null);
+
+    const load = async () => {
+        setIsLoading(true);
+        try {
+            const data = await fetchFiscalNotas(storeId);
+            setNotas(data);
+        } catch (e: any) {
+            toast.error('Erro ao carregar notas fiscais: ' + e.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => { load(); }, [storeId]);
+
+    const handleDownload = async (nota: FiscalNota) => {
+        if (!nota.pdf_path) return;
+        setDownloadingId(nota.id);
+        try {
+            const url = await fetchFiscalNotaPdfUrl(nota.pdf_path);
+            window.open(url, '_blank', 'noopener');
+        } catch (e: any) {
+            toast.error('Erro ao gerar link do PDF: ' + e.message);
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
+    // Sempre reemite via order_id, nunca table_id — mesmo quando a nota tem
+    // os dois. order_id é a "âncora" da venda (sempre populado desde a
+    // correção do Task 13, ver comentário em app/api/fiscal/emitir/route.ts)
+    // e a rota resolve ele com um select direto por id, sem restrição de
+    // tempo. O caminho por table_id, em vez disso, só aceita orders com
+    // status 'delivered' E updated_at nos últimos 5 minutos — uma
+    // reemissão manual clicada pelo lojista minutos/horas depois da falha
+    // (o caso comum: ele vê o erro na tela e clica "Reemitir" bem depois)
+    // quase sempre cairia fora dessa janela e voltaria
+    // "Pedido(s) não encontrado(s)", uma falha confusa e evitável. Trade-off
+    // aceito conscientemente: se a venda original teve mais de um `order`
+    // (mesa com múltiplas rodadas enviadas à cozinha antes de fechar a
+    // conta), a reemissão via order_id sozinho só resolve os itens da order
+    // âncora — pode gerar uma nota com valor menor que o da tentativa
+    // original. Não corrigido aqui (exigiria mudar o caminho table_id da
+    // rota de emissão, fora do escopo desta task); registrado no relatório
+    // do Task 16 como achado pra decisão futura.
+    const handleRetry = async (nota: FiscalNota) => {
+        if (!nota.order_id) {
+            toast.error('Esta nota não tem um pedido associado — não é possível reemitir.');
+            return;
+        }
+        setRetryingId(nota.id);
+        try {
+            const result = await reemitirFiscalNota({ orderId: nota.order_id });
+            if (result?.ok) {
+                toast.success(result.pdfWarning ? `Nota autorizada, mas: ${result.pdfWarning}` : 'Nota reemitida e autorizada com sucesso!');
+            } else if (result?.skipped) {
+                toast.error(result.reason || 'Reemissão não foi necessária.');
+            } else {
+                toast.error(result?.xMotivo || result?.reason || 'Falha ao reemitir a nota.');
+            }
+            await load();
+        } catch (e: any) {
+            toast.error('Erro ao reemitir: ' + e.message);
+        } finally {
+            setRetryingId(null);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
+                <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex justify-between items-center">
+                    <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
+                    <div className="flex items-center gap-2">
+                        <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
+                            <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                        </Button>
+                        <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
+                            {notas.length} {notas.length === 1 ? 'nota' : 'notas'}
+                        </Badge>
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] uppercase text-xs">
+                            <tr>
+                                <th className="px-4 py-3">Data</th>
+                                <th className="px-4 py-3 text-right">Valor</th>
+                                <th className="px-4 py-3">Modelo</th>
+                                <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-3">Chave de Acesso</th>
+                                <th className="px-4 py-3 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]">
+                            {isLoading ? (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i} className="u-stagger" style={stagger(i * 30)}>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-12" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-24 ml-auto" /></td>
+                                    </tr>
+                                ))
+                            ) : notas.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                        Nenhuma nota fiscal emitida ainda.
+                                    </td>
+                                </tr>
+                            ) : (
+                                notas.map((nota, idx) => (
+                                    <tr key={nota.id} className="u-stagger hover:bg-[var(--surface-2)] transition-colors" style={stagger(Math.min(idx, 10) * 30)}>
+                                        <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
+                                            {new Date(nota.created_at).toLocaleDateString()} <span className="text-xs text-[var(--text-muted)]/70 ml-1">{new Date(nota.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-bold text-[var(--text)] whitespace-nowrap">
+                                            R$ {(nota.valor_total ?? 0).toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-3 text-[var(--text-muted)]">
+                                            {nota.modelo === '55' ? 'NF-e' : 'NFC-e'}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <Badge color={fiscalStatusBadgeColor(nota.status)}>
+                                                {FISCAL_STATUS_LABELS[nota.status] || nota.status}
+                                            </Badge>
+                                            {nota.motivo_erro && (
+                                                <p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs truncate" title={nota.motivo_erro}>{nota.motivo_erro}</p>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">
+                                            {nota.chave_acesso ? (
+                                                <span title={nota.chave_acesso}>{nota.chave_acesso.slice(0, 8)}…{nota.chave_acesso.slice(-8)}</span>
+                                            ) : '—'}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex justify-end gap-2">
+                                                {nota.pdf_path && (
+                                                    <Button variant="secondary" size="sm" onClick={() => handleDownload(nota)} isLoading={downloadingId === nota.id}>
+                                                        <Download size={14} className="mr-1.5" /> PDF
+                                                    </Button>
+                                                )}
+                                                {RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (
+                                                    <Button variant="outline" size="sm" onClick={() => handleRetry(nota)} isLoading={retryingId === nota.id}>
+                                                        <RotateCcw size={14} className="mr-1.5" /> Reemitir
+                                                    </Button>
+                                                )}
+                                                {!nota.pdf_path && !RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (
+                                                    <span className="text-xs text-[var(--text-muted)]/70">—</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
         </div>
     );
 };

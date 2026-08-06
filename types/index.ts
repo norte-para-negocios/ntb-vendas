@@ -253,6 +253,34 @@ export interface StoreFiscalConfig {
   updated_at: string;
 }
 
+// Uma linha por tentativa de emissão fiscal (NFC-e/NF-e) — ver
+// supabase/migrations/034_fiscal_notas_e_emissao_automatica.sql e
+// app/api/fiscal/emitir/route.ts. 'pendente' existe no CHECK do banco mas
+// não é gravado por nenhum caminho de código hoje (reservado pra um fluxo
+// futuro assíncrono) — o pipeline atual só grava 'erro'/'rejeitada'/
+// 'autorizada'. Só 'erro'/'rejeitada' são seguras de reemitir: a guarda de
+// idempotência da rota de emissão bloqueia 'autorizada' E 'pendente' (ambas
+// tratadas como "já existe/pode existir documento pra esta venda").
+export interface FiscalNota {
+  id: string;
+  store_id: string;
+  table_id: string | null;
+  order_id: string | null;
+  modelo: '55' | '65';
+  ambiente: 'homologacao' | 'producao';
+  status: 'pendente' | 'autorizada' | 'rejeitada' | 'erro';
+  chave_acesso: string | null;
+  numero: number | null;
+  serie: number | null;
+  protocolo: string | null;
+  motivo_erro: string | null;
+  valor_total: number | null;
+  xml_path: string | null;
+  pdf_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OrderRating {
   id: string;
   order_id: string;

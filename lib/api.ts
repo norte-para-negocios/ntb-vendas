@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -943,6 +943,52 @@ export const fetchStoreFiscalConfig = async (storeId: string): Promise<StoreFisc
     .maybeSingle();
   if (error || !data) return null;
   return data;
+};
+
+// Lista de tentativas de emissão fiscal da loja (aba "Notas Fiscais" do
+// admin, Task 16) — leitura direta, mesma RLS pública de
+// store_fiscal_config (fiscal_notas_select_anon, ver migration 034).
+export const fetchFiscalNotas = async (storeId: string): Promise<FiscalNota[]> => {
+  const { data, error } = await supabase
+    .from('fiscal_notas')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+};
+
+// Signed URL sob demanda pro XML/PDF de uma nota — o bucket
+// fiscal-documentos é privado (sem policy de select/insert pra anon, ver
+// migration 034), então isso precisa passar pela rota de servidor (service
+// role) em vez de bater direto no Storage a partir do client.
+export const fetchFiscalNotaPdfUrl = async (pdfPath: string): Promise<string> => {
+  const res = await fetch('/api/fiscal/pdf-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfPath }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.message || 'Falha ao gerar URL do PDF.');
+  return json.url;
+};
+
+// Reemissão manual (botão "Reemitir" na aba Notas Fiscais): mesma rota de
+// emissão automática (app/api/fiscal/emitir), mas chamada direto — não
+// fire-and-forget como no fechamento de pedido (Task 14) — porque aqui é
+// uma ação explícita do lojista que precisa de feedback síncrono na tela.
+// Só faz sentido pra notas com status 'erro'/'rejeitada': a guarda de
+// idempotência da própria rota bloqueia 'autorizada'/'pendente' com
+// {skipped:true, reason:'Nota já existe para esta venda'} (ver comentário
+// em app/api/fiscal/emitir/route.ts) — a UI já filtra o botão pra só
+// aparecer nesses dois status, isto aqui só repassa a chamada.
+export const reemitirFiscalNota = async (params: { orderId?: string; tableId?: string }): Promise<any> => {
+  const res = await fetch('/api/fiscal/emitir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
 };
 
 export interface CreateStoreParams {
