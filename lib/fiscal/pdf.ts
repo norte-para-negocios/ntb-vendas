@@ -11,8 +11,14 @@
 // não é documento fiscal real): `result.constructor.name === 'Uint8Array'`,
 // `Buffer.isBuffer(result) === false`, primeiros bytes `%PDF-1.7` (PDF válido).
 // Isso corrige a suposição original do plano ("Buffer ou base64 dependendo da
-// versão") — nunca veio base64; um `Buffer.from(str, 'base64')` num Uint8Array
-// binário corromperia o PDF (trataria bytes crus como texto base64).
+// versão") — nunca veio base64 de verdade. O fallback `Buffer.from(x as
+// unknown as string, 'base64')` do plano só era um cast de tipo (nunca uma
+// conversão de valor); em runtime o Node ignora o argumento de encoding
+// quando o 1º argumento não é uma string de verdade, então na prática não
+// teria corrompido o Uint8Array de hoje — mas ainda era um tipo mentindo
+// sobre o dado (Uint8Array fingindo ser string) e quebraria de verdade se
+// algum dia vier uma string base64 legítima de outra origem. Evitado aqui
+// tratando sempre o valor pelo que ele realmente é: bytes crus.
 // @ts-expect-error node-sped-pdf não publica tipos, ver nota acima
 import { DANFe as danfeRaw, DANFCe as danfceRaw } from 'node-sped-pdf';
 
