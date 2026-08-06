@@ -4680,23 +4680,48 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
         }
     };
 
-    // Sempre reemite via order_id, nunca table_id — mesmo quando a nota tem
-    // os dois. order_id é a "âncora" da venda (sempre populado desde a
-    // correção do Task 13, ver comentário em app/api/fiscal/emitir/route.ts)
-    // e a rota resolve ele com um select direto por id, sem restrição de
-    // tempo. O caminho por table_id, em vez disso, só aceita orders com
-    // status 'delivered' E updated_at nos últimos 5 minutos — uma
-    // reemissão manual clicada pelo lojista minutos/horas depois da falha
-    // (o caso comum: ele vê o erro na tela e clica "Reemitir" bem depois)
-    // quase sempre cairia fora dessa janela e voltaria
-    // "Pedido(s) não encontrado(s)", uma falha confusa e evitável. Trade-off
-    // aceito conscientemente: se a venda original teve mais de um `order`
-    // (mesa com múltiplas rodadas enviadas à cozinha antes de fechar a
-    // conta), a reemissão via order_id sozinho só resolve os itens da order
-    // âncora — pode gerar uma nota com valor menor que o da tentativa
-    // original. Não corrigido aqui (exigiria mudar o caminho table_id da
-    // rota de emissão, fora do escopo desta task); registrado no relatório
-    // do Task 16 como achado pra decisão futura.
+    // Reemite mandando order_id E table_id juntos (quando a nota tem os
+    // dois) — achado de revisão (2026-08-05) numa primeira versão que
+    // mandava só order_id: a rota de emissão resolve QUAL order buscar
+    // usando `if (body.orderId) {...} else if (body.tableId) {...}`, então
+    // mandar os dois ainda usa o caminho orderId pra achar os itens (sem
+    // restrição de tempo — ver próximo parágrafo) — mas
+    // `notaBase.table_id = body.tableId ?? null` é montado independente de
+    // qual branch resolveu os itens. Mandar só orderId fazia a nota
+    // reemitida gravar `table_id: null`, diferente do `table_id` real que a
+    // tentativa original (via fechamento de mesa) gravou — e como os dois
+    // guards de idempotência (o SELECT em app/api/fiscal/emitir/route.ts E
+    // o índice único da migration 036) usam `table_id` como parte da chave,
+    // isso tornava a nota reemitida invisível pra uma futura checagem de
+    // idempotência pela mesma mesa, reabrindo exatamente o risco de
+    // documento duplicado que aquele guard existe pra evitar. Mandando os
+    // dois, a rota ainda resolve via orderId (não muda o comportamento
+    // buscado abaixo) mas `table_id` grava idêntico ao que a tentativa
+    // original teria gravado.
+    //
+    // Por que ainda manda orderId (não só tableId): order_id é a "âncora"
+    // da venda (sempre populado desde a correção do Task 13, ver comentário
+    // em app/api/fiscal/emitir/route.ts) e a rota resolve ele com um select
+    // direto por id, sem restrição de tempo. O caminho por table_id sozinho
+    // só aceita orders com status 'delivered' E updated_at nos últimos 5
+    // minutos — uma reemissão manual clicada pelo lojista minutos/horas
+    // depois da falha (o caso comum: ele vê o erro na tela e clica
+    // "Reemitir" bem depois) quase sempre cairia fora dessa janela e
+    // voltaria "Pedido(s) não encontrado(s)", uma falha confusa e evitável.
+    //
+    // Nota sobre o trade-off de "order_id sozinho só pega os itens da order
+    // âncora": isso seria um problema real SE uma venda de mesa pudesse ter
+    // mais de um `order` na mesma sessão de fechamento. Investigado e
+    // descartado como cenário real neste código: `create_order_secure`
+    // (migrations 007/019/028) só cria uma nova `order` pra mesa quando não
+    // existe nenhuma `pending` ainda — e pedido de mesa não passa por
+    // `send_order_to_kitchen_secure`/mudança de status até o fechamento
+    // (isso só existe pro fluxo de Balcão), então uma mesa acumula tudo
+    // numa única `order` a visita inteira. Confirmado ao vivo: toda venda
+    // de mesa já fechada no banco de dev tem exatamente 1 `order`. Continua
+    // defensivamente correto mandar table_id de qualquer forma (não custa
+    // nada e cobre qualquer mudança futura nesse comportamento), só não é
+    // um risco comum hoje.
     const handleRetry = async (nota: FiscalNota) => {
         if (!nota.order_id) {
             toast.error('Esta nota não tem um pedido associado — não é possível reemitir.');
@@ -4704,7 +4729,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
         }
         setRetryingId(nota.id);
         try {
-            const result = await reemitirFiscalNota({ orderId: nota.order_id });
+            const result = await reemitirFiscalNota({ orderId: nota.order_id, tableId: nota.table_id ?? undefined });
             if (result?.ok) {
                 toast.success(result.pdfWarning ? `Nota autorizada, mas: ${result.pdfWarning}` : 'Nota reemitida e autorizada com sucesso!');
             } else if (result?.skipped) {
