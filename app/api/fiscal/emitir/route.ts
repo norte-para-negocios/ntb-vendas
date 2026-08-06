@@ -19,8 +19,10 @@ export const maxDuration = 60;
 interface RequestBody {
   orderId?: string;
   tableId?: string;
-  // Só usado pra NF-e (modelo 55) — captura ainda não existe na UI (Task 17);
-  // aceito aqui desde já pra não precisar mexer no contrato da rota depois.
+  // Só usado pra NF-e (modelo 55) — captura opcional na UI (Task 17: modal de
+  // fechar mesa/balcão, só quando modelo_emissao_automatica === 'nfe').
+  // Ausente/vazio em modelo 55 não é mais um erro genérico: ver a checagem
+  // logo antes da FASE 1 abaixo, que grava 'pendente' em vez de lançar.
   destinatario?: { cpfCnpj: string; nome: string };
 }
 
@@ -147,6 +149,15 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // fechamentos diferentes da mesma mesa sempre têm `orders` novas (UUIDs
   // novos), nunca colidem; o mesmo fechamento (retry) sempre resolve a
   // mesma âncora, e por isso ainda é detectado como duplicata.
+  //
+  // Só 'autorizada' bloqueia (Task 17, 2026-08-06 — antes também incluía
+  // 'pendente'): um documento 'pendente' (ver checagem de destinatário
+  // ausente logo abaixo) nunca tocou a SEFAZ, então não existe risco de
+  // duplicar nada lá — bloquear nele só impediria pra sempre o fluxo que
+  // esta task existe pra viabilizar (lojista preenche o CPF/CNPJ depois e
+  // clica "Reemitir", que chama esta mesma rota de novo com o mesmo
+  // orderId/tableId). Mesmo tratamento que 'erro'/'rejeitada' já recebiam.
+  // Migration 037 aplica o mesmo ajuste no índice único do banco.
   const tableIdParaChecagem = body.tableId ?? null;
   const orderIdParaChecagem = orderIds[0];
   let checagemIdempotencia = admin
@@ -154,7 +165,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     .select('id')
     .eq('store_id', storeId)
     .eq('order_id', orderIdParaChecagem)
-    .in('status', ['autorizada', 'pendente']);
+    .eq('status', 'autorizada');
   checagemIdempotencia = tableIdParaChecagem
     ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
     : checagemIdempotencia.is('table_id', null);
@@ -225,6 +236,27 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     });
     if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (item sem NCM):', insertErr);
     return NextResponse.json({ ok: false, reason: 'Item sem NCM' });
+  }
+
+  // Falta destinatário pra NF-e (Task 17) — checado ANTES de qualquer coisa
+  // da FASE 1, especificamente antes da numeração (passo 5 logo abaixo):
+  // nenhum número fiscal pode ser consumido por uma tentativa que já nasce
+  // incompleta. Diferente do erro genérico que `montarXmlNota` lançaria (o
+  // que cairia no catch da FASE 1 como 'erro' DEPOIS de já ter gasto um
+  // número), aqui a nota grava direto como 'pendente' com um motivo claro —
+  // o lojista preenche o documento depois pela aba "Notas Fiscais" e clica
+  // "Reemitir" (Task 16), que chama esta mesma rota de novo com o mesmo
+  // orderId/tableId. `.trim()` cobre o caso de a UI mandar
+  // `destinatario: { cpfCnpj: '', nome: '' }` (campo deixado em branco, não
+  // omitido) como equivalente a "sem destinatário".
+  if (modelo === '55' && !body.destinatario?.cpfCnpj?.trim()) {
+    const { error: insertErr } = await admin.from('fiscal_notas').insert({
+      ...notaBase,
+      status: 'pendente',
+      motivo_erro: 'Falta documento do destinatário para NF-e.',
+    });
+    if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por falta de destinatário):', insertErr);
+    return NextResponse.json({ ok: false, reason: 'Falta documento do destinatário para NF-e.' });
   }
 
   // ════════════════════════════════════════════════════════════════════════

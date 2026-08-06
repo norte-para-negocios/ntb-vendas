@@ -1078,6 +1078,16 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const [paymentPeople, setPaymentPeople] = useState(1);
     const [paymentSelectedItems, setPaymentSelectedItems] = useState<{ [itemId: string]: number }>({});
 
+    // Destinatário da NF-e (Task 17) — opcional, só relevante quando a loja
+    // está configurada em modelo_emissao_automatica === 'nfe' (NFC-e não tem
+    // <dest>, não precisa de nada disso). `nfeModeloAtivo` é buscado à parte
+    // (fetchStoreFiscalConfig) porque esta view não tem acesso ao state de
+    // MenuManagementView (onde a config fiscal já é carregada pra edição) —
+    // são componentes irmãos, sem estado compartilhado.
+    const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
+    const [paymentDestCpfCnpj, setPaymentDestCpfCnpj] = useState('');
+    const [paymentDestNome, setPaymentDestNome] = useState('');
+
     const currentTableSummary = useMemo(() => {
         if (!selectedTable) return null;
         const tableOrders = activeOrders.filter(o => o.table_id === selectedTable.id);
@@ -1218,6 +1228,16 @@ NOTIFY pgrst, 'reload schema';`;
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
 
+    // Config fiscal (Task 17) — só pra saber se mostra o campo opcional de
+    // CPF/CNPJ do destinatário ao fechar a mesa. Falha silenciosa de
+    // propósito (catch vazio): sem config fiscal configurada é o estado
+    // normal da maioria das lojas, não um erro pra atrapalhar o fechamento.
+    useEffect(() => {
+        fetchStoreFiscalConfig(storeId)
+            .then((cfg) => setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe'))
+            .catch(() => setNfeModeloAtivo(false));
+    }, [storeId]);
+
     // SYNC MODAL WITH REALTIME TABLE DATA
     useEffect(() => {
         if (selectedTable) {
@@ -1312,6 +1332,8 @@ NOTIFY pgrst, 'reload schema';`;
         setPaymentTab('payment');
         setPaymentPeople(1);
         setPaymentSelectedItems({});
+        setPaymentDestCpfCnpj('');
+        setPaymentDestNome('');
         setShowPaymentModal(true);
     };
 
@@ -1361,7 +1383,15 @@ NOTIFY pgrst, 'reload schema';`;
                 methods: paymentMethods
             };
 
-            const result = await closeTableSession(selectedTable.id, paymentData);
+            // Destinatário (Task 17) — opcional mesmo em modelo NF-e; deixado
+            // em branco, a rota de emissão grava a nota como 'pendente' (não
+            // 'erro') com motivo claro, retomável depois via "Reemitir".
+            const cpfCnpjDigits = paymentDestCpfCnpj.replace(/\D/g, '');
+            const destinatario = cpfCnpjDigits
+                ? { cpfCnpj: cpfCnpjDigits, nome: paymentDestNome.trim() || 'Consumidor' }
+                : undefined;
+
+            const result = await closeTableSession(selectedTable.id, paymentData, destinatario);
 
             if (result.success) {
                 if (result.message && result.message.includes("Colunas ausentes")) {
@@ -1992,6 +2022,34 @@ NOTIFY pgrst, 'reload schema';`;
                                     )}
                                 </div>
 
+                                {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
+                                    automaticamente; NFC-e não tem <dest>, não mostra nada aqui. */}
+                                {nfeModeloAtivo && (
+                                    <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
+                                        <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                                            Documento do destinatário (NF-e, opcional)
+                                        </p>
+                                        <input
+                                            type="text"
+                                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                            placeholder="CPF ou CNPJ do cliente"
+                                            value={paymentDestCpfCnpj}
+                                            onChange={(e) => setPaymentDestCpfCnpj(e.target.value)}
+                                        />
+                                        <input
+                                            type="text"
+                                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                            placeholder="Nome do cliente"
+                                            value={paymentDestNome}
+                                            onChange={(e) => setPaymentDestNome(e.target.value)}
+                                        />
+                                        <p className="text-xs text-[var(--text-muted)]">
+                                            Deixe em branco pra fechar a mesa sem emitir a NF-e agora — dá pra preencher
+                                            e reemitir depois na aba "Notas Fiscais".
+                                        </p>
+                                    </div>
+                                )}
+
                                 {/* Summary & Action */}
                                 <div className="border-t border-[var(--border)] pt-4">
                                     <div className="space-y-1 mb-4 px-2">
@@ -2210,7 +2268,17 @@ NOTIFY pgrst, 'reload schema';`;
 const CounterView: React.FC<{ store: Store }> = ({ store }) => {
     const storeId = store.id;
     const [orders, setOrders] = useState<Order[]>([]);
-    
+
+    // Destinatário da NF-e (Task 17) — mesma lógica de TablesView: config
+    // fiscal buscada à parte (não compartilhada com MenuManagementView), só
+    // usada pra decidir se mostra o modal de captura opcional de CPF/CNPJ
+    // antes de fechar o pedido de balcão.
+    const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
+    const [closingOrder, setClosingOrder] = useState<Order | null>(null);
+    const [destCpfCnpj, setDestCpfCnpj] = useState('');
+    const [destNome, setDestNome] = useState('');
+    const [isClosingOrder, setIsClosingOrder] = useState(false);
+
     const load = async () => {
         const data = await fetchCounterOrders(storeId);
         setOrders(data);
@@ -2223,20 +2291,63 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    
+
+    useEffect(() => {
+        fetchStoreFiscalConfig(storeId)
+            .then((cfg) => setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe'))
+            .catch(() => setNfeModeloAtivo(false));
+    }, [storeId]);
+
+    const closeOrderNow = async (orderId: string, destinatario?: { cpfCnpj: string; nome: string }) => {
+        try {
+            await closeCounterOrder(orderId, destinatario);
+        } catch (e: any) {
+            if (e.message === "schema cache updated_at") {
+                toast.error("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';", 10000);
+            } else {
+                toast.error("Erro ao fechar pedido: " + e.message);
+            }
+            throw e;
+        }
+    };
+
     const handleClose = async (orderId: string) => {
-        if(await confirm("Confirma a entrega e pagamento deste pedido?")) {
+        // Loja em modelo NF-e: abre o modal de captura opcional do
+        // destinatário em vez do confirm() simples de sempre — deixar em
+        // branco continua fechando o pedido normalmente (nota cai
+        // 'pendente', não impede o fechamento).
+        if (nfeModeloAtivo) {
+            const order = orders.find((o) => o.id === orderId) || null;
+            setClosingOrder(order);
+            setDestCpfCnpj('');
+            setDestNome('');
+            return;
+        }
+        if (await confirm("Confirma a entrega e pagamento deste pedido?")) {
             try {
-                await closeCounterOrder(orderId);
-            } catch (e: any) {
-                if (e.message === "schema cache updated_at") {
-                    toast.error("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';", 10000);
-                } else {
-                    toast.error("Erro ao fechar pedido: " + e.message);
-                }
+                await closeOrderNow(orderId);
+            } catch {
+                // já reportado via toast em closeOrderNow
             }
         }
-    }
+    };
+
+    const handleConfirmCloseWithDestinatario = async () => {
+        if (!closingOrder) return;
+        setIsClosingOrder(true);
+        try {
+            const cpfCnpjDigits = destCpfCnpj.replace(/\D/g, '');
+            const destinatario = cpfCnpjDigits
+                ? { cpfCnpj: cpfCnpjDigits, nome: destNome.trim() || 'Consumidor' }
+                : undefined;
+            await closeOrderNow(closingOrder.id, destinatario);
+            setClosingOrder(null);
+        } catch {
+            // já reportado via toast em closeOrderNow
+        } finally {
+            setIsClosingOrder(false);
+        }
+    };
 
     // Achado real (2026-07-07, testando na pratica): pedido de balcao nasce
     // 'pending', e fetch_kitchen_orders_secure EXCLUI de proposito item
@@ -2354,6 +2465,44 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
                     <p className="text-sm">Aguardando novos pedidos...</p>
                 </div>
             )}
+
+            {/* Destinatário da NF-e (Task 17) — só aparece quando a loja emite
+                NF-e automaticamente (handleClose decide isso antes de abrir). */}
+            <Modal isOpen={!!closingOrder} onClose={() => setClosingOrder(null)} title="Fechar Pedido">
+                <div className="space-y-4">
+                    <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
+                        <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                            Documento do destinatário (NF-e, opcional)
+                        </p>
+                        <input
+                            type="text"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            placeholder="CPF ou CNPJ do cliente"
+                            value={destCpfCnpj}
+                            onChange={(e) => setDestCpfCnpj(e.target.value)}
+                        />
+                        <input
+                            type="text"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            placeholder="Nome do cliente"
+                            value={destNome}
+                            onChange={(e) => setDestNome(e.target.value)}
+                        />
+                        <p className="text-xs text-[var(--text-muted)]">
+                            Deixe em branco pra fechar o pedido sem emitir a NF-e agora — dá pra preencher e
+                            reemitir depois na aba "Notas Fiscais".
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <Button variant="secondary" className="flex-1" onClick={() => setClosingOrder(null)}>
+                            Cancelar
+                        </Button>
+                        <Button className="flex-1" onClick={handleConfirmCloseWithDestinatario} isLoading={isClosingOrder}>
+                            Confirmar e Fechar
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };
@@ -4634,18 +4783,17 @@ const fiscalStatusBadgeColor = (status: string): string => {
     }
 };
 
-// Só 'erro'/'rejeitada' podem ser reemitidas com sucesso hoje: a guarda de
-// idempotência de app/api/fiscal/emitir/route.ts bloqueia 'autorizada' E
-// 'pendente' (linha 1.5 da rota, ver comentário lá) com
-// {skipped:true, reason:'Nota já existe para esta venda'} antes de rodar
-// qualquer coisa — mostrar "Reemitir" nesses dois status faria o botão
-// parecer funcional mas nunca emitir nada novo, só confundir o lojista.
-// 'pendente' nunca é gravado por nenhum caminho de código hoje (ver
-// comentário em types/index.ts sobre FiscalNota), mas fica de fora da lista
-// por segurança mesmo assim — não é o texto do plano original (que dizia
-// 'erro'/'pendente'), é a checagem real da rota depois da correção do
-// Task 13.
-const RETRYABLE_FISCAL_STATUSES = ['erro', 'rejeitada'];
+// 'erro'/'rejeitada'/'pendente' podem ser reemitidas com sucesso — só
+// 'autorizada' representa um documento real já existente na SEFAZ. A guarda
+// de idempotência de app/api/fiscal/emitir/route.ts (e o índice único da
+// migration 037) bloqueiam só 'autorizada' com
+// {skipped:true, reason:'Nota já existe para esta venda'} — os outros três
+// status sempre deixam uma nova tentativa rodar o pipeline do zero.
+// 'pendente' (Task 17, 2026-08-06) é o caso mais comum de "Reemitir" na
+// prática: nota de NF-e que nasceu sem CPF/CNPJ do destinatário, cai
+// pendente ANTES de consumir numeração/tocar a SEFAZ, e só precisa que o
+// lojista preencha o documento (Task 16, esta tela) e tente de novo.
+const RETRYABLE_FISCAL_STATUSES = ['erro', 'rejeitada', 'pendente'];
 
 const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [notas, setNotas] = useState<FiscalNota[]>([]);

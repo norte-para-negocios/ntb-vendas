@@ -631,11 +631,14 @@ export const sendOrderToKitchen = async (orderId: string) => {
   if (error) throw error;
 };
 
-export const closeCounterOrder = async (orderId: string) => {
+export const closeCounterOrder = async (
+  orderId: string,
+  destinatario?: { cpfCnpj: string; nome: string },
+) => {
   const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
   if (error) throw error;
   triggerOrdemProducao({ orderId });
-  triggerEmissaoFiscal({ orderId });
+  triggerEmissaoFiscal({ orderId, destinatario });
 };
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
@@ -655,8 +658,11 @@ const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
 // Emissão fiscal automática (2026-08-05) — mesmo padrão fire-and-forget de
 // triggerOrdemProducao acima: nunca pode impedir o fechamento do pedido, que
 // já aconteceu. Loja sem modelo_emissao_automatica configurado recebe
-// { skipped: true } e nada acontece.
-const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string }) => {
+// { skipped: true } e nada acontece. `destinatario` (Task 17) só é relevante
+// pra loja em modelo NF-e — a rota ignora o campo pra NFC-e/nenhuma, então é
+// seguro sempre repassar o que a UI capturou (ou undefined), sem checar o
+// modelo aqui de novo.
+const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
   fetch('/api/fiscal/emitir', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -774,6 +780,7 @@ export const cancelPendingTableItems = async (tableId: string) => {
 export const closeTableSession = async (
   tableId: string,
   paymentData?: { total: number; methods: { method: string; amount: number }[] },
+  destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const paymentMethod = paymentData
@@ -791,7 +798,7 @@ export const closeTableSession = async (
     if (finalizeErr) return { success: false, message: finalizeErr.message };
 
     triggerOrdemProducao({ tableId });
-    triggerEmissaoFiscal({ tableId });
+    triggerEmissaoFiscal({ tableId, destinatario });
 
     return { success: true };
   } catch (e: any) {
