@@ -280,6 +280,75 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Emitente + certificado (achado crítico da revisão final de branch,
+  // 2026-08-06): o CNPJ do emitente NUNCA pode vir de
+  // `config.cnpj_autorizado` (store_fiscal_config) — esse campo é do grupo
+  // OPCIONAL `<autXML>` (CNPJ do escritório de contabilidade autorizado a
+  // baixar o XML, ver uso mais abaixo), não o CNPJ de quem emite. Usar
+  // aquele campo como CNPJ do emitente tinha dois desfechos ruins: campo
+  // vazio (o caso comum, é opcional) → CNPJ zerado/vazio → rejeição
+  // garantida da SEFAZ; ou, se a loja preenchesse o campo com o CNPJ real
+  // do contador (o uso pretendido dele) → uma NF-e/NFC-e REAL emitida em
+  // nome da empresa ERRADA. `stores.cnpj` é a fonte de verdade de sempre
+  // (migration 025 deliberadamente não criou coluna própria pra isso,
+  // porque essa já bastava — ver AGENTS.md). Confere também contra o CNPJ
+  // extraído do próprio certificado digital (`extrairCertificado` já
+  // devolvia esse dado, mas nunca era usado) — um certificado que não
+  // pertence à loja emitiria um documento fiscal REAL em nome de outra
+  // empresa, o tipo de erro que precisa travar ANTES de qualquer
+  // transmissão, não só logar depois. Feito ANTES da numeração (nenhum
+  // número fiscal consumido por uma tentativa que já nasce inválida) — o
+  // certificado baixado/extraído aqui é reaproveitado dentro da FASE 1 via
+  // `certificadoValidado`, pra não baixar/extrair duas vezes.
+  const { data: storeRow } = await admin.from('stores').select('cnpj').eq('id', storeId).maybeSingle();
+  const cnpjLoja = (storeRow?.cnpj || '').replace(/\D/g, '');
+
+  let certificadoValidado: { certPem: string; keyPem: string; certComCadeia: string };
+  try {
+    const certBucket = admin.storage.from('store-certificates');
+    const { data: pfxFile, error: pfxErr } = await certBucket.download(certMeta.file_path);
+    if (pfxErr || !pfxFile) throw new Error('Não foi possível baixar o certificado digital.');
+    const pfxBuffer = Buffer.from(await pfxFile.arrayBuffer());
+    const { certPem, keyPem, cnpjCertificado } = extrairCertificado(pfxBuffer, certSecret.password);
+    const certComCadeia = certMeta.chain_pem ? `${certPem}\n${certMeta.chain_pem}` : certPem;
+
+    if (!cnpjLoja) {
+      const { error: insertErr } = await admin.from('fiscal_notas').insert({
+        ...notaBase,
+        status: 'erro',
+        motivo_erro: 'Loja sem CNPJ cadastrado — não é possível identificar o emitente.',
+      });
+      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (loja sem CNPJ):', insertErr);
+      return NextResponse.json({ ok: false, reason: 'Loja sem CNPJ cadastrado.' });
+    }
+
+    // `cnpjCertificado` pode vir `null` se a extração não conseguir achar
+    // um padrão de 14 dígitos no CN do certificado (formato inesperado) —
+    // nesse caso não há base pra afirmar incompatibilidade, então não
+    // bloqueia (evita falso positivo travando emissão de um certificado
+    // legítimo só porque o CN não bateu no regex). Só bloqueia numa
+    // incompatibilidade AFIRMATIVA (os dois valores existem e divergem).
+    if (cnpjCertificado && cnpjCertificado !== cnpjLoja) {
+      const { error: insertErr } = await admin.from('fiscal_notas').insert({
+        ...notaBase,
+        status: 'erro',
+        motivo_erro: 'Certificado não corresponde ao CNPJ da loja.',
+      });
+      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (certificado não corresponde à loja):', insertErr);
+      return NextResponse.json({ ok: false, reason: 'Certificado não corresponde ao CNPJ da loja.' });
+    }
+
+    certificadoValidado = { certPem, keyPem, certComCadeia };
+  } catch (e) {
+    const { error: insertErr } = await admin.from('fiscal_notas').insert({
+      ...notaBase,
+      status: 'erro',
+      motivo_erro: e instanceof Error ? e.message : 'Falha ao validar certificado digital.',
+    });
+    if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pré-validação de certificado):', insertErr);
+    return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Falha ao validar certificado digital.' });
+  }
+
   // ════════════════════════════════════════════════════════════════════════
   // FASE 1 — numeração, montagem/assinatura do XML e transmissão à SEFAZ.
   // Nenhum documento fiscal existe até esta fase terminar com cStat=100.
@@ -310,13 +379,10 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       vUnCom: Number(i.price_at_time),
     }));
 
-    // 7. Certificado.
-    const certBucket = admin.storage.from('store-certificates');
-    const { data: pfxFile, error: pfxErr } = await certBucket.download(certMeta.file_path);
-    if (pfxErr || !pfxFile) throw new Error('Não foi possível baixar o certificado digital.');
-    const pfxBuffer = Buffer.from(await pfxFile.arrayBuffer());
-    const { certPem, keyPem } = extrairCertificado(pfxBuffer, certSecret.password);
-    const certComCadeia = certMeta.chain_pem ? `${certPem}\n${certMeta.chain_pem}` : certPem;
+    // 7. Certificado — já baixado/extraído/validado contra stores.cnpj
+    // ANTES da numeração (ver bloco `certificadoValidado` acima), reaproveitado
+    // aqui em vez de baixar/extrair de novo.
+    const { certPem, keyPem, certComCadeia } = certificadoValidado;
 
     // 8. Monta e assina o XML.
     const montado = montarXmlNota({
@@ -325,7 +391,10 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       serie,
       numero,
       emitente: {
-        cnpj: (config.cnpj_autorizado || '').replace(/\D/g, ''),
+        // CNPJ real do emitente — stores.cnpj, já validado contra o
+        // certificado acima (nunca config.cnpj_autorizado, ver comentário
+        // do bloco de pré-validação).
+        cnpj: cnpjLoja,
         ie: config.inscricao_estadual || '',
         razaoSocial: config.razao_social || '',
         logradouro: config.endereco_logradouro || '',
@@ -341,16 +410,18 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         cstCsosnPadrao: config.cst_csosn_padrao || '102',
         cstPisPadrao: config.cst_pis_padrao || '07',
         cstCofinsPadrao: config.cst_cofins_padrao || '07',
-        // CNPJ de fallback da própria SEFAZ-BA pro grupo <autXML>, exigência
-        // específica da Bahia desde 01/01/2016 (identificação do escritório
-        // de contabilidade). Sem NENHUM valor aqui, a SEFAZ rejeita com
-        // cStat=486 — já reproduzido e resolvido com este mesmo CNPJ em
-        // teste real (AGENTS.md, 2026-08-03/04, autorização cStat=100 tanto
-        // em NF-e quanto em NFC-e). Não existe ainda campo em
-        // store_fiscal_config pro CNPJ do escritório de contabilidade real
-        // da loja (fora de escopo desta task) — usar sempre este fallback
-        // até esse campo existir.
-        autXmlCnpj: '13937073000156',
+        // Grupo <autXML>, exigência específica da Bahia desde 01/01/2016
+        // (identificação do escritório de contabilidade autorizado a baixar
+        // o XML). Preferência pro CNPJ real que a loja configurou em
+        // `cnpj_autorizado` (esse SIM é o uso pretendido desse campo —
+        // achado da revisão final de branch, 2026-08-06: antes ele era
+        // usado por engano como CNPJ do EMITENTE, ver acima); sem valor
+        // configurado, cai no CNPJ de fallback da própria SEFAZ Bahia (sem
+        // NENHUM valor aqui, a SEFAZ rejeita com cStat=486 — já reproduzido
+        // e resolvido com este mesmo CNPJ em teste real, AGENTS.md,
+        // 2026-08-03/04, autorização cStat=100 tanto em NF-e quanto em
+        // NFC-e).
+        autXmlCnpj: (config.cnpj_autorizado || '').replace(/\D/g, '') || '13937073000156',
       },
       itens: itensXml,
       destinatario: modelo === '55' ? body.destinatario : undefined,
