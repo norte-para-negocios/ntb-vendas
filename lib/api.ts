@@ -635,6 +635,7 @@ export const closeCounterOrder = async (orderId: string) => {
   const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
   if (error) throw error;
   triggerOrdemProducao({ orderId });
+  triggerEmissaoFiscal({ orderId });
 };
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
@@ -649,6 +650,18 @@ const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).catch((e) => console.error('Integração ntb-estoque (Ordem de Produção) falhou:', e));
+};
+
+// Emissão fiscal automática (2026-08-05) — mesmo padrão fire-and-forget de
+// triggerOrdemProducao acima: nunca pode impedir o fechamento do pedido, que
+// já aconteceu. Loja sem modelo_emissao_automatica configurado recebe
+// { skipped: true } e nada acontece.
+const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string }) => {
+  fetch('/api/fiscal/emitir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch((e) => console.error('Emissão fiscal automática falhou:', e));
 };
 
 export const callWaiter = async (tableId: string) => {
@@ -778,6 +791,7 @@ export const closeTableSession = async (
     if (finalizeErr) return { success: false, message: finalizeErr.message };
 
     triggerOrdemProducao({ tableId });
+    triggerEmissaoFiscal({ tableId });
 
     return { success: true };
   } catch (e: any) {
