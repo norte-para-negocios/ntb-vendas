@@ -42,12 +42,83 @@ export interface MontarXmlParams {
   destinatario?: DestinatarioNota; // obrigatório pra modelo 55, ausente pra 65
 }
 
-const pad = (n: number | string, len: number) => String(n).padStart(len, '0');
-
 // Texto obrigatório em homologação (SEFAZ rejeita sem isso). Pra NFC-e (sem
 // <dest>), vai no xProd do primeiro item; pra NF-e, no xNome do <dest> — ver
 // histórico em AGENTS.md (2026-08-04) sobre qual campo é o certo pra cada modelo.
 const AVISO_HOMOLOGACAO = 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
+
+// Escapa entidades XML obrigatórias em qualquer valor de texto livre
+// interpolado nos templates abaixo — achado da revisão final de branch
+// (2026-08-06): nome de produto com "&" (ex.: "Fish & Chips", comum em
+// cardápio) gerava XML malformado, e isso só quebra DEPOIS de
+// increment_fiscal_numero_secure já ter consumido um número fiscal real
+// (xml-crypto lança ao tentar assinar um XML inválido, ou a SEFAZ rejeita
+// por erro de schema). Mesma lição já registrada em lib/print.ts/AGENTS.md
+// (incidente de XSS armazenado por falta de escape) — só não tinha sido
+// replicada aqui ainda.
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// xProd tem limite de 120 caracteres no schema da NFe/NFC-e (contando o
+// texto decodificado, não os bytes com entidade escapada). Em homologação,
+// o primeiro item de uma NFC-e ganha o aviso obrigatório concatenado (ver
+// AVISO_HOMOLOGACAO acima) — um nome de produto longo + esse aviso (~68
+// caracteres com o separador " - ") podia estourar o limite. Trunca só a
+// parte do NOME do produto (o aviso é exigência de compliance, não pode
+// ser cortado) e escapa depois de montar a string final.
+const XPROD_MAX = 120;
+
+function montarXProd(nomeProduto: string, comAvisoHomologacao: boolean): string {
+  if (!comAvisoHomologacao) return escapeXml(nomeProduto.slice(0, XPROD_MAX));
+  const sufixo = ` - ${AVISO_HOMOLOGACAO}`;
+  const espacoNome = Math.max(XPROD_MAX - sufixo.length, 0);
+  const nomeTruncado = nomeProduto.length > espacoNome ? nomeProduto.slice(0, espacoNome) : nomeProduto;
+  return escapeXml(`${nomeTruncado}${sufixo}`);
+}
+
+// Componentes de data/hora sempre resolvidos em America/Sao_Paulo, nunca a
+// partir do horário local do processo Node — achado crítico da revisão
+// final de branch (2026-08-06): em dev o servidor já roda com o relógio do
+// SO em UTC-3 (Brasil), então `now.getHours()`/etc "pareciam" corretos; na
+// Vercel o runtime é UTC, e o código antigo lia um relógio UTC e rotulava
+// como "-03:00" — carimbando toda nota ~3h no futuro. A SEFAZ tem
+// tolerância apertada pra dhEmi no futuro e rejeita (cStat=703), o que
+// quebraria essencialmente 100% das emissões reais em produção sem nunca
+// aparecer em teste local. O Brasil não observa mais horário de verão em
+// nenhum estado desde 2019, então o offset "-03:00" é fixo o ano inteiro
+// pra Bahia (única UF usada hoje neste projeto) — não precisamos calcular
+// o offset dinamicamente, só garantir que os COMPONENTES (ano/mês/dia/
+// hora/min/seg) venham do fuso certo, não do relógio cru do processo.
+// Verificado com `TZ=UTC node -e "..."` simulando o runtime da Vercel,
+// inclusive o caso de virada de dia/mês/ano (ex.: 2026-01-01 02:30 UTC =
+// 2025-12-31 23:30 em São Paulo) — os componentes saem corretos.
+function componentesSaoPaulo(now: Date) {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '00';
+  return {
+    ano: get('year'),
+    mes: get('month'),
+    dia: get('day'),
+    hora: get('hour'),
+    minuto: get('minute'),
+    segundo: get('second'),
+  };
+}
 
 export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: string; infNFeId: string } {
   const { modelo, ambiente, serie, numero, emitente, itens, destinatario } = params;
@@ -56,7 +127,8 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
 
   const tpAmb = ambiente === 'homologacao' ? 2 : 1;
   const now = new Date();
-  const anoMes = pad(now.getFullYear() % 100, 2) + pad(now.getMonth() + 1, 2);
+  const { ano, mes, dia, hora, minuto, segundo } = componentesSaoPaulo(now);
+  const anoMes = ano.slice(2) + mes;
 
   const { chave, cNF } = montarChaveAcesso({
     cUF: emitente.cUF,
@@ -67,9 +139,7 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     numero,
   });
 
-  const dhEmi =
-    `${now.getFullYear()}-${pad(now.getMonth() + 1, 2)}-${pad(now.getDate(), 2)}` +
-    `T${pad(now.getHours(), 2)}:${pad(now.getMinutes(), 2)}:${pad(now.getSeconds(), 2)}-03:00`;
+  const dhEmi = `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}-03:00`;
 
   const infNFeId = `NFe${chave}`;
 
@@ -78,10 +148,9 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     .map((item, i) => {
       const vProd = Number((item.qCom * item.vUnCom).toFixed(2));
       vProdTotal += vProd;
-      const xProd =
-        tpAmb === 2 && i === 0 && modelo === '65' ? `${item.xProd} - ${AVISO_HOMOLOGACAO}` : item.xProd;
+      const xProd = montarXProd(item.xProd, tpAmb === 2 && i === 0 && modelo === '65');
       return (
-        `<det nItem="${i + 1}"><prod><cProd>${item.cProd}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xProd}</xProd>` +
+        `<det nItem="${i + 1}"><prod><cProd>${escapeXml(item.cProd)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xProd}</xProd>` +
         `<NCM>${item.ncm}</NCM><CFOP>${item.cfop ?? '5102'}</CFOP><uCom>UN</uCom>` +
         `<qCom>${item.qCom.toFixed(4)}</qCom><vUnCom>${item.vUnCom.toFixed(10)}</vUnCom>` +
         `<vProd>${vProd.toFixed(2)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>UN</uTrib>` +
@@ -97,7 +166,7 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     ? (() => {
         const doc = destinatario.cpfCnpj.replace(/\D/g, '');
         const tagDoc = doc.length === 14 ? 'CNPJ' : 'CPF';
-        const xNome = tpAmb === 2 ? `${destinatario.nome} - ${AVISO_HOMOLOGACAO}` : destinatario.nome;
+        const xNome = escapeXml(tpAmb === 2 ? `${destinatario.nome} - ${AVISO_HOMOLOGACAO}` : destinatario.nome);
         return `<dest><${tagDoc}>${doc}</${tagDoc}><xNome>${xNome}</xNome><indIEDest>9</indIEDest></dest>`;
       })()
     : '';
@@ -118,9 +187,9 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<tpImp>${modelo === '65' ? 4 : 1}</tpImp><tpEmis>1</tpEmis><cDV>${chave.slice(-1)}</cDV>` +
     `<tpAmb>${tpAmb}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres>` +
     `<procEmi>0</procEmi><verProc>ntb-vendas-1.0</verProc></ide>` +
-    `<emit><CNPJ>${emitente.cnpj}</CNPJ><xNome>${emitente.razaoSocial}</xNome>` +
-    `<enderEmit><xLgr>${emitente.logradouro}</xLgr><nro>${emitente.numero}</nro><xBairro>${emitente.bairro}</xBairro>` +
-    `<cMun>${emitente.cMun}</cMun><xMun>${emitente.municipio}</xMun><UF>${emitente.uf}</UF><CEP>${emitente.cep}</CEP>` +
+    `<emit><CNPJ>${emitente.cnpj}</CNPJ><xNome>${escapeXml(emitente.razaoSocial)}</xNome>` +
+    `<enderEmit><xLgr>${escapeXml(emitente.logradouro)}</xLgr><nro>${escapeXml(emitente.numero)}</nro><xBairro>${escapeXml(emitente.bairro)}</xBairro>` +
+    `<cMun>${emitente.cMun}</cMun><xMun>${escapeXml(emitente.municipio)}</xMun><UF>${emitente.uf}</UF><CEP>${emitente.cep}</CEP>` +
     `<cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${emitente.ie}</IE><CRT>1</CRT></emit>` +
     destXml +
     autXmlXml +
