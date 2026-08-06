@@ -55,6 +55,8 @@ export async function transmitirNota(params: {
   const https = await import('node:https');
   const u = new URL(endpoint.autorizacao);
 
+  let httpStatus = 0;
+
   const xmlBruto = await new Promise<string>((resolve, reject) => {
     const req = https.request(
       {
@@ -72,6 +74,7 @@ export async function transmitirNota(params: {
         timeout: 30000,
       },
       (res) => {
+        httpStatus = res.statusCode ?? 0;
         let data = '';
         res.on('data', (c) => (data += c));
         res.on('end', () => resolve(data));
@@ -90,5 +93,5 @@ export async function transmitirNota(params: {
   const xMotivo = xmlBruto.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] ?? null;
   const protocolo = xmlBruto.match(/<nProt>([^<]+)<\/nProt>/)?.[1] ?? null;
 
-  return { httpStatus: 200, cStat, xMotivo, protocolo, xmlBruto };
+  return { httpStatus, cStat, xMotivo, protocolo, xmlBruto };
 }
