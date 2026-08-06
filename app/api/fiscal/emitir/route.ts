@@ -95,12 +95,20 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   } else if (body.tableId) {
     // Mesma janela de 5 min de app/api/integracao/ordem-producao/route.ts —
     // evita pegar pedidos de uma sessão anterior da mesma mesa.
+    // `.order('created_at')` é NECESSÁRIO (não só estético): `orderIds[0]`
+    // vira a "âncora" que identifica esta venda especificamente (ver
+    // notaBase abaixo) — sem ordenação explícita, a ordem devolvida pelo
+    // Postgres não é garantida estável entre duas execuções da mesma query,
+    // o que quebraria a checagem de idempotência (duas chamadas pra a MESMA
+    // sessão de fechamento poderiam resolver âncoras diferentes e não se
+    // reconhecerem como a mesma venda).
     const { data: orders } = await admin
       .from('orders')
       .select('id, store_id')
       .eq('table_id', body.tableId)
       .eq('status', 'delivered')
-      .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+      .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: true });
     if (orders?.length) {
       storeId = orders[0].store_id;
       orderIds = orders.map((o) => o.id);
@@ -122,22 +130,34 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // duplicação de reemissão). 'erro'/'rejeitada' ficam de fora de
   // propósito: uma tentativa que falhou antes de qualquer documento existir
   // não deve travar uma nova tentativa. Backstop de banco (índice único
-  // parcial) em supabase/migrations/035_fiscal_notas_indice_idempotencia.sql
+  // parcial) em supabase/migrations/036_fiscal_notas_indice_idempotencia_fix.sql
   // cobre a janela de corrida entre esta checagem e o insert final, que
   // esta query sozinha não fecha.
+  //
+  // BUG CRÍTICO corrigido em 2026-08-05 (2ª rodada de revisão): a chave de
+  // idempotência NÃO pode ser só (store_id, table_id) — `table_id`
+  // identifica a MESA física, que é reutilizada o dia inteiro (mesa 5 do
+  // almoço não é a mesma venda que a mesa 5 do jantar). A primeira versão
+  // deste guard deixava `order_id` sempre `null` no caminho de mesa, então
+  // TODA venda futura daquela mesa colidia com a primeira já autorizada —
+  // silenciosamente parava de emitir nota pra aquela mesa pro resto da
+  // existência dela. Corrigido usando `orderIds[0]` (a primeira `order` da
+  // sessão de fechamento, ver `.order('created_at')` acima — precisa ser
+  // determinístico) como âncora que identifica a VENDA, não a mesa: dois
+  // fechamentos diferentes da mesma mesa sempre têm `orders` novas (UUIDs
+  // novos), nunca colidem; o mesmo fechamento (retry) sempre resolve a
+  // mesma âncora, e por isso ainda é detectado como duplicata.
   const tableIdParaChecagem = body.tableId ?? null;
-  const orderIdParaChecagem = body.tableId ? null : orderIds[0];
+  const orderIdParaChecagem = orderIds[0];
   let checagemIdempotencia = admin
     .from('fiscal_notas')
     .select('id')
     .eq('store_id', storeId)
+    .eq('order_id', orderIdParaChecagem)
     .in('status', ['autorizada', 'pendente']);
   checagemIdempotencia = tableIdParaChecagem
     ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
     : checagemIdempotencia.is('table_id', null);
-  checagemIdempotencia = orderIdParaChecagem
-    ? checagemIdempotencia.eq('order_id', orderIdParaChecagem)
-    : checagemIdempotencia.is('order_id', null);
   const { data: notaExistente } = await checagemIdempotencia.maybeSingle();
   if (notaExistente) {
     return NextResponse.json({ skipped: true, reason: 'Nota já existe para esta venda' });
@@ -187,7 +207,11 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   const notaBase = {
     store_id: storeId,
     table_id: body.tableId ?? null,
-    order_id: body.tableId ? null : orderIds[0],
+    // Sempre populado, mesmo no caminho de mesa (bug corrigido acima, ver
+    // comentário na guarda de idempotência) — `orderIds[0]` é a primeira
+    // `order` da sessão de fechamento, âncora estável que identifica esta
+    // VENDA especificamente, não só a mesa física.
+    order_id: orderIds[0],
     modelo,
     ambiente: config.ambiente as 'homologacao' | 'producao',
     valor_total: valorTotal,
