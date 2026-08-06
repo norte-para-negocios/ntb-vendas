@@ -1383,6 +1383,216 @@ extraída do `.pfx`, e envia via SOAP 1.2 pro `NFeAutorizacao4` com mTLS.
   verdade, que o próximo passo é administrativo (credenciamento/CSC),
   não é código.
 
+**Atualização 2026-07-15 — CSC gerado, mas "Emissor" continua bloqueando;
+achado um caminho alternativo real (consulta, não emissão):**
+
+- O usuário completou (aparentemente) o credenciamento em
+  `efisc.sefaz.ba.gov.br/credenciamento` pra essa mesma loja (Vieras e
+  Vinhos / Vinhas e Vinhetos Distribuidoras LTDA): o painel da SEFAZ-BA
+  agora mostra CSC gerado tanto pra Produção quanto pra Homologação
+  (`Habilitado: Sim`, `Credenciado: Sim`), com dois pares de
+  ID CSC/CSC por ambiente. **Porém os dois painéis mostram `Emissor: Não`.**
+- Reexecutado o mesmo script de referência (variação controlada, mesma
+  estrutura já validada de chave/XML/assinatura/SOAP, sem alterar nada
+  além do necessário — `nNF` incrementado pra não reusar o de
+  2026-07-06) contra `NFeAutorizacao4` da SEFAZ-BA, sempre `tpAmb=2`
+  (homologação): **resultado idêntico ao de 06/07**, `cStat=702`
+  "NFC-e nao e aceita pela UF do Emitente". Ou seja, **gerar o CSC
+  sozinho não resolveu** — a hipótese mais provável, dado o `Emissor:
+  Não` visível nos dois painéis, é que credenciamento (ter CSC) e virar
+  emissor ativo de NFC-e são dois passos administrativos distintos na
+  SEFAZ-BA, e só o segundo ainda está pendente. Continua sendo bloqueio
+  administrativo, não de código.
+- **Achado novo e útil**: o usuário perguntou se, mesmo travado pra
+  emitir, dava pra "puxar notas" (consultar documentos fiscais já
+  existentes). Testado o serviço `NFeDistribuicaoDFe`, que roda no
+  **Ambiente Nacional** (hosts `hom1.nfe.fazenda.gov.br`/
+  `www1.nfe.fazenda.gov.br`, não a infraestrutura própria da SEFAZ-BA) e
+  só exige o certificado válido do CNPJ — **não depende do status de
+  Emissor de NFC-e**, por ser um serviço de consulta (o CNPJ aparece
+  como destinatário/emitente de qualquer documento no âmbito nacional,
+  não só NFC-e). Consulta por NSU (`distNSU`/`ultNSU`), script à parte
+  (`consultar-notas-nsu.mjs`, fora do repo, mesma pasta de scratch
+  isolada do script de emissão):
+  - Em homologação (`tpAmb=2`): `cStat=137` "Nenhum documento
+    localizado" — esperado, ambiente de teste isolado, sem histórico.
+  - Em **produção** (`tpAmb=1`, só consulta — sem risco fiscal nenhum,
+    diferente de emissão, já que não cria nem altera nenhum documento):
+    `cStat=138` "Documento(s) localizado(s)", **43 documentos reais**
+    (NSU 705 a 747, `ultNSU=maxNSU=747` — esse foi o lote completo
+    disponível), a maioria notas de compra de fornecedores reais dessa
+    loja (Nestlé Brasil, CRBS S/A, WMS Supermercados, Dalac Distribuidora
+    de Lácteos, Riobel Rio Joanes Distribuidora de Bebidas, Ostramar
+    Pescados, Sanifica, Norival Brigatti Junior, entre abril e junho de
+    2026), mais alguns eventos de CT-e/MDF-e vinculados. 17 desses 43 já
+    vieram como `procNFe` (nota completa, com itens), o resto como
+    `resNFe` (resumo).
+  - **Conclusão prática**: emissão de NFC-e direto por essa loja continua
+    bloqueada (pendência administrativa na SEFAZ-BA), mas **consultar
+    documentos fiscais existentes (ex.: notas de compra de fornecedor)
+    já funciona hoje, inclusive em produção**, sem depender de resolver o
+    "Emissor: Não". Isso é uma funcionalidade nova e independente — não
+    foi pedido pra virar feature do app ainda, só registrado como
+    caminho tecnicamente viável.
+- Certificado, senha e as respostas cruas da SEFAZ (dado comercial real
+  de fornecedores) ficaram só numa pasta de scratch fora do repo, nunca
+  commitados — mesmo princípio de segurança já seguido desde 06/07.
+
+**Atualização 2026-08-03 — segunda loja confirma o mesmo bloqueio de NFC-e, e
+achado novo: NF-e modelo 55 não depende do CSC e já funciona de ponta a
+ponta:**
+
+- Certificado novo (`AMJ 2026.pfx`) testado contra a SEFAZ-BA em homologação:
+  loja **AMJ Santos Restaurante LTDA**, CNPJ `39.912.717/0001-45`, também em
+  Mata de São João/BA (`cUF=29`) — cadastrada como loja `id=4` no
+  `ntb-estoque`, mas **não existe ainda como loja no `ntb-vendas`** (o teste
+  rodou isolado, fora do app, mesmo padrão de sempre).
+- **NFC-e (modelo 65)**: reproduzido o mesmo `cStat=702` "NFC-e não é aceita
+  pela UF do Emitente" já visto com a Vieras e Vinhos — confirma que o
+  bloqueio de "Emissor: Não" no painel `efisc.sefaz.ba.gov.br/credenciamento`
+  não é específico de uma loja, é o mesmo passo administrativo pendente pra
+  qualquer CNPJ novo que a Bahia exige antes de aceitar NFC-e.
+- **Achado importante**: o usuário confirmou que essa loja **já emite nota de
+  verdade hoje** — o que não batia com "está tudo bloqueado". Investigado e
+  resolvido: **CSC/"Emissor" é um requisito exclusivo de NFC-e (modelo 65)**,
+  não existe pra NF-e (modelo 55, a que gera DANFE). Testado na prática com o
+  mesmo certificado, mesmo script adaptado pra modelo 55 (com `<dest>`
+  fictício, obrigatório pra NF-e ao contrário da NFC-e anônima): **passou
+  direto pelo bloqueio de Emissor/CSC** (nunca apareceu), confirmando que o
+  caminho de emissão real dessa loja é NF-e, não NFC-e.
+- Duas rejeições intermediárias resolvidas até a autorização completa (todas
+  em homologação, `tpAmb=2`):
+  1. `cStat=495` "CPF do Emitente com Série incompatível" — pela documentação
+     oficial esse código é exclusivo de emitente CPF (existe um `503`
+     equivalente pra CNPJ), mas a SEFAZ-BA devolveu ele mesmo com emitente
+     CNPJ pra série 1 e série 5. Resolvido usando uma série dentro da faixa
+     910–969 (`920`) — sugere que a validação de série "nunca usada antes"
+     da SEFAZ-BA nesse ambiente não distingue CPF/CNPJ do jeito que a doc
+     nacional descreve (comportamento específico dessa UF, não seguir a
+     documentação genérica ao pé da letra se aparecer de novo).
+  2. `cStat=486` "Não informado o Grupo de Autorização... identificação do
+     Escritório de Contabilidade" — exigência específica da Bahia desde
+     01/01/2016 (grupo `autXML` no XML). Resolvido com o CNPJ de fallback que
+     a própria mensagem de erro sugere pra quem não informa o escritório de
+     contabilidade: `13.937.073/0001-56` (CNPJ da própria SEFAZ Bahia). Pra
+     uso real (não só teste) vale considerar usar o CNPJ do escritório de
+     contabilidade de verdade da loja em vez do fallback — o `full_object_
+     empresa` do Omie dessa loja tem `smoura@l2contabilidade.com.br` como
+     e-mail de contato, sugerindo "L2 Contabilidade" como escritório real,
+     CNPJ não confirmado.
+  3. **Resultado final: `cStat=100` "Autorizado o uso da NF-e"** — autorização
+     completa em homologação, protocolo real (`nProt 129261000149780`),
+     chave de acesso `29260839912717000145559200000000011572912991`.
+- **Implicação prática**: emissão via certificado direto + SEFAZ **funciona
+  hoje pra NF-e modelo 55** (testado ponta a ponta, só faltando decidir o
+  CNPJ do escritório de contabilidade de verdade pra uso além de teste) — o
+  que continua bloqueado é especificamente NFC-e modelo 65 (cupom fiscal),
+  por causa do "Emissor: Não" administrativo. Nenhuma dessas duas coisas foi
+  integrada ao app ainda (script standalone de novo, fora do repo principal,
+  cert/chave/senha apagados do scratch depois do teste) — é só confirmação
+  técnica de qual caminho já está desbloqueado.
+- **DANFE gerado de verdade também**, a pedido do usuário: reemitida uma
+  segunda NF-e de teste (mesmo CNPJ, série 920, `nNF=3`, protocolo real
+  `129261000149782`, `cStat=100`) e o XML autorizado (`NFe` assinada +
+  `protNFe` combinados num `nfeProc`) convertido em PDF via biblioteca npm
+  `node-sped-pdf` (`DANFe({ xml: nfeProcXml })`). PDF confirmado válido
+  (`file` reconhece como PDF 1.7) e entregue ao usuário. Isso fecha o ciclo
+  completo: certificado → XML → assinatura → autorização SEFAZ → DANFE
+  visual, tudo validado tecnicamente em homologação com essa loja.
+- **Fechamento do mistério "mas eles conseguem emitir"**: o usuário mandou
+  print da aba **Produção** do mesmo painel `efisc.sefaz.ba.gov.br` — também
+  `Emissor: Não` (CSC de produção existe, `ID 1`, validade desde 13/04/2021,
+  mas emissor nunca ativado, igual à Homologação). Confirma que essa loja
+  **nunca foi credenciada como emissora de NFC-e em nenhum dos dois
+  ambientes** — não é bug nem pendência parcial, é porque ela nunca usou
+  NFC-e de verdade. Consistente com a conclusão acima: a emissão real dessa
+  loja é 100% via NF-e modelo 55, que não precisa desse credenciamento.
+- **Confirmação em PRODUÇÃO sem emitir nada** (pedido explícito do usuário:
+  "veja se é possível emitir, porém não emita"): usados só os dois serviços
+  de CONSULTA da SEFAZ-BA em produção (nunca `NFeAutorizacao4`, que é quem
+  de fato cria/altera documento fiscal):
+  - `NfeStatusServico4` produção (`https://nfe.sefaz.ba.gov.br/webservices/
+    NFeStatusServico4/...`): `cStat=107` "Servico em Operacao" — confirma
+    mTLS/certificado funcionando contra a infra de produção de verdade (não
+    só homologação).
+  - `CadConsultaCadastro4` produção (`.../CadConsultaCadastro4/...`, service
+    `consultaCadastro`, schema `ConsCad`/`infCons` com `xServ=CONS-CAD`,
+    `UF`, `CNPJ` — sem `tpAmb`, é consulta pura): `cStat=111`, devolveu
+    `cSit=1` (cadastro regular) e **`indCredNFe=1`** (credenciado pra NF-e,
+    confirmação oficial direto da SEFAZ, bate com o teste de homologação) e
+    `indCredCTe=0`. `xFant` retornado: **"O SERTAO VAI VIRAR MAR"** —
+    confirma que é essa a loja que o usuário chama de "Sertão".
+  - Endpoints de produção/homologação de todos os serviços da BA (modelo 55
+    e 65) vêm de `storage/wsnfe_4.00_mod55.xml`/`_mod65.xml` do repo público
+    `nfephp-org/sped-nfe` (não do `nfe.fazenda.gov.br`, que redirecionou em
+    loop na tentativa de acesso direto) — útil se precisar de outro serviço
+    da SEFAZ-BA no futuro (ex.: `NfeInutilizacao4`, `NfeRecepcaoEvento4`).
+  - **Conclusão**: emissão real de NF-e em produção pra essa loja está
+    tecnicamente confirmada como possível (credenciamento ativo, serviço no
+    ar), sem nunca ter criado nenhum documento fiscal de verdade — só
+    consulta, igual ao princípio já usado com `NFeDistribuicaoDFe` em
+    2026-07-15.
+
+**Atualização 2026-08-04 — NFC-e AUTORIZADA em homologação. O bloqueio NUNCA
+foi administrativo: o endpoint estava errado desde 06/07.**
+
+Corrige a conclusão repetida nas três atualizações acima (06/07, 15/07,
+03/08), que diziam que `cStat=702` "NFC-e não é aceita pela UF do Emitente"
+era pendência de credenciamento/"Emissor: Não" na SEFAZ-BA. **Era erro de
+endpoint.**
+
+- **Causa raiz**: `storage/autorizadores.json` do `nfephp-org/sped-nfe` diz
+  que, pro **modelo 65**, `"BA": "SVRS"` — a Bahia **delega NFC-e pra Sefaz
+  Virtual do RS**. Só o **modelo 55** é `"BA": "BA"` (infra própria). Todas
+  as tentativas anteriores mandaram a NFC-e pro
+  `hnfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4` — que é o autorizador
+  de **modelo 55 da BA**. O `702` era literalmente correto: aquela UF (nesse
+  serviço) não aceita NFC-e. **Nunca teve nada a ver com a loja.**
+- **Endpoints certos (modelo 65, homologação)**:
+  `https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx`
+  (idem `NfeRetAutorizacao`/`NfeConsulta`/`NfeStatusServico`/`recepcaoevento`/
+  `nfeinutilizacao`, todos sob `nfce-homologacao.svrs.rs.gov.br/ws/`).
+  Produção é o mesmo caminho em `nfce.svrs.rs.gov.br`. `NfeStatusServico4`
+  no SVRS respondeu `cStat=107` com `cUF=29`, confirmando que é ele quem
+  atende a Bahia.
+- **`Emissor: Não` no painel `efisc.sefaz.ba.gov.br` NÃO impede emitir NFC-e
+  em homologação** — a loja AMJ Santos emitiu com `Emissor: Não` visível na
+  tela. Não usar mais esse campo como explicação de rejeição.
+- **Resultado real (loja AMJ Santos Restaurante, CNPJ 39.912.717/0001-45,
+  `tpAmb=2`)**: `cStat=100` "Autorizado o uso da NF-e", protocolo
+  `329260000124985`, chave
+  `29260839912717000145650010000000011732405968`. Confirmado
+  independentemente via `NfeConsultaProtocolo4` no SVRS (consulta pela
+  chave devolve `cStat=100`). Segunda emissão idem (`nNF=3`, protocolo
+  `329260000124986`), usada pra gerar o cupom.
+- **QR Code com o CSC de homologação** (`ID CSC 1`, valor no cofre/painel da
+  SEFAZ, nunca neste arquivo), fórmula versão 2 modo online:
+  `p=<chave>|2|<tpAmb>|<idCSC sem zeros à esquerda>|<SHA1 maiúsculo de
+  "<chave>|2|<tpAmb>|<idCSC>" + CSC>`. `infNFeSupl` (com `qrCode` +
+  `urlChave`) entra **entre `infNFe` e `Signature`** — assinar primeiro e
+  inserir depois funciona, já que o digest cobre só o subtree de `infNFe`.
+  **A SEFAZ valida esse hash de verdade**: teste de controle com CSC errado
+  devolveu `cStat=464` "Codigo de Hash no QR-Code difere do calculado".
+- **Duas correções de XML feitas no caminho** (valem pra qualquer emissão
+  futura): (1) `autXML` vai **antes de `det`** na ordem do schema (ide,
+  emit, [dest], autXML, det, total, transp, pag) — com ele no fim dava
+  `cStat=225` "Falha no Schema XML"; (2) em homologação, o texto obrigatório
+  "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" vai no
+  **`xProd` do primeiro item** (a NFC-e não tem `dest` pra receber a regra
+  equivalente da NF-e). O script de referência antigo punha esse texto no
+  `emit/xNome`, que é o lugar errado.
+- **Dados reais do emitente** vieram de `CadConsultaCadastro4` (consulta
+  pura): IE `173747203`, `cSit=1`, `indCredNFe=1`, endereço RUA DA AURORA,
+  S/N, Praia do Forte, Mata de São João/BA, CEP 48280000.
+- **Cupom (DANFE NFC-e) gerado** a partir do `nfeProc` (NFe assinada +
+  `protNFe`) com `node-sped-pdf` (`DANFCe({xml})`), PDF válido. Ressalva
+  cosmética da biblioteca: ela imprime a URL de consulta de **MT** e
+  protocolo zerado no rodapé, mesmo com o XML tendo `urlChave` da BA e o
+  `nProt` correto — problema de render, não do arquivo fiscal.
+- Certificado/chave/senha ficaram só em pasta de scratch fora do repo e
+  foram apagados depois do teste, mesmo princípio de sempre. Artefatos
+  entregues em `~/ClaudeGerado/nfce-homologacao-2026-08-04/`.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
