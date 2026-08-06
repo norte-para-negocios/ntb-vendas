@@ -238,25 +238,46 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, reason: 'Item sem NCM' });
   }
 
-  // Falta destinatário pra NF-e (Task 17) — checado ANTES de qualquer coisa
-  // da FASE 1, especificamente antes da numeração (passo 5 logo abaixo):
-  // nenhum número fiscal pode ser consumido por uma tentativa que já nasce
-  // incompleta. Diferente do erro genérico que `montarXmlNota` lançaria (o
-  // que cairia no catch da FASE 1 como 'erro' DEPOIS de já ter gasto um
-  // número), aqui a nota grava direto como 'pendente' com um motivo claro —
-  // o lojista preenche o documento depois pela aba "Notas Fiscais" e clica
-  // "Reemitir" (Task 16), que chama esta mesma rota de novo com o mesmo
-  // orderId/tableId. `.trim()` cobre o caso de a UI mandar
-  // `destinatario: { cpfCnpj: '', nome: '' }` (campo deixado em branco, não
-  // omitido) como equivalente a "sem destinatário".
-  if (modelo === '55' && !body.destinatario?.cpfCnpj?.trim()) {
-    const { error: insertErr } = await admin.from('fiscal_notas').insert({
-      ...notaBase,
-      status: 'pendente',
-      motivo_erro: 'Falta documento do destinatário para NF-e.',
-    });
-    if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por falta de destinatário):', insertErr);
-    return NextResponse.json({ ok: false, reason: 'Falta documento do destinatário para NF-e.' });
+  // Falta/documento inválido de destinatário pra NF-e (Task 17) — checado
+  // ANTES de qualquer coisa da FASE 1, especificamente antes da numeração
+  // (passo 5 logo abaixo): nenhum número fiscal pode ser consumido por uma
+  // tentativa que já nasce incompleta ou fadada à rejeição. Diferente do
+  // erro genérico que `montarXmlNota` lançaria (o que cairia no catch da
+  // FASE 1 como 'erro' DEPOIS de já ter gasto um número), aqui a nota grava
+  // direto como 'pendente' com um motivo claro — o lojista preenche/corrige
+  // o documento depois pela aba "Notas Fiscais" e clica "Reemitir" (Task
+  // 16), que chama esta mesma rota de novo com o mesmo orderId/tableId.
+  // `.trim()` cobre o caso de a UI mandar `destinatario: { cpfCnpj: '',
+  // nome: '' }` (campo deixado em branco, não omitido) como equivalente a
+  // "sem destinatário".
+  if (modelo === '55') {
+    const cpfCnpjDigits = (body.destinatario?.cpfCnpj ?? '').replace(/\D/g, '');
+    if (!cpfCnpjDigits) {
+      const { error: insertErr } = await admin.from('fiscal_notas').insert({
+        ...notaBase,
+        status: 'pendente',
+        motivo_erro: 'Falta documento do destinatário para NF-e.',
+      });
+      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por falta de destinatário):', insertErr);
+      return NextResponse.json({ ok: false, reason: 'Falta documento do destinatário para NF-e.' });
+    }
+    // Validação de tamanho (achado de revisão, Task 17 2ª rodada): sem isso,
+    // um CPF/CNPJ digitado errado (ex.: "123") passava batido até virar
+    // `<CPF>123</CPF>` no XML — consumindo um número fiscal de verdade só
+    // pra voltar rejeição garantida da SEFAZ. CPF tem 11 dígitos, CNPJ tem
+    // 14; qualquer outro tamanho não é nem um nem outro. Não valida dígito
+    // verificador (nenhum outro ponto do pipeline fiscal faz isso hoje, ver
+    // brief da task — um valor "fake-shaped" tipo '11111111111' é válido
+    // aqui de propósito, só o tamanho é checado).
+    if (cpfCnpjDigits.length !== 11 && cpfCnpjDigits.length !== 14) {
+      const { error: insertErr } = await admin.from('fiscal_notas').insert({
+        ...notaBase,
+        status: 'pendente',
+        motivo_erro: 'CPF/CNPJ do destinatário inválido.',
+      });
+      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por CPF/CNPJ inválido):', insertErr);
+      return NextResponse.json({ ok: false, reason: 'CPF/CNPJ do destinatário inválido.' });
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════

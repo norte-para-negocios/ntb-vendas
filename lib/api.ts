@@ -984,12 +984,21 @@ export const fetchFiscalNotaPdfUrl = async (pdfPath: string): Promise<string> =>
 // emissão automática (app/api/fiscal/emitir), mas chamada direto — não
 // fire-and-forget como no fechamento de pedido (Task 14) — porque aqui é
 // uma ação explícita do lojista que precisa de feedback síncrono na tela.
-// Só faz sentido pra notas com status 'erro'/'rejeitada': a guarda de
-// idempotência da própria rota bloqueia 'autorizada'/'pendente' com
-// {skipped:true, reason:'Nota já existe para esta venda'} (ver comentário
-// em app/api/fiscal/emitir/route.ts) — a UI já filtra o botão pra só
-// aparecer nesses dois status, isto aqui só repassa a chamada.
-export const reemitirFiscalNota = async (params: { orderId?: string; tableId?: string }): Promise<any> => {
+// Faz sentido pra notas com status 'erro'/'rejeitada'/'pendente' — a
+// guarda de idempotência da própria rota bloqueia só 'autorizada' (Task
+// 17: 'pendente' saiu do bloqueio, migration 037, senão essa reemissão
+// nunca conseguiria de fato tentar de novo) com {skipped:true,
+// reason:'Nota já existe para esta venda'} — a UI já filtra o botão pra só
+// aparecer nesses três status. `destinatario` (Task 17, 2ª rodada) — o
+// motivo mais comum de uma nota cair 'pendente' é falta desse dado, então
+// a reemissão precisa poder mandar um novo; opcional pra não quebrar o
+// caso 'erro'/'rejeitada' (nota que já tinha destinatário e falhou por
+// outro motivo, ex. certificado/SEFAZ fora do ar).
+export const reemitirFiscalNota = async (params: {
+  orderId?: string;
+  tableId?: string;
+  destinatario?: { cpfCnpj: string; nome: string };
+}): Promise<any> => {
   const res = await fetch('/api/fiscal/emitir', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

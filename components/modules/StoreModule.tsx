@@ -1386,10 +1386,7 @@ NOTIFY pgrst, 'reload schema';`;
             // Destinatário (Task 17) — opcional mesmo em modelo NF-e; deixado
             // em branco, a rota de emissão grava a nota como 'pendente' (não
             // 'erro') com motivo claro, retomável depois via "Reemitir".
-            const cpfCnpjDigits = paymentDestCpfCnpj.replace(/\D/g, '');
-            const destinatario = cpfCnpjDigits
-                ? { cpfCnpj: cpfCnpjDigits, nome: paymentDestNome.trim() || 'Consumidor' }
-                : undefined;
+            const destinatario = buildDestinatario(paymentDestCpfCnpj, paymentDestNome);
 
             const result = await closeTableSession(selectedTable.id, paymentData, destinatario);
 
@@ -2336,10 +2333,7 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
         if (!closingOrder) return;
         setIsClosingOrder(true);
         try {
-            const cpfCnpjDigits = destCpfCnpj.replace(/\D/g, '');
-            const destinatario = cpfCnpjDigits
-                ? { cpfCnpj: cpfCnpjDigits, nome: destNome.trim() || 'Consumidor' }
-                : undefined;
+            const destinatario = buildDestinatario(destCpfCnpj, destNome);
             await closeOrderNow(closingOrder.id, destinatario);
             setClosingOrder(null);
         } catch {
@@ -4768,6 +4762,20 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
 
 // --- SUB-MODULE: NOTAS FISCAIS ---
 
+// Normaliza os dois campos livres de captura do destinatário (CPF/CNPJ +
+// nome) num objeto pronto pra mandar pro backend, ou `undefined` se o
+// documento ficou em branco (Task 17) — mesma regra usada nas três telas
+// que capturam esse dado (TablesView, CounterView, FiscalNotasView
+// "Reemitir"): só dígitos no documento, nome default 'Consumidor' se
+// digitado em branco. A validação de tamanho (11/14 dígitos) é feita no
+// servidor (app/api/fiscal/emitir/route.ts), não aqui — este helper só
+// normaliza formato, não valida.
+const buildDestinatario = (cpfCnpj: string, nome: string): { cpfCnpj: string; nome: string } | undefined => {
+    const digits = cpfCnpj.replace(/\D/g, '');
+    if (!digits) return undefined;
+    return { cpfCnpj: digits, nome: nome.trim() || 'Consumidor' };
+};
+
 const FISCAL_STATUS_LABELS: Record<string, string> = {
     autorizada: 'Autorizada',
     pendente: 'Pendente',
@@ -4800,6 +4808,16 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [retryingId, setRetryingId] = useState<string | null>(null);
+
+    // Destinatário na reemissão (Task 17, achado de revisão — sem isso, uma
+    // nota 'pendente' por falta de CPF/CNPJ nunca tinha como ser completada:
+    // "Reemitir" só reenviava {orderId, tableId}, sem jeito nenhum de passar
+    // o documento). Só relevante pra NF-e (modelo 55); "Reemitir" numa nota
+    // NFC-e continua instantâneo, sem modal — motivo de rejeição nunca é
+    // destinatário nesse modelo (NFC-e não tem <dest>).
+    const [retryingNota, setRetryingNota] = useState<FiscalNota | null>(null);
+    const [retryDestCpfCnpj, setRetryDestCpfCnpj] = useState('');
+    const [retryDestNome, setRetryDestNome] = useState('');
 
     const load = async () => {
         setIsLoading(true);
@@ -4870,14 +4888,14 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     // defensivamente correto mandar table_id de qualquer forma (não custa
     // nada e cobre qualquer mudança futura nesse comportamento), só não é
     // um risco comum hoje.
-    const handleRetry = async (nota: FiscalNota) => {
+    const handleRetry = async (nota: FiscalNota, destinatario?: { cpfCnpj: string; nome: string }) => {
         if (!nota.order_id) {
             toast.error('Esta nota não tem um pedido associado — não é possível reemitir.');
             return;
         }
         setRetryingId(nota.id);
         try {
-            const result = await reemitirFiscalNota({ orderId: nota.order_id, tableId: nota.table_id ?? undefined });
+            const result = await reemitirFiscalNota({ orderId: nota.order_id, tableId: nota.table_id ?? undefined, destinatario });
             if (result?.ok) {
                 toast.success(result.pdfWarning ? `Nota autorizada, mas: ${result.pdfWarning}` : 'Nota reemitida e autorizada com sucesso!');
             } else if (result?.skipped) {
@@ -4891,6 +4909,27 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
         } finally {
             setRetryingId(null);
         }
+    };
+
+    // Clique no botão "Reemitir" — NF-e (modelo 55) abre o modal opcional de
+    // CPF/CNPJ antes de tentar de novo (o motivo mais comum de uma nota
+    // 'pendente' é justamente faltar esse dado); NFC-e (modelo 65) reemite
+    // na hora, igual sempre foi, porque destinatário não existe nesse modelo.
+    const handleRetryClick = (nota: FiscalNota) => {
+        if (nota.modelo === '55') {
+            setRetryingNota(nota);
+            setRetryDestCpfCnpj('');
+            setRetryDestNome('');
+            return;
+        }
+        handleRetry(nota);
+    };
+
+    const handleConfirmRetryWithDestinatario = async () => {
+        if (!retryingNota) return;
+        const destinatario = buildDestinatario(retryDestCpfCnpj, retryDestNome);
+        await handleRetry(retryingNota, destinatario);
+        setRetryingNota(null);
     };
 
     return (
@@ -4970,7 +5009,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                                     </Button>
                                                 )}
                                                 {RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (
-                                                    <Button variant="outline" size="sm" onClick={() => handleRetry(nota)} isLoading={retryingId === nota.id}>
+                                                    <Button variant="outline" size="sm" onClick={() => handleRetryClick(nota)} isLoading={retryingId === nota.id}>
                                                         <RotateCcw size={14} className="mr-1.5" /> Reemitir
                                                     </Button>
                                                 )}
@@ -4986,6 +5025,48 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     </table>
                 </div>
             </Card>
+
+            {/* Destinatário da NF-e na reemissão (Task 17) — só abre pra
+                notas modelo 55 (handleRetryClick decide isso antes). */}
+            <Modal isOpen={!!retryingNota} onClose={() => setRetryingNota(null)} title="Reemitir Nota">
+                <div className="space-y-4">
+                    <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
+                        <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                            Documento do destinatário (NF-e, opcional)
+                        </p>
+                        <input
+                            type="text"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            placeholder="CPF ou CNPJ do cliente"
+                            value={retryDestCpfCnpj}
+                            onChange={(e) => setRetryDestCpfCnpj(e.target.value)}
+                        />
+                        <input
+                            type="text"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            placeholder="Nome do cliente"
+                            value={retryDestNome}
+                            onChange={(e) => setRetryDestNome(e.target.value)}
+                        />
+                        <p className="text-xs text-[var(--text-muted)]">
+                            Se esta nota caiu pendente por falta de documento, preencha aqui antes de reemitir.
+                            Se o motivo foi outro (ex.: certificado/SEFAZ fora do ar), pode deixar em branco.
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <Button variant="secondary" className="flex-1" onClick={() => setRetryingNota(null)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            className="flex-1"
+                            onClick={handleConfirmRetryWithDestinatario}
+                            isLoading={!!retryingNota && retryingId === retryingNota.id}
+                        >
+                            Confirmar Reemissão
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };
