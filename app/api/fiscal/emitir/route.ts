@@ -4,8 +4,17 @@ import { extrairCertificado } from '@/lib/fiscal/certificado';
 import { montarXmlNota, ItemNota } from '@/lib/fiscal/xml';
 import { assinarXmlNota } from '@/lib/fiscal/assinatura';
 import { montarQrCode, inserirSuplNoXmlAssinado } from '@/lib/fiscal/qrcode';
-import { transmitirNota } from '@/lib/fiscal/soap';
+import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
 import { gerarPdfNota, montarNfeProc } from '@/lib/fiscal/pdf';
+
+// O pipeline completo (download+parse de certificado, XML, assinatura,
+// SOAP até 30s pra SEFAZ, geração de PDF) pode passar do limite padrão de
+// function serverless (10-15s) — se a function fosse morta DEPOIS da
+// autorização (documento real já existe na SEFAZ) mas ANTES do insert em
+// fiscal_notas, o documento ficaria sem NENHUM rastro no sistema (pior que
+// qualquer falha da Fase 2, que pelo menos grava a linha). 60s dá folga
+// real sobre o pior caso (30s de soap.ts + margem).
+export const maxDuration = 60;
 
 interface RequestBody {
   orderId?: string;
@@ -100,6 +109,38 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
 
   if (!storeId || !orderIds.length) {
     return NextResponse.json({ skipped: true, reason: 'Pedido(s) não encontrado(s)' });
+  }
+
+  // 1.5. Guarda de idempotência — nada nesta rota impede que o mesmo
+  // orderId/tableId seja chamado duas vezes (retry de rede do fire-and-
+  // forget que vai chamar essa rota, ou dois garçons fechando a mesma mesa
+  // quase ao mesmo tempo). Sem essa checagem, duas chamadas concorrentes
+  // rodariam o pipeline duas vezes e gerariam DOIS documentos autorizados
+  // pra mesma venda, cada um com número próprio — o mesmo tipo de problema
+  // de compliance que o design de duas fases deste arquivo existe pra
+  // evitar, só que chegando por outro ângulo (duplicação de tentativa, não
+  // duplicação de reemissão). 'erro'/'rejeitada' ficam de fora de
+  // propósito: uma tentativa que falhou antes de qualquer documento existir
+  // não deve travar uma nova tentativa. Backstop de banco (índice único
+  // parcial) em supabase/migrations/035_fiscal_notas_indice_idempotencia.sql
+  // cobre a janela de corrida entre esta checagem e o insert final, que
+  // esta query sozinha não fecha.
+  const tableIdParaChecagem = body.tableId ?? null;
+  const orderIdParaChecagem = body.tableId ? null : orderIds[0];
+  let checagemIdempotencia = admin
+    .from('fiscal_notas')
+    .select('id')
+    .eq('store_id', storeId)
+    .in('status', ['autorizada', 'pendente']);
+  checagemIdempotencia = tableIdParaChecagem
+    ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
+    : checagemIdempotencia.is('table_id', null);
+  checagemIdempotencia = orderIdParaChecagem
+    ? checagemIdempotencia.eq('order_id', orderIdParaChecagem)
+    : checagemIdempotencia.is('order_id', null);
+  const { data: notaExistente } = await checagemIdempotencia.maybeSingle();
+  if (notaExistente) {
+    return NextResponse.json({ skipped: true, reason: 'Nota já existe para esta venda' });
   }
 
   // 2. Config da loja — decide SE emite e QUAL modelo.
@@ -223,7 +264,16 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         cstCsosnPadrao: config.cst_csosn_padrao || '102',
         cstPisPadrao: config.cst_pis_padrao || '07',
         cstCofinsPadrao: config.cst_cofins_padrao || '07',
-        autXmlCnpj: undefined,
+        // CNPJ de fallback da própria SEFAZ-BA pro grupo <autXML>, exigência
+        // específica da Bahia desde 01/01/2016 (identificação do escritório
+        // de contabilidade). Sem NENHUM valor aqui, a SEFAZ rejeita com
+        // cStat=486 — já reproduzido e resolvido com este mesmo CNPJ em
+        // teste real (AGENTS.md, 2026-08-03/04, autorização cStat=100 tanto
+        // em NF-e quanto em NFC-e). Não existe ainda campo em
+        // store_fiscal_config pro CNPJ do escritório de contabilidade real
+        // da loja (fora de escopo desta task) — usar sempre este fallback
+        // até esse campo existir.
+        autXmlCnpj: '13937073000156',
       },
       itens: itensXml,
       destinatario: modelo === '55' ? body.destinatario : undefined,
@@ -244,13 +294,20 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         config.ambiente === 'homologacao' ? fiscalSecret?.cscid_homologacao : fiscalSecret?.cscid_producao;
       if (!csc || !idCsc) throw new Error('CSC/CSCID não configurado pro ambiente atual da loja.');
 
+      // URLs corretas do ambiente (homologação/produção) — antes ficavam
+      // hardcoded sempre em homologação (achado de revisão, 2026-08-05):
+      // uma nota autorizada em produção teria QR Code funcional (o hash não
+      // depende dessas URLs, só do CSC) mas o cupom impresso apontaria pro
+      // host de teste. Ver lib/fiscal/soap.ts (resolverEndpointsNfceConsulta).
+      const { urlQrCode, urlChave } = resolverEndpointsNfceConsulta(config.ambiente);
+
       const { supl } = montarQrCode({
         chave,
         tpAmb: config.ambiente === 'homologacao' ? 2 : 1,
         idCsc,
         csc,
-        urlQrCode: 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
-        urlChave: 'http://hinternet.sefaz.ba.gov.br/nfce/consulta',
+        urlQrCode,
+        urlChave,
       });
       xmlAssinado = inserirSuplNoXmlAssinado(xmlAssinado, supl);
     }
