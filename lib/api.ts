@@ -884,6 +884,7 @@ export const fetchStoreCertificateStatus = async (storeId: string): Promise<Stor
 // saveStoreCertificateSecret acima).
 export interface UpdateStoreFiscalConfigParams {
   ambiente?: 'homologacao' | 'producao';
+  modeloEmissaoAutomatica?: 'nenhuma' | 'nfce' | 'nfe';
   nfeSerie?: number;
   nfceSerie?: number;
   cteSerie?: number;

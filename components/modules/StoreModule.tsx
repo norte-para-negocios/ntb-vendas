@@ -2460,6 +2460,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // payload de save. CSC/CSCID nunca voltam do banco (write-only),
     // sempre começam vazios.
     const [fiscalAmbiente, setFiscalAmbiente] = useState<'homologacao' | 'producao'>('homologacao');
+    const [fiscalModeloEmissaoAutomatica, setFiscalModeloEmissaoAutomatica] = useState<'nenhuma' | 'nfce' | 'nfe'>('nenhuma');
     const [fiscalNfeSerie, setFiscalNfeSerie] = useState('');
     const [fiscalNfceSerie, setFiscalNfceSerie] = useState('');
     const [fiscalCteSerie, setFiscalCteSerie] = useState('');
@@ -2506,6 +2507,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         const fiscalConfig = await fetchStoreFiscalConfig(storeId);
         if (fiscalConfig) {
             setFiscalAmbiente(fiscalConfig.ambiente);
+            setFiscalModeloEmissaoAutomatica(fiscalConfig.modelo_emissao_automatica || 'nenhuma');
             setFiscalNfeSerie(fiscalConfig.nfe_serie != null ? String(fiscalConfig.nfe_serie) : '');
             setFiscalNfceSerie(fiscalConfig.nfce_serie != null ? String(fiscalConfig.nfce_serie) : '');
             setFiscalCteSerie(fiscalConfig.cte_serie != null ? String(fiscalConfig.cte_serie) : '');
@@ -2592,7 +2594,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             // Só entram no payload os campos preenchidos — string vazia vira
             // undefined, não é enviada (mesmo princípio "não mexer no que não
             // foi preenchido" já usado em handleSaveCertificate/saveStoreCertificateSecret).
-            const params: UpdateStoreFiscalConfigParams = { ambiente: fiscalAmbiente };
+            const params: UpdateStoreFiscalConfigParams = { ambiente: fiscalAmbiente, modeloEmissaoAutomatica: fiscalModeloEmissaoAutomatica };
             if (fiscalNfeSerie) params.nfeSerie = Number(fiscalNfeSerie);
             if (fiscalNfceSerie) params.nfceSerie = Number(fiscalNfceSerie);
             if (fiscalCteSerie) params.cteSerie = Number(fiscalCteSerie);
@@ -3285,6 +3287,22 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <option value="homologacao">Homologação</option>
                             <option value="producao">Produção</option>
                         </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-semibold text-[var(--text)]">Modelo de emissão automática</label>
+                        <select
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                          value={fiscalModeloEmissaoAutomatica}
+                          onChange={e => setFiscalModeloEmissaoAutomatica(e.target.value as 'nenhuma' | 'nfce' | 'nfe')}
+                        >
+                            <option value="nenhuma">Nenhuma (não emite automaticamente)</option>
+                            <option value="nfce">NFC-e (cupom fiscal)</option>
+                            <option value="nfe">NF-e (com destinatário)</option>
+                        </select>
+                        {fiscalModeloEmissaoAutomatica !== 'nenhuma' && !certStatus && (
+                            <p className="text-xs text-[var(--warn)]">⚠️ Nenhum certificado cadastrado ainda — a emissão automática não vai funcionar até o certificado ser configurado acima.</p>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

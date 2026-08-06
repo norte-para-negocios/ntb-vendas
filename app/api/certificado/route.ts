@@ -157,6 +157,13 @@ export async function POST(req: NextRequest) {
     const ambiente = readOptionalString(form, 'ambiente');
     if (ambiente === 'homologacao' || ambiente === 'producao') configFields.ambiente = ambiente;
 
+    // Modelo de emissão automática ao fechar pedido (migration 034) —
+    // 'nenhuma' (default) mantém o comportamento atual, sem emitir nada.
+    const modeloEmissaoAutomatica = readOptionalString(form, 'modeloEmissaoAutomatica');
+    if (modeloEmissaoAutomatica === 'nenhuma' || modeloEmissaoAutomatica === 'nfce' || modeloEmissaoAutomatica === 'nfe') {
+      configFields.modelo_emissao_automatica = modeloEmissaoAutomatica;
+    }
+
     const nfeSerie = readOptionalInt(form, 'nfeSerie');
     if (nfeSerie !== undefined) configFields.nfe_serie = nfeSerie;
     const nfceSerie = readOptionalInt(form, 'nfceSerie');

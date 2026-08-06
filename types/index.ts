@@ -218,6 +218,7 @@ export interface StoreFiscalCertificateStatus {
 export interface StoreFiscalConfig {
   store_id: string;
   ambiente: 'homologacao' | 'producao';
+  modelo_emissao_automatica: 'nenhuma' | 'nfce' | 'nfe';
   nfe_serie: number | null;
   nfce_serie: number | null;
   cte_serie: number | null;
