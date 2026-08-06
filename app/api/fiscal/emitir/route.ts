@@ -58,13 +58,19 @@ interface RequestBody {
 //   dados reais da nota; só xml_path/pdf_path ficam null, e o motivo do
 //   problema de pós-processamento fica visível em motivo_erro.
 //
-// ─── Limitação conhecida (não é bug, não corrigir aqui) ───────────────────
-// DestinatarioNota (modelo 55) só tem {cpfCnpj, nome} — sem endereço. A
-// biblioteca de PDF (node-sped-pdf/DANFe) lê dest.enderDest.xLgr sem
-// checagem e lança se não existir. Ou seja: pra modelo 55, é ESPERADO que
-// a Fase 2 falhe hoje (endereço do destinatário ainda não é capturado —
-// isso é trabalho de uma task futura). Graças à separação de fases acima,
-// isso vira 'autorizada' com pdf_path null, nunca 'erro'.
+// ─── Limitação conhecida, revista no Task 18 (não é bug, não corrigir aqui) ─
+// DestinatarioNota (modelo 55) só tem {cpfCnpj, nome} — sem endereço real do
+// cliente. Achado ao validar de verdade contra a SEFAZ-BA: a AUSÊNCIA de
+// <enderDest> não é só um problema de geração de PDF (como se pensava antes
+// do Task 18) — a própria SEFAZ-BA REJEITA a transmissão (cStat=719 "NF-e
+// sem a identificação do destinatario") sem esse grupo. Por isso
+// lib/fiscal/xml.ts agora sempre preenche <enderDest> com o endereço do
+// EMITENTE como placeholder fictício (nunca inventa um endereço novo, nem
+// deixa o campo ausente) — resolve tanto a rejeição da SEFAZ quanto o motivo
+// original desta nota (DANFE por biblioteca externa lendo
+// dest.enderDest.xLgr sem checagem). Capturar o endereço REAL do
+// destinatário continua fora de escopo (trabalho de task futura); o que
+// mudou é que a Fase 1 (transmissão) não depende mais disso.
 export async function POST(request: NextRequest) {
   try {
     return await emitirNotaFiscal(request);

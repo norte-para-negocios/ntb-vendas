@@ -1593,6 +1593,92 @@ endpoint.**
   foram apagados depois do teste, mesmo princípio de sempre. Artefatos
   entregues em `~/ClaudeGerado/nfce-homologacao-2026-08-04/`.
 
+**Atualização 2026-08-06 (Task 18) — validação ponta a ponta do pipeline
+completo do app (não mais script standalone) em homologação: NFC-e E NF-e
+autorizadas de verdade, 2 bugs reais achados e corrigidos no caminho.**
+
+Primeira vez que a emissão foi testada de ponta a ponta *através do app*
+(loja real criada no `ntb-vendas`, certificado subido via `/api/certificado`,
+pedido fechado disparando `/api/fiscal/emitir`) em vez de um script
+standalone — as atualizações anteriores (06/07 a 04/08) validaram a técnica
+via scripts fora do repo; esta validou o CÓDIGO que o produto final usa.
+Loja de teste: AMJ Santos Restaurante (mesmo certificado/CNPJ
+`39.912.717/0001-45` já usado em 03/08 e 04/08), `ambiente=homologacao`
+confirmado o tempo todo, apagada (loja + produtos + pedidos + segredos +
+Storage) ao final.
+
+- **NFC-e (modelo 65): `cStat=100`, chave
+  `29260839912717000145650020000000051161784640`, protocolo
+  `329260000126333`** — confirmado independentemente via
+  `NfeConsultaProtocolo4` no SVRS (mesmo `cStat=100` na consulta). PDF
+  (cupom) baixado do Storage e confirmado `PDF document, version 1.7`.
+- **NF-e (modelo 55): `cStat=100`, chave
+  `29260839912717000145559200000000061722249270`, protocolo
+  `129261000153932`**, com destinatário fake (`11144477735`/"Cliente Teste").
+  DANFE baixado e confirmado válido. (Cross-check independente via
+  `NfeConsultaProtocolo4` na infra própria da BA bateu em 403 — provável
+  path/case específico do IIS deles, não perseguido; a resposta de
+  autorização em si já veio direto da SEFAZ na transmissão, que é a fonte
+  primária.)
+
+**Bug real #1 — `xProd`/`xNome` de homologação era APPEND, deveria ser
+REPLACE** (já sinalizado como suspeita pela revisão final de branch antes
+desta task, confirmado ao vivo pelas duas rejeições abaixo):
+- NFC-e: `cStat=373` "Descricao do primeiro item diferente de NOTA FISCAL
+  EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" — a SEFAZ exige
+  que o `xProd` do primeiro item seja **exatamente** esse texto em
+  homologação, não `"${nomeProduto} - ${aviso}"`. `montarXProd` corrigida
+  pra substituir (não concatenar) quando `comAvisoHomologacao=true`.
+- NF-e: o mesmo princípio já tinha sido corrigido preventivamente pro
+  `<dest>/xNome` antes de qualquer teste ao vivo (a concatenação antiga
+  também estourava o limite de 60 caracteres do campo — a frase de aviso
+  sozinha já tem 65, por isso ganhou uma variante mais curta,
+  `AVISO_HOMOLOGACAO_XNOME`, com o texto oficial de 58 caracteres
+  "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL").
+
+**Achado #2 — série 900+ (`nfce_serie=920`) quebra especificamente a
+NFC-e/SVRS com `cStat=253` "Digito Verificador da chave de acesso composta
+invalida", uma mensagem enganosa.** A faixa 910–969 documentada em
+03-04/08 como "segura" é uma correção específica pro `cStat=495` da
+**SEFAZ-BA/modelo 55** (infra própria) — **não se aplica a NFC-e/modelo
+65**, que é sempre roteada pro SVRS (ver achado de endpoint de 04/08). A
+hipótese mais provável (não confirmada com a SEFAZ, mas consistente com a
+convenção nacional): séries 900-999 são convencionalmente reservadas pra
+NFC-e emitida em **contingência**, e o SVRS parece rejeitar
+`tpEmis=1`(normal)+série 900+ com esse cStat genérico em vez de um erro
+específico de série/tpEmis. A chave/DV em si estavam matematicamente
+corretos o tempo todo (confirmado recalculando à mão contra 2 chaves reais
+já autorizadas do histórico — 04/08 e 03/08 — batendo nos dois casos); o
+`cStat=253` some completamente ao trocar pra uma série fora da faixa
+900-999 (usado `nfce_serie=2` no teste). **Ação prática: `nfce_serie`
+nunca deve usar a faixa 900-969 — essa faixa é só pro caminho de NF-e via
+SEFAZ-BA (`nfe_serie`), não pra NFC-e via SVRS.**
+
+**Bug real #3 (código corrigido) — NF-e sem `<enderDest>` é REJEITADA pela
+SEFAZ-BA (modelo 55), não só falha na geração do DANFE como se pensava
+antes desta task.** `cStat=719` "NF-e sem a identificação do destinatario"
+mesmo com `<CPF>`/`<xNome>` corretamente preenchidos — a doc nacional tem
+um `cStat=726` mais específico pra "sem endereço", mas a SEFAZ-BA usa o 719
+genérico aqui (mesma classe de divergência de UF do `cStat=495`, ver
+03/08). Confirmado isolando a variável: o MESMO XML, só acrescido de
+`<enderDest>`, autoriza. Como `DestinatarioNota` não captura endereço real
+do cliente (limitação conhecida, documentada há mais tempo só como
+"quebra a geração do DANFE"), `lib/fiscal/xml.ts` agora sempre preenche
+`<enderDest>` com o endereço do **emitente** como placeholder fictício
+(schema-válido, `cMun`/IBGE já sabido correto) em vez de omitir o grupo —
+resolve tanto a rejeição da SEFAZ quanto o motivo original da limitação
+documentada. Capturar o endereço real do destinatário continua fora de
+escopo.
+
+- Commits: `lib/fiscal/xml.ts` (bugs #1 e #3) e
+  `app/api/fiscal/emitir/route.ts` (comentário da limitação conhecida
+  atualizado pra refletir #3).
+- Certificado, senha, CSC/CSCID e o CNPJ nunca foram impressos em nenhum
+  log/relatório desta sessão — lidos de um arquivo de credenciais fora do
+  repo, apagado ao final junto com o `.pfx`. PDFs de homologação (sem
+  valor fiscal) entregues em
+  `~/ClaudeGerado/fiscal-homologacao-2026-08-06/`.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`

@@ -47,6 +47,14 @@ export interface MontarXmlParams {
 // histórico em AGENTS.md (2026-08-04) sobre qual campo é o certo pra cada modelo.
 const AVISO_HOMOLOGACAO = 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
 
+// Variante pro <dest>/xNome de NF-e: esse campo tem limite de 60 caracteres
+// no schema (diferente do xProd, que tem 120) — a frase acima sozinha já
+// tem 65, estouraria o limite mesmo sem concatenar o nome do cliente. Texto
+// exato (58 caracteres) é a convenção padrão usada pelas bibliotecas/SEFAZ
+// pra esse campo especificamente. Achado real no Task 18 (2026-08-06):
+// REPLACE, não append — ver comentário no uso abaixo.
+const AVISO_HOMOLOGACAO_XNOME = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
+
 // Escapa entidades XML obrigatórias em qualquer valor de texto livre
 // interpolado nos templates abaixo — achado da revisão final de branch
 // (2026-08-06): nome de produto com "&" (ex.: "Fish & Chips", comum em
@@ -66,20 +74,21 @@ function escapeXml(s: string): string {
 }
 
 // xProd tem limite de 120 caracteres no schema da NFe/NFC-e (contando o
-// texto decodificado, não os bytes com entidade escapada). Em homologação,
-// o primeiro item de uma NFC-e ganha o aviso obrigatório concatenado (ver
-// AVISO_HOMOLOGACAO acima) — um nome de produto longo + esse aviso (~68
-// caracteres com o separador " - ") podia estourar o limite. Trunca só a
-// parte do NOME do produto (o aviso é exigência de compliance, não pode
-// ser cortado) e escapa depois de montar a string final.
+// texto decodificado, não os bytes com entidade escapada).
 const XPROD_MAX = 120;
 
+// Achado real no Task 18 (2026-08-06): a SEFAZ REJEITA (cStat=373,
+// "Descricao do primeiro item diferente de NOTA FISCAL EMITIDA EM AMBIENTE
+// DE HOMOLOGACAO - SEM VALOR FISCAL") se o xProd do primeiro item da NFC-e
+// em homologação for o nome do produto CONCATENADO com o aviso — a
+// validação exige o texto EXATO, sem nada antes ou depois. Mesma convenção
+// de REPLACE (não append) já corrigida pro <dest>/xNome de NF-e acima,
+// confirmada ao vivo desta vez pela própria mensagem de rejeição da SEFAZ
+// (não é suposição). A versão antiga deste comentário dizia "ganha o aviso
+// concatenado" — estava errada, corrigido aqui.
 function montarXProd(nomeProduto: string, comAvisoHomologacao: boolean): string {
-  if (!comAvisoHomologacao) return escapeXml(nomeProduto.slice(0, XPROD_MAX));
-  const sufixo = ` - ${AVISO_HOMOLOGACAO}`;
-  const espacoNome = Math.max(XPROD_MAX - sufixo.length, 0);
-  const nomeTruncado = nomeProduto.length > espacoNome ? nomeProduto.slice(0, espacoNome) : nomeProduto;
-  return escapeXml(`${nomeTruncado}${sufixo}`);
+  if (comAvisoHomologacao) return escapeXml(AVISO_HOMOLOGACAO);
+  return escapeXml(nomeProduto.slice(0, XPROD_MAX));
 }
 
 // Componentes de data/hora sempre resolvidos em America/Sao_Paulo, nunca a
@@ -166,8 +175,42 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     ? (() => {
         const doc = destinatario.cpfCnpj.replace(/\D/g, '');
         const tagDoc = doc.length === 14 ? 'CNPJ' : 'CPF';
-        const xNome = escapeXml(tpAmb === 2 ? `${destinatario.nome} - ${AVISO_HOMOLOGACAO}` : destinatario.nome);
-        return `<dest><${tagDoc}>${doc}</${tagDoc}><xNome>${xNome}</xNome><indIEDest>9</indIEDest></dest>`;
+        // Achado da revisão final de branch (2026-08-06), confirmado ao
+        // testar de verdade no Task 18: a convenção correta da SEFAZ pra
+        // homologação de NF-e é SUBSTITUIR xNome do destinatário pelo aviso
+        // fixo, não concatenar com o nome real — diferente da NFC-e (sem
+        // <dest>), que usa o xProd do primeiro item pra isso (ver acima).
+        // A versão antiga concatenava `${nome} - ${AVISO_HOMOLOGACAO}` sem
+        // truncar, estourando o limite de 60 caracteres do schema (o aviso
+        // de xProd sozinho já tem 65) e rejeitando com cStat=225 "Falha no
+        // Schema XML" antes mesmo de chegar em regra de negócio.
+        const xNome = escapeXml(tpAmb === 2 ? AVISO_HOMOLOGACAO_XNOME : destinatario.nome);
+        // Achado real no Task 18 (2026-08-06): a SEFAZ-BA (infra própria,
+        // usada pro modelo 55 — ver lib/fiscal/soap.ts) rejeita com
+        // cStat=719 "NF-e sem a identificação do destinatario" um <dest>
+        // SEM <enderDest>, mesmo com CNPJ/CPF+xNome corretamente
+        // preenchidos — apesar do texto da mensagem sugerir "identificação"
+        // genérica, na prática é especificamente a ausência de endereço (a
+        // doc nacional documenta um cStat=726 mais específico pra esse
+        // caso, mas a SEFAZ-BA não usa ele aqui — mesma classe de
+        // divergência de UF já registrada em AGENTS.md pro cStat=495).
+        // Confirmado ao vivo: o MESMO XML, só acrescido de <enderDest>,
+        // autoriza (cStat=100). Como `DestinatarioNota` não captura endereço
+        // real do cliente (limitação conhecida, documentada em AGENTS.md —
+        // era considerada só um problema de geração de DANFE, agora sabemos
+        // que também bloqueia a TRANSMISSÃO em si pra SEFAZ-BA/modelo 55),
+        // usamos o endereço do próprio EMITENTE como placeholder
+        // fictício — mesmo princípio de "obviamente fictício mas
+        // schema-válido" já usado no aviso de homologação: preenche o
+        // requisito estrutural sem inventar um endereço que pareça real, e
+        // usa um cMun (código IBGE) que já sabemos válido, evitando o risco
+        // de um município inventado gerar uma rejeição nova.
+        const enderDestXml =
+          `<enderDest><xLgr>${escapeXml(emitente.logradouro)}</xLgr><nro>${escapeXml(emitente.numero)}</nro>` +
+          `<xBairro>${escapeXml(emitente.bairro)}</xBairro><cMun>${emitente.cMun}</cMun>` +
+          `<xMun>${escapeXml(emitente.municipio)}</xMun><UF>${emitente.uf}</UF><CEP>${emitente.cep}</CEP>` +
+          `<cPais>1058</cPais><xPais>BRASIL</xPais></enderDest>`;
+        return `<dest><${tagDoc}>${doc}</${tagDoc}><xNome>${xNome}</xNome>${enderDestXml}<indIEDest>9</indIEDest></dest>`;
       })()
     : '';
 
