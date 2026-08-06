@@ -11,40 +11,54 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 //
 // Achado de revisão (Task 16, 2026-08-05): sem a checagem abaixo, esta rota
 // aceitava QUALQUER string como `pdfPath` e assinava com a service role —
-// como `fiscal_notas` tem `select using (true)` pra `anon` (migration 034,
+// como `fiscal_notas` tinha `select using (true)` pra `anon` (migration 034,
 // mesmo nível de sensibilidade de store_fiscal_certificates: CNPJ real,
 // venda detalhada, valores), e o bucket é privado especificamente pra
 // exigir "download só via signed URL sob demanda, nunca a URL pública
 // direta" (comentário original da migration 034), esta rota sem validação
 // desfazia essa fronteira: "eu sei/adivinho um caminho de arquivo" virava
 // "eu consigo baixar o PDF real", sem precisar de nenhuma referência real
-// em fiscal_notas. Corrigido: só assina se o path pedido bater com o
-// pdf_path OU xml_path de ALGUMA linha real de fiscal_notas — não precisa
-// saber de qual loja (não há sessão/loja autenticada nesta rota mesmo), só
-// impede sondar o bucket inteiro com paths arbitrários/adivinhados.
+// em fiscal_notas.
+//
+// Achado de revisão MAIS FORTE (revisão final de branch, 2026-08-06): a
+// correção original só checava "ALGUMA linha de fiscal_notas referencia
+// esse path" — insuficiente por si só, porque `fiscal_notas` tinha SELECT
+// público (migration 034), então bastava ler qualquer linha de QUALQUER
+// loja pra descobrir um path válido e passar nessa checagem. A migration
+// 039 já fecha esse SELECT público (fiscal_notas só é lida via
+// `fetch_fiscal_notas_secure`, scoped por store_id), mas defesa em
+// profundidade importa numa rota que lida com dado fiscal/pessoal real
+// (CNPJ, endereço, e pra NF-e o CPF/nome reais do cliente): agora o caller
+// precisa mandar o `noteId` específico, e a checagem confirma que o path
+// pedido bate com o `pdf_path`/`xml_path` DAQUELA nota exata — não mais "de
+// alguma nota qualquer". Isso também deixa pronto o lugar certo pra
+// acrescentar uma checagem de `storeId` no futuro, se este projeto ganhar
+// autenticação real por loja.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const pdfPath = body?.pdfPath;
+  const noteId = body?.noteId;
   if (typeof pdfPath !== 'string' || !pdfPath) {
     return NextResponse.json({ success: false, message: 'pdfPath inválido.' }, { status: 400 });
+  }
+  if (typeof noteId !== 'string' || !noteId) {
+    return NextResponse.json({ success: false, message: 'noteId inválido.' }, { status: 400 });
   }
 
   const admin = getSupabaseAdmin();
 
-  // Duas queries `.eq()` parametrizadas em vez de um único `.or()` com
-  // `pdfPath` interpolado na string do filtro — `pdfPath` vem direto do
-  // body da requisição (não confiável) e o PostgREST não escapa o valor de
-  // dentro de `.or('coluna.eq.<valor>', ...)` sozinho; um valor com vírgula/
-  // parênteses poderia distorcer o filtro combinado. `.eq()` normal passa
-  // o valor como parâmetro de verdade, sem esse risco.
-  const [porPdf, porXml] = await Promise.all([
-    admin.from('fiscal_notas').select('id').eq('pdf_path', pdfPath).limit(1).maybeSingle(),
-    admin.from('fiscal_notas').select('id').eq('xml_path', pdfPath).limit(1).maybeSingle(),
-  ]);
-  if (porPdf.error || porXml.error) {
+  // Busca a nota específica pelo id e confere que o path pedido é
+  // EXATAMENTE o pdf_path OU xml_path gravado NESSA linha — não basta
+  // existir em alguma linha qualquer da tabela.
+  const { data: nota, error: notaErr } = await admin
+    .from('fiscal_notas')
+    .select('pdf_path, xml_path')
+    .eq('id', noteId)
+    .maybeSingle();
+  if (notaErr) {
     return NextResponse.json({ success: false, message: 'Falha ao validar o caminho do arquivo.' }, { status: 500 });
   }
-  if (!porPdf.data && !porXml.data) {
+  if (!nota || (nota.pdf_path !== pdfPath && nota.xml_path !== pdfPath)) {
     return NextResponse.json({ success: false, message: 'Arquivo não encontrado.' }, { status: 404 });
   }
 

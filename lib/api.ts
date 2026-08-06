@@ -953,27 +953,36 @@ export const fetchStoreFiscalConfig = async (storeId: string): Promise<StoreFisc
 };
 
 // Lista de tentativas de emissão fiscal da loja (aba "Notas Fiscais" do
-// admin, Task 16) — leitura direta, mesma RLS pública de
-// store_fiscal_config (fiscal_notas_select_anon, ver migration 034).
+// admin, Task 16) — via RPC `fetch_fiscal_notas_secure` (security definer,
+// scoped por store_id), não mais `.from('fiscal_notas').select('*')` direto.
+// Achado crítico da revisão final de branch (2026-08-06): fiscal_notas
+// tinha SELECT liberado pra qualquer um com a chave anônima, sem filtro de
+// loja nenhum (venda detalhada, chave de acesso, protocolo e paths do
+// Storage de QUALQUER loja da plataforma) — mesma classe de vazamento já
+// corrigida uma vez em orders/order_items (021/022). Migration 039 fecha o
+// SELECT direto; a RPC devolve exatamente as mesmas colunas que o
+// `.select('*')` antigo devolvia (mesmo `row_to_json` de uma linha inteira
+// de `fiscal_notas`), então `FiscalNotasView` continua funcionando sem
+// nenhuma mudança de shape.
 export const fetchFiscalNotas = async (storeId: string): Promise<FiscalNota[]> => {
-  const { data, error } = await supabase
-    .from('fiscal_notas')
-    .select('*')
-    .eq('store_id', storeId)
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.rpc('fetch_fiscal_notas_secure', { p_store_id: storeId });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as FiscalNota[];
 };
 
 // Signed URL sob demanda pro XML/PDF de uma nota — o bucket
 // fiscal-documentos é privado (sem policy de select/insert pra anon, ver
 // migration 034), então isso precisa passar pela rota de servidor (service
-// role) em vez de bater direto no Storage a partir do client.
-export const fetchFiscalNotaPdfUrl = async (pdfPath: string): Promise<string> => {
+// role) em vez de bater direto no Storage a partir do client. `noteId`
+// (achado de revisão, 2026-08-06): a rota de servidor agora exige o id da
+// nota específica, não só o path, pra confirmar que o path bate com ESSA
+// linha exata (defesa em profundidade — ver comentário em
+// app/api/fiscal/pdf-url/route.ts).
+export const fetchFiscalNotaPdfUrl = async (noteId: string, pdfPath: string): Promise<string> => {
   const res = await fetch('/api/fiscal/pdf-url', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pdfPath }),
+    body: JSON.stringify({ noteId, pdfPath }),
   });
   const json = await res.json();
   if (!json.success) throw new Error(json.message || 'Falha ao gerar URL do PDF.');

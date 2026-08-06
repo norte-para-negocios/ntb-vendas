@@ -4837,7 +4837,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
         if (!nota.pdf_path) return;
         setDownloadingId(nota.id);
         try {
-            const url = await fetchFiscalNotaPdfUrl(nota.pdf_path);
+            const url = await fetchFiscalNotaPdfUrl(nota.id, nota.pdf_path);
             window.open(url, '_blank', 'noopener');
         } catch (e: any) {
             toast.error('Erro ao gerar link do PDF: ' + e.message);
