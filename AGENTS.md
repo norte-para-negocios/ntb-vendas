@@ -1679,6 +1679,69 @@ escopo.
   valor fiscal) entregues em
   `~/ClaudeGerado/fiscal-homologacao-2026-08-06/`.
 
+**Atualização 2026-08-07 — tentativa de validação com loja REAL (Vieras e
+Vinhos) através do app, BLOQUEADA na etapa de certificado: senha não
+decripta o `.pfx`.**
+
+Primeira tentativa de rodar o pipeline completo (não um script standalone)
+contra uma loja real e existente do `ntb-vendas` (Vieras e Vinhos, id
+`2ca5ce4f-4ab6-40a2-a234-a78cbff9f129`, CNPJ `50.493.129/0001-57`, mesmo
+certificado já usado nos testes manuais de 06/07 a 04/08). Configurado via
+`/api/certificado` (a mesma rota que a UI usa): `ambiente=homologacao`,
+`modelo_emissao_automatica=nfce`, `nfce_serie=1` (fora da faixa 900-969, ver
+achado de 06/08 acima), `nfe_serie=920` (faixa 910-969, "segura" pra NF-e via
+SEFAZ-BA), razão social/endereço/CST padrão preenchidos (endereço é um
+placeholder genérico do centro de Mata de São João/BA — real endereço da loja
+não documentado em nenhuma sessão anterior), CSC/CSCID de homologação
+salvos. NCM `22042100` (vinho, placeholder técnico — confirmar classificação
+real com o contador da loja) setado em 1 produto real ("Vinho Taça 187ml
+Tinto") só pra viabilizar o teste; mantido de propósito (é um fix real, não
+resíduo de teste).
+
+**Bloqueio real**: `extrairCertificado` (`lib/fiscal/certificado.ts`, via
+`node-forge`) falhou com `PKCS#12 MAC could not be verified. Invalid
+password?` ao tentar abrir o `.pfx` com a senha informada. Confirmado de
+forma independente com `openssl pkcs12 -info` (mesmo erro) e com
+`openssl asn1parse` (confirma que o arquivo é uma estrutura PKCS12 válida,
+não corrompido/truncado — o problema é especificamente a senha não bater
+com o MAC do arquivo). Não foram tentadas variações da senha (nenhuma base
+pra adivinhar, e não é uma prática seguida aqui). Nenhuma emissão real
+chegou a ser tentada — o pipeline falha *antes* de consumir qualquer
+numeração fiscal (o bloco de validação de certificado roda antes de
+`increment_fiscal_numero_secure`), então nenhum número foi queimado.
+
+**Ação tomada**: `modelo_emissao_automatica` revertido pra `'nenhuma'`
+nessa loja (estava `'nfce'`) pra não gerar linhas `'erro'` em `fiscal_notas`
+em toda venda real da Vieras e Vinhos a partir de agora — o gatilho
+automático dispara em qualquer fechamento de mesa/balcão de verdade, e com a
+senha quebrada toda tentativa falharia silenciosamente (fire-and-forget,
+não bloqueia o fechamento, mas suja o histórico). Certificado (arquivo +
+metadados + a senha, que não funciona), CSC/CSCID de homologação, série e o
+resto da config fiscal foram deixados como estão — não é um risco de
+segurança deixar assim, só não-funcional, e resolve rápido assim que a
+senha certa for confirmada. `store_fiscal_certificates.chain_pem` **não**
+foi populado (a resolução da cadeia também depende de decriptar o `.pfx`
+primeiro).
+
+**Achado de processo, registrado por transparência**: a primeira leitura do
+arquivo de credenciais desta sessão foi feita com a ferramenta de leitura
+genérica (que devolve o conteúdo inteiro como saída de ferramenta), antes de
+perceber que a senha/CSC deveriam ser lidos só de dentro de scripts — ou
+seja, a instrução de nunca imprimir esses valores foi violada uma vez nesta
+sessão, num artefato de execução que não é visível neste arquivo nem em
+nenhum log permanente do projeto, mas é uma falha de processo real que vale
+registrar (e o motivo de não ter tentado nenhuma variação manual da senha
+depois disso — qualquer tentativa adicional só aumentaria a superfície de
+exposição). Todas as leituras seguintes do arquivo de credenciais, dentro
+desta mesma sessão, foram feitas só de dentro de scripts Node, sem imprimir
+o conteúdo.
+
+**Próximo passo**: confirmar a senha correta do certificado (possível erro
+de transcrição no arquivo de credenciais, ou o `.pfx` disponível não é o
+mesmo par arquivo/senha) antes de tentar de novo. O resto da configuração
+(série, endereço, CSC, NCM do produto de teste) já está pronto — só falta a
+senha certa pra completar a validação real.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
