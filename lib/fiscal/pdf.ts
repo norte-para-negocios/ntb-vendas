@@ -20,20 +20,50 @@
 // algum dia vier uma string base64 legítima de outra origem. Evitado aqui
 // tratando sempre o valor pelo que ele realmente é: bytes crus.
 // @ts-expect-error node-sped-pdf não publica tipos, ver nota acima
-import { DANFe as danfeRaw, DANFCe as danfceRaw } from 'node-sped-pdf';
+import { DANFe as danfeRaw } from 'node-sped-pdf';
+import { gerarPDF as gerarNfceDanfe } from 'nfe-danfe-pdf';
 
 type GerarPdfFn = (data: { xml: string }) => Promise<Uint8Array>;
 const DANFe: GerarPdfFn = danfeRaw;
-const DANFCe: GerarPdfFn = danfceRaw;
+
+// Coleta um PDFKit.PDFDocument (o que nfe-danfe-pdf devolve, um stream, não
+// Buffer/Uint8Array como node-sped-pdf) inteiro num Buffer — a lib já chama
+// `.end()` internamente antes de devolver (confirmado: o exemplo do README
+// faz `pdfDoc.pipe(writeStream)` sem `.end()` manual e o stream termina
+// sozinho), então só falta juntar os chunks.
+function coletarPdfKitDoc(doc: Awaited<ReturnType<typeof gerarNfceDanfe>>): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+}
 
 // Gera o PDF (DANFE pra NF-e modelo 55, DANFCe/cupom pra NFC-e modelo 65) a
 // partir do XML autorizado completo (nfeProc = NFe assinada + protNFe, ver
-// montarNfeProc abaixo). `Buffer.from(resultado)` copia os bytes crus do
-// Uint8Array pra um Buffer de verdade — NÃO decodifica base64, já que o dado
-// já é binário (ver nota no topo do arquivo).
+// montarNfeProc abaixo).
+//
+// **Modelos usam bibliotecas DIFERENTES de propósito** (2026-08-11, spike
+// documentado em docs/plans/2026-08-10-cupom-fiscal-legibilidade.md):
+// `node-sped-pdf` (NF-e, continua igual) vs. `nfe-danfe-pdf` (NFC-e, trocado).
+// Motivo: `node-sped-pdf` tem 3 valores HARDCODED errados no template de
+// DANFCe (protocolo sempre "000000000000000", URL de consulta sempre
+// `sefaz.mt.gov.br` independente da UF real, tributos sempre zerados) —
+// confirmado lendo o bundle compilado, não são bug de dado de entrada, o
+// pacote nunca leu esses campos do XML. `nfe-danfe-pdf` lê os 3 corretos do
+// XML de verdade (testado com uma NFC-e real autorizada desta mesma loja).
+// Trade-off aceito conscientemente: em ambiente de HOMOLOGAÇÃO (só),
+// `nfe-danfe-pdf` mascara o nome de TODOS os itens com o aviso obrigatório
+// da SEFAZ (não só o primeiro item, como a regra realmente exige) — cosmético
+// e sem risco, já que nota de homologação não tem valor fiscal; confirmado
+// que em PRODUÇÃO (`tpAmb=1`) os nomes reais aparecem certos.
 export async function gerarPdfNota(modelo: '55' | '65', nfeProcXml: string): Promise<Buffer> {
-  const gerar = modelo === '55' ? DANFe : DANFCe;
-  const resultado = await gerar({ xml: nfeProcXml });
+  if (modelo === '65') {
+    const doc = await gerarNfceDanfe(nfeProcXml);
+    return coletarPdfKitDoc(doc);
+  }
+  const resultado = await DANFe({ xml: nfeProcXml });
   return Buffer.isBuffer(resultado) ? resultado : Buffer.from(resultado);
 }
 

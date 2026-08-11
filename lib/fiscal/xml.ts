@@ -246,6 +246,11 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro>` +
     `<vNF>${vNF}</vNF></ICMSTot></total><transp><modFrete>9</modFrete></transp>` +
     `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vNF}</vPag></detPag></pag>` +
+    // Grupo opcional pelo schema, mas exigido na prática por `nfe-danfe-pdf`
+    // (lib/fiscal/pdf.ts) — sem ele, a lib quebra tentando ler
+    // `infAdic.infCpl` de um `infAdic` undefined. Vazio por padrão; dá pra
+    // usar de verdade no futuro (ex.: "Volte sempre!").
+    `<infAdic><infCpl></infCpl></infAdic>` +
     `</infNFe></NFe>`;
 
   return { xml: nfeXml, chave, infNFeId };

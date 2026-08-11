@@ -15,6 +15,7 @@
     "date-fns": "^4.4.0",
     "lucide-react": "^1.22.0",
     "next": "16.2.9",
+    "nfe-danfe-pdf": "^1.0.3",
     "node-forge": "^1.4.0",
     "node-sped-pdf": "^1.0.66",
     "qrcode": "^1.5.4",
