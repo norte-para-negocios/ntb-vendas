@@ -248,9 +248,10 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vNF}</vPag></detPag></pag>` +
     // Grupo opcional pelo schema, mas exigido na prática por `nfe-danfe-pdf`
     // (lib/fiscal/pdf.ts) — sem ele, a lib quebra tentando ler
-    // `infAdic.infCpl` de um `infAdic` undefined. Vazio por padrão; dá pra
-    // usar de verdade no futuro (ex.: "Volte sempre!").
-    `<infAdic><infCpl></infCpl></infAdic>` +
+    // `infAdic.infCpl` de um `infAdic` undefined. `infCpl` vazio (string
+    // zero-length) é rejeitado pela SEFAZ (cStat=225, minLength do schema),
+    // por isso um texto fixo não-vazio em vez de string vazia.
+    `<infAdic><infCpl>Documento emitido pelo sistema NTB Vendas.</infCpl></infAdic>` +
     `</infNFe></NFe>`;
 
   return { xml: nfeXml, chave, infNFeId };
