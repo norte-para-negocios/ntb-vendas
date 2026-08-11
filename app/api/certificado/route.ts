@@ -184,6 +184,8 @@ export async function POST(req: NextRequest) {
 
     const inscricaoMunicipal = readOptionalString(form, 'inscricaoMunicipal');
     if (inscricaoMunicipal !== undefined) configFields.inscricao_municipal = inscricaoMunicipal;
+    const telefone = readOptionalString(form, 'telefone');
+    if (telefone !== undefined) configFields.telefone = telefone;
     const casasDecimais = readOptionalInt(form, 'casasDecimais');
     if (casasDecimais !== undefined) configFields.casas_decimais = casasDecimais;
     const cnpjAutorizado = readOptionalString(form, 'cnpjAutorizado');

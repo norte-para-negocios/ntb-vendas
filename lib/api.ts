@@ -901,6 +901,7 @@ export interface UpdateStoreFiscalConfigParams {
   cteUltimoNumero?: number;
   mdfeUltimoNumero?: number;
   inscricaoMunicipal?: string;
+  telefone?: string;
   casasDecimais?: number;
   cnpjAutorizado?: string;
   observacaoNfe?: string;

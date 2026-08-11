@@ -30,6 +30,7 @@ export interface DadosEmitenteNota {
   cstPisPadrao: string;
   cstCofinsPadrao: string;
   autXmlCnpj?: string; // exigência específica da BA — CNPJ do escritório de contabilidade
+  telefone?: string; // opcional — schema NFe aceita <fone> ausente
 }
 
 export interface MontarXmlParams {
@@ -233,7 +234,9 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<emit><CNPJ>${emitente.cnpj}</CNPJ><xNome>${escapeXml(emitente.razaoSocial)}</xNome>` +
     `<enderEmit><xLgr>${escapeXml(emitente.logradouro)}</xLgr><nro>${escapeXml(emitente.numero)}</nro><xBairro>${escapeXml(emitente.bairro)}</xBairro>` +
     `<cMun>${emitente.cMun}</cMun><xMun>${escapeXml(emitente.municipio)}</xMun><UF>${emitente.uf}</UF><CEP>${emitente.cep}</CEP>` +
-    `<cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${emitente.ie}</IE><CRT>1</CRT></emit>` +
+    `<cPais>1058</cPais><xPais>BRASIL</xPais>` +
+    (emitente.telefone ? `<fone>${emitente.telefone.replace(/\D/g, '')}</fone>` : '') +
+    `</enderEmit><IE>${emitente.ie}</IE><CRT>1</CRT></emit>` +
     destXml +
     autXmlXml +
     detXml +

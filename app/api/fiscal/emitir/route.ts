@@ -210,7 +210,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // 4. Itens da venda (com NCM do produto).
   const { data: items } = await admin
     .from('order_items')
-    .select('quantity, status, price_at_time, product:products(id, name, ncm)')
+    .select('quantity, status, price_at_time, product:products(id, name, ncm, omie_codigo)')
     .in('order_id', orderIds);
 
   const itensValidos = (items ?? []).filter((i) => i.status !== 'canceled');
@@ -378,7 +378,10 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
 
     // 6. Monta itens do XML.
     const itensXml: ItemNota[] = itensValidos.map((i) => ({
-      cProd: String((i as any).product.id).slice(0, 8),
+      // omie_codigo é o SKU real (ex.: "90935"), legível no cupom impresso.
+      // Fallback pro UUID truncado só cobre produtos cadastrados manualmente
+      // sem vínculo com o Omie (omie_codigo null) — nunca deve faltar código.
+      cProd: (i as any).product.omie_codigo || String((i as any).product.id).slice(0, 8),
       xProd: (i as any).product.name,
       ncm: (i as any).product.ncm,
       qCom: i.quantity,
@@ -428,6 +431,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         // 2026-08-03/04, autorização cStat=100 tanto em NF-e quanto em
         // NFC-e).
         autXmlCnpj: (config.cnpj_autorizado || '').replace(/\D/g, '') || '13937073000156',
+        telefone: config.telefone || undefined,
       },
       itens: itensXml,
       destinatario: modelo === '55' ? body.destinatario : undefined,

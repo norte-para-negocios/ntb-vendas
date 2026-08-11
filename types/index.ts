@@ -228,6 +228,7 @@ export interface StoreFiscalConfig {
   cte_ultimo_numero: number;
   mdfe_ultimo_numero: number;
   inscricao_municipal: string | null;
+  telefone: string | null;
   casas_decimais: number;
   cnpj_autorizado: string | null;
   observacao_nfe: string | null;

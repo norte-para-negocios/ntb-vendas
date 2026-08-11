@@ -204,6 +204,7 @@ export const AdminModule: React.FC = () => {
   const [fiscalCteUltimoNumero, setFiscalCteUltimoNumero] = useState('');
   const [fiscalMdfeUltimoNumero, setFiscalMdfeUltimoNumero] = useState('');
   const [fiscalInscricaoMunicipal, setFiscalInscricaoMunicipal] = useState('');
+  const [fiscalTelefone, setFiscalTelefone] = useState('');
   const [fiscalCasasDecimais, setFiscalCasasDecimais] = useState('2');
   const [fiscalCnpjAutorizado, setFiscalCnpjAutorizado] = useState('');
   const [fiscalObservacaoNfe, setFiscalObservacaoNfe] = useState('');
@@ -303,6 +304,7 @@ export const AdminModule: React.FC = () => {
       setFiscalCteUltimoNumero('');
       setFiscalMdfeUltimoNumero('');
       setFiscalInscricaoMunicipal('');
+      setFiscalTelefone('');
       setFiscalCasasDecimais('2');
       setFiscalCnpjAutorizado('');
       setFiscalObservacaoNfe('');
@@ -378,6 +380,7 @@ export const AdminModule: React.FC = () => {
           setFiscalCteUltimoNumero(String(fiscalConfig.cte_ultimo_numero ?? 0));
           setFiscalMdfeUltimoNumero(String(fiscalConfig.mdfe_ultimo_numero ?? 0));
           setFiscalInscricaoMunicipal(fiscalConfig.inscricao_municipal || '');
+          setFiscalTelefone(fiscalConfig.telefone || '');
           setFiscalCasasDecimais(String(fiscalConfig.casas_decimais ?? 2));
           setFiscalCnpjAutorizado(fiscalConfig.cnpj_autorizado || '');
           setFiscalObservacaoNfe(fiscalConfig.observacao_nfe || '');
@@ -506,6 +509,7 @@ export const AdminModule: React.FC = () => {
           if (fiscalCteUltimoNumero) params.cteUltimoNumero = Number(fiscalCteUltimoNumero);
           if (fiscalMdfeUltimoNumero) params.mdfeUltimoNumero = Number(fiscalMdfeUltimoNumero);
           if (fiscalInscricaoMunicipal) params.inscricaoMunicipal = fiscalInscricaoMunicipal;
+          if (fiscalTelefone) params.telefone = fiscalTelefone;
           if (fiscalCasasDecimais) params.casasDecimais = Number(fiscalCasasDecimais);
           if (fiscalCnpjAutorizado) params.cnpjAutorizado = fiscalCnpjAutorizado;
           if (fiscalObservacaoNfe) params.observacaoNfe = fiscalObservacaoNfe;
@@ -1126,6 +1130,8 @@ export const AdminModule: React.FC = () => {
                           </div>
 
                           <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
+
+                          <Input label="Telefone" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
 
                           <div className="grid grid-cols-2 gap-4">
                               <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
