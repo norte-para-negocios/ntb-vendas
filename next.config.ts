@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   // node_modules (confirmado: ENOENT em produção, arquivo existe no disco).
   // Marcar como pacote externo faz o Next NUNCA tentar rastrear/reescrever
   // esses caminhos — vira um require() normal do Node, que resolve certo.
-  serverExternalPackages: ["pdfkit"],
+  serverExternalPackages: ["pdfkit", "nfe-danfe-pdf"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "res.cloudinary.com", pathname: "/dmxucnk9a/**" },
