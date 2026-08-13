@@ -118,7 +118,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         if (!universalUser) return;
         setIsLoadingStores(true);
         fetchAllStores().then((data) => {
-            setStores(data.filter(s => s.is_active));
+            setStores(data.filter(s => s.is_active && (!s.is_test || universalUser?.pode_ver_lojas_teste)));
             setIsLoadingStores(false);
         });
     }, [universalUser]);
@@ -3462,13 +3462,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div className="flex flex-col gap-1.5">
                         <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
                         <select
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 disabled:opacity-60 disabled:cursor-not-allowed"
                           value={fiscalAmbiente}
                           onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
+                          disabled={store.is_test}
                         >
                             <option value="homologacao">Homologação</option>
                             <option value="producao">Produção</option>
                         </select>
+                        {store.is_test && (
+                            <p className="text-xs text-[var(--text-muted)]">🔒 Loja de teste — ambiente sempre em homologação.</p>
+                        )}
                     </div>
 
                     <div className="flex flex-col gap-1.5">
