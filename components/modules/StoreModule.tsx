@@ -7,7 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, StoreFiscalConfig, FiscalNota } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -2795,6 +2795,42 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         }
     };
 
+    // Integração ntb-vendas -> ntb-estoque (Ordem de Produção automática,
+    // migration 042) — URL/chave nunca voltam do banco (write-only, mesmo
+    // princípio do CSC acima), só o toggle `ativo` e se já está configurada.
+    const [ntbEstoqueStatus, setNtbEstoqueStatus] = useState<NtbEstoqueIntegracaoStatus>({ configurado: false, ativo: false });
+    const [ntbEstoqueUrlInput, setNtbEstoqueUrlInput] = useState('');
+    const [ntbEstoqueApiKeyInput, setNtbEstoqueApiKeyInput] = useState('');
+    const [isSavingNtbEstoque, setIsSavingNtbEstoque] = useState(false);
+
+    useEffect(() => { fetchNtbEstoqueIntegracaoStatus(storeId).then(setNtbEstoqueStatus); }, [storeId]);
+
+    const handleSaveNtbEstoqueIntegracao = async () => {
+        if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
+            return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
+        }
+        setIsSavingNtbEstoque(true);
+        try {
+            const result = await saveNtbEstoqueIntegracaoConfig(storeId, { url: ntbEstoqueUrlInput, apiKey: ntbEstoqueApiKeyInput, ativo: true });
+            if (!result.success) throw new Error(result.message);
+            toast.success('Integração com o NTB Estoque configurada!');
+            setNtbEstoqueUrlInput('');
+            setNtbEstoqueApiKeyInput('');
+            setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(storeId));
+        } catch (e: any) {
+            toast.error('Erro ao configurar integração: ' + e.message);
+        } finally {
+            setIsSavingNtbEstoque(false);
+        }
+    };
+
+    const handleToggleNtbEstoqueAtivo = async (ativo: boolean) => {
+        const result = await saveNtbEstoqueIntegracaoConfig(storeId, { ativo });
+        if (!result.success) return toast.error('Erro ao atualizar: ' + result.message);
+        setNtbEstoqueStatus((prev) => ({ ...prev, ativo }));
+        toast.success(ativo ? 'Ordem de Produção automática ativada.' : 'Ordem de Produção automática desativada.');
+    };
+
     const certBadge = () => {
         if (!certStatus) return <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">Nenhum certificado cadastrado</Badge>;
         if (!certStatus.expires_at) return <Badge color="bg-[var(--info)]/10 text-[var(--info)]">Cadastrado (sem validade informada)</Badge>;
@@ -3589,6 +3625,53 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         Salvar Configuração Fiscal
                     </Button>
                 </div>
+            </section>
+
+            {/* INTEGRAÇÃO COM O NTB ESTOQUE (Ordem de Produção automática) */}
+            <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm space-y-4">
+                <div>
+                    <h3 className="font-bold text-lg text-[var(--text)]">Integração com o NTB Estoque</h3>
+                    <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                    <div>
+                        <h4 className="font-bold text-[var(--text)]">Ordem de Produção automática</h4>
+                        <p className="text-sm text-[var(--text-muted)]">
+                            {ntbEstoqueStatus.configurado
+                                ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
+                                : 'Ainda não configurada — preencha a URL e a chave de API abaixo.'}
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
+                        disabled={!ntbEstoqueStatus.configurado}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <Input
+                        label="URL do NTB Estoque"
+                        placeholder="https://app-estoque.norteparanegocios.com.br"
+                        value={ntbEstoqueUrlInput}
+                        onChange={e => setNtbEstoqueUrlInput(e.target.value)}
+                    />
+                    <Input
+                        label="Chave de API"
+                        type="password"
+                        placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
+                        value={ntbEstoqueApiKeyInput}
+                        onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
+                    />
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
+
+                <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque}>
+                    Salvar Integração com o NTB Estoque
+                </Button>
             </section>
 
             {/* CATEGORIES */}

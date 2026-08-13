@@ -953,6 +953,39 @@ export const fetchStoreFiscalConfig = async (storeId: string): Promise<StoreFisc
   return data;
 };
 
+// Integração ntb-vendas -> ntb-estoque (Ordem de Produção automática, ver
+// app/api/integracao/ordem-producao/route.ts e migration 042). Status via
+// RPC security definer (write-only, nunca expõe a api_key — só se está
+// configurada, ativa, e a URL, que não é segredo); escrita via rota própria
+// (service role), mesmo princípio de write-only já usado no certificado.
+export interface NtbEstoqueIntegracaoStatus {
+  configurado: boolean;
+  ativo: boolean;
+  url?: string;
+}
+
+export const fetchNtbEstoqueIntegracaoStatus = async (storeId: string): Promise<NtbEstoqueIntegracaoStatus> => {
+  const { data, error } = await supabase.rpc('fetch_ntb_estoque_integracao_status_secure', { p_store_id: storeId });
+  if (error || !data) return { configurado: false, ativo: false };
+  return data as NtbEstoqueIntegracaoStatus;
+};
+
+export const saveNtbEstoqueIntegracaoConfig = async (
+  storeId: string,
+  params: { url?: string; apiKey?: string; ativo?: boolean }
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const res = await fetch('/api/integracao/configurar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, ...params }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+};
+
 // Lista de tentativas de emissão fiscal da loja (aba "Notas Fiscais" do
 // admin, Task 16) — via RPC `fetch_fiscal_notas_secure` (security definer,
 // scoped por store_id), não mais `.from('fiscal_notas').select('*')` direto.

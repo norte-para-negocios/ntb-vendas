@@ -106,12 +106,15 @@ export async function POST(request: NextRequest) {
 
   const { data: secret } = await admin
     .from('store_ntb_estoque_secrets')
-    .select('ntb_estoque_url, ntb_estoque_api_key')
+    .select('ntb_estoque_url, ntb_estoque_api_key, ativo')
     .eq('store_id', storeId)
     .maybeSingle();
 
   if (!secret) {
     return NextResponse.json({ skipped: true, reason: 'Loja sem integração ntb-estoque configurada' });
+  }
+  if (!secret.ativo) {
+    return NextResponse.json({ skipped: true, reason: 'Integração ntb-estoque desativada pela loja' });
   }
 
   const { data: items } = await admin
