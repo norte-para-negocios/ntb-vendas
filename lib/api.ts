@@ -1107,30 +1107,13 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
     if (createError) throw createError;
 
-    const { data: categories } = await supabase.from('categories').select('*').eq('store_id', storeId);
-    const categoryMap: { [oldId: string]: string } = {};
-
-    if (categories && categories.length > 0) {
-      // Insert único (era um insert por categoria antes); casa a nova pela posição do array,
-      // já que o Postgrest devolve as linhas de um insert em lote na mesma ordem em que foram enviadas.
-      const categoriesToInsert = categories.map((cat) => ({ store_id: newStore.id, name: cat.name, order: cat.order }));
-      const { data: newCategories, error: categoriesErr } = await supabase.from('categories').insert(categoriesToInsert).select();
-      if (categoriesErr) throw categoriesErr;
-      newCategories?.forEach((newCat, i) => { categoryMap[categories[i].id] = newCat.id; });
-    }
-
-    const { data: products } = await supabase.from('products').select('*').eq('store_id', storeId);
-    if (products && products.length > 0) {
-      const productsToInsert = products.map((prod) => ({
-        category_id: prod.category_id ? categoryMap[prod.category_id] : null,
-        name: prod.name, description: prod.description, price: prod.price, image_url: prod.image_url,
-        available: prod.available, prep_time_minutes: prod.prep_time_minutes,
-      }));
-      // Achado critico de seguranca (2026-07-07): insert em lote direto em
-      // products, mesma classe do resto (ver comentario de createProduct).
-      const { error: dupErr } = await supabase.rpc('duplicate_products_secure', { p_store_id: newStore.id, p_products: productsToInsert });
-      if (dupErr) throw dupErr;
-    }
+    // Duplicação completa (categorias + produtos + grupos de opção +
+    // opções) numa RPC atômica só, com mapeamento de ID via tabela
+    // temporária (migration 043) — substitui o trio anterior (insert de
+    // categoria + duplicate_products_secure sem adicionais), que nunca
+    // copiava adicionais/opcionais de produto.
+    const { error: dupErr } = await supabase.rpc('duplicate_store_completo_secure', { p_store_id_origem: storeId, p_store_id_destino: newStore.id });
+    if (dupErr) throw dupErr;
 
     const { data: originalTables } = await supabase.rpc('get_tables_secure', { p_store_id: storeId });
     const tableCount = (originalTables as any[])?.length || 0;

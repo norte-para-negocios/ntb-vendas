@@ -31,6 +31,7 @@ export interface Store {
   logo_url: string | null;
   cnpj: string;
   is_active: boolean;
+  is_test?: boolean;
   contract_type: 'balcao' | 'balcao_mesas';
   contract_period_months: number;
   activation_date: string;
@@ -296,4 +297,5 @@ export interface UniversalUser {
   id: string;
   name: string;
   email: string;
+  pode_ver_lojas_teste?: boolean;
 }
