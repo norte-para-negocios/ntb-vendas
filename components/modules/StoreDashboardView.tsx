@@ -49,6 +49,16 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
     const weeklyStats = calcStats(weeklySales);
     const monthlyStats = calcStats(monthlySales);
 
+    // Comparação dos 3 blocos fixos do topo com o período anterior
+    // equivalente (ontem / semana passada / mês passado) — mesma base de
+    // `sales` já carregada, sem busca extra.
+    const yesterday = subDays(now, 1);
+    const prevDailyStats = calcStats(sales.filter(s => isSameDay(new Date(s.created_at), yesterday)));
+    const lastWeekRef = subDays(now, 7);
+    const prevWeeklyStats = calcStats(sales.filter(s => isSameWeek(new Date(s.created_at), lastWeekRef, { locale: ptBR })));
+    const lastMonthRef = subMonths(now, 1);
+    const prevMonthlyStats = calcStats(sales.filter(s => isSameMonth(new Date(s.created_at), lastMonthRef)));
+
     const periodSales = useMemo(() => {
         if (periodType === 'today') return dailySales;
         if (periodType === 'week') return weeklySales;
@@ -94,14 +104,14 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
         return ((current - previous) / previous) * 100;
     };
 
-    const ChangeBadge = ({ value }: { value: number | undefined }) => {
+    const ChangeBadge = ({ value, label = 'vs. período anterior' }: { value: number | undefined; label?: string }) => {
         if (value === undefined) return null;
         const isUp = value >= 0;
         const Icon = isUp ? TrendingUp : TrendingDown;
         return (
             <span className={`inline-flex items-center gap-1 text-xs font-bold ${isUp ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
                 <Icon size={14} />
-                {isUp ? '+' : ''}{value.toFixed(1)}% vs. período anterior
+                {isUp ? '+' : ''}{value.toFixed(1)}% {label}
             </span>
         );
     };
@@ -251,17 +261,38 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                 <h2 className="text-xl font-bold text-[var(--text)] mb-4">Faturamento Bruto</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
-                        { label: 'Hoje', stats: dailyStats },
-                        { label: 'Esta Semana', stats: weeklyStats },
-                        { label: 'Este Mês', stats: monthlyStats },
-                    ].map(({ label, stats }, i) => (
-                        <Card key={label} className={`${cardCls} u-grow-in u-card`} style={{ animationDelay: `${i * 60}ms` }}>
-                            <h3 className="font-bold text-[var(--text)] mb-3 border-b border-[var(--border)] pb-2">{label}</h3>
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><span className="text-sm text-[var(--text-muted)]">Total:</span><span className="font-bold text-[var(--brand)]">R$ {stats.total.toFixed(2)}</span></div>
-                                <div className="flex justify-between"><span className="text-sm text-[var(--text-muted)]">Ticket Médio:</span><span className="font-medium text-[var(--text)]">R$ {stats.ticket.toFixed(2)}</span></div>
-                                <div className="flex justify-between"><span className="text-sm text-[var(--text-muted)]">Pedidos:</span><span className="font-medium text-[var(--text)]">{stats.count}</span></div>
-                                <div className="flex justify-between"><span className="text-sm text-[var(--text-muted)]">Ocupação Mesas:</span><span className="font-medium text-[var(--text)]">{stats.tableOrders}</span></div>
+                        { label: 'Hoje', stats: dailyStats, prev: prevDailyStats, prevLabel: 'vs. ontem', accent: 'var(--brand)' },
+                        { label: 'Esta Semana', stats: weeklyStats, prev: prevWeeklyStats, prevLabel: 'vs. semana passada', accent: 'var(--info)' },
+                        { label: 'Este Mês', stats: monthlyStats, prev: prevMonthlyStats, prevLabel: 'vs. mês passado', accent: 'var(--ok)' },
+                    ].map(({ label, stats, prev, prevLabel, accent }, i) => (
+                        <Card key={label} accentColor={accent} className={`${cardCls} u-grow-in u-card pl-5`} style={{ animationDelay: `${i * 60}ms` }}>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</h3>
+                                <div className="p-1.5 rounded-full bg-[var(--surface-2)]">
+                                    <Receipt size={14} style={{ color: accent }} />
+                                </div>
+                            </div>
+                            {/* Total em destaque tipográfico (número grande primeiro,
+                                leitura de relance) + variação vs. o período anterior
+                                equivalente logo abaixo — antes eram 4 linhas de texto
+                                de mesmo peso, difícil comparar os 3 blocos num olhar. */}
+                            <p className="text-2xl font-black num" style={{ color: accent }}>R$ {stats.total.toFixed(2)}</p>
+                            <div className="min-h-[18px] mb-3">
+                                <ChangeBadge value={percentChange(stats.total, prev.total)} label={prevLabel} />
+                            </div>
+                            <div className="space-y-2 border-t border-[var(--border)] pt-2.5">
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket Médio</span>
+                                    <span className="font-medium text-[var(--text)] num">R$ {stats.ticket.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>
+                                    <span className="font-medium text-[var(--text)] num">{stats.count}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><Users size={13} /> Pedidos de Mesa</span>
+                                    <span className="font-medium text-[var(--text)] num">{stats.tableOrders}</span>
+                                </div>
                             </div>
                         </Card>
                     ))}

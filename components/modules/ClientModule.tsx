@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart, ChevronRight, CupSoda, IceCreamBowl, Sandwich, Wheat, Beef, Fish, Drumstick, Salad, Soup, Croissant } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
@@ -16,19 +16,26 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
-import { AuthBackdrop } from '@/components/AuthBackdrop';
 
 // --- COMPONENTS ---
 
-// Identidade "carta de vinhos" do cardápio do cliente: dourado usado só pra
-// preço/proveniência (o azul da marca continua sendo a cor de ação/CTA).
-// Hex fixo de propósito, como os outros consts de marca do projeto
-// (AuthBackdrop, app/page.tsx) — não é um token do design system porque só
-// existe nesta tela.
+// Identidade "carta de vinhos" do cardápio do cliente: dourado pra preço/
+// proveniência E pros CTAs do fluxo de compra (GOLD_CTA_STYLE abaixo, mudança
+// de 2026-08-15 — antes o CTA era o azul da marca, que destoava no meio da
+// identidade). Ações utilitárias fora do fluxo de compra (tema, sair, conta)
+// continuam neutras/azul. Hex fixo de propósito, como os outros consts de
+// marca do projeto (AuthBackdrop, app/page.tsx) — não é um token do design
+// system porque só existe nesta tela.
 const WINE_GOLD = '#D4AF5C';
 // Tom mais escuro só pro ícone dentro do medalhão dourado claro: o dourado
 // puro em cima do próprio tom claro (rgba 0.14) não tem contraste suficiente.
 const WINE_GOLD_DARK = '#8A6A2B';
+// CTA assinatura do fluxo de compra (Adicionar / Ver Comanda / Enviar pedido):
+// dourado sólido com texto --ink, em vez do azul padrão do design system — o
+// azul de ação no meio da identidade carta de vinhos lia como tema genérico.
+// Inline style de propósito: vence as classes bg-*/text-white do Button em
+// qualquer estado (hover incluído), sem precisar de variante nova no ui.tsx.
+const GOLD_CTA_STYLE: React.CSSProperties = { background: WINE_GOLD, color: 'var(--ink)' };
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
 // E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
@@ -43,14 +50,31 @@ function hasActivePromo(product: { price: number; promo_price?: number | null })
 // do Omie, não uma taxonomia fixa no banco).
 function categoryIcon(name: string) {
     const n = name.toLowerCase();
-    if (n.includes('champagne')) return Sparkles;
+    // Bebidas/nicho vinho primeiro (vocabulário original da loja piloto) —
+    // matches mais específicos precisam vir antes dos genéricos.
+    if (n.includes('champagne') || n.includes('espumante')) return Sparkles;
     if (n.includes('vinho')) return Wine;
-    if (n.includes('drink')) return Martini;
-    if (n.includes('long neck') || n.includes('artesan')) return Beer;
-    if (n.includes('s/ álcool') || n.includes('s/ alcool') || n.includes('suco')) return GlassWater;
-    if (n.includes('50ml') || n.includes('whisky') || n.includes('destilad') || n.includes('licor') || n.includes('conhaque')) return Flame;
+    if (n.includes('drink') || n.includes('coquetel') || n.includes('caipirinha')) return Martini;
+    if (n.includes('long neck') || n.includes('artesan') || n.includes('cerveja') || n.includes('chopp') || n.includes('chope')) return Beer;
+    if (n.includes('s/ álcool') || n.includes('s/ alcool') || n.includes('suco') || n.includes('água') || n.includes('agua')) return GlassWater;
+    if (n.includes('refri') || n.includes('soda')) return CupSoda;
+    if (n.includes('50ml') || n.includes('whisky') || n.includes('destilad') || n.includes('licor') || n.includes('conhaque') || n.includes('cachaça') || n.includes('cachaca')) return Flame;
+    if (n.includes('café') || n.includes('cafe') || n.includes('cappuccino')) return Coffee;
+    // Comida genérica (ampliado 2026-08-15: o vocabulário original só cobria
+    // o nicho de vinho — "Entradas"/"Pratos Principais" caíam no talher
+    // genérico até em restaurante comum).
     if (n.includes('pizza')) return Pizza;
-    if (n.includes('sobremesa')) return Cake;
+    if (n.includes('sobremesa') || n.includes('doce') || n.includes('bolo') || n.includes('torta')) return Cake;
+    if (n.includes('açaí') || n.includes('acai') || n.includes('sorvete') || n.includes('gelato')) return IceCreamBowl;
+    if (n.includes('lanche') || n.includes('burger') || n.includes('búrguer') || n.includes('sandu')) return Sandwich;
+    if (n.includes('massa') || n.includes('macarr') || n.includes('pasta')) return Wheat;
+    if (n.includes('carne') || n.includes('churrasco') || n.includes('grelhado') || n.includes('parrilla') || n.includes('steak')) return Beef;
+    if (n.includes('peixe') || n.includes('fruto') || n.includes('sushi') || n.includes('japon') || n.includes('ostra') || n.includes('camarão') || n.includes('camarao') || n.includes('ceviche')) return Fish;
+    if (n.includes('frango') || n.includes('asa') || n.includes('porç') || n.includes('porc') || n.includes('petisco')) return Drumstick;
+    if (n.includes('salada') || n.includes('vegan') || n.includes('vegetarian') || n.includes('fit')) return Salad;
+    if (n.includes('sopa') || n.includes('caldo')) return Soup;
+    if (n.includes('entrada') || n.includes('aperitivo') || n.includes('couvert')) return Croissant;
+    if (n.includes('prato') || n.includes('principal') || n.includes('executivo') || n.includes('almoço') || n.includes('almoco')) return ChefHat;
     if (n.includes('taxa')) return Receipt;
     return UtensilsCrossed;
 }
@@ -84,7 +108,7 @@ const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onCo
                 </div>
 
                 <div className="w-full space-y-3">
-                    <Button onClick={onConfirm} isLoading={isLoading} className="w-full h-12 text-lg">
+                    <Button onClick={onConfirm} isLoading={isLoading} className="w-full h-12 text-lg font-semibold" style={GOLD_CTA_STYLE}>
                         Tudo Certo, Enviar!
                     </Button>
                     <Button variant="secondary" onClick={onClose} className="w-full">
@@ -663,23 +687,31 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
         }
     };
 
-    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]"><span className="text-[var(--text-muted)] text-sm animate-pulse">Carregando...</span></div>;
+    // Overlay escuro coerente com a identidade do cardápio (--ink + dourado)
+    // em vez do AuthBackdrop azul institucional: desde que o login virou um
+    // modal disparado no meio do fluxo de compra (requestAccessThen), o azul
+    // com nuvens quebrava completamente a atmosfera da carta de vinhos.
+    if (isLoading) return (
+        <div className="min-h-full flex items-center justify-center p-4" style={{ background: 'rgba(10,13,19,0.8)' }}>
+            <span className="text-white/80 text-sm animate-pulse">Carregando...</span>
+        </div>
+    );
 
     return (
-        <AuthBackdrop>
+        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" style={{ background: 'rgba(10,13,19,0.82)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
           <div className="w-full max-w-sm flex flex-col items-center">
-            <div className="mb-7 text-center">
+            <div className="mb-6 text-center u-grow-in">
                 {store?.logo_url ? (
-                    <Image src={store.logo_url} alt={`Logo de ${store.name}`} width={80} height={80} className="w-20 h-20 rounded-[1.4rem] mx-auto mb-4 object-cover border-2 border-white/40" style={{ boxShadow: '0 18px 40px -12px rgba(0,0,0,0.4)' }} />
+                    <Image src={store.logo_url} alt={`Logo de ${store.name}`} width={80} height={80} className="w-20 h-20 rounded-[1.4rem] mx-auto mb-4 object-cover" style={{ boxShadow: '0 18px 40px -12px rgba(0,0,0,0.5)', border: '2px solid rgba(212,175,92,0.45)' }} />
                 ) : (
-                    <div className="w-16 h-16 rounded-[1.4rem] flex items-center justify-center mx-auto mb-4 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ animation: '3s ease-in-out infinite icon-float' }}>
-                        <Coffee size={26}/>
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.35)' }}>
+                        <Wine size={26} style={{ color: WINE_GOLD }} />
                     </div>
                 )}
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
-                <p className="text-white/75 text-sm">Faça seu pedido direto pelo celular</p>
+                <p className="text-sm" style={{ color: WINE_GOLD }}>Identifique-se para continuar seu pedido</p>
             </div>
-            <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+            <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)', border: '1px solid rgba(212,175,92,0.3)' }}>
                 {onClose && (
                     <button
                         onClick={onClose}
@@ -783,7 +815,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     )}
                 </div>
 
-                <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
+                <Button className="w-full group font-semibold" style={GOLD_CTA_STYLE} onClick={handleEnter} disabled={isLoading}>
                     <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
                     {tables.find(t => t.id === tableId)?.status === 'occupied'
                         ? 'Entrar / Recuperar'
@@ -791,7 +823,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                 </Button>
             </Card>
           </div>
-        </AuthBackdrop>
+        </div>
     );
 };
 
@@ -960,7 +992,11 @@ const ProductModal: React.FC<{
     // contrário da vitrine de Destaques, que já filtra por isso. Mesmo
     // conjunto de ids que `visibleCategories` já calcula no ClientModule.
     visibleCategoryIds: Set<string>,
-}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
+    // Medalhão da categoria (mesma heurística categoryIcon do resto do
+    // cardápio) — dá identidade visual ao modal quando o produto não tem
+    // foto, que é o caso da maioria dos produtos importados de ERP.
+    icon?: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>,
+}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds, icon: Icon = UtensilsCrossed }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -1034,10 +1070,32 @@ const ProductModal: React.FC<{
                 >
                     <Heart size={18} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : 'text-[var(--text-muted)]'} />
                 </button>
-                {product.image_url && (
+                {product.image_url ? (
                     <div className="relative w-full h-56 rounded-xl overflow-hidden shadow-sm">
                         <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 100vw, 480px" className="object-cover" />
                     </div>
+                ) : (
+                    // Sem foto (maioria dos produtos de ERP): medalhão dourado da
+                    // categoria + etiqueta de origem — mesma linguagem visual do
+                    // ProductCard, pro modal não parecer outro app.
+                    (() => {
+                        const { origin } = parseOrigin(product.name);
+                        return (
+                            <div className="flex items-center gap-3 u-grow-in">
+                                <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(212,175,92,0.14)' }}>
+                                    <Icon size={24} style={{ color: WINE_GOLD_DARK }} />
+                                </div>
+                                {origin && (
+                                    <span
+                                        className="text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-[3px] border"
+                                        style={{ borderColor: 'rgba(212,175,92,0.4)', color: WINE_GOLD }}
+                                    >
+                                        {origin}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })()
                 )}
                 <p className="text-[var(--text-muted)] leading-relaxed">{product.description}</p>
 
@@ -1067,7 +1125,10 @@ const ProductModal: React.FC<{
                             <span className="text-xl font-semibold num" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
                         </span>
                     ) : (
-                        <span className="text-xl font-semibold text-[var(--brand)] num">R$ {product.price.toFixed(2)}</span>
+                        // Dourado, não azul da marca: o preço é dourado em TODO o resto
+                        // do cardápio (ProductCard, promo aqui em cima, "Peça também") —
+                        // este era o único lugar que ainda vazava a cor de ação.
+                        <span className="text-xl font-semibold num" style={{ color: WINE_GOLD }}>R$ {product.price.toFixed(2)}</span>
                     )}
                     <div className="flex items-center gap-3 bg-[var(--surface)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
                         <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
@@ -1183,7 +1244,7 @@ const ProductModal: React.FC<{
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                <Button className="w-full mt-4 h-12 text-lg font-semibold" style={GOLD_CTA_STYLE} disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
                     Adicionar • R$ {(unitPrice * qty).toFixed(2)}
                 </Button>
                 {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
@@ -1279,7 +1340,7 @@ const CartModal: React.FC<{
                         <Button variant="secondary" onClick={onClose}>
                             Adicionar Mais
                         </Button>
-                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0}>
+                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0} className="font-semibold" style={GOLD_CTA_STYLE}>
                             Confirmar Pedido
                         </Button>
                     </div>
@@ -2478,7 +2539,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
                             </div>
                             <Button
-                                className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white"
+                                className="w-full font-semibold"
+                                style={GOLD_CTA_STYLE}
                                 onClick={() => setIsCartOpen(true)}
                             >
                                 Ver Comanda
@@ -2526,6 +2588,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isFavorite={!!selectedProduct && favoriteIds.has(selectedProduct.id)}
                 onToggleFavorite={toggleFavorite}
                 visibleCategoryIds={visibleCategoryIds}
+                icon={selectedProduct ? (categoryIconById[selectedProduct.category_id || ''] || UtensilsCrossed) : undefined}
             />
 
             <CounterConfirmModal
