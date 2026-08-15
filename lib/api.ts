@@ -1062,7 +1062,7 @@ export interface CreateStoreParams {
   serviceFeeRate: number;
 }
 
-export const createStore = async (params: CreateStoreParams): Promise<{ success: boolean; message?: string }> => {
+export const createStore = async (params: CreateStoreParams): Promise<{ success: boolean; message?: string; storeId?: string }> => {
   try {
     const { data: storeData, error: storeError } = await supabase
       .from('stores')
@@ -1084,7 +1084,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
       if (tablesError) console.error('Error creating tables:', tablesError);
     }
 
-    return { success: true };
+    return { success: true, storeId: storeData.id };
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro desconhecido ao criar loja.' };
   }

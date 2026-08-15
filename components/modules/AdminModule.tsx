@@ -178,6 +178,9 @@ export const AdminModule: React.FC = () => {
   const [periodMonths, setPeriodMonths] = useState<number>(12);
   const [isActive, setIsActive] = useState(true);
   const [serviceFeeRatePercent, setServiceFeeRatePercent] = useState<number>(10);
+  // Emite nota fiscal? — toggle simples que mapeia pro modelo_emissao_automatica
+  // já existente em store_fiscal_config (nfce quando ligado, nenhuma quando desligado).
+  const [emiteNotaFiscal, setEmiteNotaFiscal] = useState(false);
 
   // Logo Upload State
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -281,6 +284,7 @@ export const AdminModule: React.FC = () => {
       setPeriodMonths(12);
       setIsActive(true);
       setServiceFeeRatePercent(10);
+      setEmiteNotaFiscal(false);
       setLogoFile(null);
       setLogoPreview(null);
       setErrorMsg(null);
@@ -369,6 +373,7 @@ export const AdminModule: React.FC = () => {
       setCertStatus(await fetchStoreCertificateStatus(store.id));
 
       const fiscalConfig = await fetchStoreFiscalConfig(store.id);
+      setEmiteNotaFiscal(!!fiscalConfig && fiscalConfig.modelo_emissao_automatica !== 'nenhuma');
       if (fiscalConfig) {
           setFiscalAmbiente(fiscalConfig.ambiente);
           setFiscalNfeSerie(fiscalConfig.nfe_serie != null ? String(fiscalConfig.nfe_serie) : '');
@@ -598,13 +603,21 @@ export const AdminModule: React.FC = () => {
           };
 
           let result;
+          let storeId = editingId;
           if (editingId) {
               result = await updateStore(editingId, params);
           } else {
               result = await createStore(params);
+              storeId = result.success ? (result.storeId || null) : null;
           }
 
           if(result.success) {
+              if (storeId) {
+                  const fiscalResult = await updateStoreFiscalConfig(storeId, { modeloEmissaoAutomatica: emiteNotaFiscal ? 'nfce' : 'nenhuma' });
+                  if (!fiscalResult.success) {
+                      toast.error('Loja salva, mas houve um erro ao salvar a opção de nota fiscal: ' + fiscalResult.message);
+                  }
+              }
               toast.success(editingId ? 'Loja atualizada com sucesso!' : 'Loja criada com sucesso!');
               setIsModalOpen(false);
               resetForm();
@@ -978,6 +991,29 @@ export const AdminModule: React.FC = () => {
                     </div>
                 </div>
               </div>
+
+              {/* Toggle simples de emissão fiscal — mapeia pro
+                  store_fiscal_config.modelo_emissao_automatica já existente
+                  (nfce quando ligado, nenhuma quando desligado). Disponível
+                  já na criação, não só editando (config detalhada continua
+                  só em "Editar Loja", ver seção abaixo). */}
+              <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
+                  <div>
+                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Emite nota fiscal?</h4>
+                      <p className="text-xs text-[var(--text-muted)]">Se ligado, a loja emite NFC-e automaticamente ao fechar mesa/balcão.</p>
+                  </div>
+                  <button
+                      type="button"
+                      role="switch"
+                      aria-checked={emiteNotaFiscal}
+                      aria-label="Emite nota fiscal?"
+                      onClick={() => setEmiteNotaFiscal(prev => !prev)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${emiteNotaFiscal ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                  >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emiteNotaFiscal ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+              </div>
+
               <hr className="border-[var(--border)]" />
 
               {editingId && (

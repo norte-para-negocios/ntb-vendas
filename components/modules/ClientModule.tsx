@@ -607,7 +607,7 @@ function useWatchingPresence(storeId: string | undefined, tableId: string | unde
     }, [storeId, tableId, watching]);
 }
 
-const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, isHost?: boolean, table?: Table | null) => void, storeSlug: string, store: Store | null }> = ({ onLogin, storeSlug, store }) => {
+const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, isHost?: boolean, table?: Table | null) => void, storeSlug: string, store: Store | null, onClose?: () => void }> = ({ onLogin, storeSlug, store, onClose }) => {
     const [name, setName] = useState('');
     const [pin, setPin] = useState('');
     const [tableId, setTableId] = useState('');
@@ -679,7 +679,16 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
                 <p className="text-white/75 text-sm">Faça seu pedido direto pelo celular</p>
             </div>
-            <Card className="u-grow-in w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+            <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+                {onClose && (
+                    <button
+                        onClick={onClose}
+                        aria-label="Fechar e continuar vendo o cardápio"
+                        className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
+                    >
+                        <X size={18} />
+                    </button>
+                )}
                 {store?.contract_type === 'balcao_mesas' && (
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <button
@@ -1770,6 +1779,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
     const [isCartOpen, setIsCartOpen] = useState(false);
 
+    // Cardápio livre, PIN só na primeira tentativa de adicionar item (ver
+    // conversa com o usuário, 2026-08-14): antes o cardápio inteiro ficava
+    // atrás do login; agora só a AÇÃO de adicionar ao carrinho é que exige
+    // sessão. `pendingCartAction` guarda o que o cliente tentou fazer pra
+    // completar sozinho assim que o PIN é validado.
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const [pendingCartAction, setPendingCartAction] = useState<(() => void) | null>(null);
+
     // Tracker State
     const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
     const [isCounterConfirmOpen, setIsCounterConfirmOpen] = useState(false);
@@ -1959,6 +1976,29 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             timestamp: Date.now(),
             hostPin: tableId && hostStatus && table ? table.pin : null,
         }));
+
+        // Login disparado a partir de uma tentativa de adicionar item (ver
+        // requestAccessThen abaixo): fecha o modal e completa sozinho a ação
+        // que ficou pendente, sem o cliente precisar repetir o toque.
+        setIsLoginModalOpen(false);
+        if (pendingCartAction) {
+            pendingCartAction();
+            setPendingCartAction(null);
+        }
+    };
+
+    // Gate de acesso movido pra hora da ação (2026-08-14): navegar pelo
+    // cardápio é livre; só a primeira tentativa de adicionar item ao
+    // carrinho pede nome+mesa+PIN. Com sessão já aberta, executa na hora;
+    // sem sessão, guarda a ação e abre o modal — handleLogin completa ela
+    // sozinho ao validar o PIN.
+    const requestAccessThen = (action: () => void) => {
+        if (hasAccess) {
+            action();
+        } else {
+            setPendingCartAction(() => action);
+            setIsLoginModalOpen(true);
+        }
     };
 
     const handleLogout = async (force = false) => {
@@ -2158,8 +2198,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         </div>
     );
 
-    if (!hasAccess) return <LoginScreen onLogin={handleLogin} storeSlug={slug || ''} store={currentStore} />;
-
     // TRACKER MODE INTERCEPT
     if (trackedOrderId) {
         return <OrderTracker orderId={trackedOrderId} onReset={handleResetTracker} onLogout={() => handleLogout(true)} />;
@@ -2180,22 +2218,28 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <div className="min-w-0">
                         <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: WINE_GOLD }}>Norte Para Negócios</span>
                         <h1 className="font-bold text-white text-[22px] leading-tight tracking-tight truncate mt-0.5">{currentStore.name}</h1>
-                        <div className="flex items-center gap-1.5 text-[11px] mt-2 flex-wrap">
-                            <span className="flex items-center gap-1 bg-white/10 border border-white/15 text-white/80 px-2 py-1 rounded-full">
-                                <User size={10} /> {clientName} {isHost ? '(Host)' : ''}
-                            </span>
-                            {currentTable ? (
-                                <span className="font-semibold text-white/90 bg-white/10 border border-white/15 px-2 py-1 rounded-full">Mesa {currentTable.number}</span>
-                            ) : (
-                                <span className="font-semibold px-2 py-1 rounded-full" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }}>Balcão</span>
-                            )}
-                            {isHost && currentTable && hostPin && (
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-full cursor-pointer" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }} onClick={() => setShowPin(!showPin)}>
-                                    <span className="num font-semibold tracking-wider">{showPin ? hostPin : '••••'}</span>
-                                    {showPin ? <EyeOff size={9} /> : <Eye size={9} />}
-                                </div>
-                            )}
-                        </div>
+                        {/* Chips de sessão (nome/mesa/PIN) só existem depois que o
+                            cliente tentou adicionar algo e passou pelo modal de PIN
+                            (ver requestAccessThen) — antes disso não há sessão pra
+                            mostrar. */}
+                        {hasAccess && (
+                            <div className="flex items-center gap-1.5 text-[11px] mt-2 flex-wrap">
+                                <span className="flex items-center gap-1 bg-white/10 border border-white/15 text-white/80 px-2 py-1 rounded-full">
+                                    <User size={10} /> {clientName} {isHost ? '(Host)' : ''}
+                                </span>
+                                {currentTable ? (
+                                    <span className="font-semibold text-white/90 bg-white/10 border border-white/15 px-2 py-1 rounded-full">Mesa {currentTable.number}</span>
+                                ) : (
+                                    <span className="font-semibold px-2 py-1 rounded-full" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }}>Balcão</span>
+                                )}
+                                {isHost && currentTable && hostPin && (
+                                    <div className="flex items-center gap-1 px-2 py-1 rounded-full cursor-pointer" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }} onClick={() => setShowPin(!showPin)}>
+                                        <span className="num font-semibold tracking-wider">{showPin ? hostPin : '••••'}</span>
+                                        {showPin ? <EyeOff size={9} /> : <Eye size={9} />}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-1.5 flex-shrink-0">
                         {currentTable && (
@@ -2207,9 +2251,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             </button>
                         )}
                         <ThemeToggle className="w-8 h-8 rounded-full border border-white/15" variant="sidebar" />
-                        <button onClick={() => handleLogout(false)} className="w-8 h-8 flex items-center justify-center bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/20 rounded-full u-motion">
-                            <LogOut size={14} />
-                        </button>
+                        {hasAccess && (
+                            <button onClick={() => handleLogout(false)} className="w-8 h-8 flex items-center justify-center bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/20 rounded-full u-motion">
+                                <LogOut size={14} />
+                            </button>
+                        )}
                     </div>
                 </div>
             </header>
@@ -2258,8 +2304,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         onSelect={setSelectedProduct}
                                         onQuickAdd={(p) => {
                                             if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                            addToCart(p, 1, '', []);
-                                            toast.success(`${p.name} adicionado`);
+                                            requestAccessThen(() => {
+                                                addToCart(p, 1, '', []);
+                                                toast.success(`${p.name} adicionado`);
+                                            });
                                         }}
                                         disabled={isWaitingBill}
                                         isBestseller={bestsellerIds.has(product.id)}
@@ -2384,8 +2432,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 // (ex.: borda de pizza) também são upsell/vinculados ao
                                 // omie_codigo da integração, não podem ser pulados no "+".
                                 if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                addToCart(p, 1, '', []);
-                                toast.success(`${p.name} adicionado`);
+                                requestAccessThen(() => {
+                                    addToCart(p, 1, '', []);
+                                    toast.success(`${p.name} adicionado`);
+                                });
                             }}
                             disabled={isWaitingBill}
                             style={stagger(Math.min(i, 10) * 30)}
@@ -2463,9 +2513,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 product={selectedProduct}
                 onClose={() => setSelectedProduct(null)}
                 onAdd={(qty, notes, selectedOptions) => {
-                    if (selectedProduct) {
-                        addToCart(selectedProduct, qty, notes, selectedOptions);
-                        toast.success('Adicionado ao carrinho!');
+                    const product = selectedProduct;
+                    if (product) {
+                        requestAccessThen(() => {
+                            addToCart(product, qty, notes, selectedOptions);
+                            toast.success('Adicionado ao carrinho!');
+                        });
                     }
                 }}
                 noteSuggestions={currentStore?.config?.note_suggestions || []}
@@ -2509,6 +2562,21 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     currentStore={currentStore}
                     currentTable={currentTable}
                 />
+            )}
+
+            {/* Modal de nome+mesa+PIN, disparado por requestAccessThen na
+                primeira tentativa de adicionar item — não é mais um gate de
+                página inteira. Fecha sem logar = cancela a ação pendente e
+                volta a navegar livremente. */}
+            {isLoginModalOpen && (
+                <div className="fixed inset-0 z-[100] overflow-y-auto">
+                    <LoginScreen
+                        onLogin={handleLogin}
+                        storeSlug={slug || ''}
+                        store={currentStore}
+                        onClose={() => { setIsLoginModalOpen(false); setPendingCartAction(null); }}
+                    />
+                </div>
             )}
         </div>
     );
