@@ -149,11 +149,22 @@ export async function POST(request: NextRequest) {
 
   const itens = Array.from(porCodigo, ([codigo, quantidade]) => ({ codigo, quantidade }));
 
+  // Ambiente fiscal da loja (2026-08-16, pedido explícito do usuário) — repassado
+  // junto pro ntb-estoque conseguir mostrar/filtrar "essa OP veio de uma venda de
+  // homologação" na própria tela de Ordem de Produção, sem precisar consultar o
+  // banco do ntb-vendas pra saber. Loja sem `store_fiscal_config` configurado
+  // (a maioria) manda `null` — ntb-estoque trata como "não informado".
+  const { data: fiscalConfig } = await admin
+    .from('store_fiscal_config')
+    .select('ambiente')
+    .eq('store_id', storeId)
+    .maybeSingle();
+
   try {
     const res = await fetch(`${secret.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/ordem-producao`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret.ntb_estoque_api_key}` },
-      body: JSON.stringify({ itens, pedidoRef: orderIds[0] }),
+      body: JSON.stringify({ itens, pedidoRef: orderIds[0], ambiente: fiscalConfig?.ambiente ?? null }),
     });
     const json = await res.json().catch(() => null);
     return NextResponse.json({ ok: res.ok, ntbEstoque: json });

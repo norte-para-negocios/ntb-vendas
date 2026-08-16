@@ -4910,6 +4910,11 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [retryingNota, setRetryingNota] = useState<FiscalNota | null>(null);
     const [retryDestCpfCnpj, setRetryDestCpfCnpj] = useState('');
     const [retryDestNome, setRetryDestNome] = useState('');
+    // Filtro por ambiente (2026-08-16, pedido explícito do usuário) — sem isso
+    // não dá pra separar visualmente nota de homologação (sem valor fiscal)
+    // de nota de produção (documento real) na mesma lista.
+    const [ambienteFilter, setAmbienteFilter] = useState<'todos' | 'homologacao' | 'producao'>('todos');
+    const filteredNotas = ambienteFilter === 'todos' ? notas : notas.filter(n => n.ambiente === ambienteFilter);
 
     const load = async () => {
         setIsLoading(true);
@@ -5030,11 +5035,20 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex justify-between items-center">
                     <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
                     <div className="flex items-center gap-2">
+                        <select
+                            className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                            value={ambienteFilter}
+                            onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
+                        >
+                            <option value="todos">Todos os ambientes</option>
+                            <option value="homologacao">Só Homologação</option>
+                            <option value="producao">Só Produção</option>
+                        </select>
                         <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
                             <RefreshCw size={14} className="mr-1.5" /> Atualizar
                         </Button>
                         <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
-                            {notas.length} {notas.length === 1 ? 'nota' : 'notas'}
+                            {filteredNotas.length} {filteredNotas.length === 1 ? 'nota' : 'notas'}
                         </Badge>
                     </div>
                 </div>
@@ -5045,6 +5059,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <th className="px-4 py-3">Data</th>
                                 <th className="px-4 py-3 text-right">Valor</th>
                                 <th className="px-4 py-3">Modelo</th>
+                                <th className="px-4 py-3">Ambiente</th>
                                 <th className="px-4 py-3">Status</th>
                                 <th className="px-4 py-3">Chave de Acesso</th>
                                 <th className="px-4 py-3 text-right">Ações</th>
@@ -5058,18 +5073,19 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                         <td className="px-4 py-3"><Skeleton className="h-4 w-16 ml-auto" /></td>
                                         <td className="px-4 py-3"><Skeleton className="h-4 w-12" /></td>
                                         <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                                         <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
                                         <td className="px-4 py-3"><Skeleton className="h-4 w-24 ml-auto" /></td>
                                     </tr>
                                 ))
-                            ) : notas.length === 0 ? (
+                            ) : filteredNotas.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
-                                        Nenhuma nota fiscal emitida ainda.
+                                    <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                        {notas.length === 0 ? 'Nenhuma nota fiscal emitida ainda.' : 'Nenhuma nota nesse ambiente.'}
                                     </td>
                                 </tr>
                             ) : (
-                                notas.map((nota, idx) => (
+                                filteredNotas.map((nota, idx) => (
                                     <tr key={nota.id} className="u-stagger hover:bg-[var(--surface-2)] transition-colors" style={stagger(Math.min(idx, 10) * 30)}>
                                         <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
                                             {new Date(nota.created_at).toLocaleDateString()} <span className="text-xs text-[var(--text-muted)]/70 ml-1">{new Date(nota.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -5079,6 +5095,11 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                         </td>
                                         <td className="px-4 py-3 text-[var(--text-muted)]">
                                             {nota.modelo === '55' ? 'NF-e' : 'NFC-e'}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <Badge color={nota.ambiente === 'homologacao' ? 'bg-[var(--warn)]/10 border border-[var(--warn)]/30 text-[var(--warn)]' : 'bg-[var(--err)]/10 border border-[var(--err)]/30 text-[var(--err)]'}>
+                                                {nota.ambiente === 'homologacao' ? 'Homologação' : 'Produção'}
+                                            </Badge>
                                         </td>
                                         <td className="px-4 py-3">
                                             <Badge color={fiscalStatusBadgeColor(nota.status)}>
