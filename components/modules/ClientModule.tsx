@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart, ChevronRight, ChevronDown, CupSoda, IceCreamBowl, Sandwich, Wheat, Beef, Fish, Drumstick, Salad, Soup, Croissant } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight, ChevronDown } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
@@ -43,40 +43,6 @@ const GOLD_CTA_STYLE: React.CSSProperties = { background: WINE_GOLD, color: 'var
 // valor cobrado (isso é sempre getEffectivePrice/calculateCartItemUnitPrice).
 function hasActivePromo(product: { price: number; promo_price?: number | null }): boolean {
     return product.promo_price != null && product.promo_price < product.price;
-}
-
-// Ícone por categoria: leitura visual rápida na navegação, sem depender de
-// texto. Heurística por palavra-chave no nome da categoria (dado real vindo
-// do Omie, não uma taxonomia fixa no banco).
-function categoryIcon(name: string) {
-    const n = name.toLowerCase();
-    // Bebidas/nicho vinho primeiro (vocabulário original da loja piloto) —
-    // matches mais específicos precisam vir antes dos genéricos.
-    if (n.includes('champagne') || n.includes('espumante')) return Sparkles;
-    if (n.includes('vinho')) return Wine;
-    if (n.includes('drink') || n.includes('coquetel') || n.includes('caipirinha')) return Martini;
-    if (n.includes('long neck') || n.includes('artesan') || n.includes('cerveja') || n.includes('chopp') || n.includes('chope')) return Beer;
-    if (n.includes('s/ álcool') || n.includes('s/ alcool') || n.includes('suco') || n.includes('água') || n.includes('agua')) return GlassWater;
-    if (n.includes('refri') || n.includes('soda')) return CupSoda;
-    if (n.includes('50ml') || n.includes('whisky') || n.includes('destilad') || n.includes('licor') || n.includes('conhaque') || n.includes('cachaça') || n.includes('cachaca')) return Flame;
-    if (n.includes('café') || n.includes('cafe') || n.includes('cappuccino')) return Coffee;
-    // Comida genérica (ampliado 2026-08-15: o vocabulário original só cobria
-    // o nicho de vinho — "Entradas"/"Pratos Principais" caíam no talher
-    // genérico até em restaurante comum).
-    if (n.includes('pizza')) return Pizza;
-    if (n.includes('sobremesa') || n.includes('doce') || n.includes('bolo') || n.includes('torta')) return Cake;
-    if (n.includes('açaí') || n.includes('acai') || n.includes('sorvete') || n.includes('gelato')) return IceCreamBowl;
-    if (n.includes('lanche') || n.includes('burger') || n.includes('búrguer') || n.includes('sandu')) return Sandwich;
-    if (n.includes('massa') || n.includes('macarr') || n.includes('pasta')) return Wheat;
-    if (n.includes('carne') || n.includes('churrasco') || n.includes('grelhado') || n.includes('parrilla') || n.includes('steak')) return Beef;
-    if (n.includes('peixe') || n.includes('fruto') || n.includes('sushi') || n.includes('japon') || n.includes('ostra') || n.includes('camarão') || n.includes('camarao') || n.includes('ceviche')) return Fish;
-    if (n.includes('frango') || n.includes('asa') || n.includes('porç') || n.includes('porc') || n.includes('petisco')) return Drumstick;
-    if (n.includes('salada') || n.includes('vegan') || n.includes('vegetarian') || n.includes('fit')) return Salad;
-    if (n.includes('sopa') || n.includes('caldo')) return Soup;
-    if (n.includes('entrada') || n.includes('aperitivo') || n.includes('couvert')) return Croissant;
-    if (n.includes('prato') || n.includes('principal') || n.includes('executivo') || n.includes('almoço') || n.includes('almoco')) return ChefHat;
-    if (n.includes('taxa')) return Receipt;
-    return UtensilsCrossed;
 }
 
 // Muitos vinhos vêm do Omie com o país de origem no fim do nome ("- ARG",
@@ -835,15 +801,14 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // Linha de "carta de vinhos" (não mais card com placeholder de foto): sem
 // fotos reais ainda pra a maioria dos 248 produtos, um card com caixa cinza
 // vazia parece quebrado. A fila tipográfica (medalhão com ícone da
-// categoria, nome, etiqueta de origem, preço em dourado) fica intencional
-// com ou sem imagem — quando a foto chegar, ela só substitui o medalhão.
-const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, icon: Icon = UtensilsCrossed, isBestseller, isFavorite, onToggleFavorite }: {
+// nome, etiqueta de origem, preço em dourado) — sem ícone/medalhão (removido
+// 2026-08-16, pedido explícito do usuário: só tipografia, como carta impressa.
+const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, isBestseller, isFavorite, onToggleFavorite }: {
     product: Product,
     onSelect: (product: Product) => void,
     onQuickAdd?: (product: Product) => void,
     disabled?: boolean,
     style?: React.CSSProperties,
-    icon?: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>,
     // Vende mais II (migration 020): badge calculado (não é PRODUCT_TAGS) e
     // favorito 100% client-side (localStorage) — ambos opcionais pra não
     // quebrar nenhum outro caller existente do ProductCard.
@@ -863,46 +828,32 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             className={`u-grow-in group flex items-start gap-3 py-3.5 px-1.5 text-left w-full u-motion border-b border-dotted border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
             style={style}
         >
-            <div
-                className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center mt-0.5"
-                style={{ background: product.image_url ? undefined : 'rgba(212,175,92,0.14)' }}
-            >
-                {product.image_url ? (
+            {/* Sem ícone/medalhão (removido 2026-08-16, pedido explícito do
+                usuário — "cheio de circulozinhos" competindo entre si na
+                lista). Sem foto real (maioria dos produtos vindos de ERP),
+                a linha é só tipografia: nome + preço, igual carta impressa
+                de verdade. Foto, quando existe, continua aparecendo. */}
+            {product.image_url && (
+                <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 mt-0.5">
                     <Image src={product.image_url} alt={product.name} width={44} height={44} className="w-full h-full object-cover u-motion group-hover:scale-105" />
-                ) : (
-                    <Icon size={18} style={{ color: WINE_GOLD_DARK }} />
-                )}
-            </div>
+                </div>
+            )}
             <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-3">
                     <h3 className="font-semibold text-[var(--text)] leading-snug text-[14.5px]">
                         {clean}
-                        {/* Badges (migration 019): só o emoji aqui, discreto — a carta de
-                            vinhos não pode virar poluição visual. Label completo só no
-                            ProductModal (detalhe expandido). */}
-                        {product.tags.length > 0 && (
-                            <span
-                                className="ml-1.5 text-[12px] align-middle"
-                                title={product.tags.map(t => getTagDisplay(t).label).join(', ')}
-                            >
-                                {product.tags.map(t => getTagDisplay(t).emoji).filter(Boolean).join(' ')}
-                            </span>
-                        )}
                         {/* "Mais vendido" (migration 020, Vende Mais II): calculado a
                             partir de venda real (get_bestseller_product_ids), não é
-                            tag manual do catálogo — por isso ganha fundo/borda própria
-                            em vez de só emoji solto, pra não ser confundido com
-                            PRODUCT_TAGS. */}
+                            tag manual do catálogo. Etiqueta 2026-08-16: só texto
+                            dourado, sem emoji/pílula — pedido explícito do usuário
+                            de cortar decoração "de app" da carta. */}
                         {isBestseller && (
-                            // Cor via token de tema (--warn), já calibrado pra AA (>=4.5:1)
-                            // em claro e escuro numa rodada de acessibilidade anterior —
-                            // mesmo padrão usado nos outros badges deste arquivo (ex.: status
-                            // de pedido), em vez de hex fixo sem variante dark.
                             <span
-                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full align-middle whitespace-nowrap bg-[var(--warn)]/12 text-[var(--warn)]"
+                                className="ml-1.5 text-[10px] font-bold uppercase tracking-wide align-middle whitespace-nowrap"
+                                style={{ color: WINE_GOLD }}
                                 title="Um dos produtos mais vendidos desta loja"
                             >
-                                🔥 Mais vendido
+                                Mais vendido
                             </span>
                         )}
                     </h3>
@@ -960,11 +911,16 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         </span>
                     ) : <span />}
                     {onQuickAdd && (
+                        // Dourado, não o azul da marca (2026-08-16) — mesmo motivo do
+                        // GOLD_CTA_STYLE nos outros CTAs de compra: esse "+" é a ação
+                        // mais repetida da tela inteira, precisa ser a MESMA cor que o
+                        // resto do fluxo de pedido, não uma cor de ação genérica solta.
                         <button
                             type="button"
                             aria-label={`Adicionar ${product.name}`}
                             onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
-                            className="w-8 h-8 rounded-full bg-[var(--brand)] text-white flex items-center justify-center shadow-sm u-motion u-press hover:bg-[var(--brand-strong)] flex-shrink-0"
+                            className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm u-motion u-press flex-shrink-0"
+                            style={{ background: WINE_GOLD, color: 'var(--ink)' }}
                         >
                             <Plus size={17} />
                         </button>
@@ -994,11 +950,7 @@ const ProductModal: React.FC<{
     // contrário da vitrine de Destaques, que já filtra por isso. Mesmo
     // conjunto de ids que `visibleCategories` já calcula no ClientModule.
     visibleCategoryIds: Set<string>,
-    // Medalhão da categoria (mesma heurística categoryIcon do resto do
-    // cardápio) — dá identidade visual ao modal quando o produto não tem
-    // foto, que é o caso da maioria dos produtos importados de ERP.
-    icon?: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>,
-}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds, icon: Icon = UtensilsCrossed }) => {
+}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -1077,25 +1029,19 @@ const ProductModal: React.FC<{
                         <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 100vw, 480px" className="object-cover" />
                     </div>
                 ) : (
-                    // Sem foto (maioria dos produtos de ERP): medalhão dourado da
-                    // categoria + etiqueta de origem — mesma linguagem visual do
-                    // ProductCard, pro modal não parecer outro app.
+                    // Sem foto (maioria dos produtos de ERP): só a etiqueta de
+                    // origem, se houver — sem ícone/medalhão (removido 2026-08-16,
+                    // mesmo motivo do ProductCard: só tipografia).
                     (() => {
                         const { origin } = parseOrigin(product.name);
+                        if (!origin) return null;
                         return (
-                            <div className="flex items-center gap-3 u-grow-in">
-                                <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(212,175,92,0.14)' }}>
-                                    <Icon size={24} style={{ color: WINE_GOLD_DARK }} />
-                                </div>
-                                {origin && (
-                                    <span
-                                        className="text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-[3px] border"
-                                        style={{ borderColor: 'rgba(212,175,92,0.4)', color: WINE_GOLD }}
-                                    >
-                                        {origin}
-                                    </span>
-                                )}
-                            </div>
+                            <span
+                                className="inline-block text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-[3px] border u-grow-in"
+                                style={{ borderColor: 'rgba(212,175,92,0.4)', color: WINE_GOLD }}
+                            >
+                                {origin}
+                            </span>
                         );
                     })()
                 )}
@@ -2180,11 +2126,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // .some() de featuredProducts em cada render do modal.
     const visibleCategoryIds = useMemo(() => new Set(visibleCategories.map(c => c.id)), [visibleCategories]);
 
-    const categoryIconById = useMemo(() => {
-        const map: Record<string, ReturnType<typeof categoryIcon>> = {};
-        categories.forEach(c => { map[c.id] = categoryIcon(c.name); });
-        return map;
-    }, [categories]);
     if (loadError === 'network') return (
         <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
             <RefreshCw className="text-[var(--text-muted)]" size={48} />
@@ -2334,7 +2275,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 >
                                     <ProductCard
                                         product={product}
-                                        icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
                                         onSelect={setSelectedProduct}
                                         onQuickAdd={(p) => {
                                             if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
@@ -2373,32 +2313,38 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <div className="flex gap-1">
                         {/* Favoritos (Vende Mais II, 100% client-side): mesma área da
                             busca/ordenação, filtra productsByCategory de forma cumulativa
-                            (ver useMemo acima) — categoria com resultado abre sozinha. */}
+                            (ver useMemo acima) — categoria com resultado abre sozinha.
+                            Estado ativo em dourado (2026-08-16, era vermelho/azul —
+                            cor de ação/erro genérica destoando da carta de vinhos). */}
                         <button
                             onClick={() => setFavoritesOnly(v => !v)}
-                            className={`flex items-center gap-1 px-2.5 h-11 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--err)] text-white border-[var(--err)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`flex items-center gap-1 px-2.5 h-11 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'border-[rgba(212,175,92,0.5)] text-[var(--text)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            style={favoritesOnly ? { background: 'rgba(212,175,92,0.12)' } : undefined}
                             title="Mostrar só favoritos"
                             aria-pressed={favoritesOnly}
                         >
-                            <Heart size={14} className={favoritesOnly ? 'fill-current' : ''} /> Favoritos
+                            <Heart size={14} className={favoritesOnly ? 'fill-current' : ''} style={favoritesOnly ? { color: WINE_GOLD } : undefined} /> Favoritos
                         </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_asc' ? 'default' : 'price_asc')}
-                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_asc' ? 'border-[rgba(212,175,92,0.5)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            style={sortBy === 'price_asc' ? { background: 'rgba(212,175,92,0.12)', color: WINE_GOLD } : undefined}
                             title="Preço Menor"
                         >
                             <ArrowDownWideNarrow size={16} />
                         </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_desc' ? 'default' : 'price_desc')}
-                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_desc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_desc' ? 'border-[rgba(212,175,92,0.5)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                            style={sortBy === 'price_desc' ? { background: 'rgba(212,175,92,0.12)', color: WINE_GOLD } : undefined}
                             title="Preço Maior"
                         >
                              <ArrowUpNarrowWide size={16} />
                         </button>
                         <button
                              onClick={() => setSortBy(sortBy === 'name_asc' ? 'default' : 'name_asc')}
-                             className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'name_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                             className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'name_asc' ? 'border-[rgba(212,175,92,0.5)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                             style={sortBy === 'name_asc' ? { background: 'rgba(212,175,92,0.12)', color: WINE_GOLD } : undefined}
                              title="Nome A-Z"
                         >
                              <ArrowDownAZ size={16} />
@@ -2414,7 +2360,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 resultado abre sozinha (ver isCategoryExpanded acima). */}
             <div className={`px-4 pt-3 pb-2 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                 {visibleCategories.map((cat) => {
-                    const Icon = categoryIconById[cat.id] || UtensilsCrossed;
                     const catProducts = productsByCategory[cat.id] || [];
                     const expanded = isCategoryExpanded(cat.id);
                     // Com filtro ativo, categoria sem nenhum resultado some
@@ -2423,56 +2368,66 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     if (hasActiveFilter && catProducts.length === 0) return null;
                     return (
                         <div key={cat.id} className="border-b border-[var(--border)] last:border-0">
+                            {/* Sem ícone (removido 2026-08-16 — ver ProductCard acima pro
+                                mesmo motivo): nome em caixa alta discreta + contagem já
+                                bastam pra escanear a lista de categorias. */}
                             <button
                                 type="button"
                                 onClick={() => setActiveCategory(prev => prev === cat.id ? '' : cat.id)}
                                 aria-expanded={expanded}
-                                className="w-full flex items-center gap-3 py-3.5 text-left u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] px-1.5 -mx-1.5"
+                                className="w-full flex items-center gap-3 py-4 text-left u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] px-1.5 -mx-1.5"
                             >
-                                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(212,175,92,0.14)' }}>
-                                    <Icon size={16} style={{ color: WINE_GOLD_DARK }} />
-                                </div>
                                 <div className="flex-1 min-w-0 flex items-baseline gap-2">
-                                    <h2 className="font-bold text-[var(--text)] text-[16px] tracking-tight truncate">{cat.name}</h2>
-                                    <span className="text-[12px] font-semibold text-[var(--text-muted)] flex-shrink-0">{catProducts.length}</span>
+                                    <h2 className="font-bold text-[var(--text)] text-[15px] uppercase tracking-[0.04em] truncate">{cat.name}</h2>
+                                    <span className="text-[12px] font-medium text-[var(--text-muted)] flex-shrink-0">{catProducts.length}</span>
                                 </div>
                                 <ChevronDown
                                     size={18}
-                                    className="text-[var(--text-muted)] u-motion flex-shrink-0"
-                                    style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                                    className="text-[var(--text-muted)] flex-shrink-0"
+                                    style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 300ms cubic-bezier(0.22,1,0.36,1)' }}
                                 />
                             </button>
-                            {expanded && (
-                                <div className="pb-2 u-grow-in">
-                                    {catProducts.map((product, i) => (
-                                        <ProductCard
-                                            key={product.id}
-                                            product={product}
-                                            icon={Icon}
-                                            onSelect={setSelectedProduct}
-                                            onQuickAdd={(p) => {
-                                                // Qualquer grupo de opção (obrigatório ou não) abre o
-                                                // modal completo em vez de adicionar direto — extras
-                                                // opcionais (ex.: borda de pizza) também são upsell/
-                                                // vinculados ao omie_codigo, não podem ser pulados no "+".
-                                                if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                                requestAccessThen(() => {
-                                                    addToCart(p, 1, '', []);
-                                                    toast.success(`${p.name} adicionado`);
-                                                });
-                                            }}
-                                            disabled={isWaitingBill}
-                                            style={stagger(Math.min(i, 10) * 30)}
-                                            isBestseller={bestsellerIds.has(product.id)}
-                                            isFavorite={favoriteIds.has(product.id)}
-                                            onToggleFavorite={toggleFavorite}
-                                        />
-                                    ))}
-                                    {catProducts.length === 0 && (
-                                        <p className="text-[13px] text-[var(--text-muted)] py-3 text-center">Nenhum produto nesta categoria.</p>
-                                    )}
+                            {/* Expande/recolhe animado via grid-template-rows (0fr↔1fr) — a
+                                técnica que anima até a altura real do conteúdo, ao contrário
+                                de max-height. Conteúdo sempre montado (não condicional), só
+                                a altura do wrapper anima; prefers-reduced-motion já zera a
+                                duração da transição globalmente (app/globals.css). */}
+                            <div
+                                className="grid"
+                                style={{ gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows 320ms cubic-bezier(0.22,1,0.36,1)' }}
+                                aria-hidden={!expanded}
+                            >
+                                <div className="overflow-hidden" style={{ pointerEvents: expanded ? 'auto' : 'none' }}>
+                                    <div className="pb-2">
+                                        {catProducts.map((product, i) => (
+                                            <ProductCard
+                                                key={product.id}
+                                                product={product}
+                                                onSelect={setSelectedProduct}
+                                                onQuickAdd={(p) => {
+                                                    // Qualquer grupo de opção (obrigatório ou não) abre o
+                                                    // modal completo em vez de adicionar direto — extras
+                                                    // opcionais (ex.: borda de pizza) também são upsell/
+                                                    // vinculados ao omie_codigo, não podem ser pulados no "+".
+                                                    if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
+                                                    requestAccessThen(() => {
+                                                        addToCart(p, 1, '', []);
+                                                        toast.success(`${p.name} adicionado`);
+                                                    });
+                                                }}
+                                                disabled={isWaitingBill}
+                                                style={stagger(Math.min(i, 10) * 30)}
+                                                isBestseller={bestsellerIds.has(product.id)}
+                                                isFavorite={favoriteIds.has(product.id)}
+                                                onToggleFavorite={toggleFavorite}
+                                            />
+                                        ))}
+                                        {catProducts.length === 0 && (
+                                            <p className="text-[13px] text-[var(--text-muted)] py-3 text-center">Nenhum produto nesta categoria.</p>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     );
                 })}
@@ -2565,7 +2520,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isFavorite={!!selectedProduct && favoriteIds.has(selectedProduct.id)}
                 onToggleFavorite={toggleFavorite}
                 visibleCategoryIds={visibleCategoryIds}
-                icon={selectedProduct ? (categoryIconById[selectedProduct.category_id || ''] || UtensilsCrossed) : undefined}
             />
 
             <CounterConfirmModal
