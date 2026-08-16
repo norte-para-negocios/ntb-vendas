@@ -980,7 +980,8 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-3 py-2">
+            <div className="flex-1 overflow-y-auto py-2">
+              <div className="grid grid-cols-2 gap-3">
                 {filteredProducts.map(product => (
                     <Card key={product.id} onClick={() => setSelectedProduct(product)} className="flex flex-col gap-2 p-2 cursor-pointer hover:border-[var(--brand)] transition-colors">
                         {product.image_url ? (
@@ -1007,6 +1008,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         </div>
                     </Card>
                 ))}
+              </div>
             </div>
 
             <StoreProductModal
