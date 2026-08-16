@@ -1003,6 +1003,49 @@ antes disso o cliente era obrigado a clicar manualmente até num grupo de
 escolha única obrigatória, o que é atrito desnecessário pro caso de uso
 mais comum (tamanho quase sempre tem um "padrão" natural, tipo Médio).
 
+**Pendente (2026-08-16, só anotado, ideia grande do usuário — pediu opinião,
+não é pra implementar sem pedido explícito):** duas ideias relacionadas,
+juntas numa mensagem só:
+
+1. **"Produto pai com variações" no cardápio do cliente** — retoma a ideia já
+   registrada mais cedo na mesma sessão ("várias moquecas soltas, quero
+   clicar em 'Moqueca' e escolher qual"): em vez de N produtos separados
+   ("Moqueca de Peixe", "Moqueca de Camarão", "Moqueca Mista"...) aparecendo
+   soltos na lista, agrupar visualmente num produto "pai" com as variações
+   escolhidas dentro (tamanho, sabor, "tirar algo" etc.).
+   **Achado importante ao investigar antes de escrever esta nota: o
+   mecanismo de fundo pra isso JÁ EXISTE e já funciona de ponta a ponta** —
+   é exatamente `product_option_groups`/`product_options` (ver seção acima),
+   com `product_options.omie_codigo` (migration 026) já garantindo que CADA
+   variação vira um código Omie próprio na hora de disparar a Ordem de
+   Produção (`create_order_secure`/migration 028 já gravam o `omie_codigo`
+   certo por opção escolhida em `selected_options`). **Não falta nenhum
+   dado novo, só UI**: hoje criar um "produto pai com variações" exige
+   montar manualmente grupo + opções uma a uma no formulário de produto —
+   não existe um assistente/atalho pra "criar N variações de uma vez a
+   partir de uma lista de produtos soltos já cadastrados" (o caso real:
+   consolidar as ~3 moquecas já cadastradas separadamente num produto só
+   com um grupo "Qual moqueca?"). Confirmar com o usuário se é isso que ele
+   quer antes de desenhar.
+2. **Cadastro de produto unificado entre `ntb-vendas` e `ntb-estoque`** —
+   mesmo espírito do bootstrap de loja feito nesta sessão ("Criar no NTB
+   Estoque também"/"Criar no NTB Vendas também"): cadastrar um produto de
+   um lado já cria/preenche o que for preciso do outro lado, com os campos
+   que cada sistema exige aparecendo tudo numa tela só (dependendo de onde
+   o usuário começa a cadastrar). **Esclarecido pelo próprio usuário no
+   mesmo pedido**: isso é só uma camada de UI/organização — a raiz continua
+   sendo cada variação virar um produto Omie específico com o código certo
+   pra consumo de estoque bater certo (igual ao item 1); o Omie em si não
+   tem conceito de "produto pai", é sempre SKU plano — o "produto pai" é
+   uma representação só do lado do `ntb-vendas`, pensada pra aparecer
+   melhor pro cliente/lojista.
+
+Nenhuma das duas partes tem desenho ainda (schema de "que campos migram pra
+onde", se o vínculo produto↔produto entre os dois sistemas usa
+`omie_codigo` como chave ou precisa de algo novo, etc.) — registrado pra
+quando o usuário pedir pra desenhar de verdade. Mesma nota espelhada no
+AGENTS.md do `ntb-estoque`.
+
 ## Cardápio por horário/turno (migration 018)
 
 Uma categoria inteira do cardápio pode ficar restrita a uma janela de
