@@ -118,6 +118,23 @@
   --scrollbar-thumb-hover: #9aa6b8;
 }
 
+/* Conteúdo dentro do vidro (sheets, barras) sempre lê os tokens do tema
+   escuro, independente do tema ambiente do usuário — o material de vidro
+   em si é sempre escuro (ecoa --ink, ver .u-glass-bar/.u-glass-cart/
+   .u-glass-modal abaixo), então o texto/superfícies dentro precisam ser
+   sempre claros pra manter contraste, mesmo com o app inteiro em tema
+   claro (achado C1 da revisão final de 2026-08-16: texto escuro do tema
+   claro sobre vidro quase preto ficava em ~1:1 de contraste, confirmado
+   nos prints de QA da Task 7). Mesmos valores literais do bloco .dark
+   acima — não reinventados. */
+.on-glass {
+  --text: #e6e8ec;
+  --text-muted: #8b93a1;
+  --surface: #15171d;
+  --surface-2: #1c1f27;
+  --border: rgba(255, 255, 255, 0.12);
+}
+
 /* Dark mode: ativado por classe .dark no <html> */
 .dark {
   --bg: #0d0e12;
@@ -376,6 +393,48 @@ html {
 
 .u-soft-bounce {
   animation: soft-bounce 0.5s var(--ease-out) both;
+}
+
+/* Vidro/translúcido — só pra chrome fixo (sticky/fixed/modal), nunca pra
+   conteúdo que rola (custo de repaint de GPU). Ver docs/plans/2026-08-16-
+   cardapio-material-motion-apple.md, Princípio 1. */
+.u-glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.u-glass-bar {
+  background: rgba(10, 13, 19, 0.7);
+  backdrop-filter: blur(14px) saturate(160%);
+}
+
+.u-glass-cart {
+  background: rgba(10, 13, 19, 0.72);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+
+/* Vidro dos 4 bottom sheets do cardápio (Modal variant="sheet" em ui.tsx —
+   ProductModal/BillSplitter — e o BottomSheet local de ClientModule.tsx —
+   CartModal/OrderStatusModal) — via classe (não mais style inline)
+   especificamente pra herdar o fallback de prefers-reduced-transparency
+   abaixo, que inline style nunca conseguiria respeitar (achado da Task 7). */
+.u-glass-modal {
+  background: rgba(20, 23, 31, 0.85);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .u-glass {
+    background: rgba(20, 23, 31, 0.95);
+    backdrop-filter: none;
+  }
+  .u-glass-bar,
+  .u-glass-cart,
+  .u-glass-modal {
+    background: rgba(20, 23, 31, 0.95);
+    backdrop-filter: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Loader2, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const Button: React.FC<
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -100,9 +101,34 @@ export const Modal: React.FC<{
   title: string;
   children: React.ReactNode;
   width?: string;
-}> = ({ isOpen, onClose, title, children, width = 'max-w-md' }) => {
+  // 'sheet' (opt-in, 2026-08-16): vidro + spring + arrastar pra fechar no
+  // mobile, igual ao BottomSheet do cardápio do cliente. Default 'center'
+  // preserva o comportamento de sempre (CSS fadeIn/slideUp, sem drag) —
+  // nenhum consumidor existente (admin/lojista) muda sem passar a prop.
+  variant?: 'center' | 'sheet';
+}> = ({ isOpen, onClose, title, children, width = 'max-w-md', variant = 'center' }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
+  // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de
+  // código): com dragElastic.top pequeno, a sheet mal se move ao ser
+  // arrastada pra cima, mas o CURSOR do mouse continua andando a
+  // distância cheia — ele "sai" da sheet e passa a estar sobre o scrim
+  // (que tem onClick={onClose}). Ao soltar o botão ali, o clique nativo
+  // do browser (disparado logo depois do mouseup) aterrissa no scrim e
+  // fecha a folha sem o usuário ter arrastado pra baixo o suficiente (nem
+  // rápido o suficiente) pra isso ser intencional. Em touch isso não
+  // acontece (o pointerup é capturado pelo elemento original, não "vaza"
+  // pro scrim) — confirmado testando os dois com Playwright (mouse vs.
+  // touch simulado via CDP).
+  //
+  // Achado decisivo ao instrumentar com console.log: o `click` nativo
+  // dispara ANTES do `onDragEnd` do Framer Motion rodar (não depois, como
+  // seria intuitivo) — marcar a flag dentro de `onDragEnd` sempre chega
+  // tarde demais, o `onClick` do scrim já leu o valor antigo. A flag
+  // precisa ser marcada em `onDragStart` (dispara assim que o gesto é
+  // reconhecido como arrasto, bem antes do soltar/click) e só é limpa
+  // depois, em `onDragEnd`, com um pequeno atraso.
+  const justDraggedRef = React.useRef(false);
 
   // Foco inicial + focus trap (Tab/Shift+Tab) + fechar com Esc enquanto o
   // modal estiver aberto. Ver Task I2 da varredura de 2026-07-02.
@@ -161,7 +187,78 @@ export const Modal: React.FC<{
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  if (variant === 'sheet') {
+    // AnimatePresence precisa ficar montado incondicionalmente pra poder
+    // rodar a animação de saída — só o conteúdo interno é gated por isOpen.
+    // Se isOpen (ou o componente inteiro) desmontasse a árvore junto com o
+    // AnimatePresence, a transição de exit nunca teria chance de rodar (o
+    // desmonte é síncrono). Ver Task 3 (BottomSheet) em ClientModule.tsx,
+    // que já segue esse mesmo formato.
+    return (
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            key="scrim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            style={{ background: 'rgba(10,13,19,0.6)' }}
+            onClick={() => { if (!justDraggedRef.current) onClose(); }}
+          >
+            <motion.div
+              key="sheet"
+              ref={containerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              tabIndex={-1}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', bounce: 0.18, duration: 0.4 }}
+              drag="y"
+              // Só `top: 0` (achado I1 da revisão final de 2026-08-16, mesma
+              // mudança do BottomSheet em ClientModule.tsx — manter os dois em
+              // sincronia): sem `bottom` no objeto de constraints, arrastar pra
+              // baixo (fechar) fica sem limite/1:1 com o dedo, sem nenhum
+              // `dragElastic` se aplicando a esse eixo; `top: 0.05` continua
+              // quase rígido ao arrastar pra cima, passando do topo.
+              dragConstraints={{ top: 0 }}
+              dragElastic={{ top: 0.05, bottom: 0.5 }}
+              // Mesmos limiares do BottomSheet em ClientModule.tsx
+              // (DISMISS_VELOCITY=500, DISMISS_OFFSET_RATIO=0.35) — duplicado
+              // aqui porque ui.tsx não importa de ClientModule.tsx; se um
+              // valor mudar, mudar os dois juntos.
+              onDragStart={() => { justDraggedRef.current = true; }}
+              onDragEnd={(_e, info) => {
+                setTimeout(() => { justDraggedRef.current = false; }, 150);
+                if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
+              }}
+              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col u-glass-modal on-glass`}
+              style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 flex-shrink-0">
+                <h3 id={titleId} className="text-[15px] font-semibold text-white">{title}</h3>
+                <button onClick={onClose} className="text-white/60 hover:text-white hover:bg-white/10 p-1 rounded-[var(--r-sm)] u-motion">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-5 overflow-y-auto">{children}</div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+
   if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 animate-[fadeIn_0.2s_ease-out]">
       <div

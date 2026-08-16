@@ -16,7 +16,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 
 // --- COMPONENTS ---
 
@@ -33,6 +33,15 @@ const WINE_GOLD = '#D4AF5C';
 // ProductModal: o dourado puro em cima do próprio tom claro (rgba 0.08)
 // não tem contraste suficiente.
 const WINE_GOLD_DARK = '#8A6A2B';
+
+// Presets de spring validados com o usuário no companion visual de
+// brainstorming (2026-08-16) — não são valores arbitrários. SPRING_TAP:
+// feedback de toque, sem bounce (damping 1.0 da Apple — botão não carrega
+// momentum de gesto). SPRING_SHEET: abrir/fechar/arrastar de folha e
+// acordeão, bounce leve (~damping 0.82 testado na demo interativa, bate
+// com o valor real que a Apple documenta pra drawer/sheet).
+const SPRING_TAP = { type: 'spring' as const, bounce: 0, duration: 0.15 };
+const SPRING_SHEET = { type: 'spring' as const, bounce: 0.18, duration: 0.4 };
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
 // E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
@@ -522,18 +531,11 @@ function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: (
 // rodada ativa (reaproveitando OrderProgressView, igual ao Balcão) + histórico
 // das rodadas já entregues nesta visita.
 function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClose: () => void; orders: MesaOrderState[] }) {
-    if (!isOpen) return null;
-
     const active = [...orders].reverse().find(o => o.status !== OrderStatus.DELIVERED && o.status !== OrderStatus.CANCELED) ?? null;
     const history = orders.filter(o => o.orderId !== active?.orderId && o.status === OrderStatus.DELIVERED);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-[fadeIn_0.2s_ease-out]" onClick={onClose}>
-            <div
-                className="w-full max-w-md bg-[var(--bg)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)] flex flex-col max-h-[85vh]"
-                style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
-                onClick={(e) => e.stopPropagation()}
-            >
+        <BottomSheet isOpen={isOpen} onClose={onClose} title="Acompanhar Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] bg-[var(--surface)]">
                     <div className="flex items-center gap-2.5">
                         <BellRing size={18} className="text-[var(--brand)]" />
@@ -570,8 +572,7 @@ function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClos
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </BottomSheet>
     );
 }
 
@@ -661,7 +662,13 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
     );
 
     return (
-        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" style={{ background: 'rgba(10,13,19,0.82)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+        // .u-glass-modal (achado M1 da revisão final de 2026-08-16, mesmo bug já
+        // corrigido em outras superfícies de vidro nesta branch): backdrop-filter
+        // inline nunca respeita o fallback de prefers-reduced-transparency (só
+        // uma classe CSS consegue, via @media), e duplicar manualmente o prefixo
+        // -webkit- é exatamente o padrão que a Task 7 eliminou em todo o resto do
+        // cardápio — faltava só este overlay.
+        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out] u-glass-modal">
           <div className="w-full max-w-sm flex flex-col items-center">
             <div className="mb-6 text-center u-grow-in">
                 {store?.logo_url ? (
@@ -778,12 +785,14 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     )}
                 </div>
 
-                <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
-                    <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
-                    {tables.find(t => t.id === tableId)?.status === 'occupied'
-                        ? 'Entrar / Recuperar'
-                        : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
-                </Button>
+                <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
+                    <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
+                        <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
+                        {tables.find(t => t.id === tableId)?.status === 'occupied'
+                            ? 'Entrar / Recuperar'
+                            : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
+                    </Button>
+                </motion.div>
             </Card>
           </div>
         </div>
@@ -949,13 +958,22 @@ const ProductModal: React.FC<{
     // contrário da vitrine de Destaques, que já filtra por isso. Mesmo
     // conjunto de ids que `visibleCategories` já calcula no ClientModule.
     visibleCategoryIds: Set<string>,
-}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
+}> = ({ product: incomingProduct, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
+    // Modal (variant="sheet") precisa continuar renderizando o conteúdo
+    // durante a animação de saída (~0.4s, spring) — se este componente
+    // retornasse null no instante em que incomingProduct vira null, o
+    // AnimatePresence de dentro do Modal nunca teria conteúdo pra manter
+    // montado enquanto anima. Guarda o último produto real e usa ele pro
+    // corpo do modal; isOpen continua refletindo incomingProduct de verdade.
+    const lastProductRef = useRef<Product | null>(null);
+    if (incomingProduct) lastProductRef.current = incomingProduct;
+    const product = incomingProduct ?? lastProductRef.current;
 
     useEffect(() => {
-        if (!product) return;
+        if (!incomingProduct) return;
         setQty(1);
         setNotes('');
 
@@ -965,16 +983,16 @@ const ProductModal: React.FC<{
         // client-side extra com `available !== false` mesmo o servidor
         // (fetchMenu) ja filtrando por available=true por padrao.
         const initialSelections: Record<string, string[]> = {};
-        (product.option_groups || []).forEach(group => {
+        (incomingProduct.option_groups || []).forEach(group => {
             if (group.type === 'single' && group.required) {
                 const firstAvailable = group.options.find(opt => opt.available !== false);
                 if (firstAvailable) initialSelections[group.id] = [firstAvailable.id];
             }
         });
         setSelections(initialSelections);
-    }, [product]);
+    }, [incomingProduct]);
 
-    if (!product) return null;
+    if (!product) return null; // só null antes do primeiro produto abrir (ver lastProductRef acima)
 
     const groups = product.option_groups || [];
 
@@ -1010,7 +1028,7 @@ const ProductModal: React.FC<{
     });
 
     return (
-        <Modal isOpen={!!product} onClose={onClose} title={product.name}>
+        <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet">
             <div className="relative space-y-4">
                 {/* Favoritar (Vende Mais II, 100% client-side, localStorage) — canto
                     superior direito do modal, sobrepõe a foto quando existe; sem
@@ -1019,7 +1037,13 @@ const ProductModal: React.FC<{
                     type="button"
                     aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
                     onClick={() => onToggleFavorite(product.id)}
-                    className="absolute top-0 right-0 z-10 p-2 rounded-full bg-[var(--surface)]/85 backdrop-blur-sm border border-[var(--border)] u-motion u-press-sm"
+                    // Sem `backdrop-blur-sm` (achado M3 da revisão final de
+                    // 2026-08-16): esse ícone já vive dentro de uma sheet de
+                    // vidro em animação (drag-transformada) — um segundo
+                    // backdrop-filter aninhado ali é um caso caro de
+                    // compositing em celular fraco. `bg-[var(--surface)]`
+                    // opaco (sem blur) fica visualmente equivalente.
+                    className="absolute top-0 right-0 z-10 p-2 rounded-full bg-[var(--surface)] border border-[var(--border)] u-motion u-press-sm"
                 >
                     <Heart size={18} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : 'text-[var(--text-muted)]'} />
                 </button>
@@ -1191,14 +1215,192 @@ const ProductModal: React.FC<{
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                    Adicionar • R$ {(unitPrice * qty).toFixed(2)}
-                </Button>
+                <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
+                    <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                        Adicionar • R$ {(unitPrice * qty).toFixed(2)}
+                    </Button>
+                </motion.div>
                 {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
             </div>
         </Modal>
     );
 };
+
+// Bottom sheet reutilizável (2026-08-16): scrim + folha que arrasta com o
+// dedo de verdade (1:1, não só anima no final), resiste com rubber-band
+// ao passar do topo, e decide fechar-ou-voltar pela VELOCIDADE do gesto
+// ao soltar (projeção de momentum), não só pela distância arrastada — ver
+// docs/plans/2026-08-16-cardapio-material-motion-apple.md, Princípio 4.
+// CartModal e OrderStatusModal usam este componente pro scrim/folha/gesto;
+// cada um só cuida do próprio conteúdo interno (header/body/footer).
+const DISMISS_VELOCITY = 500; // px/s — flick rápido pra baixo já fecha
+const DISMISS_OFFSET_RATIO = 0.35; // arrastar >35% da altura da folha fecha mesmo sem flick
+
+// Duplicado de components/ui.tsx (Modal) de propósito — achado I2 da revisão
+// final de 2026-08-16: BottomSheet (usado por CartModal/OrderStatusModal)
+// não tinha role="dialog"/aria-modal/focus-trap/Esc, enquanto o gêmeo
+// Modal variant="sheet" (ui.tsx) já tinha desde sempre. Mesmo princípio já
+// documentado no comentário de ui.tsx: "se um valor mudar, mudar os dois
+// juntos" — não virou hook/módulo compartilhado novo porque não existe
+// nenhum lib/hooks compartilhado entre ClientModule.tsx e ui.tsx hoje, e
+// inventar um cruzamento novo tão perto do fim do branch é risco
+// desproporcional a um bugfix de acessibilidade.
+const BOTTOM_SHEET_FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md', title }: {
+    isOpen: boolean;
+    onClose: () => void;
+    children: React.ReactNode;
+    maxWidth?: string;
+    // Nome acessível da folha pro leitor de tela (aria-label) — cada
+    // consumidor (CartModal/OrderStatusModal) já mostra esse mesmo texto
+    // visualmente no próprio header, então aria-label evita ter que
+    // encanar um id através da fronteira children/BottomSheet só pra usar
+    // aria-labelledby.
+    title: string;
+}) {
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de
+    // código): dragElastic.top pequeno faz a folha mal se mover ao ser
+    // arrastada pra cima, mas o cursor do mouse continua andando a
+    // distância cheia — ele "sai" da folha e passa a estar sobre o scrim
+    // (que tem onClick={onClose}). Ao soltar o botão ali, o clique nativo
+    // do browser (disparado logo depois do mouseup) aterrissa no scrim e
+    // fecha a folha mesmo sem o usuário ter arrastado o suficiente pra
+    // isso ser intencional. Não acontece em touch (pointerup fica
+    // capturado no elemento original) — confirmado testando os dois com
+    // Playwright (mouse vs. touch simulado via CDP).
+    //
+    // A guarda abaixo suprime esse clique acidental do scrim. Achado
+    // decisivo ao instrumentar com console.log: o evento nativo `click`
+    // dispara ANTES do `onDragEnd` do Framer Motion rodar (não depois,
+    // como seria intuitivo) — então marcar a flag dentro de `onDragEnd`
+    // sempre chega tarde demais, o `onClick` do scrim já leu o valor
+    // antigo. A flag precisa ser marcada em `onDragStart` (dispara assim
+    // que o gesto é reconhecido como arrasto, bem antes do soltar/click) e
+    // só é limpa depois, em `onDragEnd`, com um pequeno atraso — folga
+    // suficiente pra não atrapalhar um toque legítimo seguinte no scrim.
+    const justDraggedRef = React.useRef(false);
+
+    // Foco inicial + focus trap (Tab/Shift+Tab) + fechar com Esc — mesmo
+    // efeito de components/ui.tsx (Modal), duplicado aqui (ver comentário
+    // acima do componente).
+    React.useEffect(() => {
+        if (!isOpen) return;
+
+        const container = containerRef.current;
+        const getFocusable = (): HTMLElement[] =>
+            container
+                ? Array.from(container.querySelectorAll<HTMLElement>(BOTTOM_SHEET_FOCUSABLE_SELECTOR)).filter(
+                    (el) => el.offsetParent !== null
+                )
+                : [];
+
+        const focusable = getFocusable();
+        if (focusable.length > 0) {
+            focusable[0].focus();
+        } else {
+            container?.focus();
+        }
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+                return;
+            }
+
+            if (e.key === 'Tab') {
+                const items = getFocusable();
+                if (items.length === 0) {
+                    e.preventDefault();
+                    container?.focus();
+                    return;
+                }
+
+                const first = items[0];
+                const last = items[items.length - 1];
+                const active = document.activeElement;
+
+                if (e.shiftKey) {
+                    if (active === first || !container?.contains(active)) {
+                        e.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    if (active === last || !container?.contains(active)) {
+                        e.preventDefault();
+                        first.focus();
+                    }
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <motion.div
+                    key="scrim"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ background: 'rgba(10,13,19,0.6)' }}
+                    onClick={() => { if (!justDraggedRef.current) onClose(); }}
+                >
+                    <motion.div
+                        key="sheet"
+                        ref={containerRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={title}
+                        tabIndex={-1}
+                        initial={{ y: '100%' }}
+                        animate={{ y: 0 }}
+                        exit={{ y: '100%' }}
+                        transition={SPRING_SHEET}
+                        drag="y"
+                        // Só `top: 0` (achado I1 da revisão final de 2026-08-16): com
+                        // `bottom: 0` também, arrastar pra BAIXO (fechar) também
+                        // ficava elástico/resistido — a spec pede rastreio 1:1 do
+                        // dedo ao arrastar pra baixo, com resistência só ao
+                        // arrastar pra CIMA (passar do topo). Sem `bottom` no
+                        // objeto, esse eixo fica sem limite, então nenhum
+                        // `dragElastic` se aplica a ele — só `top: 0.05` (quase
+                        // rígido) continua valendo pra cima.
+                        dragConstraints={{ top: 0 }}
+                        dragElastic={{ top: 0.05, bottom: 0.5 }}
+                        onDragStart={() => { justDraggedRef.current = true; }}
+                        onDragEnd={(_e, info) => {
+                            setTimeout(() => { justDraggedRef.current = false; }, 150);
+                            if (info.velocity.y > DISMISS_VELOCITY || info.offset.y > window.innerHeight * DISMISS_OFFSET_RATIO) {
+                                onClose();
+                            }
+                        }}
+                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass-modal on-glass`}
+                        style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Alça visual — sinaliza que dá pra arrastar (achado da
+                            skill apple-design: "swipe actions must show clear
+                            affordance"). Só decorativo, o gesto funciona na folha
+                            inteira, não só na alça. */}
+                        <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
+                            <div className="w-10 h-1 rounded-full bg-white/20" />
+                        </div>
+                        {children}
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+}
 
 const CartModal: React.FC<{
     isOpen: boolean,
@@ -1210,11 +1412,8 @@ const CartModal: React.FC<{
     onUpdateQty: (item: CartItem, delta: number) => void,
     onRemove: (item: CartItem) => void
 }> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove }) => {
-    if(!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-[fadeIn_0.2s_ease-out]">
-            <div className="w-full max-w-md bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)] flex flex-col max-h-[90vh]" style={{boxShadow:'var(--shadow-md), 0 0 0 1px var(--border)'}}>
+        <BottomSheet isOpen={isOpen} onClose={onClose} title="Seu Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
                     <div className="flex items-center gap-2.5">
                         <ShoppingBag size={18} className="text-[var(--brand)]" />
@@ -1284,20 +1483,23 @@ const CartModal: React.FC<{
                         <span className="num">R$ {total.toFixed(2)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <Button variant="secondary" onClick={onClose}>
-                            Adicionar Mais
-                        </Button>
-                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0}>
-                            Confirmar Pedido
-                        </Button>
+                        <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
+                            <Button variant="secondary" onClick={onClose} className="w-full">
+                                Adicionar Mais
+                            </Button>
+                        </motion.div>
+                        <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
+                            <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0} className="w-full">
+                                Confirmar Pedido
+                            </Button>
+                        </motion.div>
                     </div>
                 </div>
-            </div>
-        </div>
+        </BottomSheet>
     );
 }
 
-const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null }> = ({ onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable }) => {
+const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable }) => {
     const [tab, setTab] = useState<'split' | 'users' | 'calculator'>('split');
     const [people, setPeople] = useState(1);
     const [total, setTotal] = useState(0);
@@ -1317,7 +1519,32 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
     const [isServiceFeeEnabled, setIsServiceFeeEnabled] = useState(false);
     const [serviceFeeRate, setServiceFeeRate] = useState(0.10);
 
+    // Defesa extra pro achado C2 da revisão final (2026-08-16): desde que
+    // Modal variant="sheet" ficou montado durante a animação de saída em vez
+    // de desmontar, o estado interno do BillSplitter não reseta mais sozinho
+    // entre um "fechar" e o próximo "abrir" — cobre qualquer caminho de
+    // fechamento (não só handleRequestBill, que já reseta showCloseConfirmation
+    // direto) e também tab/people/selectedItems (achado M4, mesma causa raiz),
+    // que sem isso reabriam na aba/estado da visita anterior.
     useEffect(() => {
+        if (!isOpen) {
+            setShowCloseConfirmation(false);
+            setTab('split');
+            setPeople(1);
+            setSelectedItems({});
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        // Modal (variant="sheet") agora fica montado durante a animação de
+        // saída (~0.4s) — sem esse guard, fechar a comanda continuaria
+        // buscando dado e mantendo a assinatura realtime aberta enquanto o
+        // cliente nem está mais olhando a comanda, e reabrir não reiniciaria
+        // a busca (o efeito só roda de novo quando as deps mudam). Fecha a
+        // assinatura (via cleanup) quando isOpen vira false, e só busca/
+        // assina de novo quando volta a ficar true.
+        if (!isOpen) return;
+
         const loadBill = async () => {
             setIsLoading(true);
             const data = await fetchTableOrderSummary(tableId);
@@ -1356,7 +1583,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [tableId, storeId]);
+    }, [tableId, storeId, isOpen]);
 
     const handleCallWaiter = async () => {
         try {
@@ -1381,6 +1608,12 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             }
             await requestTableBill(tableId);
             toast.success("Conta solicitada com sucesso! O garçom trará a conta em instantes.");
+            // Sem isso, o modal ficava montado (variant="sheet" não desmonta mais
+            // pra poder animar a saída — ver o useEffect abaixo) com
+            // showCloseConfirmation ainda true, e "Encerrar Mesa" (isOpen
+            // hardcoded true) reaparecia sozinho por cima de tudo depois do
+            // sucesso. Ver achado C2 da revisão final de 2026-08-16.
+            setShowCloseConfirmation(false);
             onClose();
         } catch (e) {
             toast.error("Erro ao solicitar conta.");
@@ -1534,7 +1767,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
     }
 
     return (
-        <Modal isOpen={true} onClose={onClose} title="Conta da Mesa">
+        <Modal isOpen={isOpen} onClose={onClose} title="Conta da Mesa" variant="sheet">
             <div className="space-y-4">
                 {isLoading ? (
                     <div className="py-10 animate-pulse text-center text-[var(--brand)]">Carregando conta...</div>
@@ -2180,7 +2413,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const isWaitingBill = currentTable?.status === TableStatus.WAITING_BILL;
 
     return (
-        <div className="bg-[var(--bg)] min-h-screen pb-32">
+        <MotionConfig reducedMotion="user">
+            <div className="bg-[var(--bg)] min-h-screen pb-32">
             {/* Header — banda de marca fixa (sempre --ink, não segue claro/escuro,
                 mesmo princípio do AuthBackdrop): é a "capa" da carta, rola junto
                 com a página em vez de ficar fixa, pra abrir espaço pro conteúdo. */}
@@ -2297,7 +2531,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {/* Search and Sort — banda de marca (--ink) some da barra de
                 categorias (2026-08-15): categorias agora são um acordeão
                 empilhado dentro da lista, não uma fileira horizontal fixa. */}
-            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
+            {/* Sem `u-glass` aqui (achado M2 da revisão final de 2026-08-16): essa
+                classe soma uma borda nos 4 lados (`u-glass-bar` sozinha não tem
+                borda nenhuma), o que numa barra sticky full-bleed cria um
+                traço visível nas bordas esquerda/direita/topo do viewport —
+                antes só existia `border-b`. `border-[var(--border)]` (via
+                `on-glass`) reproduz a MESMA cor de borda que `u-glass` usava,
+                só que só embaixo. */}
+            <div className={`px-4 py-3 u-glass-bar on-glass border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
                 <div className="flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
@@ -2371,8 +2612,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 onClick={() => setActiveCategory(prev => prev === cat.id ? '' : cat.id)}
                                 aria-expanded={expanded}
                                 whileTap={{ scale: 0.98 }}
-                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                className="w-full flex items-center gap-3 py-4 text-left u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] px-1.5 -mx-1.5"
+                                transition={SPRING_TAP}
+                                whileHover={{ backgroundColor: 'rgba(255,255,255,0.07)' }}
+                                className="w-full flex items-center gap-3 py-4 text-left u-motion rounded-[var(--r-md)] px-3 -mx-1.5 mt-1.5"
+                                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                             >
                                 <div className="flex-1 min-w-0 flex items-baseline gap-2">
                                     <h2 className="font-bold text-[var(--text)] text-[15px] uppercase tracking-[0.04em] truncate">{cat.name}</h2>
@@ -2380,7 +2623,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 </div>
                                 <motion.div
                                     animate={{ rotate: expanded ? 180 : 0 }}
-                                    transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+                                    transition={SPRING_SHEET}
                                     className="text-[var(--text-muted)] flex-shrink-0"
                                 >
                                     <ChevronDown size={18} />
@@ -2396,7 +2639,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             <motion.div
                                 initial={false}
                                 animate={{ height: expanded ? 'auto' : 0 }}
-                                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+                                transition={SPRING_SHEET}
                                 style={{ overflow: 'hidden' }}
                                 aria-hidden={!expanded}
                             >
@@ -2457,32 +2700,53 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
 
             {/* Floating Cart Button + Status da Mesa (empilham: Comanda em cima, Status embaixo) */}
-            {!isWaitingBill && (cart.length > 0 || latestMesaOrder) && (
-                <div className="fixed bottom-4 left-4 right-4 z-40 flex flex-col gap-3 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
-                    {cart.length > 0 && (
-                        <div className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border" style={{ background: 'var(--ink)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}>
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
-                                        <Wine size={16} style={{ color: WINE_GOLD }} />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
-                                        <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
-                                    </div>
-                                </div>
-                                <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
-                            </div>
-                            <Button
-                                className="w-full"
-                                onClick={() => setIsCartOpen(true)}
+            {!isWaitingBill && (
+                <div className="fixed bottom-4 left-4 right-4 z-40 flex flex-col gap-3">
+                    <AnimatePresence>
+                        {cart.length > 0 && (
+                            <motion.div
+                                key="cart-bar"
+                                initial={{ y: 40, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                exit={{ y: 40, opacity: 0 }}
+                                transition={SPRING_SHEET}
+                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border u-glass-cart on-glass"
+                                style={{ borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
                             >
-                                Ver Comanda
-                            </Button>
-                        </div>
-                    )}
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
+                                            <Wine size={16} style={{ color: WINE_GOLD }} />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
+                                            <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
+                                </div>
+                                <Button
+                                    className="w-full"
+                                    onClick={() => setIsCartOpen(true)}
+                                >
+                                    Ver Comanda
+                                </Button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     {latestMesaOrder && (
-                        <OrderStatusPill order={latestMesaOrder} onClick={() => setIsOrderStatusOpen(true)} />
+                        // Entrada com spring (achado M5 da revisão final de 2026-08-16):
+                        // a pill perdeu a animação de entrada quando o wrapper da barra
+                        // do carrinho virou motion.div (Task 2) — sem AnimatePresence de
+                        // propósito, o mount/unmount natural do `{latestMesaOrder && ...}`
+                        // já dispara initial→animate sozinho, igual ao cart-bar acima.
+                        <motion.div
+                            initial={{ y: 40, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={SPRING_SHEET}
+                        >
+                            <OrderStatusPill order={latestMesaOrder} onClick={() => setIsOrderStatusOpen(true)} />
+                        </motion.div>
                     )}
                 </div>
             )}
@@ -2548,8 +2812,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 orders={mesaOrders}
             />
 
-            {showBill && currentTable && currentStore && (
+            {currentTable && currentStore && (
                 <BillSplitter
+                    isOpen={showBill}
                     onClose={() => setShowBill(false)}
                     tableId={currentTable.id}
                     storeId={currentStore.id}
@@ -2574,6 +2839,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     />
                 </div>
             )}
-        </div>
+            </div>
+        </MotionConfig>
     );
 };
