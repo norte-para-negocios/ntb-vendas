@@ -118,6 +118,23 @@
   --scrollbar-thumb-hover: #9aa6b8;
 }
 
+/* Conteúdo dentro do vidro (sheets, barras) sempre lê os tokens do tema
+   escuro, independente do tema ambiente do usuário — o material de vidro
+   em si é sempre escuro (ecoa --ink, ver .u-glass-bar/.u-glass-cart/
+   .u-glass-modal abaixo), então o texto/superfícies dentro precisam ser
+   sempre claros pra manter contraste, mesmo com o app inteiro em tema
+   claro (achado C1 da revisão final de 2026-08-16: texto escuro do tema
+   claro sobre vidro quase preto ficava em ~1:1 de contraste, confirmado
+   nos prints de QA da Task 7). Mesmos valores literais do bloco .dark
+   acima — não reinventados. */
+.on-glass {
+  --text: #e6e8ec;
+  --text-muted: #8b93a1;
+  --surface: #15171d;
+  --surface-2: #1c1f27;
+  --border: rgba(255, 255, 255, 0.12);
+}
+
 /* Dark mode: ativado por classe .dark no <html> */
 .dark {
   --bg: #0d0e12;

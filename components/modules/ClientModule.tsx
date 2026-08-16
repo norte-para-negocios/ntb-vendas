@@ -1281,7 +1281,7 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
                                 onClose();
                             }
                         }}
-                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass-modal`}
+                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass-modal on-glass`}
                         style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
                         onClick={(e) => e.stopPropagation()}
                     >
@@ -2407,7 +2407,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {/* Search and Sort — banda de marca (--ink) some da barra de
                 categorias (2026-08-15): categorias agora são um acordeão
                 empilhado dentro da lista, não uma fileira horizontal fixa. */}
-            <div className={`px-4 py-3 u-glass u-glass-bar sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
+            {/* Sem `u-glass` aqui (achado M2 da revisão final de 2026-08-16): essa
+                classe soma uma borda nos 4 lados (`u-glass-bar` sozinha não tem
+                borda nenhuma), o que numa barra sticky full-bleed cria um
+                traço visível nas bordas esquerda/direita/topo do viewport —
+                antes só existia `border-b`. `border-[var(--border)]` (via
+                `on-glass`) reproduz a MESMA cor de borda que `u-glass` usava,
+                só que só embaixo. */}
+            <div className={`px-4 py-3 u-glass-bar on-glass border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
                 <div className="flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
@@ -2579,7 +2586,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: 40, opacity: 0 }}
                                 transition={SPRING_SHEET}
-                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border u-glass-cart"
+                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border u-glass-cart on-glass"
                                 style={{ borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
                             >
                                 <div className="flex justify-between items-center">

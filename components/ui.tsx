@@ -230,7 +230,7 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col u-glass-modal`}
+              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col u-glass-modal on-glass`}
               style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
               onClick={(e) => e.stopPropagation()}
             >
