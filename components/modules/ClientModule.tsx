@@ -535,7 +535,7 @@ function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClos
     const history = orders.filter(o => o.orderId !== active?.orderId && o.status === OrderStatus.DELIVERED);
 
     return (
-        <BottomSheet isOpen={isOpen} onClose={onClose}>
+        <BottomSheet isOpen={isOpen} onClose={onClose} title="Acompanhar Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] bg-[var(--surface)]">
                     <div className="flex items-center gap-2.5">
                         <BellRing size={18} className="text-[var(--brand)]" />
@@ -1224,12 +1224,31 @@ const ProductModal: React.FC<{
 const DISMISS_VELOCITY = 500; // px/s — flick rápido pra baixo já fecha
 const DISMISS_OFFSET_RATIO = 0.35; // arrastar >35% da altura da folha fecha mesmo sem flick
 
-function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
+// Duplicado de components/ui.tsx (Modal) de propósito — achado I2 da revisão
+// final de 2026-08-16: BottomSheet (usado por CartModal/OrderStatusModal)
+// não tinha role="dialog"/aria-modal/focus-trap/Esc, enquanto o gêmeo
+// Modal variant="sheet" (ui.tsx) já tinha desde sempre. Mesmo princípio já
+// documentado no comentário de ui.tsx: "se um valor mudar, mudar os dois
+// juntos" — não virou hook/módulo compartilhado novo porque não existe
+// nenhum lib/hooks compartilhado entre ClientModule.tsx e ui.tsx hoje, e
+// inventar um cruzamento novo tão perto do fim do branch é risco
+// desproporcional a um bugfix de acessibilidade.
+const BOTTOM_SHEET_FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md', title }: {
     isOpen: boolean;
     onClose: () => void;
     children: React.ReactNode;
     maxWidth?: string;
+    // Nome acessível da folha pro leitor de tela (aria-label) — cada
+    // consumidor (CartModal/OrderStatusModal) já mostra esse mesmo texto
+    // visualmente no próprio header, então aria-label evita ter que
+    // encanar um id através da fronteira children/BottomSheet só pra usar
+    // aria-labelledby.
+    title: string;
 }) {
+    const containerRef = React.useRef<HTMLDivElement>(null);
     // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de
     // código): dragElastic.top pequeno faz a folha mal se mover ao ser
     // arrastada pra cima, mas o cursor do mouse continua andando a
@@ -1251,6 +1270,64 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
     // só é limpa depois, em `onDragEnd`, com um pequeno atraso — folga
     // suficiente pra não atrapalhar um toque legítimo seguinte no scrim.
     const justDraggedRef = React.useRef(false);
+
+    // Foco inicial + focus trap (Tab/Shift+Tab) + fechar com Esc — mesmo
+    // efeito de components/ui.tsx (Modal), duplicado aqui (ver comentário
+    // acima do componente).
+    React.useEffect(() => {
+        if (!isOpen) return;
+
+        const container = containerRef.current;
+        const getFocusable = (): HTMLElement[] =>
+            container
+                ? Array.from(container.querySelectorAll<HTMLElement>(BOTTOM_SHEET_FOCUSABLE_SELECTOR)).filter(
+                    (el) => el.offsetParent !== null
+                )
+                : [];
+
+        const focusable = getFocusable();
+        if (focusable.length > 0) {
+            focusable[0].focus();
+        } else {
+            container?.focus();
+        }
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+                return;
+            }
+
+            if (e.key === 'Tab') {
+                const items = getFocusable();
+                if (items.length === 0) {
+                    e.preventDefault();
+                    container?.focus();
+                    return;
+                }
+
+                const first = items[0];
+                const last = items[items.length - 1];
+                const active = document.activeElement;
+
+                if (e.shiftKey) {
+                    if (active === first || !container?.contains(active)) {
+                        e.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    if (active === last || !container?.contains(active)) {
+                        e.preventDefault();
+                        first.focus();
+                    }
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
 
     return (
         <AnimatePresence>
@@ -1324,7 +1401,7 @@ const CartModal: React.FC<{
     onRemove: (item: CartItem) => void
 }> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove }) => {
     return (
-        <BottomSheet isOpen={isOpen} onClose={onClose}>
+        <BottomSheet isOpen={isOpen} onClose={onClose} title="Seu Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
                     <div className="flex items-center gap-2.5">
                         <ShoppingBag size={18} className="text-[var(--brand)]" />
