@@ -909,10 +909,12 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                     {/* Preço promocional (migration 019): cheio riscado + efetivo em
                         destaque (mesmo dourado de sempre). getEffectivePrice é a mesma
                         fonte que já decide quanto o carrinho cobra (lib/calc.ts).
-                        Favoritar (Vende Mais II, 100% client-side): coração empilhado
-                        acima do preço, mesmo canto — stopPropagation pra não abrir o
-                        modal (o card inteiro já é clicável). */}
-                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                        Favoritar (Vende Mais II, 100% client-side): coração ao LADO do
+                        preço, mesma linha (2026-08-16 — antes ficava empilhado em cima,
+                        empurrando o preço pra baixo do nome do produto) —
+                        stopPropagation pra não abrir o modal (o card inteiro já é
+                        clicável). */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                         {onToggleFavorite && (
                             // Alvo de toque real de 44x44 (padrão do projeto) sem alterar o
                             // layout compacto do card: padding aumenta a caixa clicável e a
