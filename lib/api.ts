@@ -986,6 +986,27 @@ export const saveNtbEstoqueIntegracaoConfig = async (
   }
 };
 
+// Bootstrap cross-sistema (2026-08-16): cria a loja correspondente no
+// ntb-estoque e já grava a integração aqui, tudo num clique só ("Criar no
+// NTB Estoque também" na criação de loja) — sem o operador ver/copiar
+// chave nenhuma. Ver app/api/integracao/criar-loja-estoque/route.ts.
+export const criarLojaNoEstoque = async (
+  storeId: string,
+  nome: string,
+  cnpj?: string
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const res = await fetch('/api/integracao/criar-loja-estoque', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, nome, cnpj }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+};
+
 // Lista de tentativas de emissão fiscal da loja (aba "Notas Fiscais" do
 // admin, Task 16) — via RPC `fetch_fiscal_notas_secure` (security definer,
 // scoped por store_id), não mais `.from('fiscal_notas').select('*')` direto.

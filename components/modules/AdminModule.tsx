@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
@@ -247,6 +247,12 @@ export const AdminModule: React.FC = () => {
   const [ntbEstoqueApiKeyInput, setNtbEstoqueApiKeyInput] = useState('');
   const [isSavingNtbEstoque, setIsSavingNtbEstoque] = useState(false);
 
+  // Criar no NTB Estoque também, já na criação da loja — checkbox só
+  // aparece em "Nova Loja" (não em "Editar Loja", que já tem a seção
+  // completa de integração acima). Pedido explícito do usuário
+  // (2026-08-16): um clique só, sem mexer em chave nenhuma.
+  const [criarNoEstoqueTambem, setCriarNoEstoqueTambem] = useState(false);
+
   // User Form State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -308,6 +314,7 @@ export const AdminModule: React.FC = () => {
       setNtbEstoqueStatus({ configurado: false, ativo: false });
       setNtbEstoqueUrlInput('');
       setNtbEstoqueApiKeyInput('');
+      setCriarNoEstoqueTambem(false);
   };
 
   const resetFiscalConfigForm = () => {
@@ -661,6 +668,14 @@ export const AdminModule: React.FC = () => {
                   const fiscalResult = await updateStoreFiscalConfig(storeId, { modeloEmissaoAutomatica: emiteNotaFiscal ? 'nfce' : 'nenhuma' });
                   if (!fiscalResult.success) {
                       toast.error('Loja salva, mas houve um erro ao salvar a opção de nota fiscal: ' + fiscalResult.message);
+                  }
+              }
+              if (!editingId && storeId && criarNoEstoqueTambem) {
+                  const estoqueResult = await criarLojaNoEstoque(storeId, trimmedName, cnpj);
+                  if (!estoqueResult.success) {
+                      toast.error('Loja criada aqui, mas falhou criar no NTB Estoque: ' + estoqueResult.message);
+                  } else {
+                      toast.success('Loja criada no NTB Estoque também!');
                   }
               }
               toast.success(editingId ? 'Loja atualizada com sucesso!' : 'Loja criada com sucesso!');
@@ -1058,6 +1073,29 @@ export const AdminModule: React.FC = () => {
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emiteNotaFiscal ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
               </div>
+
+              {/* Criar no NTB Estoque também — só em "Nova Loja" (loja já
+                  existente usa a seção completa de integração em "Editar
+                  Loja", mais abaixo). Cria a loja lá, gera a chave, e já
+                  salva a integração aqui, tudo automático. */}
+              {!editingId && (
+                  <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
+                      <div>
+                          <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><ArrowRight size={14}/> Criar no NTB Estoque também?</h4>
+                          <p className="text-xs text-[var(--text-muted)]">Cria a loja correspondente lá e já liga a integração — sem precisar mexer em chave nenhuma.</p>
+                      </div>
+                      <button
+                          type="button"
+                          role="switch"
+                          aria-checked={criarNoEstoqueTambem}
+                          aria-label="Criar no NTB Estoque também?"
+                          onClick={() => setCriarNoEstoqueTambem(prev => !prev)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${criarNoEstoqueTambem ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                      >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${criarNoEstoqueTambem ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                  </div>
+              )}
 
               <hr className="border-[var(--border)]" />
 
