@@ -219,7 +219,13 @@ export const Modal: React.FC<{
               exit={{ y: '100%' }}
               transition={{ type: 'spring', bounce: 0.18, duration: 0.4 }}
               drag="y"
-              dragConstraints={{ top: 0, bottom: 0 }}
+              // Só `top: 0` (achado I1 da revisão final de 2026-08-16, mesma
+              // mudança do BottomSheet em ClientModule.tsx — manter os dois em
+              // sincronia): sem `bottom` no objeto de constraints, arrastar pra
+              // baixo (fechar) fica sem limite/1:1 com o dedo, sem nenhum
+              // `dragElastic` se aplicando a esse eixo; `top: 0.05` continua
+              // quase rígido ao arrastar pra cima, passando do topo.
+              dragConstraints={{ top: 0 }}
               dragElastic={{ top: 0.05, bottom: 0.5 }}
               // Mesmos limiares do BottomSheet em ClientModule.tsx
               // (DISMISS_VELOCITY=500, DISMISS_OFFSET_RATIO=0.35) — duplicado

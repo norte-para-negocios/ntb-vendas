@@ -1267,12 +1267,25 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
                 >
                     <motion.div
                         key="sheet"
+                        ref={containerRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={title}
+                        tabIndex={-1}
                         initial={{ y: '100%' }}
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
                         transition={SPRING_SHEET}
                         drag="y"
-                        dragConstraints={{ top: 0, bottom: 0 }}
+                        // Só `top: 0` (achado I1 da revisão final de 2026-08-16): com
+                        // `bottom: 0` também, arrastar pra BAIXO (fechar) também
+                        // ficava elástico/resistido — a spec pede rastreio 1:1 do
+                        // dedo ao arrastar pra baixo, com resistência só ao
+                        // arrastar pra CIMA (passar do topo). Sem `bottom` no
+                        // objeto, esse eixo fica sem limite, então nenhum
+                        // `dragElastic` se aplica a ele — só `top: 0.05` (quase
+                        // rígido) continua valendo pra cima.
+                        dragConstraints={{ top: 0 }}
                         dragElastic={{ top: 0.05, bottom: 0.5 }}
                         onDragStart={() => { justDraggedRef.current = true; }}
                         onDragEnd={(_e, info) => {
