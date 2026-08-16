@@ -1282,7 +1282,7 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
                             }
                         }}
                         className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass-modal`}
-                        style={{ boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+                        style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Alça visual — sinaliza que dá pra arrastar (achado da
