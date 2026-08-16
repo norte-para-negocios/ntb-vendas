@@ -749,7 +749,12 @@ dashboard). Passos aplicados:
    `triggerOrdemProducao()`/`lib/api.ts`) hoje não inclui nenhuma informação
    de destino (cozinha/bar) por item — precisaria ganhar isso pra a ordem de
    produção poder escolher o local certo do lado de lá. Mesma nota espelhada
-   no AGENTS.md do `ntb-estoque`.
+   no AGENTS.md do `ntb-estoque`. **Esclarecido no mesmo dia:** criar locais
+   de estoque com qualquer nome (ex.: "Cozinha 1", "Cozinha 2", "Bar 1",
+   "Bar 2") **já é possível hoje** no `ntb-estoque` (`/local-estoque` →
+   "Novo local", descrição livre) — não é gap nenhum, isso já existe. O que
+   falta é só o lado de cá informar o `destination` por item, e o
+   `ntb-estoque` escolher entre os locais já cadastrados.
 
 ## Histórico completo no Contabo (dual-write, 2026-07-13)
 
