@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart, ChevronRight, CupSoda, IceCreamBowl, Sandwich, Wheat, Beef, Fish, Drumstick, Salad, Soup, Croissant } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Martini, Beer, GlassWater, Flame, Pizza, Cake, Sparkles, Heart, ChevronRight, ChevronDown, CupSoda, IceCreamBowl, Sandwich, Wheat, Beef, Fish, Drumstick, Salad, Soup, Croissant } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
@@ -1800,27 +1800,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return () => clearInterval(interval);
     }, []);
 
-    // Barra de categorias: arrastável com o mouse (desktop) + auto-scroll da
-    // categoria ativa pra dentro da vista. No mobile o toque já rola nativo.
-    const navScrollRef = useRef<HTMLDivElement>(null);
-    const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-    const navDrag = useRef({ down: false, moved: false, startX: 0, startScroll: 0 });
-    const onNavDown = (e: React.MouseEvent) => {
-        const el = navScrollRef.current; if (!el) return;
-        navDrag.current = { down: true, moved: false, startX: e.pageX, startScroll: el.scrollLeft };
-    };
-    const onNavMove = (e: React.MouseEvent) => {
-        if (!navDrag.current.down) return;
-        const el = navScrollRef.current; if (!el) return;
-        const dx = e.pageX - navDrag.current.startX;
-        if (Math.abs(dx) > 3) navDrag.current.moved = true;
-        el.scrollLeft = navDrag.current.startScroll - dx;
-    };
-    const onNavUp = () => { navDrag.current.down = false; };
-    useEffect(() => {
-        const el = chipRefs.current[activeCategory];
-        el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }, [activeCategory]);
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showBill, setShowBill] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -1896,13 +1875,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         const { categories, products, error: menuError } = await fetchMenu(store.id, true);
         setCategories(categories);
         setProducts(products);
-        // Cardapio por horario (migration 018): comeca ja na 1a categoria
-        // disponivel AGORA, nao so a 1a da lista (que pode estar fora da
-        // janela de horario) — evita abrir o cardapio numa categoria vazia.
-        if (categories.length > 0) {
-            const firstAvailable = categories.find(c => isCategoryAvailableNow(c)) || categories[0];
-            setActiveCategory(firstAvailable.id);
-        }
+        // Acordeão (2026-08-15): cardápio abre com todas as categorias
+        // recolhidas, nenhuma expandida por padrão — o cliente toca pra
+        // abrir a que quiser (antes a 1a categoria disponível abria sozinha,
+        // modelo de aba única que não existe mais).
         if (menuError) setLoadError('network');
         setIsLoadingMenu(false);
     }, [slug, setCurrentStore]);
@@ -2138,56 +2114,53 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         [categories, scheduleNow]
     );
 
-    // Se a categoria ativa deixar de estar disponivel (relogio virou durante
-    // a visita do cliente), troca automaticamente pra primeira categoria
-    // ainda disponivel — nao existe hoje nenhuma aba "Todas" no cardapio do
-    // cliente (activeCategory sempre aponta pra uma categoria concreta desde
-    // o load inicial), entao "mostrar tudo" nao é o padrao aplicavel aqui.
+    // Categorias empilhadas em acordeão (2026-08-15, pedido explícito do
+    // usuário): se a categoria expandida deixar de estar disponível (relógio
+    // virou durante a visita), só recolhe — não força abrir outra sozinha,
+    // já que agora "nada aberto" é um estado normal (não é mais "toda visita
+    // começa com uma categoria ativa" como no modelo antigo de aba única).
     useEffect(() => {
-        if (visibleCategories.length === 0) return;
-        if (!visibleCategories.some(c => c.id === activeCategory)) {
-            setActiveCategory(visibleCategories[0].id);
+        if (activeCategory && !visibleCategories.some(c => c.id === activeCategory)) {
+            setActiveCategory('');
         }
     }, [visibleCategories, activeCategory]);
 
-    const filteredProducts = useMemo(() => {
-        let prods = [...products]; // Create a copy to avoid mutating state directly
+    // Busca/favoritos filtram os produtos DENTRO de cada categoria (não mais
+    // uma lista única da categoria ativa) — cada categoria do acordeão pega
+    // sua fatia daqui. `sortBy` também é aplicado por categoria: "menor
+    // preço primeiro" faz sentido dentro de uma seção, não faria sentido
+    // comparar entre seções diferentes.
+    const productsByCategory = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+        const map: Record<string, Product[]> = {};
+        visibleCategories.forEach(cat => {
+            let prods = products.filter(p => p.category_id === cat.id);
+            if (term) {
+                // Busca por descrição (migration 019): além do nome, também bate se
+                // o termo aparecer na descrição do produto (campo opcional).
+                prods = prods.filter(p => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term));
+            }
+            if (favoritesOnly) prods = prods.filter(p => favoriteIds.has(p.id));
 
-        if (activeCategory) {
-            // Produtos de uma categoria que acabou de sair da janela de horario
-            // (ainda nao corrigido pelo efeito acima) tambem somem — nunca
-            // mostra produto de categoria que nao esta na barra.
-            const isActiveVisible = visibleCategories.some(c => c.id === activeCategory);
-            prods = isActiveVisible ? prods.filter(p => p.category_id === activeCategory) : [];
-        }
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            // Busca por descrição (migration 019): além do nome, também bate se o
-            // termo aparecer na descrição do produto — descrição é opcional, daí
-            // o `?.` (produto sem descrição simplesmente não casa por esse lado).
-            prods = prods.filter(p => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term));
-        }
-        // Favoritos (Vende Mais II, 100% client-side): mesmo padrão cumulativo
-        // que a busca por texto já usa aqui em cima — categoria ativa (e busca)
-        // continuam valendo, isso só restringe ainda mais (AND, não substitui).
-        if (favoritesOnly) {
-            prods = prods.filter(p => favoriteIds.has(p.id));
-        }
+            // getEffectivePrice (migration 019): produto com promoção ativa
+            // ordena pelo preço que o cliente realmente paga, não o cheio.
+            if (sortBy === 'price_asc') prods = [...prods].sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
+            else if (sortBy === 'price_desc') prods = [...prods].sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
+            else if (sortBy === 'name_asc') prods = [...prods].sort((a, b) => a.name.localeCompare(b.name));
 
-        // Sorting Logic
-        // getEffectivePrice (migration 019): produto com promoção ativa tem que
-        // ordenar pelo preço que o cliente realmente paga, não o cheio — senão
-        // um item em promoção pode aparecer fora de ordem em "menor preço".
-        if (sortBy === 'price_asc') {
-            prods.sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
-        } else if (sortBy === 'price_desc') {
-            prods.sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
-        } else if (sortBy === 'name_asc') {
-            prods.sort((a, b) => a.name.localeCompare(b.name));
-        }
+            map[cat.id] = prods;
+        });
+        return map;
+    }, [products, visibleCategories, searchTerm, sortBy, favoritesOnly, favoriteIds]);
 
-        return prods;
-    }, [products, activeCategory, visibleCategories, searchTerm, sortBy, favoritesOnly, favoriteIds]);
+    // Com busca ou filtro de favoritos ativo, as categorias com resultado
+    // abrem sozinhas (senão o cliente teria que tocar categoria por
+    // categoria pra achar o que procurou) — sem filtro, só a categoria que
+    // o cliente tocou manualmente fica aberta (comportamento normal do
+    // acordeão, um clique = aparecem os produtos daquela categoria).
+    const hasActiveFilter = !!searchTerm.trim() || favoritesOnly;
+    const isCategoryExpanded = (categoryId: string) =>
+        hasActiveFilter ? (productsByCategory[categoryId]?.length ?? 0) > 0 : activeCategory === categoryId;
 
     // Vitrine de destaques (migration 019): produtos featured=true, respeitando
     // a mesma janela de horário/dia de categoria que o resto do cardápio já
@@ -2210,8 +2183,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         categories.forEach(c => { map[c.id] = categoryIcon(c.name); });
         return map;
     }, [categories]);
-    const activeCategoryObj = useMemo(() => visibleCategories.find(c => c.id === activeCategory) || null, [visibleCategories, activeCategory]);
-
     if (loadError === 'network') return (
         <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center gap-3 p-6 text-center">
             <RefreshCw className="text-[var(--text-muted)]" size={48} />
@@ -2382,46 +2353,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 </div>
             )}
 
-            {/* Category Nav — banda de marca continua aqui: navegação com ícone
-                por categoria, arrastável (mouse), rola no toque, degradê nas
-                bordas. Fica grudada no topo ao rolar (a "capa" acima, não). */}
-            <div className={`sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-20`} style={{ background: 'var(--ink)' }}>
-                <div className="relative">
-                    <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 z-10" style={{ background: 'linear-gradient(to right, var(--ink), transparent)' }} />
-                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10" style={{ background: 'linear-gradient(to left, var(--ink), transparent)' }} />
-                    <div
-                        ref={navScrollRef}
-                        onMouseDown={onNavDown}
-                        onMouseMove={onNavMove}
-                        onMouseUp={onNavUp}
-                        onMouseLeave={onNavUp}
-                        className="overflow-x-auto no-scrollbar flex gap-2 px-4 py-3 cursor-grab active:cursor-grabbing select-none"
-                        style={{ scrollSnapType: 'x proximity' }}
-                    >
-                        {visibleCategories.map((cat) => {
-                            const active = activeCategory === cat.id;
-                            const Icon = categoryIconById[cat.id] || UtensilsCrossed;
-                            return (
-                                <button
-                                    key={cat.id}
-                                    ref={(el) => { chipRefs.current[cat.id] = el; }}
-                                    onClick={() => { if (!navDrag.current.moved) setActiveCategory(cat.id); }}
-                                    style={{ scrollSnapAlign: 'center', ...(active ? { background: WINE_GOLD, color: 'var(--ink)' } : undefined) }}
-                                    className={`whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold u-motion flex-shrink-0 ${
-                                        active ? 'shadow-sm' : 'bg-white/8 text-white/75 hover:bg-white/15 hover:text-white border border-white/10'
-                                    }`}
-                                >
-                                    <Icon size={14} />
-                                    {cat.name}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* Search and Sort */}
-            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-[85px]' : 'top-[52px]'} z-10`}>
+            {/* Search and Sort — banda de marca (--ink) some da barra de
+                categorias (2026-08-15): categorias agora são um acordeão
+                empilhado dentro da lista, não uma fileira horizontal fixa. */}
+            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
                 <div className="flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
@@ -2435,8 +2370,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     {/* Sort Dropdown / Toggles */}
                     <div className="flex gap-1">
                         {/* Favoritos (Vende Mais II, 100% client-side): mesma área da
-                            busca/ordenação, filtra filteredProducts de forma cumulativa
-                            (ver useMemo acima) — não desliga categoria nem busca. */}
+                            busca/ordenação, filtra productsByCategory de forma cumulativa
+                            (ver useMemo acima) — categoria com resultado abre sozinha. */}
                         <button
                             onClick={() => setFavoritesOnly(v => !v)}
                             className={`flex items-center gap-1 px-2.5 h-11 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--err)] text-white border-[var(--err)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
@@ -2470,53 +2405,93 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 </div>
             </div>
 
-            {/* Menu List — "carta" editorial: título da categoria + contagem,
-                depois as linhas (sem grid de cards). */}
-            <div className={`px-4 pt-4 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                {activeCategoryObj && !searchTerm && (
-                    <div className="flex items-center gap-2 mb-1 u-grow-in">
-                        <h2 className="font-bold text-[var(--text)] text-[17px] tracking-tight">{activeCategoryObj.name}</h2>
-                        <span className="text-[11px] font-semibold text-[var(--text-muted)]">{filteredProducts.length}</span>
-                        <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(212,175,92,0.5), transparent)' }} />
-                    </div>
-                )}
-                <div>
-                    {filteredProducts.map((product, i) => (
-                        <ProductCard
-                            key={product.id}
-                            product={product}
-                            icon={categoryIconById[product.category_id || ''] || UtensilsCrossed}
-                            onSelect={setSelectedProduct}
-                            onQuickAdd={(p) => {
-                                // Qualquer grupo de opção (obrigatório ou não) abre o modal
-                                // completo em vez de adicionar direto — extras opcionais
-                                // (ex.: borda de pizza) também são upsell/vinculados ao
-                                // omie_codigo da integração, não podem ser pulados no "+".
-                                if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                requestAccessThen(() => {
-                                    addToCart(p, 1, '', []);
-                                    toast.success(`${p.name} adicionado`);
-                                });
-                            }}
-                            disabled={isWaitingBill}
-                            style={stagger(Math.min(i, 10) * 30)}
-                            isBestseller={bestsellerIds.has(product.id)}
-                            isFavorite={favoriteIds.has(product.id)}
-                            onToggleFavorite={toggleFavorite}
-                        />
-                    ))}
-                </div>
+            {/* Categorias em acordeão (2026-08-15, pedido explícito do usuário):
+                uma embaixo da outra — toca no nome, aparecem os produtos
+                daquela categoria embaixo, na mesma página (sem trocar de
+                tela). Com busca/favoritos ativos, toda categoria com
+                resultado abre sozinha (ver isCategoryExpanded acima). */}
+            <div className={`px-4 pt-3 pb-2 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                {visibleCategories.map((cat) => {
+                    const Icon = categoryIconById[cat.id] || UtensilsCrossed;
+                    const catProducts = productsByCategory[cat.id] || [];
+                    const expanded = isCategoryExpanded(cat.id);
+                    // Com filtro ativo, categoria sem nenhum resultado some
+                    // inteira da lista — não faz sentido mostrar um cabeçalho
+                    // vazio de "Bebidas (0)" no meio de uma busca.
+                    if (hasActiveFilter && catProducts.length === 0) return null;
+                    return (
+                        <div key={cat.id} className="border-b border-[var(--border)] last:border-0">
+                            <button
+                                type="button"
+                                onClick={() => setActiveCategory(prev => prev === cat.id ? '' : cat.id)}
+                                aria-expanded={expanded}
+                                className="w-full flex items-center gap-3 py-3.5 text-left u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] px-1.5 -mx-1.5"
+                            >
+                                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(212,175,92,0.14)' }}>
+                                    <Icon size={16} style={{ color: WINE_GOLD_DARK }} />
+                                </div>
+                                <div className="flex-1 min-w-0 flex items-baseline gap-2">
+                                    <h2 className="font-bold text-[var(--text)] text-[16px] tracking-tight truncate">{cat.name}</h2>
+                                    <span className="text-[12px] font-semibold text-[var(--text-muted)] flex-shrink-0">{catProducts.length}</span>
+                                </div>
+                                <ChevronDown
+                                    size={18}
+                                    className="text-[var(--text-muted)] u-motion flex-shrink-0"
+                                    style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                                />
+                            </button>
+                            {expanded && (
+                                <div className="pb-2 u-grow-in">
+                                    {catProducts.map((product, i) => (
+                                        <ProductCard
+                                            key={product.id}
+                                            product={product}
+                                            icon={Icon}
+                                            onSelect={setSelectedProduct}
+                                            onQuickAdd={(p) => {
+                                                // Qualquer grupo de opção (obrigatório ou não) abre o
+                                                // modal completo em vez de adicionar direto — extras
+                                                // opcionais (ex.: borda de pizza) também são upsell/
+                                                // vinculados ao omie_codigo, não podem ser pulados no "+".
+                                                if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
+                                                requestAccessThen(() => {
+                                                    addToCart(p, 1, '', []);
+                                                    toast.success(`${p.name} adicionado`);
+                                                });
+                                            }}
+                                            disabled={isWaitingBill}
+                                            style={stagger(Math.min(i, 10) * 30)}
+                                            isBestseller={bestsellerIds.has(product.id)}
+                                            isFavorite={favoriteIds.has(product.id)}
+                                            onToggleFavorite={toggleFavorite}
+                                        />
+                                    ))}
+                                    {catProducts.length === 0 && (
+                                        <p className="text-[13px] text-[var(--text-muted)] py-3 text-center">Nenhum produto nesta categoria.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+
                 {isLoadingMenu ? (
                     <div className="text-center py-12 text-[var(--text-muted)] text-sm animate-pulse">Carregando cardápio...</div>
-                ) : filteredProducts.length === 0 ? (
+                ) : visibleCategories.length === 0 ? (
                     <div className="flex flex-col items-center text-center py-16 u-grow-in">
                         <div className="w-16 h-16 rounded-[1.4rem] bg-[var(--brand-soft)] flex items-center justify-center mb-4" style={{ animation: '3s ease-in-out infinite icon-float' }}>
                             <UtensilsCrossed size={26} className="text-[var(--brand)]/50" />
                         </div>
-                        <p className="text-[var(--text)] font-medium">{searchTerm ? 'Nada encontrado' : 'Cardápio a caminho'}</p>
-                        <p className="text-[var(--text-muted)] text-sm mt-1 max-w-[15rem]">
-                            {searchTerm ? 'Tente buscar por outro nome.' : 'Os pratos desta loja aparecem aqui assim que forem cadastrados.'}
-                        </p>
+                        <p className="text-[var(--text)] font-medium">Cardápio a caminho</p>
+                        <p className="text-[var(--text-muted)] text-sm mt-1 max-w-[15rem]">Os pratos desta loja aparecem aqui assim que forem cadastrados.</p>
+                    </div>
+                ) : hasActiveFilter && Object.values(productsByCategory).every(p => p.length === 0) ? (
+                    <div className="flex flex-col items-center text-center py-16 u-grow-in">
+                        <div className="w-16 h-16 rounded-[1.4rem] bg-[var(--brand-soft)] flex items-center justify-center mb-4" style={{ animation: '3s ease-in-out infinite icon-float' }}>
+                            <UtensilsCrossed size={26} className="text-[var(--brand)]/50" />
+                        </div>
+                        <p className="text-[var(--text)] font-medium">Nada encontrado</p>
+                        <p className="text-[var(--text-muted)] text-sm mt-1 max-w-[15rem]">Tente buscar por outro nome.</p>
                     </div>
                 ) : null}
             </div>
