@@ -16,26 +16,23 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
+import { motion, AnimatePresence } from 'motion/react';
 
 // --- COMPONENTS ---
 
-// Identidade "carta de vinhos" do cardápio do cliente: dourado pra preço/
-// proveniência E pros CTAs do fluxo de compra (GOLD_CTA_STYLE abaixo, mudança
-// de 2026-08-15 — antes o CTA era o azul da marca, que destoava no meio da
-// identidade). Ações utilitárias fora do fluxo de compra (tema, sair, conta)
-// continuam neutras/azul. Hex fixo de propósito, como os outros consts de
-// marca do projeto (AuthBackdrop, app/page.tsx) — não é um token do design
-// system porque só existe nesta tela.
+// Identidade "carta de vinhos" do cardápio do cliente: dourado só pra
+// preço/valor e etiqueta de proveniência — regra original do projeto,
+// restaurada em 2026-08-16 depois de uma rodada que também tinha jogado
+// dourado nos CTAs/botões (o usuário achou "amarelo demais"). Ação
+// continua sendo o azul da marca (--brand), igual ao resto do produto
+// (admin, lojista, landing). Hex fixo de propósito, como os outros
+// consts de marca do projeto (AuthBackdrop, app/page.tsx) — não é um
+// token do design system porque só existe nesta tela.
 const WINE_GOLD = '#D4AF5C';
-// Tom mais escuro só pro ícone dentro do medalhão dourado claro: o dourado
-// puro em cima do próprio tom claro (rgba 0.14) não tem contraste suficiente.
+// Tom mais escuro só pro texto sobre o fundo claro da etiqueta de tag no
+// ProductModal: o dourado puro em cima do próprio tom claro (rgba 0.08)
+// não tem contraste suficiente.
 const WINE_GOLD_DARK = '#8A6A2B';
-// CTA assinatura do fluxo de compra (Adicionar / Ver Comanda / Enviar pedido):
-// dourado sólido com texto --ink, em vez do azul padrão do design system — o
-// azul de ação no meio da identidade carta de vinhos lia como tema genérico.
-// Inline style de propósito: vence as classes bg-*/text-white do Button em
-// qualquer estado (hover incluído), sem precisar de variante nova no ui.tsx.
-const GOLD_CTA_STYLE: React.CSSProperties = { background: WINE_GOLD, color: 'var(--ink)' };
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
 // E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
@@ -74,7 +71,7 @@ const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onCo
                 </div>
 
                 <div className="w-full space-y-3">
-                    <Button onClick={onConfirm} isLoading={isLoading} className="w-full h-12 text-lg font-semibold" style={GOLD_CTA_STYLE}>
+                    <Button onClick={onConfirm} isLoading={isLoading} className="w-full h-12 text-lg">
                         Tudo Certo, Enviar!
                     </Button>
                     <Button variant="secondary" onClick={onClose} className="w-full">
@@ -781,7 +778,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     )}
                 </div>
 
-                <Button className="w-full group font-semibold" style={GOLD_CTA_STYLE} onClick={handleEnter} disabled={isLoading}>
+                <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
                     <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
                     {tables.find(t => t.id === tableId)?.status === 'occupied'
                         ? 'Entrar / Recuperar'
@@ -911,19 +908,21 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         </span>
                     ) : <span />}
                     {onQuickAdd && (
-                        // Dourado, não o azul da marca (2026-08-16) — mesmo motivo do
-                        // GOLD_CTA_STYLE nos outros CTAs de compra: esse "+" é a ação
-                        // mais repetida da tela inteira, precisa ser a MESMA cor que o
-                        // resto do fluxo de pedido, não uma cor de ação genérica solta.
-                        <button
+                        // Azul da marca (revertido 2026-08-16 — regra original do
+                        // projeto: dourado só pra preço/valor, azul pra ação. A rodada
+                        // anterior botou dourado até nos botões, ficou "amarelo demais").
+                        // whileTap com spring de verdade (lib `motion`) em vez do scale
+                        // CSS instantâneo do u-press — é o botão mais tocado da tela.
+                        <motion.button
                             type="button"
                             aria-label={`Adicionar ${product.name}`}
                             onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
-                            className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm u-motion u-press flex-shrink-0"
-                            style={{ background: WINE_GOLD, color: 'var(--ink)' }}
+                            whileTap={{ scale: 0.88 }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                            className="w-8 h-8 rounded-full bg-[var(--brand)] text-white flex items-center justify-center shadow-sm u-motion hover:bg-[var(--brand-strong)] flex-shrink-0"
                         >
                             <Plus size={17} />
-                        </button>
+                        </motion.button>
                     )}
                 </div>
             </div>
@@ -1192,7 +1191,7 @@ const ProductModal: React.FC<{
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <Button className="w-full mt-4 h-12 text-lg font-semibold" style={GOLD_CTA_STYLE} disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
                     Adicionar • R$ {(unitPrice * qty).toFixed(2)}
                 </Button>
                 {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
@@ -1288,7 +1287,7 @@ const CartModal: React.FC<{
                         <Button variant="secondary" onClick={onClose}>
                             Adicionar Mais
                         </Button>
-                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0} className="font-semibold" style={GOLD_CTA_STYLE}>
+                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0}>
                             Confirmar Pedido
                         </Button>
                     </div>
@@ -2314,37 +2313,33 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         {/* Favoritos (Vende Mais II, 100% client-side): mesma área da
                             busca/ordenação, filtra productsByCategory de forma cumulativa
                             (ver useMemo acima) — categoria com resultado abre sozinha.
-                            Estado ativo em dourado (2026-08-16, era vermelho/azul —
-                            cor de ação/erro genérica destoando da carta de vinhos). */}
+                            Estado ativo no azul da marca (revertido 2026-08-16 — dourado
+                            é só pra preço/valor, não pra estado de botão). */}
                         <button
                             onClick={() => setFavoritesOnly(v => !v)}
-                            className={`flex items-center gap-1 px-2.5 h-11 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'border-[rgba(212,175,92,0.5)] text-[var(--text)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                            style={favoritesOnly ? { background: 'rgba(212,175,92,0.12)' } : undefined}
+                            className={`flex items-center gap-1 px-2.5 h-11 rounded-[var(--r-md)] border text-[12px] font-semibold u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Mostrar só favoritos"
                             aria-pressed={favoritesOnly}
                         >
-                            <Heart size={14} className={favoritesOnly ? 'fill-current' : ''} style={favoritesOnly ? { color: WINE_GOLD } : undefined} /> Favoritos
+                            <Heart size={14} className={favoritesOnly ? 'fill-current' : ''} /> Favoritos
                         </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_asc' ? 'default' : 'price_asc')}
-                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_asc' ? 'border-[rgba(212,175,92,0.5)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                            style={sortBy === 'price_asc' ? { background: 'rgba(212,175,92,0.12)', color: WINE_GOLD } : undefined}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Preço Menor"
                         >
                             <ArrowDownWideNarrow size={16} />
                         </button>
                         <button
                             onClick={() => setSortBy(sortBy === 'price_desc' ? 'default' : 'price_desc')}
-                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_desc' ? 'border-[rgba(212,175,92,0.5)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                            style={sortBy === 'price_desc' ? { background: 'rgba(212,175,92,0.12)', color: WINE_GOLD } : undefined}
+                            className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'price_desc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                             title="Preço Maior"
                         >
                              <ArrowUpNarrowWide size={16} />
                         </button>
                         <button
                              onClick={() => setSortBy(sortBy === 'name_asc' ? 'default' : 'name_asc')}
-                             className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'name_asc' ? 'border-[rgba(212,175,92,0.5)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                             style={sortBy === 'name_asc' ? { background: 'rgba(212,175,92,0.12)', color: WINE_GOLD } : undefined}
+                             className={`p-2 rounded-[var(--r-md)] border u-motion u-press-sm ${sortBy === 'name_asc' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
                              title="Nome A-Z"
                         >
                              <ArrowDownAZ size={16} />
@@ -2371,33 +2366,41 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             {/* Sem ícone (removido 2026-08-16 — ver ProductCard acima pro
                                 mesmo motivo): nome em caixa alta discreta + contagem já
                                 bastam pra escanear a lista de categorias. */}
-                            <button
+                            <motion.button
                                 type="button"
                                 onClick={() => setActiveCategory(prev => prev === cat.id ? '' : cat.id)}
                                 aria-expanded={expanded}
+                                whileTap={{ scale: 0.98 }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                                 className="w-full flex items-center gap-3 py-4 text-left u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] px-1.5 -mx-1.5"
                             >
                                 <div className="flex-1 min-w-0 flex items-baseline gap-2">
                                     <h2 className="font-bold text-[var(--text)] text-[15px] uppercase tracking-[0.04em] truncate">{cat.name}</h2>
                                     <span className="text-[12px] font-medium text-[var(--text-muted)] flex-shrink-0">{catProducts.length}</span>
                                 </div>
-                                <ChevronDown
-                                    size={18}
+                                <motion.div
+                                    animate={{ rotate: expanded ? 180 : 0 }}
+                                    transition={{ type: 'spring', stiffness: 300, damping: 22 }}
                                     className="text-[var(--text-muted)] flex-shrink-0"
-                                    style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 300ms cubic-bezier(0.22,1,0.36,1)' }}
-                                />
-                            </button>
-                            {/* Expande/recolhe animado via grid-template-rows (0fr↔1fr) — a
-                                técnica que anima até a altura real do conteúdo, ao contrário
-                                de max-height. Conteúdo sempre montado (não condicional), só
-                                a altura do wrapper anima; prefers-reduced-motion já zera a
-                                duração da transição globalmente (app/globals.css). */}
-                            <div
-                                className="grid"
-                                style={{ gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows 320ms cubic-bezier(0.22,1,0.36,1)' }}
+                                >
+                                    <ChevronDown size={18} />
+                                </motion.div>
+                            </motion.button>
+                            {/* Expande/recolhe com física de mola de verdade (lib `motion`,
+                                2026-08-16 — pedido explícito do usuário: a versão anterior
+                                era CSS com cubic-bezier fingindo, "mecânica"; agora anima a
+                                altura real do conteúdo via spring, com o leve "acomodar"
+                                que dá o efeito líquido/Apple). Conteúdo sempre montado, só
+                                a altura anima; prefers-reduced-motion é respeitado pela
+                                própria lib automaticamente. */}
+                            <motion.div
+                                initial={false}
+                                animate={{ height: expanded ? 'auto' : 0 }}
+                                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+                                style={{ overflow: 'hidden' }}
                                 aria-hidden={!expanded}
                             >
-                                <div className="overflow-hidden" style={{ pointerEvents: expanded ? 'auto' : 'none' }}>
+                                <div style={{ pointerEvents: expanded ? 'auto' : 'none' }}>
                                     <div className="pb-2">
                                         {catProducts.map((product, i) => (
                                             <ProductCard
@@ -2427,7 +2430,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         )}
                                     </div>
                                 </div>
-                            </div>
+                            </motion.div>
                         </div>
                     );
                 })}
@@ -2471,8 +2474,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
                             </div>
                             <Button
-                                className="w-full font-semibold"
-                                style={GOLD_CTA_STYLE}
+                                className="w-full"
                                 onClick={() => setIsCartOpen(true)}
                             >
                                 Ver Comanda
