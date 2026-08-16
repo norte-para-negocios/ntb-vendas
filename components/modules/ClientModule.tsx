@@ -2307,7 +2307,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {/* Search and Sort — banda de marca (--ink) some da barra de
                 categorias (2026-08-15): categorias agora são um acordeão
                 empilhado dentro da lista, não uma fileira horizontal fixa. */}
-            <div className={`px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
+            <div className={`px-4 py-3 u-glass sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`} style={{ background: 'rgba(10,13,19,0.7)', backdropFilter: 'blur(14px) saturate(160%)', WebkitBackdropFilter: 'blur(14px) saturate(160%)' }}>
                 <div className="flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
@@ -2467,30 +2467,40 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
 
             {/* Floating Cart Button + Status da Mesa (empilham: Comanda em cima, Status embaixo) */}
-            {!isWaitingBill && (cart.length > 0 || latestMesaOrder) && (
-                <div className="fixed bottom-4 left-4 right-4 z-40 flex flex-col gap-3 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]">
-                    {cart.length > 0 && (
-                        <div className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border" style={{ background: 'var(--ink)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}>
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
-                                        <Wine size={16} style={{ color: WINE_GOLD }} />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
-                                        <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
-                                    </div>
-                                </div>
-                                <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
-                            </div>
-                            <Button
-                                className="w-full"
-                                onClick={() => setIsCartOpen(true)}
+            {!isWaitingBill && (
+                <div className="fixed bottom-4 left-4 right-4 z-40 flex flex-col gap-3">
+                    <AnimatePresence>
+                        {cart.length > 0 && (
+                            <motion.div
+                                key="cart-bar"
+                                initial={{ y: 40, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                exit={{ y: 40, opacity: 0 }}
+                                transition={SPRING_SHEET}
+                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border"
+                                style={{ background: 'rgba(10,13,19,0.72)', backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
                             >
-                                Ver Comanda
-                            </Button>
-                        </div>
-                    )}
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
+                                            <Wine size={16} style={{ color: WINE_GOLD }} />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
+                                            <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
+                                </div>
+                                <Button
+                                    className="w-full"
+                                    onClick={() => setIsCartOpen(true)}
+                                >
+                                    Ver Comanda
+                                </Button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     {latestMesaOrder && (
                         <OrderStatusPill order={latestMesaOrder} onClick={() => setIsOrderStatusOpen(true)} />
                     )}
