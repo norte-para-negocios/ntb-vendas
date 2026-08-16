@@ -132,6 +132,22 @@ export const Modal: React.FC<{
 
   // Foco inicial + focus trap (Tab/Shift+Tab) + fechar com Esc enquanto o
   // modal estiver aberto. Ver Task I2 da varredura de 2026-07-02.
+  //
+  // `onClose` guardado em ref (não entra nas deps do efeito abaixo): o
+  // consumidor típico passa `onClose={() => setX(false)}` inline, uma
+  // função NOVA a cada render do componente pai. Qualquer digitação num
+  // campo controlado dentro do modal (onChange -> setState -> re-render do
+  // pai) trocava essa referência, o que reexecutava o efeito inteiro e
+  // chamava `focusable[0].focus()` de novo NO MEIO da digitação — como o X
+  // de fechar é o primeiro elemento focável no DOM (vem antes do form no
+  // JSX), o foco pulava do campo de texto pro botão de fechar a cada
+  // tecla. Achado real reportado pelo usuário (2026-08-16, modal "Nova
+  // Loja" do Master Admin) — bug existia desde a Task I2, nunca detectado
+  // porque testes anteriores não digitaram em campo controlado com o
+  // devtools de performance ligado.
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
   React.useEffect(() => {
     if (!isOpen) return;
 
@@ -153,7 +169,7 @@ export const Modal: React.FC<{
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -185,7 +201,8 @@ export const Modal: React.FC<{
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (variant === 'sheet') {
     // AnimatePresence precisa ficar montado incondicionalmente pra poder
