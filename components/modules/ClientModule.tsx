@@ -1417,6 +1417,22 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     const [isServiceFeeEnabled, setIsServiceFeeEnabled] = useState(false);
     const [serviceFeeRate, setServiceFeeRate] = useState(0.10);
 
+    // Defesa extra pro achado C2 da revisão final (2026-08-16): desde que
+    // Modal variant="sheet" ficou montado durante a animação de saída em vez
+    // de desmontar, o estado interno do BillSplitter não reseta mais sozinho
+    // entre um "fechar" e o próximo "abrir" — cobre qualquer caminho de
+    // fechamento (não só handleRequestBill, que já reseta showCloseConfirmation
+    // direto) e também tab/people/selectedItems (achado M4, mesma causa raiz),
+    // que sem isso reabriam na aba/estado da visita anterior.
+    useEffect(() => {
+        if (!isOpen) {
+            setShowCloseConfirmation(false);
+            setTab('split');
+            setPeople(1);
+            setSelectedItems({});
+        }
+    }, [isOpen]);
+
     useEffect(() => {
         // Modal (variant="sheet") agora fica montado durante a animação de
         // saída (~0.4s) — sem esse guard, fechar a comanda continuaria
@@ -1490,6 +1506,12 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
             }
             await requestTableBill(tableId);
             toast.success("Conta solicitada com sucesso! O garçom trará a conta em instantes.");
+            // Sem isso, o modal ficava montado (variant="sheet" não desmonta mais
+            // pra poder animar a saída — ver o useEffect abaixo) com
+            // showCloseConfirmation ainda true, e "Encerrar Mesa" (isOpen
+            // hardcoded true) reaparecia sozinho por cima de tudo depois do
+            // sucesso. Ver achado C2 da revisão final de 2026-08-16.
+            setShowCloseConfirmation(false);
             onClose();
         } catch (e) {
             toast.error("Erro ao solicitar conta.");
