@@ -4562,23 +4562,60 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">NF-e</p>
-                            <Input type="number" label="Série" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
-                            <Input type="number" label="Último número emitido" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
-                            <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                    {/* Reorganizado (2026-08-16, pedido explícito do usuário): antes NF-e e
+                        NFC-e apareciam sempre lado a lado, misturados com CSC (que só existe
+                        pra NFC-e) mesmo quando a loja usa só um dos dois — ou nenhum. Agora só
+                        aparece o bloco do tipo escolhido acima em "Modelo de emissão automática". */}
+                    {fiscalModeloEmissaoAutomatica === 'nfe' && (
+                        <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
+                            <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input type="number" label="Série" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                                <Input type="number" label="Último número emitido" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
+                            </div>
+                            <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
+                                <textarea
+                                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                  rows={2}
+                                  value={fiscalObservacaoNfe}
+                                  onChange={e => setFiscalObservacaoNfe(e.target.value)}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">NFC-e</p>
-                            <Input type="number" label="Série" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
-                            <Input type="number" label="Último número emitido" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
-                            <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                    )}
+
+                    {fiscalModeloEmissaoAutomatica === 'nfce' && (
+                        <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
+                            <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input type="number" label="Série" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                                <Input type="number" label="Último número emitido" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                            </div>
+                            <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
+                            <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
+                                    <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
+                                    <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
+                                    <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
+                                    <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    {fiscalModeloEmissaoAutomatica === 'nenhuma' && (
+                        <p className="text-xs text-[var(--text-muted)] italic">Escolha NFC-e ou NF-e acima pra configurar série, numeração e (se for NFC-e) o CSC.</p>
+                    )}
 
                     <details className="border border-[var(--border)] rounded-lg p-3">
-                        <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Avançado (CT-e / MDF-e)</summary>
+                        <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Outros documentos — CT-e / MDF-e (avançado)</summary>
                         <div className="grid grid-cols-2 gap-4 mt-3">
                             <div className="space-y-2">
                                 <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
@@ -4595,46 +4632,23 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                         </div>
                     </details>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
-                            <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
-                            <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
+                    <div className="pt-4 border-t border-[var(--border)] space-y-4">
+                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Dados gerais</p>
+                        <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
+                        <Input label="Telefone" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
+                            <Input label="CNPJ Autorizado" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
                         </div>
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
-                            <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
-                            <Input type="password" label="CSCID" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
+                            <textarea
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                              rows={2}
+                              value={fiscalObservacaoPedido}
+                              onChange={e => setFiscalObservacaoPedido(e.target.value)}
+                            />
                         </div>
-                    </div>
-
-                    <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
-
-                    <Input label="Telefone" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
-                        <Input label="CNPJ Autorizado" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
-                        <textarea
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
-                          rows={2}
-                          value={fiscalObservacaoNfe}
-                          onChange={e => setFiscalObservacaoNfe(e.target.value)}
-                        />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
-                        <textarea
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
-                          rows={2}
-                          value={fiscalObservacaoPedido}
-                          onChange={e => setFiscalObservacaoPedido(e.target.value)}
-                        />
                     </div>
 
                     {/* Identificação da empresa (migration 025) */}
