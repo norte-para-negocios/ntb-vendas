@@ -7,7 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -2987,6 +2987,65 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         loadMenu();
     }
 
+    // Consolidar produtos soltos em variação (2026-08-16) — "organizar o
+    // cardápio": seleciona 2+ produtos da MESMA categoria e agrupa como
+    // variações de um produto-pai (ver consolidateProductsIntoVariants em
+    // lib/api.ts). Só entra em modo de seleção quando o lojista pede —
+    // fora disso a lista de produtos funciona exatamente como sempre.
+    const [groupSelectMode, setGroupSelectMode] = useState(false);
+    const [selectedForGroup, setSelectedForGroup] = useState<Set<string>>(new Set());
+    const [groupModalOpen, setGroupModalOpen] = useState(false);
+    const [groupBaseId, setGroupBaseId] = useState<string | null>(null);
+    const [groupNameInput, setGroupNameInput] = useState('');
+    const [isConsolidating, setIsConsolidating] = useState(false);
+
+    const toggleProductForGroup = (productId: string) => {
+        setSelectedForGroup(prev => {
+            const next = new Set(prev);
+            if (next.has(productId)) next.delete(productId); else next.add(productId);
+            return next;
+        });
+    };
+
+    const selectedGroupProducts = useMemo(
+        () => products.filter(p => selectedForGroup.has(p.id)),
+        [products, selectedForGroup]
+    );
+    const selectedGroupSameCategory = useMemo(() => {
+        if (selectedGroupProducts.length < 2) return false;
+        const firstGroupId = groupIdOf(selectedGroupProducts[0]);
+        return selectedGroupProducts.every(p => groupIdOf(p) === firstGroupId);
+    }, [selectedGroupProducts]);
+
+    const openGroupModal = () => {
+        if (!selectedGroupSameCategory) return;
+        // Sugere o mais barato como base (price_delta nunca pode ser negativo).
+        const cheapest = [...selectedGroupProducts].sort((a, b) => a.price - b.price)[0];
+        setGroupBaseId(cheapest.id);
+        setGroupNameInput('');
+        setGroupModalOpen(true);
+    };
+
+    const handleConsolidateGroup = async () => {
+        if (!groupBaseId || !groupNameInput.trim()) {
+            return toast.error('Escolha o produto base e dê um nome pro grupo.');
+        }
+        setIsConsolidating(true);
+        try {
+            const result = await consolidateProductsIntoVariants(storeId, groupBaseId, selectedGroupProducts, groupNameInput.trim());
+            if (!result.success) throw new Error(result.message);
+            toast.success('Produtos agrupados em variações!');
+            setGroupModalOpen(false);
+            setGroupSelectMode(false);
+            setSelectedForGroup(new Set());
+            loadMenu();
+        } catch (e: any) {
+            toast.error('Erro ao agrupar: ' + e.message);
+        } finally {
+            setIsConsolidating(false);
+        }
+    };
+
     const [serviceFeeEnabled, setServiceFeeEnabled] = useState(store.config?.charge_service_fee ?? false);
     const [currentStoreConfig, setCurrentStoreConfig] = useState(store.config);
 
@@ -3296,10 +3355,34 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
                     {/* PRODUCTS */}
                     <section className="mt-8">
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                             <h3 className="font-bold text-lg text-[var(--text)]">Produtos</h3>
-                            <Button onClick={() => openProductModal()}><Plus size={18} className="mr-1"/> Novo Produto</Button>
+                            <div className="flex items-center gap-2">
+                                {groupSelectMode && selectedGroupProducts.length >= 2 && (
+                                    selectedGroupSameCategory ? (
+                                        <Button onClick={openGroupModal} className="!bg-[var(--brand)]">
+                                            Agrupar como variações ({selectedGroupProducts.length})
+                                        </Button>
+                                    ) : (
+                                        <span className="text-xs text-[var(--warn)] font-medium">Selecione produtos da mesma categoria</span>
+                                    )
+                                )}
+                                <Button
+                                    variant={groupSelectMode ? 'secondary' : 'outline'}
+                                    onClick={() => { setGroupSelectMode(prev => !prev); setSelectedForGroup(new Set()); }}
+                                >
+                                    {groupSelectMode ? 'Cancelar seleção' : 'Agrupar variações'}
+                                </Button>
+                                <Button onClick={() => openProductModal()}><Plus size={18} className="mr-1"/> Novo Produto</Button>
+                            </div>
                         </div>
+                        {groupSelectMode && (
+                            <p className="text-xs text-[var(--text-muted)] mb-4">
+                                Selecione 2+ produtos parecidos da mesma categoria (ex.: as variações de um prato) pra
+                                juntar num produto só, com um grupo de escolha. Nenhum produto é apagado — os que
+                                virarem variação ficam ocultos do cardápio, com o histórico de venda preservado.
+                            </p>
+                        )}
 
                         <div className="space-y-6">
                             {productGroups.map(cat => {
@@ -3323,10 +3406,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                     ref={provided.innerRef}
                                                                     {...provided.draggableProps}
                                                                 >
-                                                                    <Card className={`flex gap-3 p-3 relative group ${!prod.available ? 'opacity-60 bg-[var(--surface-2)]' : ''} ${snapshot.isDragging ? 'shadow-xl ring-2 ring-[var(--brand)]' : ''}`}>
-                                                                        <div {...provided.dragHandleProps} className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center text-[var(--border)] hover:text-[var(--text-muted)] cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--surface-2)]/50 rounded-l-xl z-10">
-                                                                            <GripVertical size={20} />
-                                                                        </div>
+                                                                    <Card className={`flex gap-3 p-3 relative group ${!prod.available ? 'opacity-60 bg-[var(--surface-2)]' : ''} ${snapshot.isDragging ? 'shadow-xl ring-2 ring-[var(--brand)]' : ''} ${groupSelectMode && selectedForGroup.has(prod.id) ? 'ring-2 ring-[var(--brand)]' : ''}`}>
+                                                                        {groupSelectMode ? (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => toggleProductForGroup(prod.id)}
+                                                                                aria-pressed={selectedForGroup.has(prod.id)}
+                                                                                className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-xl ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
+                                                                            >
+                                                                                {selectedForGroup.has(prod.id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                                            </button>
+                                                                        ) : (
+                                                                            <div {...provided.dragHandleProps} className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center text-[var(--border)] hover:text-[var(--text-muted)] cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--surface-2)]/50 rounded-l-xl z-10">
+                                                                                <GripVertical size={20} />
+                                                                            </div>
+                                                                        )}
                                                                         <div className="w-20 h-20 bg-[var(--surface-2)] rounded-lg flex-shrink-0 overflow-hidden ml-4">
                                                                             {prod.image_url ? (
                                                                                 <Image src={prod.image_url} alt="" width={80} height={80} className="w-full h-full object-cover"/>
@@ -3674,6 +3768,55 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     )}
 
                     <Button className="w-full h-12 mt-2" onClick={handleSaveSchedule} isLoading={isSavingSchedule}>Salvar</Button>
+                </div>
+            </Modal>
+
+            {/* AGRUPAR VARIAÇÕES MODAL — consolidar produtos soltos num
+                produto-pai com grupo de escolha (ver consolidateProductsIntoVariants). */}
+            <Modal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)} title="Agrupar como variações">
+                <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Escolha qual produto vira a base (os outros ficam ocultos do cardápio, sem apagar nada) e dê um
+                        nome pro grupo de escolha.
+                    </p>
+
+                    <Input
+                        label="Nome do grupo"
+                        placeholder='Ex: "Qual sabor?"'
+                        value={groupNameInput}
+                        onChange={e => setGroupNameInput(e.target.value)}
+                    />
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-semibold text-[var(--text)]">Produto base (preço de partida)</label>
+                        {selectedGroupProducts.map(p => {
+                            const base = selectedGroupProducts.find(b => b.id === groupBaseId);
+                            const delta = base ? Math.max(0, p.price - base.price) : 0;
+                            return (
+                                <label key={p.id} className="flex items-center justify-between gap-3 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] cursor-pointer">
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="radio"
+                                            name="groupBase"
+                                            checked={groupBaseId === p.id}
+                                            onChange={() => setGroupBaseId(p.id)}
+                                        />
+                                        <div>
+                                            <p className="text-sm font-medium text-[var(--text)]">{p.name}</p>
+                                            <p className="text-xs text-[var(--text-muted)]">R$ {p.price.toFixed(2)}{p.omie_codigo ? ` · Omie ${p.omie_codigo}` : ''}</p>
+                                        </div>
+                                    </div>
+                                    {groupBaseId !== p.id && (
+                                        <span className="text-xs font-bold text-[var(--brand)] flex-shrink-0">+ R$ {delta.toFixed(2)}</span>
+                                    )}
+                                </label>
+                            );
+                        })}
+                    </div>
+
+                    <Button className="w-full h-12" onClick={handleConsolidateGroup} isLoading={isConsolidating}>
+                        Agrupar {selectedGroupProducts.length} produtos
+                    </Button>
                 </div>
             </Modal>
         </div>

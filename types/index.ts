@@ -136,6 +136,11 @@ export interface Product {
   promo_price?: number | null;
   featured: boolean; // migration 019 — alimenta a vitrine "Destaques" no cardapio do cliente
   tags: string[];
+  // Integracao ntb-vendas -> ntb-estoque (migration 026) -- coluna ja existia
+  // e ja era selecionada por fetchMenu (`select('*')`), so nao estava tipada
+  // aqui ainda (achado ao construir a ferramenta de consolidar produtos em
+  // variacao, 2026-08-16).
+  omie_codigo?: string | null;
   option_groups?: ProductOptionGroup[]; // so populado quando o Product veio de fetchMenu
   // Vende mais II (migration 020): "peca tambem" (cross-sell manual do
   // lojista). Anexado em runtime por fetchMenu, nao e coluna de banco

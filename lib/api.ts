@@ -408,7 +408,7 @@ export interface ProductOptionGroupInput {
   required: boolean;
   min_select?: number | null;
   max_select?: number | null;
-  options: { name: string; price_delta: number; available?: boolean }[];
+  options: { name: string; price_delta: number; available?: boolean; omie_codigo?: string | null }[];
 }
 
 // Sync atomico via function Postgres security definer (migration 017) — antes
@@ -427,10 +427,51 @@ export const syncProductOptionGroups = async (productId: string, groups: Product
       required: g.required,
       min_select: g.min_select ?? null,
       max_select: g.max_select ?? null,
-      options: g.options.map(o => ({ name: o.name, price_delta: o.price_delta, available: o.available ?? true })),
+      options: g.options.map(o => ({ name: o.name, price_delta: o.price_delta, available: o.available ?? true, omie_codigo: o.omie_codigo ?? null })),
     })),
   });
   if (error) throw error;
+};
+
+// Consolidar produtos soltos já cadastrados num produto-pai com variações
+// (2026-08-16, pedido explícito do usuário — "organizar o cardápio",
+// retomado depois da correção do bug de grid). Reaproveita
+// syncProductOptionGroups (acima) — a única coisa nova é calcular o
+// price_delta de cada variação em cima do produto mais barato (obrigatório:
+// price_delta nunca pode ser negativo, CHECK do banco) e preservar o
+// omie_codigo de cada produto original na opção correspondente. Depois de
+// criar o grupo no produto-base, os outros produtos ficam escondidos do
+// cardápio (available=false) — nunca apagados, preserva histórico de venda.
+export const consolidateProductsIntoVariants = async (
+  storeId: string,
+  baseProductId: string,
+  allSelectedProducts: { id: string; name: string; price: number; omie_codigo?: string | null }[],
+  groupName: string
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const base = allSelectedProducts.find(p => p.id === baseProductId);
+    if (!base) throw new Error('Produto base não encontrado na seleção.');
+
+    const options = allSelectedProducts.map(p => ({
+      name: p.name,
+      price_delta: Math.max(0, p.price - base.price),
+      available: true,
+      omie_codigo: p.omie_codigo ?? null,
+    }));
+
+    await syncProductOptionGroups(baseProductId, [
+      { name: groupName, type: 'single', required: true, options },
+    ]);
+
+    const others = allSelectedProducts.filter(p => p.id !== baseProductId);
+    for (const p of others) {
+      await updateProduct(p.id, storeId, { available: false });
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
 };
 
 // Vende mais II (migration 020) — "peca tambem": sync atomico via function
