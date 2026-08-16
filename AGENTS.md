@@ -754,7 +754,13 @@ dashboard). Passos aplicados:
    "Bar 2") **já é possível hoje** no `ntb-estoque` (`/local-estoque` →
    "Novo local", descrição livre) — não é gap nenhum, isso já existe. O que
    falta é só o lado de cá informar o `destination` por item, e o
-   `ntb-estoque` escolher entre os locais já cadastrados.
+   `ntb-estoque` escolher entre os locais já cadastrados. **Confirmado pelo
+   usuário (2026-08-16):** a escolha de qual local de estoque usar é feita
+   aqui, no `ntb-vendas` (não no `ntb-estoque`) — ou seja, o mapeamento
+   produto/categoria → local de estoque (Cozinha/Bar/etc.) precisa existir
+   deste lado, e o payload que sai daqui pro `ntb-estoque` já manda o nome
+   do local resolvido (não só o `destination` cru), o `ntb-estoque` só usa
+   o que chegar.
 
 ## Histórico completo no Contabo (dual-write, 2026-07-13)
 
