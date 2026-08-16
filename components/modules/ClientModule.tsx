@@ -662,7 +662,13 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
     );
 
     return (
-        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" style={{ background: 'rgba(10,13,19,0.82)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+        // .u-glass-modal (achado M1 da revisão final de 2026-08-16, mesmo bug já
+        // corrigido em outras superfícies de vidro nesta branch): backdrop-filter
+        // inline nunca respeita o fallback de prefers-reduced-transparency (só
+        // uma classe CSS consegue, via @media), e duplicar manualmente o prefixo
+        // -webkit- é exatamente o padrão que a Task 7 eliminou em todo o resto do
+        // cardápio — faltava só este overlay.
+        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out] u-glass-modal">
           <div className="w-full max-w-sm flex flex-col items-center">
             <div className="mb-6 text-center u-grow-in">
                 {store?.logo_url ? (
@@ -1031,7 +1037,13 @@ const ProductModal: React.FC<{
                     type="button"
                     aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
                     onClick={() => onToggleFavorite(product.id)}
-                    className="absolute top-0 right-0 z-10 p-2 rounded-full bg-[var(--surface)]/85 backdrop-blur-sm border border-[var(--border)] u-motion u-press-sm"
+                    // Sem `backdrop-blur-sm` (achado M3 da revisão final de
+                    // 2026-08-16): esse ícone já vive dentro de uma sheet de
+                    // vidro em animação (drag-transformada) — um segundo
+                    // backdrop-filter aninhado ali é um caso caro de
+                    // compositing em celular fraco. `bg-[var(--surface)]`
+                    // opaco (sem blur) fica visualmente equivalente.
+                    className="absolute top-0 right-0 z-10 p-2 rounded-full bg-[var(--surface)] border border-[var(--border)] u-motion u-press-sm"
                 >
                     <Heart size={18} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : 'text-[var(--text-muted)]'} />
                 </button>
@@ -2723,7 +2735,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         )}
                     </AnimatePresence>
                     {latestMesaOrder && (
-                        <OrderStatusPill order={latestMesaOrder} onClick={() => setIsOrderStatusOpen(true)} />
+                        // Entrada com spring (achado M5 da revisão final de 2026-08-16):
+                        // a pill perdeu a animação de entrada quando o wrapper da barra
+                        // do carrinho virou motion.div (Task 2) — sem AnimatePresence de
+                        // propósito, o mount/unmount natural do `{latestMesaOrder && ...}`
+                        // já dispara initial→animate sozinho, igual ao cart-bar acima.
+                        <motion.div
+                            initial={{ y: 40, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={SPRING_SHEET}
+                        >
+                            <OrderStatusPill order={latestMesaOrder} onClick={() => setIsOrderStatusOpen(true)} />
+                        </motion.div>
                     )}
                 </div>
             )}
