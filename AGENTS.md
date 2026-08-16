@@ -1281,6 +1281,26 @@ pós-refeição" saiu desta lista — já implementada, ver `order_ratings` na
 seção de migrations e a limitação conhecida na seção de dívidas técnicas
 abaixo.)
 
+**Pendente (2026-08-16, só anotado, pedido explícito do usuário):** no
+campo "Meses de Contrato" do formulário de loja (Master Admin,
+`AdminModule.tsx`, hoje `<Input type="number">` puro), poder marcar o
+contrato como "infinito"/em aberto (sem data de expiração), em vez de ser
+obrigado a digitar um número de meses. Não implementado ainda — hoje
+`contract_period_months` é sempre um número; precisa decidir a
+representação (`null` = sem prazo? Um valor sentinela?) e onde esse prazo é
+usado hoje (não confirmado nesta sessão se algo já lê `contract_period_months`
+pra bloquear a loja automaticamente ao vencer, ou se é só informativo —
+checar antes de implementar).
+
+**Pendente (2026-08-16, só anotado, pedido explícito do usuário):** o campo
+"Mesas" no mesmo formulário (`AdminModule.tsx`, `<input type="range" min="1"
+max="100">`, estado `tableCount`) tem um teto artificial de 100 — o usuário
+quer poder colocar quantas mesas quiser, sem esse limite. Não implementado
+ainda; mudança provavelmente simples (trocar o range por um input numérico
+sem `max`, ou elevar o `max` bem acima do necessário), mas checar antes se
+existe algum outro limite/suposição de "até 100 mesas" em outro lugar do
+código (impressão, grid de mesas, etc.) antes de mexer.
+
 **⚠️ REGRA CRÍTICA (2026-07-06), vale pra qualquer trabalho de emissão
 fiscal neste projeto daqui pra frente: SEMPRE testar em ambiente de
 HOMOLOGAÇÃO da SEFAZ. NUNCA emitir nota fiscal real durante

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams } from '@/lib/api';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
@@ -238,6 +238,15 @@ export const AdminModule: React.FC = () => {
   const [fiscalNaturezaOperacaoPadrao, setFiscalNaturezaOperacaoPadrao] = useState('');
   const [isSavingFiscalConfig, setIsSavingFiscalConfig] = useState(false);
 
+  // Integração ntb-vendas -> ntb-estoque (Ordem de Produção automática, ver
+  // a mesma seção em StoreModule.tsx/MenuManagementView — duplicado de
+  // propósito aqui pro Master Admin poder configurar sem precisar entrar no
+  // painel do lojista, mesmo princípio já usado pra Config. Fiscal acima).
+  const [ntbEstoqueStatus, setNtbEstoqueStatus] = useState<NtbEstoqueIntegracaoStatus>({ configurado: false, ativo: false });
+  const [ntbEstoqueUrlInput, setNtbEstoqueUrlInput] = useState('');
+  const [ntbEstoqueApiKeyInput, setNtbEstoqueApiKeyInput] = useState('');
+  const [isSavingNtbEstoque, setIsSavingNtbEstoque] = useState(false);
+
   // User Form State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -295,6 +304,10 @@ export const AdminModule: React.FC = () => {
       setCertStatus(null);
 
       resetFiscalConfigForm();
+
+      setNtbEstoqueStatus({ configurado: false, ativo: false });
+      setNtbEstoqueUrlInput('');
+      setNtbEstoqueApiKeyInput('');
   };
 
   const resetFiscalConfigForm = () => {
@@ -371,6 +384,10 @@ export const AdminModule: React.FC = () => {
       setCertPassword('');
       setCertExpiresAt('');
       setCertStatus(await fetchStoreCertificateStatus(store.id));
+
+      setNtbEstoqueUrlInput('');
+      setNtbEstoqueApiKeyInput('');
+      setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(store.id));
 
       const fiscalConfig = await fetchStoreFiscalConfig(store.id);
       setEmiteNotaFiscal(!!fiscalConfig && fiscalConfig.modelo_emissao_automatica !== 'nenhuma');
@@ -558,6 +575,34 @@ export const AdminModule: React.FC = () => {
       } finally {
           setIsSavingFiscalConfig(false);
       }
+  };
+
+  const handleSaveNtbEstoqueIntegracaoAdmin = async () => {
+      if (!editingId) return; // só disponível editando loja existente
+      if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
+          return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
+      }
+      setIsSavingNtbEstoque(true);
+      try {
+          const result = await saveNtbEstoqueIntegracaoConfig(editingId, { url: ntbEstoqueUrlInput, apiKey: ntbEstoqueApiKeyInput, ativo: true });
+          if (!result.success) throw new Error(result.message);
+          toast.success('Integração com o NTB Estoque configurada!');
+          setNtbEstoqueUrlInput('');
+          setNtbEstoqueApiKeyInput('');
+          setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(editingId));
+      } catch (e: any) {
+          toast.error('Erro ao configurar integração: ' + e.message);
+      } finally {
+          setIsSavingNtbEstoque(false);
+      }
+  };
+
+  const handleToggleNtbEstoqueAtivoAdmin = async (ativo: boolean) => {
+      if (!editingId) return;
+      const result = await saveNtbEstoqueIntegracaoConfig(editingId, { ativo });
+      if (!result.success) return toast.error('Erro ao atualizar: ' + result.message);
+      setNtbEstoqueStatus((prev) => ({ ...prev, ativo }));
+      toast.success(ativo ? 'Ordem de Produção automática ativada.' : 'Ordem de Produção automática desativada.');
   };
 
   const certBadge = () => {
@@ -1196,6 +1241,61 @@ export const AdminModule: React.FC = () => {
 
                           <Button variant="secondary" className="w-full" onClick={handleSaveFiscalConfig} isLoading={isSavingFiscalConfig}>
                               Salvar Configuração Fiscal
+                          </Button>
+                      </div>
+                      <hr className="border-[var(--border)]" />
+
+                      {/* Integração com o NTB Estoque (Ordem de Produção automática) —
+                          pedido explícito do usuário (2026-08-16): poder escolher/configurar
+                          a integração já na tela de criação/edição de loja do Master Admin,
+                          sem precisar entrar no painel do lojista. */}
+                      <div className="space-y-4">
+                          <div>
+                              <h4 className="font-bold text-sm text-[var(--text)]">Integração com o NTB Estoque</h4>
+                              <p className="text-xs text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
+                              <div>
+                                  <h4 className="font-bold text-sm text-[var(--text)]">Ordem de Produção automática</h4>
+                                  <p className="text-xs text-[var(--text-muted)]">
+                                      {ntbEstoqueStatus.configurado
+                                          ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
+                                          : 'Ainda não configurada — preencha a URL e a chave de API abaixo.'}
+                                  </p>
+                              </div>
+                              <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={ntbEstoqueStatus.ativo}
+                                  aria-label="Ordem de Produção automática"
+                                  onClick={() => handleToggleNtbEstoqueAtivoAdmin(!ntbEstoqueStatus.ativo)}
+                                  disabled={!ntbEstoqueStatus.configurado}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                              >
+                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
+                              </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <Input
+                                  label="URL do NTB Estoque"
+                                  placeholder="https://app-estoque.norteparanegocios.com.br"
+                                  value={ntbEstoqueUrlInput}
+                                  onChange={e => setNtbEstoqueUrlInput(e.target.value)}
+                              />
+                              <Input
+                                  label="Chave de API"
+                                  type="password"
+                                  placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
+                                  value={ntbEstoqueApiKeyInput}
+                                  onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
+                              />
+                          </div>
+                          <p className="text-xs text-[var(--text-muted)]">A chave é gerada na tela "Lojas" do NTB Estoque (seção "Integração com NTB Vendas"). Ela nunca é exibida de volta depois de salva aqui — deixe em branco se não quiser trocá-la.</p>
+
+                          <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracaoAdmin} isLoading={isSavingNtbEstoque}>
+                              Salvar Integração com o NTB Estoque
                           </Button>
                       </div>
                       <hr className="border-[var(--border)]" />
