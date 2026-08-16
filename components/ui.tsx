@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Loader2, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const Button: React.FC<
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -100,7 +101,12 @@ export const Modal: React.FC<{
   title: string;
   children: React.ReactNode;
   width?: string;
-}> = ({ isOpen, onClose, title, children, width = 'max-w-md' }) => {
+  // 'sheet' (opt-in, 2026-08-16): vidro + spring + arrastar pra fechar no
+  // mobile, igual ao BottomSheet do cardápio do cliente. Default 'center'
+  // preserva o comportamento de sempre (CSS fadeIn/slideUp, sem drag) —
+  // nenhum consumidor existente (admin/lojista) muda sem passar a prop.
+  variant?: 'center' | 'sheet';
+}> = ({ isOpen, onClose, title, children, width = 'max-w-md', variant = 'center' }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
 
@@ -162,6 +168,61 @@ export const Modal: React.FC<{
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  if (variant === 'sheet') {
+    return (
+      <AnimatePresence>
+        <motion.div
+          key="scrim"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          style={{ background: 'rgba(10,13,19,0.6)' }}
+          onClick={onClose}
+        >
+          <motion.div
+            key="sheet"
+            ref={containerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', bounce: 0.18, duration: 0.4 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0.05, bottom: 0.5 }}
+            // Mesmos limiares do BottomSheet em ClientModule.tsx
+            // (DISMISS_VELOCITY=500, DISMISS_OFFSET_RATIO=0.35) — duplicado
+            // aqui porque ui.tsx não importa de ClientModule.tsx; se um
+            // valor mudar, mudar os dois juntos.
+            onDragEnd={(_e, info) => {
+              if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
+            }}
+            className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col`}
+            style={{ background: 'rgba(20,23,31,0.85)', backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 flex-shrink-0">
+              <h3 id={titleId} className="text-[15px] font-semibold text-white">{title}</h3>
+              <button onClick={onClose} className="text-white/60 hover:text-white hover:bg-white/10 p-1 rounded-[var(--r-sm)] u-motion">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">{children}</div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 animate-[fadeIn_0.2s_ease-out]">
       <div

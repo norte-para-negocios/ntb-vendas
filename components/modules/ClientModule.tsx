@@ -1011,7 +1011,7 @@ const ProductModal: React.FC<{
     });
 
     return (
-        <Modal isOpen={!!product} onClose={onClose} title={product.name}>
+        <Modal isOpen={!!product} onClose={onClose} title={product.name} variant="sheet">
             <div className="relative space-y-4">
                 {/* Favoritar (Vende Mais II, 100% client-side, localStorage) — canto
                     superior direito do modal, sobrepõe a foto quando existe; sem
@@ -1593,7 +1593,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
     }
 
     return (
-        <Modal isOpen={true} onClose={onClose} title="Conta da Mesa">
+        <Modal isOpen={true} onClose={onClose} title="Conta da Mesa" variant="sheet">
             <div className="space-y-4">
                 {isLoading ? (
                     <div className="py-10 animate-pulse text-center text-[var(--brand)]">Carregando conta...</div>
