@@ -2307,7 +2307,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {/* Search and Sort — banda de marca (--ink) some da barra de
                 categorias (2026-08-15): categorias agora são um acordeão
                 empilhado dentro da lista, não uma fileira horizontal fixa. */}
-            <div className={`px-4 py-3 u-glass sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`} style={{ background: 'rgba(10,13,19,0.7)', backdropFilter: 'blur(14px) saturate(160%)', WebkitBackdropFilter: 'blur(14px) saturate(160%)' }}>
+            <div className={`px-4 py-3 u-glass u-glass-bar sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-10`}>
                 <div className="flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-[var(--text-muted)]" size={18} />
@@ -2477,8 +2477,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: 40, opacity: 0 }}
                                 transition={SPRING_SHEET}
-                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border"
-                                style={{ background: 'rgba(10,13,19,0.72)', backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)', borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
+                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border u-glass-cart"
+                                style={{ borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
                             >
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2.5">

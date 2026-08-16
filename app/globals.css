@@ -387,8 +387,27 @@ html {
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
+
+.u-glass-bar {
+  background: rgba(10, 13, 19, 0.7);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+.u-glass-cart {
+  background: rgba(10, 13, 19, 0.72);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .u-glass {
+    background: rgba(20, 23, 31, 0.95);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .u-glass-bar,
+  .u-glass-cart {
     background: rgba(20, 23, 31, 0.95);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
