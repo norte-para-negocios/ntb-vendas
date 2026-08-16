@@ -531,18 +531,11 @@ function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: (
 // rodada ativa (reaproveitando OrderProgressView, igual ao Balcão) + histórico
 // das rodadas já entregues nesta visita.
 function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClose: () => void; orders: MesaOrderState[] }) {
-    if (!isOpen) return null;
-
     const active = [...orders].reverse().find(o => o.status !== OrderStatus.DELIVERED && o.status !== OrderStatus.CANCELED) ?? null;
     const history = orders.filter(o => o.orderId !== active?.orderId && o.status === OrderStatus.DELIVERED);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-[fadeIn_0.2s_ease-out]" onClick={onClose}>
-            <div
-                className="w-full max-w-md bg-[var(--bg)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)] flex flex-col max-h-[85vh]"
-                style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
-                onClick={(e) => e.stopPropagation()}
-            >
+        <BottomSheet isOpen={isOpen} onClose={onClose}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] bg-[var(--surface)]">
                     <div className="flex items-center gap-2.5">
                         <BellRing size={18} className="text-[var(--brand)]" />
@@ -579,8 +572,7 @@ function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClos
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </BottomSheet>
     );
 }
 
@@ -1209,6 +1201,68 @@ const ProductModal: React.FC<{
     );
 };
 
+// Bottom sheet reutilizável (2026-08-16): scrim + folha que arrasta com o
+// dedo de verdade (1:1, não só anima no final), resiste com rubber-band
+// ao passar do topo, e decide fechar-ou-voltar pela VELOCIDADE do gesto
+// ao soltar (projeção de momentum), não só pela distância arrastada — ver
+// docs/plans/2026-08-16-cardapio-material-motion-apple.md, Princípio 4.
+// CartModal e OrderStatusModal usam este componente pro scrim/folha/gesto;
+// cada um só cuida do próprio conteúdo interno (header/body/footer).
+const DISMISS_VELOCITY = 500; // px/s — flick rápido pra baixo já fecha
+const DISMISS_OFFSET_RATIO = 0.35; // arrastar >35% da altura da folha fecha mesmo sem flick
+
+function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
+    isOpen: boolean;
+    onClose: () => void;
+    children: React.ReactNode;
+    maxWidth?: string;
+}) {
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <motion.div
+                    key="scrim"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ background: 'rgba(10,13,19,0.6)' }}
+                    onClick={onClose}
+                >
+                    <motion.div
+                        key="sheet"
+                        initial={{ y: '100%' }}
+                        animate={{ y: 0 }}
+                        exit={{ y: '100%' }}
+                        transition={SPRING_SHEET}
+                        drag="y"
+                        dragConstraints={{ top: 0, bottom: 0 }}
+                        dragElastic={{ top: 0.05, bottom: 0.5 }}
+                        onDragEnd={(_e, info) => {
+                            if (info.velocity.y > DISMISS_VELOCITY || info.offset.y > window.innerHeight * DISMISS_OFFSET_RATIO) {
+                                onClose();
+                            }
+                        }}
+                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass`}
+                        style={{ background: 'rgba(20,23,31,0.85)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Alça visual — sinaliza que dá pra arrastar (achado da
+                            skill apple-design: "swipe actions must show clear
+                            affordance"). Só decorativo, o gesto funciona na folha
+                            inteira, não só na alça. */}
+                        <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
+                            <div className="w-10 h-1 rounded-full bg-white/20" />
+                        </div>
+                        {children}
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+}
+
 const CartModal: React.FC<{
     isOpen: boolean,
     onClose: () => void,
@@ -1219,11 +1273,8 @@ const CartModal: React.FC<{
     onUpdateQty: (item: CartItem, delta: number) => void,
     onRemove: (item: CartItem) => void
 }> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove }) => {
-    if(!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-[fadeIn_0.2s_ease-out]">
-            <div className="w-full max-w-md bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)] flex flex-col max-h-[90vh]" style={{boxShadow:'var(--shadow-md), 0 0 0 1px var(--border)'}}>
+        <BottomSheet isOpen={isOpen} onClose={onClose}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
                     <div className="flex items-center gap-2.5">
                         <ShoppingBag size={18} className="text-[var(--brand)]" />
@@ -1301,8 +1352,7 @@ const CartModal: React.FC<{
                         </Button>
                     </div>
                 </div>
-            </div>
-        </div>
+        </BottomSheet>
     );
 }
 
