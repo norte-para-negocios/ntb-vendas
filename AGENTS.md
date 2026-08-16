@@ -706,6 +706,21 @@ dashboard). Passos aplicados:
    acima): cadastro manual de receita/consumo de ingrediente no
    `ntb-estoque`, feito por quem administra o estoque dessa loja — não é
    código.
+4. **Pendente (2026-08-16, pedido explícito do usuário, ainda não
+   desenhado nem implementado):** hoje ligar a integração entre uma loja
+   daqui e sua correspondente no `ntb-estoque` (`store_ntb_estoque_secrets`
+   deste lado + `lojas.integracao_api_key` do outro) é 100% manual, feito
+   depois que as duas lojas já existem, cada lado por conta própria — não
+   tem pergunta nenhuma nos formulários de cadastro de loja de nenhum dos
+   dois projetos. O usuário quer poder **escolher, no próprio formulário de
+   criação de loja (aqui e no `ntb-estoque`), se aquela loja deve ser
+   integrada com a correspondente do outro sistema**, em vez do processo
+   manual atual. Precisa de desenho antes de implementar (mexe nos dois
+   repos e nos dois formulários de cadastro; hoje não existe nenhum
+   identificador comum entre uma loja daqui e uma loja do `ntb-estoque` além
+   do que foi ligado manualmente loja a loja) — mesma nota espelhada no
+   AGENTS.md do `ntb-estoque`, com a lista de pontos em aberto pra próxima
+   sessão que for desenhar isso. Não agir sem pedido explícito.
 
 ## Histórico completo no Contabo (dual-write, 2026-07-13)
 
