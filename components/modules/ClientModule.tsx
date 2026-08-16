@@ -950,13 +950,22 @@ const ProductModal: React.FC<{
     // contrário da vitrine de Destaques, que já filtra por isso. Mesmo
     // conjunto de ids que `visibleCategories` já calcula no ClientModule.
     visibleCategoryIds: Set<string>,
-}> = ({ product, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
+}> = ({ product: incomingProduct, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
+    // Modal (variant="sheet") precisa continuar renderizando o conteúdo
+    // durante a animação de saída (~0.4s, spring) — se este componente
+    // retornasse null no instante em que incomingProduct vira null, o
+    // AnimatePresence de dentro do Modal nunca teria conteúdo pra manter
+    // montado enquanto anima. Guarda o último produto real e usa ele pro
+    // corpo do modal; isOpen continua refletindo incomingProduct de verdade.
+    const lastProductRef = useRef<Product | null>(null);
+    if (incomingProduct) lastProductRef.current = incomingProduct;
+    const product = incomingProduct ?? lastProductRef.current;
 
     useEffect(() => {
-        if (!product) return;
+        if (!incomingProduct) return;
         setQty(1);
         setNotes('');
 
@@ -966,16 +975,16 @@ const ProductModal: React.FC<{
         // client-side extra com `available !== false` mesmo o servidor
         // (fetchMenu) ja filtrando por available=true por padrao.
         const initialSelections: Record<string, string[]> = {};
-        (product.option_groups || []).forEach(group => {
+        (incomingProduct.option_groups || []).forEach(group => {
             if (group.type === 'single' && group.required) {
                 const firstAvailable = group.options.find(opt => opt.available !== false);
                 if (firstAvailable) initialSelections[group.id] = [firstAvailable.id];
             }
         });
         setSelections(initialSelections);
-    }, [product]);
+    }, [incomingProduct]);
 
-    if (!product) return null;
+    if (!product) return null; // só null antes do primeiro produto abrir (ver lastProductRef acima)
 
     const groups = product.option_groups || [];
 
@@ -1011,7 +1020,7 @@ const ProductModal: React.FC<{
     });
 
     return (
-        <Modal isOpen={!!product} onClose={onClose} title={product.name} variant="sheet">
+        <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet">
             <div className="relative space-y-4">
                 {/* Favoritar (Vende Mais II, 100% client-side, localStorage) — canto
                     superior direito do modal, sobrepõe a foto quando existe; sem
@@ -1356,7 +1365,7 @@ const CartModal: React.FC<{
     );
 }
 
-const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null }> = ({ onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable }) => {
+const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable }) => {
     const [tab, setTab] = useState<'split' | 'users' | 'calculator'>('split');
     const [people, setPeople] = useState(1);
     const [total, setTotal] = useState(0);
@@ -1377,6 +1386,15 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
     const [serviceFeeRate, setServiceFeeRate] = useState(0.10);
 
     useEffect(() => {
+        // Modal (variant="sheet") agora fica montado durante a animação de
+        // saída (~0.4s) — sem esse guard, fechar a comanda continuaria
+        // buscando dado e mantendo a assinatura realtime aberta enquanto o
+        // cliente nem está mais olhando a comanda, e reabrir não reiniciaria
+        // a busca (o efeito só roda de novo quando as deps mudam). Fecha a
+        // assinatura (via cleanup) quando isOpen vira false, e só busca/
+        // assina de novo quando volta a ficar true.
+        if (!isOpen) return;
+
         const loadBill = async () => {
             setIsLoading(true);
             const data = await fetchTableOrderSummary(tableId);
@@ -1415,7 +1433,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [tableId, storeId]);
+    }, [tableId, storeId, isOpen]);
 
     const handleCallWaiter = async () => {
         try {
@@ -1593,7 +1611,7 @@ const BillSplitter: React.FC<{ onClose: () => void, tableId: string, storeId: st
     }
 
     return (
-        <Modal isOpen={true} onClose={onClose} title="Conta da Mesa" variant="sheet">
+        <Modal isOpen={isOpen} onClose={onClose} title="Conta da Mesa" variant="sheet">
             <div className="space-y-4">
                 {isLoading ? (
                     <div className="py-10 animate-pulse text-center text-[var(--brand)]">Carregando conta...</div>
@@ -2620,8 +2638,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 orders={mesaOrders}
             />
 
-            {showBill && currentTable && currentStore && (
+            {currentTable && currentStore && (
                 <BillSplitter
+                    isOpen={showBill}
                     onClose={() => setShowBill(false)}
                     tableId={currentTable.id}
                     storeId={currentStore.id}
