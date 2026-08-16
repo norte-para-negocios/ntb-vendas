@@ -557,6 +557,23 @@ contexto pré-login, usar `fetchTablesPublic`), `orders`, `order_items`
 adicionais escolhidos), `table_sessions`, `order_ratings`,
 `store_fiscal_certificates`, `store_fiscal_certificate_secrets`.
 
+**Pendente (2026-08-16, só anotado, pedido explícito do usuário):** hoje
+Certificado e Configuração do Emissor Fiscal ficam só no Master Admin
+(`AdminModule.tsx`, "Editar Loja") — foram removidas de dentro do painel do
+lojista (`StoreModule.tsx`/`MenuManagementView`, onde tinham sido abertas em
+2026-07-07) porque o usuário considerou errado deixar o lojista mexer em
+certificado/config fiscal por conta própria ("deveria estar em adm e não em
+cardápio"). Ainda não implementado, mas pedido explicitamente: **separar a
+tela de Notas Fiscais em NF-e e NFC-e** (hoje `FiscalNotasView` em
+`StoreModule.tsx` mistura os dois tipos numa lista só, com um filtro de
+ambiente — ver seção "Integração ntb-vendas ↔ ntb-estoque" abaixo pro
+contexto do filtro de ambiente) — o usuário quer abrir e escolher
+diretamente o que quer fazer (emitir NF-e ou NFC-e) em vez de tudo junto, e
+poder escolher entre gerar/baixar DANFE (NF-e) ou o cupom/DANFCe (NFC-e) a
+partir dessa tela. Precisa de desenho (não é 100% claro ainda se é só
+separar a listagem por tipo com um filtro/aba, ou se o fluxo de EMITIR
+também precisa mudar) antes de implementar.
+
 ## Integração ntb-vendas ↔ ntb-estoque (`omie_codigo`, migration 026)
 
 **Primeiro passo real** (2026-07-07) da integração planejada há tempos: ao
@@ -706,21 +723,33 @@ dashboard). Passos aplicados:
    acima): cadastro manual de receita/consumo de ingrediente no
    `ntb-estoque`, feito por quem administra o estoque dessa loja — não é
    código.
-4. **Pendente (2026-08-16, pedido explícito do usuário, ainda não
-   desenhado nem implementado):** hoje ligar a integração entre uma loja
-   daqui e sua correspondente no `ntb-estoque` (`store_ntb_estoque_secrets`
-   deste lado + `lojas.integracao_api_key` do outro) é 100% manual, feito
-   depois que as duas lojas já existem, cada lado por conta própria — não
-   tem pergunta nenhuma nos formulários de cadastro de loja de nenhum dos
-   dois projetos. O usuário quer poder **escolher, no próprio formulário de
-   criação de loja (aqui e no `ntb-estoque`), se aquela loja deve ser
-   integrada com a correspondente do outro sistema**, em vez do processo
-   manual atual. Precisa de desenho antes de implementar (mexe nos dois
-   repos e nos dois formulários de cadastro; hoje não existe nenhum
-   identificador comum entre uma loja daqui e uma loja do `ntb-estoque` além
-   do que foi ligado manualmente loja a loja) — mesma nota espelhada no
-   AGENTS.md do `ntb-estoque`, com a lista de pontos em aberto pra próxima
-   sessão que for desenhar isso. Não agir sem pedido explícito.
+4. **Parcialmente resolvido (2026-08-16):** ligar a integração entre uma
+   loja daqui e sua correspondente no `ntb-estoque` deixou de exigir SQL
+   manual dos dois lados — o `ntb-estoque` ganhou uma tela (`LojaCard` →
+   seção "Integração com NTB Vendas") pra gerar/regenerar/remover a chave
+   (`lojas.integracao_api_key`), e o Master Admin daqui ganhou a mesma
+   seção "Integração com o NTB Estoque" que já existia só no painel do
+   lojista (URL + chave + toggle ativo/inativo), reaproveitando
+   `fetchNtbEstoqueIntegracaoStatus`/`saveNtbEstoqueIntegracaoConfig` já
+   existentes. **O que ainda falta** (não implementado, precisa de desenho):
+   ainda é o operador quem copia URL+chave gerados lá e cola aqui — não
+   existe descoberta automática entre as duas lojas nem uma ligação feita
+   "no momento da criação" da loja em si (as duas telas de cadastro
+   continuam sem essa pergunta). Não agir sem pedido explícito.
+5. **Pendente (2026-08-16, só anotado, pedido explícito do usuário):** a
+   Ordem de Produção criada no `ntb-estoque` a partir de uma venda daqui
+   deveria usar o **local de estoque certo conforme onde o item foi
+   preparado** — pedido feito na Cozinha (KDS `destination='kitchen'`) devia
+   gerar/consumir no local de estoque "Cozinha", pedido feito no Bar
+   (`destination='bar'`) no local "Bar", em vez de tudo cair num único local
+   genérico (não confirmado nesta sessão se hoje já existe essa distinção do
+   lado do `ntb-estoque` ou se é sempre um local fixo — checar antes de
+   desenhar). O payload que este projeto manda pra
+   `/api/integracao/ordem-producao` do `ntb-estoque` (ver
+   `triggerOrdemProducao()`/`lib/api.ts`) hoje não inclui nenhuma informação
+   de destino (cozinha/bar) por item — precisaria ganhar isso pra a ordem de
+   produção poder escolher o local certo do lado de lá. Mesma nota espelhada
+   no AGENTS.md do `ntb-estoque`.
 
 ## Histórico completo no Contabo (dual-write, 2026-07-13)
 
