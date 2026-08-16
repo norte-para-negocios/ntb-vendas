@@ -2431,8 +2431,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 onClick={() => setActiveCategory(prev => prev === cat.id ? '' : cat.id)}
                                 aria-expanded={expanded}
                                 whileTap={{ scale: 0.98 }}
-                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                className="w-full flex items-center gap-3 py-4 text-left u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] px-1.5 -mx-1.5"
+                                transition={SPRING_TAP}
+                                whileHover={{ backgroundColor: 'rgba(255,255,255,0.07)' }}
+                                className="w-full flex items-center gap-3 py-4 text-left u-motion rounded-[var(--r-md)] px-3 -mx-1.5 mt-1.5"
+                                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                             >
                                 <div className="flex-1 min-w-0 flex items-baseline gap-2">
                                     <h2 className="font-bold text-[var(--text)] text-[15px] uppercase tracking-[0.04em] truncate">{cat.name}</h2>
@@ -2440,7 +2442,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 </div>
                                 <motion.div
                                     animate={{ rotate: expanded ? 180 : 0 }}
-                                    transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+                                    transition={SPRING_SHEET}
                                     className="text-[var(--text-muted)] flex-shrink-0"
                                 >
                                     <ChevronDown size={18} />
@@ -2456,7 +2458,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             <motion.div
                                 initial={false}
                                 animate={{ height: expanded ? 'auto' : 0 }}
-                                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+                                transition={SPRING_SHEET}
                                 style={{ overflow: 'hidden' }}
                                 aria-hidden={!expanded}
                             >
