@@ -378,6 +378,23 @@ html {
   animation: soft-bounce 0.5s var(--ease-out) both;
 }
 
+/* Vidro/translúcido — só pra chrome fixo (sticky/fixed/modal), nunca pra
+   conteúdo que rola (custo de repaint de GPU). Ver docs/plans/2026-08-16-
+   cardapio-material-motion-apple.md, Princípio 1. */
+.u-glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .u-glass {
+    background: rgba(20, 23, 31, 0.95);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .u-grow-in, .u-soft-bounce { animation: none; }
 }

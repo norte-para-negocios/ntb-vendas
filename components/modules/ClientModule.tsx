@@ -16,7 +16,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 
 // --- COMPONENTS ---
 
@@ -33,6 +33,15 @@ const WINE_GOLD = '#D4AF5C';
 // ProductModal: o dourado puro em cima do próprio tom claro (rgba 0.08)
 // não tem contraste suficiente.
 const WINE_GOLD_DARK = '#8A6A2B';
+
+// Presets de spring validados com o usuário no companion visual de
+// brainstorming (2026-08-16) — não são valores arbitrários. SPRING_TAP:
+// feedback de toque, sem bounce (damping 1.0 da Apple — botão não carrega
+// momentum de gesto). SPRING_SHEET: abrir/fechar/arrastar de folha e
+// acordeão, bounce leve (~damping 0.82 testado na demo interativa, bate
+// com o valor real que a Apple documenta pra drawer/sheet).
+const SPRING_TAP = { type: 'spring' as const, bounce: 0, duration: 0.15 };
+const SPRING_SHEET = { type: 'spring' as const, bounce: 0.18, duration: 0.4 };
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
 // E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
@@ -2180,7 +2189,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const isWaitingBill = currentTable?.status === TableStatus.WAITING_BILL;
 
     return (
-        <div className="bg-[var(--bg)] min-h-screen pb-32">
+        <MotionConfig reducedMotion="user">
+            <div className="bg-[var(--bg)] min-h-screen pb-32">
             {/* Header — banda de marca fixa (sempre --ink, não segue claro/escuro,
                 mesmo princípio do AuthBackdrop): é a "capa" da carta, rola junto
                 com a página em vez de ficar fixa, pra abrir espaço pro conteúdo. */}
@@ -2574,6 +2584,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     />
                 </div>
             )}
-        </div>
+            </div>
+        </MotionConfig>
     );
 };
