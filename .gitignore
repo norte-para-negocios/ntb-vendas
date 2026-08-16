@@ -45,3 +45,6 @@ scripts/.pooler-host
 
 # git worktrees (superpowers:using-git-worktrees)
 /.worktrees
+
+# Superpowers brainstorming companion (mockup scratch, não é código do produto)
+.superpowers/
