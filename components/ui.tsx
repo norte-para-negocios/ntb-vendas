@@ -109,6 +109,26 @@ export const Modal: React.FC<{
 }> = ({ isOpen, onClose, title, children, width = 'max-w-md', variant = 'center' }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
+  // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de
+  // código): com dragElastic.top pequeno, a sheet mal se move ao ser
+  // arrastada pra cima, mas o CURSOR do mouse continua andando a
+  // distância cheia — ele "sai" da sheet e passa a estar sobre o scrim
+  // (que tem onClick={onClose}). Ao soltar o botão ali, o clique nativo
+  // do browser (disparado logo depois do mouseup) aterrissa no scrim e
+  // fecha a folha sem o usuário ter arrastado pra baixo o suficiente (nem
+  // rápido o suficiente) pra isso ser intencional. Em touch isso não
+  // acontece (o pointerup é capturado pelo elemento original, não "vaza"
+  // pro scrim) — confirmado testando os dois com Playwright (mouse vs.
+  // touch simulado via CDP).
+  //
+  // Achado decisivo ao instrumentar com console.log: o `click` nativo
+  // dispara ANTES do `onDragEnd` do Framer Motion rodar (não depois, como
+  // seria intuitivo) — marcar a flag dentro de `onDragEnd` sempre chega
+  // tarde demais, o `onClick` do scrim já leu o valor antigo. A flag
+  // precisa ser marcada em `onDragStart` (dispara assim que o gesto é
+  // reconhecido como arrasto, bem antes do soltar/click) e só é limpa
+  // depois, em `onDragEnd`, com um pequeno atraso.
+  const justDraggedRef = React.useRef(false);
 
   // Foco inicial + focus trap (Tab/Shift+Tab) + fechar com Esc enquanto o
   // modal estiver aberto. Ver Task I2 da varredura de 2026-07-02.
@@ -185,7 +205,7 @@ export const Modal: React.FC<{
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
             style={{ background: 'rgba(10,13,19,0.6)' }}
-            onClick={onClose}
+            onClick={() => { if (!justDraggedRef.current) onClose(); }}
           >
             <motion.div
               key="sheet"
@@ -205,11 +225,13 @@ export const Modal: React.FC<{
               // (DISMISS_VELOCITY=500, DISMISS_OFFSET_RATIO=0.35) — duplicado
               // aqui porque ui.tsx não importa de ClientModule.tsx; se um
               // valor mudar, mudar os dois juntos.
+              onDragStart={() => { justDraggedRef.current = true; }}
               onDragEnd={(_e, info) => {
+                setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col`}
-              style={{ background: 'rgba(20,23,31,0.85)', backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col u-glass-modal`}
+              style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-center pt-2 pb-1 flex-shrink-0">

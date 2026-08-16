@@ -1230,6 +1230,28 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
     children: React.ReactNode;
     maxWidth?: string;
 }) {
+    // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de
+    // código): dragElastic.top pequeno faz a folha mal se mover ao ser
+    // arrastada pra cima, mas o cursor do mouse continua andando a
+    // distância cheia — ele "sai" da folha e passa a estar sobre o scrim
+    // (que tem onClick={onClose}). Ao soltar o botão ali, o clique nativo
+    // do browser (disparado logo depois do mouseup) aterrissa no scrim e
+    // fecha a folha mesmo sem o usuário ter arrastado o suficiente pra
+    // isso ser intencional. Não acontece em touch (pointerup fica
+    // capturado no elemento original) — confirmado testando os dois com
+    // Playwright (mouse vs. touch simulado via CDP).
+    //
+    // A guarda abaixo suprime esse clique acidental do scrim. Achado
+    // decisivo ao instrumentar com console.log: o evento nativo `click`
+    // dispara ANTES do `onDragEnd` do Framer Motion rodar (não depois,
+    // como seria intuitivo) — então marcar a flag dentro de `onDragEnd`
+    // sempre chega tarde demais, o `onClick` do scrim já leu o valor
+    // antigo. A flag precisa ser marcada em `onDragStart` (dispara assim
+    // que o gesto é reconhecido como arrasto, bem antes do soltar/click) e
+    // só é limpa depois, em `onDragEnd`, com um pequeno atraso — folga
+    // suficiente pra não atrapalhar um toque legítimo seguinte no scrim.
+    const justDraggedRef = React.useRef(false);
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -1241,7 +1263,7 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
                     transition={{ duration: 0.2 }}
                     className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ background: 'rgba(10,13,19,0.6)' }}
-                    onClick={onClose}
+                    onClick={() => { if (!justDraggedRef.current) onClose(); }}
                 >
                     <motion.div
                         key="sheet"
@@ -1252,13 +1274,15 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md' }: {
                         drag="y"
                         dragConstraints={{ top: 0, bottom: 0 }}
                         dragElastic={{ top: 0.05, bottom: 0.5 }}
+                        onDragStart={() => { justDraggedRef.current = true; }}
                         onDragEnd={(_e, info) => {
+                            setTimeout(() => { justDraggedRef.current = false; }, 150);
                             if (info.velocity.y > DISMISS_VELOCITY || info.offset.y > window.innerHeight * DISMISS_OFFSET_RATIO) {
                                 onClose();
                             }
                         }}
-                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass`}
-                        style={{ background: 'rgba(20,23,31,0.85)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass-modal`}
+                        style={{ boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Alça visual — sinaliza que dá pra arrastar (achado da
