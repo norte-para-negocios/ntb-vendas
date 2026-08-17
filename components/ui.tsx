@@ -1,18 +1,19 @@
 'use client';
 
 import React from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, X, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 
 export const Button: React.FC<
-  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'> & {
     variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
     size?: 'sm' | 'md' | 'lg';
     isLoading?: boolean;
   }
 > = ({ className = '', variant = 'primary', size = 'md', isLoading, children, ...props }) => {
   const base =
-    'inline-flex items-center justify-center font-medium rounded-[var(--r-md)] u-motion u-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none';
+    'inline-flex items-center justify-center font-medium rounded-[var(--r-md)] u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none';
 
   const sizes = {
     sm: 'px-3 py-1.5 text-[13px] gap-1.5',
@@ -34,14 +35,17 @@ export const Button: React.FC<
   };
 
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      whileHover={{ scale: 1.015 }}
+      transition={SPRING_TAP}
       className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
       disabled={isLoading || props.disabled}
       {...props}
     >
       {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
-    </button>
+    </motion.button>
   );
 };
 
@@ -77,20 +81,65 @@ export const Card: React.FC<{
   hoverable?: boolean;
   accentColor?: string;
   style?: React.CSSProperties;
-}> = ({ children, className = '', onClick, hoverable, accentColor, style }) => (
-  <div
-    onClick={onClick}
-    className={`relative overflow-hidden rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface)] ${
-      onClick || hoverable ? 'cursor-pointer u-card' : ''
-    } ${className}`}
-    style={{ boxShadow: 'var(--shadow-sm)', ...style }}
-  >
-    {accentColor && (
-      <div className="absolute inset-y-0 left-0 w-1 rounded-l-[var(--r-lg)]" style={{ backgroundColor: accentColor }} />
-    )}
-    {children}
-  </div>
-);
+}> = ({ children, className = '', onClick, hoverable, accentColor, style }) => {
+  const interactive = Boolean(onClick || hoverable);
+  return (
+    <motion.div
+      onClick={onClick}
+      {...(interactive
+        ? { whileHover: { y: -2, boxShadow: 'var(--shadow-md)' }, whileTap: { scale: 0.99 }, transition: SPRING_TAP }
+        : {})}
+      className={`relative overflow-hidden rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface)] ${
+        interactive ? 'cursor-pointer' : ''
+      } ${className}`}
+      style={{ boxShadow: 'var(--shadow-sm)', ...style }}
+    >
+      {accentColor && (
+        <div className="absolute inset-y-0 left-0 w-1 rounded-l-[var(--r-lg)]" style={{ backgroundColor: accentColor }} />
+      )}
+      {children}
+    </motion.div>
+  );
+};
+
+// Acordeão reutilizável (2026-08-16) — generaliza o padrão já validado no
+// cardápio do cliente (acordeão de categoria, ClientModule.tsx) pra
+// qualquer seção do lojista/admin que hoje é sempre visível e devia ficar
+// recolhida por padrão. Ver docs/superpowers/specs/2026-08-16-lojista-
+// admin-material-motion-apple.md.
+export const Collapsible: React.FC<{
+  title: string;
+  defaultOpen?: boolean;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, defaultOpen = false, badge, children }) => {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+      <motion.button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        whileTap={{ scale: 0.99 }}
+        transition={SPRING_TAP}
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left u-motion hover:bg-[var(--surface-2)]"
+      >
+        <span className="flex items-center gap-2 font-bold text-[var(--text)]">
+          {title}
+          {badge}
+        </span>
+        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={SPRING_SHEET} className="text-[var(--text-muted)] flex-shrink-0">
+          <ChevronDown size={18} />
+        </motion.span>
+      </motion.button>
+      <motion.div initial={false} animate={{ height: open ? 'auto' : 0 }} transition={SPRING_SHEET} style={{ overflow: 'hidden' }} aria-hidden={!open}>
+        <div style={{ pointerEvents: open ? 'auto' : 'none' }} className="px-5 pb-5 pt-1 border-t border-[var(--border)]">
+          {children}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
 
 const MODAL_FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -274,31 +323,45 @@ export const Modal: React.FC<{
     );
   }
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 animate-[fadeIn_0.2s_ease-out]">
-      <div
-        ref={containerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className={`w-full ${width} bg-[var(--surface)] rounded-[var(--r-lg)] overflow-hidden animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]`}
-        style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
-          <h3 id={titleId} className="text-[15px] font-semibold text-[var(--text)]">{title}</h3>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-1 rounded-[var(--r-sm)] u-motion"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="scrim"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4"
+        >
+          <motion.div
+            key="panel"
+            ref={containerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={SPRING_SHEET}
+            className={`w-full ${width} bg-[var(--surface)] rounded-[var(--r-lg)] overflow-hidden`}
+            style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
           >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
-      </div>
-    </div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+              <h3 id={titleId} className="text-[15px] font-semibold text-[var(--text)]">{title}</h3>
+              <button
+                onClick={onClose}
+                className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-1 rounded-[var(--r-sm)] u-motion"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
