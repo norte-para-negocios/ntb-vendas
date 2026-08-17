@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
@@ -804,7 +804,15 @@ export const AdminModule: React.FC = () => {
       if (!editingId && (!slug || slug === generateSlug(name))) setSlug(generateSlug(newName));
   };
 
+  // MotionConfig reducedMotion="user" — mesmo princípio já usado em
+  // ClientModule.tsx (cardápio do cliente) e agora em StoreModule.tsx (lado
+  // do lojista): sem isso, as springs adicionadas ao Master Admin nesta
+  // rodada (Collapsible dos dois acordeões fiscal/estoque, whileTap dos
+  // botões do card de loja) nunca respeitariam prefers-reduced-motion — o
+  // bloco CSS global em globals.css só zera animation/transition-duration
+  // de CSS, não afeta as animações JS-driven do Motion.
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-[var(--bg)] flex">
       {/* Sidebar */}
       <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:flex md:flex-col">
@@ -1486,5 +1494,6 @@ export const AdminModule: React.FC = () => {
           </div>
       </Modal>
     </div>
+    </MotionConfig>
   );
 };

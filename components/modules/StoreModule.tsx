@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -5553,7 +5553,16 @@ export const StoreModule: React.FC = () => {
         return user.permissions[t as keyof typeof user.permissions] !== false;
     };
 
+    // MotionConfig reducedMotion="user" — mesmo princípio já usado em
+    // ClientModule.tsx (cardápio do cliente): sem isso, as springs
+    // adicionadas ao lojista/admin nesta rodada (Collapsible, AnimatePresence
+    // de Mesas/Balcão/KDS, whileTap de Button/Card) nunca respeitam
+    // prefers-reduced-motion — o bloco CSS global em globals.css só zera
+    // animation/transition-duration de CSS, não afeta as animações
+    // JS-driven do Motion. Ponto único de wrap (StoreLayout engloba todas
+    // as views por children), propaga via Context pra tudo abaixo.
     return (
+        <MotionConfig reducedMotion="user">
         <StoreLayout
             title={
                 tab === 'tables' ? 'Mesas & Comandas' :
@@ -5576,7 +5585,7 @@ export const StoreModule: React.FC = () => {
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
             {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} />}
-            
+
             {!canAccess(tab) && (
                 <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">
                     <Lock size={48} className="mb-4 opacity-20"/>
@@ -5584,5 +5593,6 @@ export const StoreModule: React.FC = () => {
                 </div>
             )}
         </StoreLayout>
+        </MotionConfig>
     );
 }
