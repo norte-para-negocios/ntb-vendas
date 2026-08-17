@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
-import { Button, Card, Badge, Modal, Input } from '@/components/ui';
+import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
@@ -4519,13 +4519,13 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
 
             {activeTab === 'fiscal' && (
                 <>
+                    <FiscalNotasView storeId={storeId} />
             {/* CERTIFICADO E CONFIGURAÇÃO FISCAL — mesma tela do Master Admin
                 (AdminModule.tsx), aberta pro lojista também (2026-07-07). Só
                 armazenamento/configuração, nenhuma lógica de emissão de NFC-e
                 de verdade (ver AGENTS.md, seção "Configuração do emissor
                 fiscal"). */}
-            <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm space-y-6">
-                <h3 className="font-bold text-lg text-[var(--text)]">Certificado e Configuração Fiscal</h3>
+            <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false}>
 
                 {/* Certificado Digital */}
                 <div className="space-y-3">
@@ -4744,8 +4744,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                         Salvar Configuração Fiscal
                     </Button>
                 </div>
-            </section>
-                    <FiscalNotasView storeId={storeId} />
+            </Collapsible>
                 </>
             )}
 
