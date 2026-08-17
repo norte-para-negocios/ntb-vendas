@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
+import { SPRING_TAP } from '@/lib/motion';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
-import { Button, Card, Input, Modal, Badge } from '@/components/ui';
+import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -896,30 +898,43 @@ export const AdminModule: React.FC = () => {
                         </div>
                     </div>
                     <div className="mt-auto pt-4 flex gap-2 border-t border-[var(--border)]">
-                        <a href={`/c/${store.slug}`} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg border border-[var(--brand)]/20 transition-colors">
+                        <motion.a
+                            whileTap={{ scale: 0.96 }}
+                            transition={SPRING_TAP}
+                            href={`/c/${store.slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 text-center py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--brand)]/5 rounded-lg border border-[var(--brand)]/20 transition-colors"
+                        >
                             Ver Cardápio
-                        </a>
-                        <button
+                        </motion.a>
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            transition={SPRING_TAP}
                             onClick={() => handleDuplicateStore(store.id, store.name)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] u-motion u-press"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] u-motion"
                             title="Duplicar"
                         >
                             <Copy size={18} />
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            transition={SPRING_TAP}
                             onClick={() => handleEditStore(store)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] u-motion u-press"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] u-motion"
                             title="Editar"
                         >
                             <Edit2 size={18} />
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            transition={SPRING_TAP}
                             onClick={() => handleDeleteStore(store.id, store.name)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] u-motion u-press"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
                             title="Excluir"
                         >
                             <Trash2 size={18} />
-                        </button>
+                        </motion.button>
                     </div>
                  </Card>
              ))}
@@ -1128,7 +1143,7 @@ export const AdminModule: React.FC = () => {
               <hr className="border-[var(--border)]" />
 
               {editingId && (
-                  <>
+                  <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false} badge={certBadge()}>
                       <div className="space-y-3">
                           <div className="flex items-center justify-between">
                               <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
@@ -1393,7 +1408,7 @@ export const AdminModule: React.FC = () => {
                           </Button>
                       </div>
                       <hr className="border-[var(--border)]" />
-                  </>
+                  </Collapsible>
               )}
               <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
