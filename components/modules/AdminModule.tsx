@@ -1143,6 +1143,7 @@ export const AdminModule: React.FC = () => {
               <hr className="border-[var(--border)]" />
 
               {editingId && (
+                  <>
                   <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false} badge={certBadge()}>
                       <div className="space-y-3">
                           <div className="flex items-center justify-between">
@@ -1352,8 +1353,9 @@ export const AdminModule: React.FC = () => {
                               Salvar Configuração Fiscal
                           </Button>
                       </div>
-                      <hr className="border-[var(--border)]" />
+                  </Collapsible>
 
+                  <Collapsible title="Integração com o NTB Estoque" defaultOpen={false}>
                       {/* Integração com o NTB Estoque (Ordem de Produção automática) —
                           pedido explícito do usuário (2026-08-16): poder escolher/configurar
                           a integração já na tela de criação/edição de loja do Master Admin,
@@ -1407,8 +1409,8 @@ export const AdminModule: React.FC = () => {
                               Salvar Integração com o NTB Estoque
                           </Button>
                       </div>
-                      <hr className="border-[var(--border)]" />
                   </Collapsible>
+                  </>
               )}
               <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
