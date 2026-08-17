@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
+import { motion, AnimatePresence } from 'motion/react';
+import { SPRING_TAP } from '@/lib/motion';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -1519,6 +1521,7 @@ NOTIFY pgrst, 'reload schema';`;
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <AnimatePresence>
                 {tables.map((table, tableIdx) => {
                     const summary = getTableSummary(table.id);
                     const isBlocked = table.status === 'blocked';
@@ -1529,6 +1532,7 @@ NOTIFY pgrst, 'reload schema';`;
                     return (
                         <Card
                             key={table.id}
+                            hoverable
                             onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
                             className={`u-stagger relative flex flex-col justify-between p-4 transition-all duration-300 border-2 group ${
                                 areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
@@ -1675,6 +1679,7 @@ NOTIFY pgrst, 'reload schema';`;
                         </Card>
                     );
                 })}
+                </AnimatePresence>
             </div>
 
             {/* MODAL DA MESA */}
