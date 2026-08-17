@@ -1530,8 +1530,15 @@ NOTIFY pgrst, 'reload schema';`;
                     const hasOrders = summary.count > 0;
 
                     return (
-                        <Card
+                        <motion.div
                             key={table.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={SPRING_TAP}
+                        >
+                        <Card
                             hoverable
                             onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
                             className={`u-stagger relative flex flex-col justify-between p-4 transition-all duration-300 border-2 group ${
@@ -1677,6 +1684,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                             )}
                         </Card>
+                        </motion.div>
                     );
                 })}
                 </AnimatePresence>
