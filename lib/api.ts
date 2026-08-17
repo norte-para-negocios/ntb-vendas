@@ -1118,7 +1118,7 @@ export interface CreateStoreParams {
   slug: string;
   contractType: 'balcao' | 'balcao_mesas';
   tableCount: number;
-  periodMonths: number;
+  periodMonths: number | null;
   isActive: boolean;
   logoUrl?: string | null;
   serviceFeeRate: number;

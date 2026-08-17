@@ -5081,7 +5081,13 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     // não dá pra separar visualmente nota de homologação (sem valor fiscal)
     // de nota de produção (documento real) na mesma lista.
     const [ambienteFilter, setAmbienteFilter] = useState<'todos' | 'homologacao' | 'producao'>('todos');
-    const filteredNotas = ambienteFilter === 'todos' ? notas : notas.filter(n => n.ambiente === ambienteFilter);
+    // Filtro por tipo de documento (2026-08-16, pedido explícito do usuário)
+    // — NF-e e NFC-e vinham sempre juntas na mesma lista, sem jeito de olhar
+    // só um tipo. Mesmo padrão do filtro de ambiente acima.
+    const [tipoFilter, setTipoFilter] = useState<'todos' | '55' | '65'>('todos');
+    const filteredNotas = notas
+        .filter(n => ambienteFilter === 'todos' || n.ambiente === ambienteFilter)
+        .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter);
 
     const load = async () => {
         setIsLoading(true);
@@ -5204,6 +5210,15 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     <div className="flex items-center gap-2">
                         <select
                             className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                            value={tipoFilter}
+                            onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
+                        >
+                            <option value="todos">NF-e e NFC-e</option>
+                            <option value="55">Só NF-e</option>
+                            <option value="65">Só NFC-e</option>
+                        </select>
+                        <select
+                            className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
                             value={ambienteFilter}
                             onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
                         >
@@ -5248,7 +5263,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             ) : filteredNotas.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
-                                        {notas.length === 0 ? 'Nenhuma nota fiscal emitida ainda.' : 'Nenhuma nota nesse ambiente.'}
+                                        {notas.length === 0 ? 'Nenhuma nota fiscal emitida ainda.' : 'Nenhuma nota com esses filtros.'}
                                     </td>
                                 </tr>
                             ) : (
@@ -5285,7 +5300,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             <div className="flex justify-end gap-2">
                                                 {nota.pdf_path && (
                                                     <Button variant="secondary" size="sm" onClick={() => handleDownload(nota)} isLoading={downloadingId === nota.id}>
-                                                        <Download size={14} className="mr-1.5" /> PDF
+                                                        <Download size={14} className="mr-1.5" /> {nota.modelo === '55' ? 'DANFE' : 'Cupom'}
                                                     </Button>
                                                 )}
                                                 {RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (

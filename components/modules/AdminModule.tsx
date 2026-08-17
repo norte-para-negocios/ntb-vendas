@@ -175,7 +175,7 @@ export const AdminModule: React.FC = () => {
   const [slug, setSlug] = useState('');
   const [contractType, setContractType] = useState<'balcao' | 'balcao_mesas'>('balcao');
   const [tableCount, setTableCount] = useState<number>(10);
-  const [periodMonths, setPeriodMonths] = useState<number>(12);
+  const [periodMonths, setPeriodMonths] = useState<number | null>(12);
   const [isActive, setIsActive] = useState(true);
   const [serviceFeeRatePercent, setServiceFeeRatePercent] = useState<number>(10);
   // Emite nota fiscal? — toggle simples que mapeia pro modelo_emissao_automatica
@@ -387,7 +387,7 @@ export const AdminModule: React.FC = () => {
       const tables = await fetchTables(store.id);
       setTableCount(tables.length || 0);
 
-      setPeriodMonths(store.contract_period_months || 12);
+      setPeriodMonths(store.contract_period_months);
       setIsActive(store.is_active);
       setServiceFeeRatePercent(store.config?.service_fee_rate != null ? store.config.service_fee_rate * 100 : 10);
       setLogoPreview(store.logo_url);
@@ -1048,7 +1048,27 @@ export const AdminModule: React.FC = () => {
                 <Input label="Nome do Estabelecimento" placeholder="Ex: Hamburgueria Top" value={name} onChange={handleNameChange} />
                 <div className="grid grid-cols-2 gap-4">
                      <Input label="CNPJ" placeholder="00.000.000/0000-00" value={cnpj} onChange={e => setCnpj(e.target.value)} />
-                     <Input type="number" label="Meses de Contrato" value={periodMonths} onChange={e => setPeriodMonths(parseInt(e.target.value))} />
+                     <div className="flex flex-col gap-1.5">
+                         {periodMonths === null ? (
+                             <>
+                                 <label className="text-sm font-semibold text-[var(--text)]">Meses de Contrato</label>
+                                 <div className="flex items-center h-10 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text-muted)]">
+                                     Sem prazo definido
+                                 </div>
+                             </>
+                         ) : (
+                             <Input type="number" label="Meses de Contrato" value={periodMonths} onChange={e => setPeriodMonths(parseInt(e.target.value) || 1)} />
+                         )}
+                         <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                             <input
+                                 type="checkbox"
+                                 checked={periodMonths === null}
+                                 onChange={e => setPeriodMonths(e.target.checked ? null : 12)}
+                                 className="accent-[var(--brand)]"
+                             />
+                             Contrato sem prazo (infinito)
+                         </label>
+                     </div>
                 </div>
                 <Input type="number" label="Taxa de Serviço (%)" value={serviceFeeRatePercent} onChange={e => setServiceFeeRatePercent(Number(e.target.value) || 0)} min="0" max="100" step="0.1" />
                 <div className="flex flex-col gap-1.5">
@@ -1386,8 +1406,14 @@ export const AdminModule: React.FC = () => {
                   </div>
                   {contractType === 'balcao_mesas' && (
                       <div className="bg-[var(--info)]/10 p-4 rounded-xl border border-[var(--info)]/20">
-                        <div className="flex justify-between items-center mb-2"><label className="text-sm font-bold text-[var(--info)]">Mesas: {tableCount}</label></div>
-                        <input type="range" min="1" max="100" value={tableCount} onChange={e => setTableCount(parseInt(e.target.value))} className="w-full h-2 bg-[var(--info)]/30 rounded-lg appearance-none cursor-pointer accent-[var(--info)]"/>
+                        <div className="flex justify-between items-center mb-2"><label className="text-sm font-bold text-[var(--info)]">Mesas</label></div>
+                        <input
+                            type="number"
+                            min="1"
+                            value={tableCount}
+                            onChange={e => setTableCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40"
+                        />
                         {editingId && <p className="text-xs text-[var(--info)] mt-2">Nota: Reduzir mesas não apaga as existentes automaticamente.</p>}
                       </div>
                   )}

@@ -33,7 +33,7 @@ export interface Store {
   is_active: boolean;
   is_test?: boolean;
   contract_type: 'balcao' | 'balcao_mesas';
-  contract_period_months: number;
+  contract_period_months: number | null;
   activation_date: string;
   config: {
     use_pin: boolean;

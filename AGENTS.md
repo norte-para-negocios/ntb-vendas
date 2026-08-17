@@ -557,22 +557,19 @@ contexto pré-login, usar `fetchTablesPublic`), `orders`, `order_items`
 adicionais escolhidos), `table_sessions`, `order_ratings`,
 `store_fiscal_certificates`, `store_fiscal_certificate_secrets`.
 
-**Pendente (2026-08-16, só anotado, pedido explícito do usuário):** hoje
-Certificado e Configuração do Emissor Fiscal ficam só no Master Admin
-(`AdminModule.tsx`, "Editar Loja") — foram removidas de dentro do painel do
-lojista (`StoreModule.tsx`/`MenuManagementView`, onde tinham sido abertas em
-2026-07-07) porque o usuário considerou errado deixar o lojista mexer em
-certificado/config fiscal por conta própria ("deveria estar em adm e não em
-cardápio"). Ainda não implementado, mas pedido explicitamente: **separar a
-tela de Notas Fiscais em NF-e e NFC-e** (hoje `FiscalNotasView` em
-`StoreModule.tsx` mistura os dois tipos numa lista só, com um filtro de
-ambiente — ver seção "Integração ntb-vendas ↔ ntb-estoque" abaixo pro
-contexto do filtro de ambiente) — o usuário quer abrir e escolher
-diretamente o que quer fazer (emitir NF-e ou NFC-e) em vez de tudo junto, e
-poder escolher entre gerar/baixar DANFE (NF-e) ou o cupom/DANFCe (NFC-e) a
-partir dessa tela. Precisa de desenho (não é 100% claro ainda se é só
-separar a listagem por tipo com um filtro/aba, ou se o fluxo de EMITIR
-também precisa mudar) antes de implementar.
+**Resolvido (2026-08-16):** Certificado e Configuração do Emissor Fiscal
+ficam no Master Admin (`AdminModule.tsx`, "Editar Loja") **e** no painel do
+lojista, na aba Administração → Notas Fiscais (`StoreModule.tsx`,
+`StoreAdminView`, sub-aba `fiscal`) — não foi tirado do lojista de vez, só
+movido da aba Cardápio (`MenuManagementView`) pra Administração
+("deveria estar em adm e não em cardápio" queria dizer isso, não remover o
+acesso). **Também resolvido:** `FiscalNotasView` ganhou um segundo filtro
+("NF-e e NFC-e" / "Só NF-e" / "Só NFC-e", `tipoFilter`) ao lado do filtro de
+ambiente já existente, e o botão de baixar PDF agora mostra "DANFE" (NF-e)
+ou "Cupom" (NFC-e) em vez de "PDF" genérico — não existe um fluxo de
+"emitir manualmente" nessa tela pra separar (emissão é sempre automática ao
+fechar a venda, conforme `modelo_emissao_automatica`), então o pedido virou
+filtro + rótulo específico por tipo.
 
 ## Integração ntb-vendas ↔ ntb-estoque (`omie_codigo`, migration 026)
 
@@ -1007,26 +1004,25 @@ mais comum (tamanho quase sempre tem um "padrão" natural, tipo Médio).
 não é pra implementar sem pedido explícito):** duas ideias relacionadas,
 juntas numa mensagem só:
 
-1. **"Produto pai com variações" no cardápio do cliente** — retoma a ideia já
-   registrada mais cedo na mesma sessão ("várias moquecas soltas, quero
-   clicar em 'Moqueca' e escolher qual"): em vez de N produtos separados
-   ("Moqueca de Peixe", "Moqueca de Camarão", "Moqueca Mista"...) aparecendo
-   soltos na lista, agrupar visualmente num produto "pai" com as variações
-   escolhidas dentro (tamanho, sabor, "tirar algo" etc.).
-   **Achado importante ao investigar antes de escrever esta nota: o
-   mecanismo de fundo pra isso JÁ EXISTE e já funciona de ponta a ponta** —
-   é exatamente `product_option_groups`/`product_options` (ver seção acima),
-   com `product_options.omie_codigo` (migration 026) já garantindo que CADA
-   variação vira um código Omie próprio na hora de disparar a Ordem de
-   Produção (`create_order_secure`/migration 028 já gravam o `omie_codigo`
-   certo por opção escolhida em `selected_options`). **Não falta nenhum
-   dado novo, só UI**: hoje criar um "produto pai com variações" exige
-   montar manualmente grupo + opções uma a uma no formulário de produto —
-   não existe um assistente/atalho pra "criar N variações de uma vez a
-   partir de uma lista de produtos soltos já cadastrados" (o caso real:
-   consolidar as ~3 moquecas já cadastradas separadamente num produto só
-   com um grupo "Qual moqueca?"). Confirmar com o usuário se é isso que ele
-   quer antes de desenhar.
+1. **"Produto pai com variações" no cardápio do cliente — RESOLVIDO
+   (2026-08-16).** Construída a ferramenta "Agrupar como variações"
+   (`MenuManagementView`, modo de seleção na lista de produtos →
+   `consolidateProductsIntoVariants` em `lib/api.ts`, reaproveita
+   `syncProductOptionGroups`): seleciona 2+ produtos da mesma categoria,
+   escolhe o mais barato como base (obrigatório — `price_delta` nunca
+   negativo), e vira um grupo de variação único, com `omie_codigo` de cada
+   produto original preservado por opção. Os produtos consolidados ficam
+   `available=false` (nunca apagados, preserva histórico de venda).
+   Aplicada de ponta a ponta nas 6 lojas com cardápio real: **~140 grupos
+   de variação criados** (Moqueca/Ensopado, Na Chapa, Executivo, Drinks
+   inteiro — ~90 produtos só em Drinks —, toda a família Pizza por tamanho
+   G/M, Sobremesas, Pastas, Pratos Kids, cardápio padronizado das 4 lojas
+   Donana, etc.). Vinhos/champagnes/espumantes/whisky/conhaque ficaram de
+   fora de propósito — cada rótulo é produto genuinamente diferente,
+   agrupar pioraria a navegação de uma carta de vinhos. Migration 044
+   (aplicada nos dois bancos) corrigiu `sync_product_option_groups`, que
+   não gravava `omie_codigo` por opção desde a migration 026 — sem isso a
+   consolidação perderia o vínculo com a Ordem de Produção automática.
 2. **Cadastro de produto unificado entre `ntb-vendas` e `ntb-estoque`** —
    mesmo espírito do bootstrap de loja feito nesta sessão ("Criar no NTB
    Estoque também"/"Criar no NTB Vendas também"): cadastrar um produto de
@@ -1040,11 +1036,11 @@ juntas numa mensagem só:
    uma representação só do lado do `ntb-vendas`, pensada pra aparecer
    melhor pro cliente/lojista.
 
-Nenhuma das duas partes tem desenho ainda (schema de "que campos migram pra
-onde", se o vínculo produto↔produto entre os dois sistemas usa
-`omie_codigo` como chave ou precisa de algo novo, etc.) — registrado pra
-quando o usuário pedir pra desenhar de verdade. Mesma nota espelhada no
-AGENTS.md do `ntb-estoque`.
+Item 2 continua sem desenho (schema de "que campos migram pra onde", se o
+vínculo produto↔produto entre os dois sistemas usa `omie_codigo` como
+chave ou precisa de algo novo, etc.) — registrado pra quando o usuário
+pedir pra desenhar de verdade. Mesma nota espelhada no AGENTS.md do
+`ntb-estoque`.
 
 ## Cardápio por horário/turno (migration 018)
 
@@ -1364,25 +1360,16 @@ pós-refeição" saiu desta lista — já implementada, ver `order_ratings` na
 seção de migrations e a limitação conhecida na seção de dívidas técnicas
 abaixo.)
 
-**Pendente (2026-08-16, só anotado, pedido explícito do usuário):** no
-campo "Meses de Contrato" do formulário de loja (Master Admin,
-`AdminModule.tsx`, hoje `<Input type="number">` puro), poder marcar o
-contrato como "infinito"/em aberto (sem data de expiração), em vez de ser
-obrigado a digitar um número de meses. Não implementado ainda — hoje
-`contract_period_months` é sempre um número; precisa decidir a
-representação (`null` = sem prazo? Um valor sentinela?) e onde esse prazo é
-usado hoje (não confirmado nesta sessão se algo já lê `contract_period_months`
-pra bloquear a loja automaticamente ao vencer, ou se é só informativo —
-checar antes de implementar).
+**Resolvido (2026-08-16):** "Meses de Contrato" (Master Admin,
+`AdminModule.tsx`) agora aceita "sem prazo definido" — checkbox que zera
+`periodMonths` pra `null` (migration 045, `contract_period_months` virou
+nullable; confirmado antes de mexer que essa coluna nunca é lida em nenhum
+lugar do código pra bloquear/expirar loja, é só informativo, então a
+mudança não tem efeito colateral em nada que já funciona).
 
-**Pendente (2026-08-16, só anotado, pedido explícito do usuário):** o campo
-"Mesas" no mesmo formulário (`AdminModule.tsx`, `<input type="range" min="1"
-max="100">`, estado `tableCount`) tem um teto artificial de 100 — o usuário
-quer poder colocar quantas mesas quiser, sem esse limite. Não implementado
-ainda; mudança provavelmente simples (trocar o range por um input numérico
-sem `max`, ou elevar o `max` bem acima do necessário), mas checar antes se
-existe algum outro limite/suposição de "até 100 mesas" em outro lugar do
-código (impressão, grid de mesas, etc.) antes de mexer.
+**Resolvido (2026-08-16):** o campo "Mesas" (`AdminModule.tsx`) tinha um
+teto de 100 (`<input type="range" min="1" max="100">`) — virou um
+`<input type="number" min="1">` sem limite superior.
 
 **⚠️ REGRA CRÍTICA (2026-07-06), vale pra qualquer trabalho de emissão
 fiscal neste projeto daqui pra frente: SEMPRE testar em ambiente de
