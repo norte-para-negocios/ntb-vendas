@@ -2414,13 +2414,22 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence>
             {orders.map(order => {
                 const itemCount = order.order_items?.reduce((a,b) => a+b.quantity, 0) || 0;
                 const total = order.order_items?.reduce((a,b) => a+(b.quantity * b.price_at_time), 0) || 0;
                 const status = order.status;
 
                 return (
-                    <Card key={order.id} accentColor="var(--brand)" className="flex flex-col p-4 pl-5">
+                    <motion.div
+                        key={order.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={SPRING_TAP}
+                    >
+                    <Card accentColor="var(--brand)" className="flex flex-col p-4 pl-5">
                          <div className="flex justify-between items-start mb-2">
                              <div>
                                  <h3 className="font-bold text-lg text-[var(--text)] flex items-center gap-2">
@@ -2465,8 +2474,10 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
                              )}
                          </div>
                     </Card>
+                    </motion.div>
                 );
             })}
+            </AnimatePresence>
             {orders.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
                     <Coffee className="mb-4 h-20 w-20 opacity-20" />
