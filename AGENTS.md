@@ -733,31 +733,26 @@ dashboard). Passos aplicados:
    existe descoberta automática entre as duas lojas nem uma ligação feita
    "no momento da criação" da loja em si (as duas telas de cadastro
    continuam sem essa pergunta). Não agir sem pedido explícito.
-5. **Pendente (2026-08-16, só anotado, pedido explícito do usuário):** a
-   Ordem de Produção criada no `ntb-estoque` a partir de uma venda daqui
-   deveria usar o **local de estoque certo conforme onde o item foi
-   preparado** — pedido feito na Cozinha (KDS `destination='kitchen'`) devia
-   gerar/consumir no local de estoque "Cozinha", pedido feito no Bar
-   (`destination='bar'`) no local "Bar", em vez de tudo cair num único local
-   genérico (não confirmado nesta sessão se hoje já existe essa distinção do
-   lado do `ntb-estoque` ou se é sempre um local fixo — checar antes de
-   desenhar). O payload que este projeto manda pra
-   `/api/integracao/ordem-producao` do `ntb-estoque` (ver
-   `triggerOrdemProducao()`/`lib/api.ts`) hoje não inclui nenhuma informação
-   de destino (cozinha/bar) por item — precisaria ganhar isso pra a ordem de
-   produção poder escolher o local certo do lado de lá. Mesma nota espelhada
-   no AGENTS.md do `ntb-estoque`. **Esclarecido no mesmo dia:** criar locais
-   de estoque com qualquer nome (ex.: "Cozinha 1", "Cozinha 2", "Bar 1",
-   "Bar 2") **já é possível hoje** no `ntb-estoque` (`/local-estoque` →
-   "Novo local", descrição livre) — não é gap nenhum, isso já existe. O que
-   falta é só o lado de cá informar o `destination` por item, e o
-   `ntb-estoque` escolher entre os locais já cadastrados. **Confirmado pelo
-   usuário (2026-08-16):** a escolha de qual local de estoque usar é feita
-   aqui, no `ntb-vendas` (não no `ntb-estoque`) — ou seja, o mapeamento
-   produto/categoria → local de estoque (Cozinha/Bar/etc.) precisa existir
-   deste lado, e o payload que sai daqui pro `ntb-estoque` já manda o nome
-   do local resolvido (não só o `destination` cru), o `ntb-estoque` só usa
-   o que chegar.
+5. **Resolvido (2026-08-16):** a Ordem de Produção criada no `ntb-estoque` a
+   partir de uma venda daqui agora usa o **local de estoque certo conforme
+   onde o item foi preparado**. `app/api/integracao/ordem-producao/route.ts`
+   passou a mandar `destination: product.destination` (`'kitchen'|'bar'|null`,
+   coluna que já existia em `products`, nunca tinha sido incluída nesse
+   payload) por item resolvido — herdado do produto pai pra qualquer
+   adicional/opcional dele (uma borda de pizza é feita na mesma estação que
+   a pizza, não tem `destination` próprio).
+   **Um ajuste em relação ao que o usuário confirmou antes:** ele tinha dito
+   que a escolha do local deveria ser feita "aqui, no ntb-vendas", com o
+   payload já mandando o nome do local resolvido. Implementado diferente
+   por decisão técnica: o `ntb-vendas` não tem (nem deveria ter) visibilidade
+   dos códigos de local de estoque do Omie, que são inteiramente internos ao
+   `ntb-estoque` — então este lado só manda o `destination` cru
+   (`kitchen`/`bar`, que já é o dado que o `ntb-vendas` realmente possui e
+   decide, via `products.destination`/KDS), e quem resolve pro código Omie
+   certo é o `ntb-estoque`, usando um mapeamento próprio por loja
+   (`lojas.local_estoque_cozinha_codigo`/`local_estoque_bar_codigo`,
+   configurável na tela de Lojas de lá). Documentado com mais detalhe no
+   AGENTS.md do `ntb-estoque`.
 
 ## Histórico completo no Contabo (dual-write, 2026-07-13)
 

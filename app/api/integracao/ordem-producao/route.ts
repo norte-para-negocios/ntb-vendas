@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
   const { data: items } = await admin
     .from('order_items')
-    .select('quantity, status, selected_options, product:products(omie_codigo)')
+    .select('quantity, status, selected_options, product:products(omie_codigo, destination)')
     .in('order_id', orderIds);
 
   // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
@@ -127,19 +127,30 @@ export async function POST(request: NextRequest) {
   // gravado em selected_options pela create_order_secure (migration 028), não
   // precisa de join extra. Pedidos anteriores a essa migration simplesmente
   // não têm o campo (undefined), tratados como sem código.
-  const porCodigo = new Map<string, number>();
+  //
+  // destination (2026-08-16, pedido explícito do usuário) — vai junto pro
+  // ntb-estoque escolher o local de estoque certo (Cozinha/Bar) na Ordem de
+  // Produção, em vez de sempre cair no local padrão do Omie. Um adicional
+  // (ex.: borda de pizza) sempre herda o destination do PRODUTO PAI — faz a
+  // pizza inteira na mesma estação, não existe "destination" próprio de
+  // opcional.
+  const porCodigo = new Map<string, { quantidade: number; destination: 'kitchen' | 'bar' | null }>();
   for (const item of items ?? []) {
     if (item.status === 'canceled') continue;
 
-    const codigoProduto = (item as any).product?.omie_codigo as string | null | undefined;
+    const produto = (item as any).product as { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null } | null;
+    const destination = produto?.destination ?? null;
+    const codigoProduto = produto?.omie_codigo;
     if (codigoProduto) {
-      porCodigo.set(codigoProduto, (porCodigo.get(codigoProduto) ?? 0) + item.quantity);
+      const atual = porCodigo.get(codigoProduto);
+      porCodigo.set(codigoProduto, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination });
     }
 
     const opcoes = (item.selected_options ?? []) as { omie_codigo?: string | null }[];
     for (const opcao of opcoes) {
       if (!opcao.omie_codigo) continue;
-      porCodigo.set(opcao.omie_codigo, (porCodigo.get(opcao.omie_codigo) ?? 0) + item.quantity);
+      const atual = porCodigo.get(opcao.omie_codigo);
+      porCodigo.set(opcao.omie_codigo, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination });
     }
   }
 
@@ -147,7 +158,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Nenhum item com omie_codigo vinculado' });
   }
 
-  const itens = Array.from(porCodigo, ([codigo, quantidade]) => ({ codigo, quantidade }));
+  const itens = Array.from(porCodigo, ([codigo, v]) => ({ codigo, quantidade: v.quantidade, destination: v.destination }));
 
   // Ambiente fiscal da loja (2026-08-16, pedido explícito do usuário) — repassado
   // junto pro ntb-estoque conseguir mostrar/filtrar "essa OP veio de uma venda de
