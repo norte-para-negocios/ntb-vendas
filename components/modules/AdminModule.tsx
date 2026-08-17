@@ -927,7 +927,7 @@ export const AdminModule: React.FC = () => {
                             whileTap={{ scale: 0.9 }}
                             transition={SPRING_TAP}
                             onClick={() => handleDuplicateStore(store.id, store.name)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] u-motion"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--info)] transition-colors"
                             title="Duplicar"
                         >
                             <Copy size={18} />
@@ -936,7 +936,7 @@ export const AdminModule: React.FC = () => {
                             whileTap={{ scale: 0.9 }}
                             transition={SPRING_TAP}
                             onClick={() => handleEditStore(store)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] u-motion"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
                             title="Editar"
                         >
                             <Edit2 size={18} />
@@ -945,7 +945,7 @@ export const AdminModule: React.FC = () => {
                             whileTap={{ scale: 0.9 }}
                             transition={SPRING_TAP}
                             onClick={() => handleDeleteStore(store.id, store.name)}
-                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
+                            className="px-3 text-[var(--text-muted)] hover:text-[var(--err)] transition-colors"
                             title="Excluir"
                         >
                             <Trash2 size={18} />
@@ -1160,11 +1160,9 @@ export const AdminModule: React.FC = () => {
               {editingId && (
                   <>
                   <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false} badge={certBadge()}>
+                    <div className="space-y-4">
                       <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                              <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
-                              {certBadge()}
-                          </div>
+                          <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
                           <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
                               <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
                               <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
@@ -1368,18 +1366,16 @@ export const AdminModule: React.FC = () => {
                               Salvar Configuração Fiscal
                           </Button>
                       </div>
+                    </div>
                   </Collapsible>
 
-                  <Collapsible title="Integração com o NTB Estoque" defaultOpen={false}>
+                  <Collapsible title="Integração com o NTB Estoque" defaultOpen={false} badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}>
                       {/* Integração com o NTB Estoque (Ordem de Produção automática) —
                           pedido explícito do usuário (2026-08-16): poder escolher/configurar
                           a integração já na tela de criação/edição de loja do Master Admin,
                           sem precisar entrar no painel do lojista. */}
                       <div className="space-y-4">
-                          <div>
-                              <h4 className="font-bold text-sm text-[var(--text)]">Integração com o NTB Estoque</h4>
-                              <p className="text-xs text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
-                          </div>
+                          <p className="text-xs text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
 
                           <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
                               <div>

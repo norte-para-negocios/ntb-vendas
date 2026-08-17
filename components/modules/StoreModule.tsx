@@ -1552,7 +1552,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <Card
                             hoverable
                             onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
-                            className={`u-stagger relative flex flex-col justify-between p-4 transition-all duration-300 border-2 group ${
+                            className={`relative flex flex-col justify-between p-4 transition-[height,background-color,border-color,box-shadow] duration-300 border-2 group ${
                                 areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
                             } ${
                                 isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
@@ -4564,6 +4564,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 de verdade (ver AGENTS.md, seção "Configuração do emissor
                 fiscal"). */}
             <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false}>
+              <div className="space-y-6">
 
                 {/* Certificado Digital */}
                 <div className="space-y-3">
@@ -4782,6 +4783,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                         Salvar Configuração Fiscal
                     </Button>
                 </div>
+              </div>
             </Collapsible>
                 </>
             )}

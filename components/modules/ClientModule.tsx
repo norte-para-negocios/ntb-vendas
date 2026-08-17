@@ -777,14 +777,12 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     )}
                 </div>
 
-                <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
-                    <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
-                        <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
-                        {tables.find(t => t.id === tableId)?.status === 'occupied'
-                            ? 'Entrar / Recuperar'
-                            : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
-                    </Button>
-                </motion.div>
+                <Button className="w-full group" onClick={handleEnter} disabled={isLoading}>
+                    <LogIn className="mr-2 u-motion group-hover:translate-x-1" size={20} />
+                    {tables.find(t => t.id === tableId)?.status === 'occupied'
+                        ? 'Entrar / Recuperar'
+                        : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
+                </Button>
             </Card>
           </div>
         </div>
@@ -1207,11 +1205,9 @@ const ProductModal: React.FC<{
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
-                    <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                        Adicionar • R$ {(unitPrice * qty).toFixed(2)}
-                    </Button>
-                </motion.div>
+                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                    Adicionar • R$ {(unitPrice * qty).toFixed(2)}
+                </Button>
                 {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
             </div>
         </Modal>
@@ -1475,16 +1471,12 @@ const CartModal: React.FC<{
                         <span className="num">R$ {total.toFixed(2)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
-                            <Button variant="secondary" onClick={onClose} className="w-full">
-                                Adicionar Mais
-                            </Button>
-                        </motion.div>
-                        <motion.div whileTap={{ scale: 0.97 }} transition={SPRING_TAP}>
-                            <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0} className="w-full">
-                                Confirmar Pedido
-                            </Button>
-                        </motion.div>
+                        <Button variant="secondary" onClick={onClose} className="w-full">
+                            Adicionar Mais
+                        </Button>
+                        <Button onClick={onConfirm} isLoading={isLoading} disabled={cart.length === 0} className="w-full">
+                            Confirmar Pedido
+                        </Button>
                     </div>
                 </div>
         </BottomSheet>
@@ -2633,9 +2625,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 animate={{ height: expanded ? 'auto' : 0 }}
                                 transition={SPRING_SHEET}
                                 style={{ overflow: 'hidden' }}
-                                aria-hidden={!expanded}
                             >
-                                <div style={{ pointerEvents: expanded ? 'auto' : 'none' }}>
+                                <div inert={!expanded || undefined}>
                                     <div className="pb-2">
                                         {catProducts.map((product, i) => (
                                             <ProductCard

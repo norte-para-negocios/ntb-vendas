@@ -13,7 +13,7 @@ export const Button: React.FC<
   }
 > = ({ className = '', variant = 'primary', size = 'md', isLoading, children, ...props }) => {
   const base =
-    'inline-flex items-center justify-center font-medium rounded-[var(--r-md)] u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none';
+    'inline-flex items-center justify-center font-medium rounded-[var(--r-md)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none';
 
   const sizes = {
     sm: 'px-3 py-1.5 text-[13px] gap-1.5',
@@ -122,7 +122,7 @@ export const Collapsible: React.FC<{
         aria-expanded={open}
         whileTap={{ scale: 0.99 }}
         transition={SPRING_TAP}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left u-motion hover:bg-[var(--surface-2)]"
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-[var(--surface-2)]"
       >
         <span className="flex items-center gap-2 font-bold text-[var(--text)]">
           {title}
@@ -132,8 +132,8 @@ export const Collapsible: React.FC<{
           <ChevronDown size={18} />
         </motion.span>
       </motion.button>
-      <motion.div initial={false} animate={{ height: open ? 'auto' : 0 }} transition={SPRING_SHEET} style={{ overflow: 'hidden' }} aria-hidden={!open}>
-        <div style={{ pointerEvents: open ? 'auto' : 'none' }} className="px-5 pb-5 pt-1 border-t border-[var(--border)]">
+      <motion.div initial={false} animate={{ height: open ? 'auto' : 0 }} transition={SPRING_SHEET} style={{ overflow: 'hidden' }}>
+        <div inert={!open || undefined} className="px-5 pb-5 pt-1 border-t border-[var(--border)]">
           {children}
         </div>
       </motion.div>
@@ -152,8 +152,9 @@ export const Modal: React.FC<{
   width?: string;
   // 'sheet' (opt-in, 2026-08-16): vidro + spring + arrastar pra fechar no
   // mobile, igual ao BottomSheet do cardápio do cliente. Default 'center'
-  // preserva o comportamento de sempre (CSS fadeIn/slideUp, sem drag) —
-  // nenhum consumidor existente (admin/lojista) muda sem passar a prop.
+  // (2026-08-16): também usa spring de verdade (SPRING_SHEET, fade+scale
+  // via Motion) pra todo consumidor existente (admin/lojista), não é mais
+  // CSS fadeIn/slideUp — mesma linguagem de spring do resto do app.
   variant?: 'center' | 'sheet';
 }> = ({ isOpen, onClose, title, children, width = 'max-w-md', variant = 'center' }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -283,7 +284,7 @@ export const Modal: React.FC<{
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', bounce: 0.18, duration: 0.4 }}
+              transition={SPRING_SHEET}
               drag="y"
               // Só `top: 0` (achado I1 da revisão final de 2026-08-16, mesma
               // mudança do BottomSheet em ClientModule.tsx — manter os dois em
