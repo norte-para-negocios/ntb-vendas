@@ -1043,8 +1043,21 @@ um fallback genérico (`21069090`, mesmo critério do backfill manual da
 Vieras e Vinhos) e `unidade="UN"`, chama `incluirProduto` (Omie) → devolve
 `codigo_produto` → salvo aqui em `products.omie_codigo` direto via
 `supabaseAdmin` (não passa pela RPC `update_product_secure`, que não tem
-esse campo). **Direção 2 (ntb-estoque → ntb-vendas) fica pra outra
-rodada**, por decisão explícita do usuário nesta sessão.
+esse campo). **Item 2 — Resolvido, Direção 2 (2026-08-16), mesma sessão:**
+o inverso — cadastrar produto novo no `ntb-estoque` já cria o produto
+correspondente aqui também (checkbox "Criar no NTB Vendas também" em
+"Novo produto" lá, só aparece quando "Produto de PDV" está marcado, já que
+só produto de PDV faz sentido no cardápio). Novo endpoint aqui,
+`app/api/integracao/produtos/route.ts` (não confundir com o endpoint de
+mesmo nome do lado `ntb-estoque` — apps diferentes) — auth Bearer contra
+`store_ntb_estoque_secrets.ntb_estoque_api_key` (a MESMA chave, usada ao
+contrário: quem chama agora é o `ntb-estoque`, usando `lojas.integracao_api_key`
+como Bearer), resolve o `store_id` pela chave recebida, recebe
+`{nome, preco, omieCodigo}` (o `codigo`/SKU já existe no Omie a essa
+altura, não precisa gerar nada aqui) e insere direto em `products` com
+`available: false` — fica oculto do cardápio até o lojista completar
+categoria/imagem/descrição aqui (o `ntb-estoque` não tem nenhum desses
+conceitos).
 
 ## Cardápio por horário/turno (migration 018)
 
