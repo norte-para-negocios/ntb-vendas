@@ -702,12 +702,21 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
   return (
     <div>
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            <AnimatePresence>
             {orders.map(item => {
                 const { client, observation } = parseItemNote(item.notes || '');
                 const late = isItemLate(item);
 
                 return (
-                    <Card key={item.id} className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md ${late ? 'border-[var(--err)] ring-2 ring-[var(--err)]/30' : ''}`}>
+                    <motion.div
+                        key={item.id}
+                        layout
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.92 }}
+                        transition={SPRING_TAP}
+                    >
+                    <Card className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md ${late ? 'border-[var(--err)] ring-2 ring-[var(--err)]/30' : ''}`}>
                         <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                 {item.order?.order_type === 'counter' ? (
@@ -789,8 +798,10 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                             </Button>
                         </div>
                     </Card>
+                    </motion.div>
                 );
             })}
+            </AnimatePresence>
             {orders.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
                     <CheckCircle className="mb-4 h-20 w-20 opacity-20 text-[var(--ok)]" />
