@@ -3273,51 +3273,54 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             </section>
 
             {/* INTEGRAÇÃO COM O NTB ESTOQUE (Ordem de Produção automática) */}
-            <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm space-y-4">
-                <div>
-                    <h3 className="font-bold text-lg text-[var(--text)]">Integração com o NTB Estoque</h3>
+            <Collapsible
+                title="Integração com o NTB Estoque"
+                defaultOpen={false}
+                badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}
+            >
+                <div className="space-y-4">
                     <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
-                </div>
 
-                <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
-                    <div>
-                        <h4 className="font-bold text-[var(--text)]">Ordem de Produção automática</h4>
-                        <p className="text-sm text-[var(--text-muted)]">
-                            {ntbEstoqueStatus.configurado
-                                ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
-                                : 'Ainda não configurada — preencha a URL e a chave de API abaixo.'}
-                        </p>
+                    <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                        <div>
+                            <h4 className="font-bold text-[var(--text)]">Ordem de Produção automática</h4>
+                            <p className="text-sm text-[var(--text-muted)]">
+                                {ntbEstoqueStatus.configurado
+                                    ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
+                                    : 'Ainda não configurada — preencha a URL e a chave de API abaixo.'}
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
+                            disabled={!ntbEstoqueStatus.configurado}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
                     </div>
-                    <button
-                        onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
-                        disabled={!ntbEstoqueStatus.configurado}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
-                    >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </button>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <Input
-                        label="URL do NTB Estoque"
-                        placeholder="https://app-estoque.norteparanegocios.com.br"
-                        value={ntbEstoqueUrlInput}
-                        onChange={e => setNtbEstoqueUrlInput(e.target.value)}
-                    />
-                    <Input
-                        label="Chave de API"
-                        type="password"
-                        placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
-                        value={ntbEstoqueApiKeyInput}
-                        onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
-                    />
-                </div>
-                <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="URL do NTB Estoque"
+                            placeholder="https://app-estoque.norteparanegocios.com.br"
+                            value={ntbEstoqueUrlInput}
+                            onChange={e => setNtbEstoqueUrlInput(e.target.value)}
+                        />
+                        <Input
+                            label="Chave de API"
+                            type="password"
+                            placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
+                            value={ntbEstoqueApiKeyInput}
+                            onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
+                        />
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
 
-                <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque}>
-                    Salvar Integração com o NTB Estoque
-                </Button>
-            </section>
+                    <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque}>
+                        Salvar Integração com o NTB Estoque
+                    </Button>
+                </div>
+            </Collapsible>
 
             {/* CATEGORIES */}
             <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
