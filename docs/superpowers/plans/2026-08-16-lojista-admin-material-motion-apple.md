@@ -652,6 +652,15 @@ import { SPRING_TAP } from '@/lib/motion';
 
 - [ ] **Step 2: Grid de mesas ganha `AnimatePresence` + `layout`**
 
+> **Correção pós-review (2026-08-16):** a versão original deste step só
+> adicionava `hoverable` ao `Card` e envolvia o `.map` em
+> `AnimatePresence`, sem nenhum `initial`/`animate`/`exit` no elemento —
+> `AnimatePresence` sozinho não anima nada sem esses props no filho direto.
+> A versão abaixo já corrige isso, envolvendo o `Card` num `motion.div`
+> com spring de entrada/saída, mesmo padrão usado nas Tasks 6/7
+> (Balcão/Cozinha-Bar) — consistência entre as 3 tasks de "cards com
+> entrada/saída".
+
 Dentro de `TablesView`, achar:
 ```tsx
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
