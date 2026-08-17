@@ -995,9 +995,8 @@ antes disso o cliente era obrigado a clicar manualmente até num grupo de
 escolha única obrigatória, o que é atrito desnecessário pro caso de uso
 mais comum (tamanho quase sempre tem um "padrão" natural, tipo Médio).
 
-**Pendente (2026-08-16, só anotado, ideia grande do usuário — pediu opinião,
-não é pra implementar sem pedido explícito):** duas ideias relacionadas,
-juntas numa mensagem só:
+**Ideia grande do usuário (2026-08-16), duas partes relacionadas — ambas
+resolvidas (item 2 só na Direção 1, ver abaixo):**
 
 1. **"Produto pai com variações" no cardápio do cliente — RESOLVIDO
    (2026-08-16).** Construída a ferramenta "Agrupar como variações"
