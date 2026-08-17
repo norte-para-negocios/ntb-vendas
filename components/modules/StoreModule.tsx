@@ -5531,20 +5531,36 @@ export const StoreModule: React.FC = () => {
     // seletor de loja é reaberto).
     const handleSwitchStore = handleLogout;
 
+    // MotionConfig reducedMotion="user" envolve TODO retorno deste componente
+    // (inclusive as telas de loading/login abaixo, que usam Button com
+    // whileTap) — não só o retorno autenticado no fim da função. Ver
+    // task-8-fix-round-1-report.md: o wrap original (Task 8) só cobria o
+    // <StoreLayout> final, deixando a tela de "Restaurando sessão..." e
+    // StoreLogin (incluindo os sub-fluxos de troca de senha/seletor de loja
+    // universal) fora do Context, springando normalmente mesmo com
+    // prefers-reduced-motion ativo.
     if (isRestoringSession) {
         return (
-            <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
-                <div className="auth-mesh" />
-                <div className="auth-grain" />
-                <div className="relative z-[1] flex flex-col items-center gap-3 text-[var(--text-muted)]">
-                    <RefreshCw size={28} className="animate-spin text-[var(--brand)]" />
-                    <p className="text-sm">Restaurando sessão...</p>
+            <MotionConfig reducedMotion="user">
+                <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+                    <div className="auth-mesh" />
+                    <div className="auth-grain" />
+                    <div className="relative z-[1] flex flex-col items-center gap-3 text-[var(--text-muted)]">
+                        <RefreshCw size={28} className="animate-spin text-[var(--brand)]" />
+                        <p className="text-sm">Restaurando sessão...</p>
+                    </div>
                 </div>
-            </div>
+            </MotionConfig>
         );
     }
 
-    if (!user) return <StoreLogin onLogin={handleLogin} />;
+    if (!user) {
+        return (
+            <MotionConfig reducedMotion="user">
+                <StoreLogin onLogin={handleLogin} />
+            </MotionConfig>
+        );
+    }
 
     // Permission Check
     const canAccess = (t: string) => {
@@ -5553,14 +5569,9 @@ export const StoreModule: React.FC = () => {
         return user.permissions[t as keyof typeof user.permissions] !== false;
     };
 
-    // MotionConfig reducedMotion="user" — mesmo princípio já usado em
-    // ClientModule.tsx (cardápio do cliente): sem isso, as springs
-    // adicionadas ao lojista/admin nesta rodada (Collapsible, AnimatePresence
-    // de Mesas/Balcão/KDS, whileTap de Button/Card) nunca respeitam
-    // prefers-reduced-motion — o bloco CSS global em globals.css só zera
-    // animation/transition-duration de CSS, não afeta as animações
-    // JS-driven do Motion. Ponto único de wrap (StoreLayout engloba todas
-    // as views por children), propaga via Context pra tudo abaixo.
+    // Terceiro wrap de MotionConfig (view autenticada) — ver comentário
+    // acima dos dois primeiros (loading/login) pro porquê de precisar de um
+    // por branch, e não um único wrap externo cobrindo tudo.
     return (
         <MotionConfig reducedMotion="user">
         <StoreLayout

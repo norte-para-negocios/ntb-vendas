@@ -293,8 +293,19 @@ export const AdminModule: React.FC = () => {
       }
   }, [isAuthenticated, view]);
 
+  // MotionConfig reducedMotion="user" envolve TODO retorno deste componente
+  // (inclusive AdminLogin abaixo, que usa Button com whileTap e tem seu
+  // próprio sub-fluxo de troca de senha) — não só o retorno autenticado mais
+  // abaixo. Ver task-8-fix-round-1-report.md: o wrap original (Task 8) só
+  // cobria a `<div className="min-h-screen ...">` final, deixando a tela de
+  // login fora do Context, springando normalmente mesmo com
+  // prefers-reduced-motion ativo.
   if (!isAuthenticated) {
-      return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
+      return (
+        <MotionConfig reducedMotion="user">
+          <AdminLogin onLogin={() => setIsAuthenticated(true)} />
+        </MotionConfig>
+      );
   }
 
   const resetForm = () => {
@@ -804,13 +815,9 @@ export const AdminModule: React.FC = () => {
       if (!editingId && (!slug || slug === generateSlug(name))) setSlug(generateSlug(newName));
   };
 
-  // MotionConfig reducedMotion="user" — mesmo princípio já usado em
-  // ClientModule.tsx (cardápio do cliente) e agora em StoreModule.tsx (lado
-  // do lojista): sem isso, as springs adicionadas ao Master Admin nesta
-  // rodada (Collapsible dos dois acordeões fiscal/estoque, whileTap dos
-  // botões do card de loja) nunca respeitariam prefers-reduced-motion — o
-  // bloco CSS global em globals.css só zera animation/transition-duration
-  // de CSS, não afeta as animações JS-driven do Motion.
+  // Segundo wrap de MotionConfig (view autenticada) — ver comentário acima
+  // do primeiro (tela de login) pro porquê de precisar de um por branch, e
+  // não um único wrap externo cobrindo tudo.
   return (
     <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-[var(--bg)] flex">
