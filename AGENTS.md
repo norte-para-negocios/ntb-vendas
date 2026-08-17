@@ -1031,11 +1031,21 @@ juntas numa mensagem só:
    uma representação só do lado do `ntb-vendas`, pensada pra aparecer
    melhor pro cliente/lojista.
 
-Item 2 continua sem desenho (schema de "que campos migram pra onde", se o
-vínculo produto↔produto entre os dois sistemas usa `omie_codigo` como
-chave ou precisa de algo novo, etc.) — registrado pra quando o usuário
-pedir pra desenhar de verdade. Mesma nota espelhada no AGENTS.md do
-`ntb-estoque`.
+**Item 2 — Resolvido, Direção 1 (2026-08-16):** cadastrar produto novo aqui
+já cria o produto correspondente no `ntb-estoque` (via Omie), num clique só
+("Criar no NTB Estoque também" em "Novo Produto"). Reaproveita a MESMA
+chave/URL de `store_ntb_estoque_secrets` já usada pra Ordem de Produção —
+sem segredo novo. Fluxo: `app/api/integracao/criar-produto-estoque/route.ts`
+(interno, nunca expõe a chave ao browser) → chama
+`ntb-estoque:/api/integracao/produtos` (novo, mesma auth Bearer
+`integracao_api_key` da rota de Ordem de Produção) → lá gera um `codigo`
+(SKU) automático (`NTBV-<timestamp>`), usa NCM enviado por este projeto ou
+um fallback genérico (`21069090`, mesmo critério do backfill manual da
+Vieras e Vinhos) e `unidade="UN"`, chama `incluirProduto` (Omie) → devolve
+`codigo_produto` → salvo aqui em `products.omie_codigo` direto via
+`supabaseAdmin` (não passa pela RPC `update_product_secure`, que não tem
+esse campo). **Direção 2 (ntb-estoque → ntb-vendas) fica pra outra
+rodada**, por decisão explícita do usuário nesta sessão.
 
 ## Cardápio por horário/turno (migration 018)
 

@@ -7,7 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -2581,6 +2581,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // campos de texto opcionais deste form (nao ha catalogo fechado, ao
     // contrario de PRODUCT_TAGS).
     const [pNcm, setPNcm] = useState('');
+    // Cadastro de produto unificado, Direção 1 (2026-08-16) — só em "Novo
+    // Produto" (não em editar), mesmo padrão do "Criar no NTB Estoque
+    // também" da tela de loja.
+    const [pCriarNoEstoque, setPCriarNoEstoque] = useState(false);
     const [pFile, setPFile] = useState<File | null>(null);
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -2873,6 +2877,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTags([]);
             setPRecommendedIds([]);
             setPNcm('');
+            setPCriarNoEstoque(false);
         }
         setPRecommendationSearch('');
         setPFile(null);
@@ -2932,11 +2937,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             };
 
             let productId: string;
+            const isNewProduct = !editingProduct;
             if (editingProduct) {
                 await updateProduct(editingProduct.id, storeId, productData);
                 productId = editingProduct.id;
             } else {
                 productId = await createProduct(storeId, pCat, productData);
+            }
+
+            if (isNewProduct && pCriarNoEstoque) {
+                const estoqueResult = await criarProdutoNoEstoque(storeId, productId, pName, priceNum, pNcm.trim() || null);
+                if (!estoqueResult.success) {
+                    toast.error('Produto criado aqui, mas falhou criar no NTB Estoque: ' + estoqueResult.message);
+                } else {
+                    toast.success('Produto criado no NTB Estoque também!');
+                }
             }
 
             const groupsToSave: ProductOptionGroupInput[] = pOptionGroups
@@ -3552,6 +3567,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                              onChange={e => setPNcm(e.target.value)}
                          />
                     </div>
+
+                    {/* Cadastro de produto unificado, Direção 1 (2026-08-16)
+                        — só na criação, não em editar (edição de omie_codigo
+                        continua fora de escopo, ver AGENTS.md). */}
+                    {!editingProduct && (
+                        <label className="flex items-center gap-2 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={pCriarNoEstoque}
+                                onChange={e => setPCriarNoEstoque(e.target.checked)}
+                                className="accent-[var(--brand)]"
+                            />
+                            <span className="text-sm text-[var(--text)]">Criar no NTB Estoque também</span>
+                        </label>
+                    )}
 
                     {/* Destaque e etiquetas (migration 019, cardapio que vende) —
                         tudo configuravel pelo lojista aqui mesmo, sem Master Admin. */}

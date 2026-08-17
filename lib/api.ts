@@ -474,6 +474,31 @@ export const consolidateProductsIntoVariants = async (
   }
 };
 
+// Cadastro de produto unificado, Direção 1 (2026-08-16, pedido explícito do
+// usuário) — cria o produto correspondente no NTB Estoque (via Omie) e já
+// salva o omie_codigo aqui, tudo num clique só ("Criar no NTB Estoque
+// também" no formulário de "Novo Produto"). Reaproveita a mesma
+// chave/URL já configurada em store_ntb_estoque_secrets pra Ordem de
+// Produção — ver app/api/integracao/criar-produto-estoque/route.ts.
+export const criarProdutoNoEstoque = async (
+  storeId: string,
+  productId: string,
+  nome: string,
+  preco: number,
+  ncm?: string | null
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const res = await fetch('/api/integracao/criar-produto-estoque', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, productId, nome, preco, ncm }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+};
+
 // Vende mais II (migration 020) — "peca tambem": sync atomico via function
 // Postgres security definer, mesmo padrao de syncProductOptionGroups acima
 // (apaga+recria numa transação só, valida loja/limite/auto-recomendação
