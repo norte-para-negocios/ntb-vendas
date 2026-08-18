@@ -219,36 +219,35 @@ export const fetchStoreUsers = async (): Promise<(StoreUser & { store: Store })[
 // em paralelo com as queries de categorias/produtos em fetchMenu em vez de
 // depois delas. Filtro por loja via !inner em products (mesmo padrão de
 // fetchKitchenOrders — sem !inner o filtro não restringe as linhas
-// devolvidas, só zera o campo embutido, ver AGENTS.md). Opções vêm numa 2ª
-// leitura (dependem dos ids de grupo) em vez de embed de 2 níveis, por
-// simplicidade e certeza de comportamento. `.limit(500)` nas duas queries,
-// mesmo padrão de fetchActiveOrdersForTables/fetchKitchenOrders.
+// devolvidas, só zera o campo embutido, ver AGENTS.md). `.limit(500)`, mesmo
+// padrão de fetchActiveOrdersForTables/fetchKitchenOrders.
 // `includeUnavailable`: false/omitido (cardápio do cliente e fluxo de
 // pedido do garçom) filtra product_options só `available = true`; true
 // (MenuManagementView editando produto) traz todas, inclusive indisponíveis.
+//
+// Opções vêm via embed de 2 níveis (product_options aninhado direto em
+// product_option_groups) — não mais numa 2ª leitura separada com
+// `.in('group_id', groupIds)` como antes (2026-08-17, achado real ao
+// consolidar o cardápio de uma loja com ~60 produtos-pai/grupos: essa 2ª
+// query monta uma URL com TODOS os group_id da loja concatenados em
+// `group_id=in.(...)` — cresce direto com o nº de grupos e derrubou o
+// `nginx` do `testvendase` (self-hosted) com 502 Bad Gateway assim que a
+// loja passou de ~60 grupos, por estourar o limite de tamanho de header/URL
+// da requisição. O embed faz o join dentro do próprio Postgres — o tamanho
+// da URL não cresce mais com a quantidade de grupos/opções da loja).
 async function fetchOptionGroupsByProduct(storeId: string, includeUnavailable = false): Promise<Map<string, ProductOptionGroup[]>> {
-  const { data: groupsData, error: groupsError } = await supabase
+  let query = supabase
     .from('product_option_groups')
-    .select('*, product:products!inner(store_id)')
+    .select('*, product:products!inner(store_id), product_options(*)')
     .eq('product.store_id', storeId)
     .order('order')
+    .order('order', { referencedTable: 'product_options' })
     .limit(500);
+  if (!includeUnavailable) query = query.eq('product_options.available', true);
+  const { data: groupsData, error: groupsError } = await query;
   if (groupsError || !groupsData || groupsData.length === 0) {
     if (groupsError) console.error('Fetch product option groups error:', groupsError);
     return new Map();
-  }
-
-  const groupIds = groupsData.map((g: any) => g.id);
-  let optionsQuery = supabase.from('product_options').select('*').in('group_id', groupIds).order('order').limit(500);
-  if (!includeUnavailable) optionsQuery = optionsQuery.eq('available', true);
-  const { data: optionsData, error: optionsError } = await optionsQuery;
-  if (optionsError) console.error('Fetch product options error:', optionsError);
-
-  const optionsByGroup = new Map<string, { id: string; group_id: string; name: string; price_delta: number; available: boolean; order: number }[]>();
-  for (const o of optionsData || []) {
-    const list = optionsByGroup.get(o.group_id) || [];
-    list.push({ id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), available: o.available, order: o.order });
-    optionsByGroup.set(o.group_id, list);
   }
 
   const groupsByProduct = new Map<string, ProductOptionGroup[]>();
@@ -257,7 +256,9 @@ async function fetchOptionGroupsByProduct(storeId: string, includeUnavailable = 
     list.push({
       id: g.id, product_id: g.product_id, name: g.name, type: g.type, required: g.required,
       min_select: g.min_select ?? null, max_select: g.max_select ?? null, order: g.order,
-      options: optionsByGroup.get(g.id) || [],
+      options: (g.product_options || []).map((o: any) => ({
+        id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), available: o.available, order: o.order,
+      })),
     });
     groupsByProduct.set(g.product_id, list);
   }
