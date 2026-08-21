@@ -9,7 +9,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -3139,6 +3139,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [serviceFeeEnabled, setServiceFeeEnabled] = useState(store.config?.charge_service_fee ?? false);
     const [currentStoreConfig, setCurrentStoreConfig] = useState(store.config);
 
+    // Capa do cardápio (Task 1 do redesign iFood, migration 047,
+    // `stores.cover_url`). Diferente dos toggles/config acima (que vivem em
+    // `stores.config`, uma coluna jsonb), `cover_url` é coluna própria da
+    // loja — não existe campo de logo equivalente aqui em StoreModule.tsx
+    // (o upload de logo só existe hoje no Master Admin, `AdminModule.tsx`)
+    // então este bloco replica o MESMO padrão visual de lá (preview em
+    // caixa tracejada + botão "Escolher Imagem" + `uploadStoreCover`), só
+    // com persistência própria (`updateStoreCoverUrl`) e um botão "Salvar
+    // Capa" explícito, já que aqui não existe um "Salvar Loja" geral que
+    // upload por trás — mesmo princípio de loading/erro dos outros
+    // controles desta seção (estado otimista + toast de erro).
+    const [coverFile, setCoverFile] = useState<File | null>(null);
+    const [coverPreview, setCoverPreview] = useState<string | null>(store.cover_url);
+    const [isSavingCover, setIsSavingCover] = useState(false);
+
     // Vende mais II (migration 020) — "mais vendido" automatico. Mesma chave
     // jsonb de sempre (stores.config), so' com show_bestsellers nova; mesmo
     // padrao otimista do toggle de taxa de servico logo acima.
@@ -3163,7 +3178,36 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
         setNoteSuggestions(store.config?.note_suggestions ?? []);
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
+        setCoverPreview(store.cover_url);
+        setCoverFile(null);
     }, [store]);
+
+    const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setCoverFile(file);
+            setCoverPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSaveCover = async () => {
+        if (!coverFile) return;
+        setIsSavingCover(true);
+        try {
+            const uploadedUrl = await uploadStoreCover(coverFile);
+            const result = await updateStoreCoverUrl(store.id, uploadedUrl);
+            if (!result.success) throw new Error(result.message || 'Erro ao salvar a capa.');
+            setCoverFile(null);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, cover_url: uploadedUrl });
+            }
+            toast.success('Capa do cardápio atualizada!');
+        } catch (e: any) {
+            toast.error('Erro ao salvar capa: ' + e.message);
+        } finally {
+            setIsSavingCover(false);
+        }
+    };
 
     const handleToggleServiceFee = async () => {
         const newValue = !serviceFeeEnabled;
@@ -3271,6 +3315,35 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             {/* STORE SETTINGS */}
             <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
                 <h3 className="font-bold text-lg mb-4 text-[var(--text)]">Configurações Gerais</h3>
+
+                {/* Capa do cardápio (Task 1, redesign iFood, migration 047) —
+                    mesmo padrão visual do upload de logo do Master Admin
+                    (AdminModule.tsx), que não existe replicado aqui. */}
+                <div className="flex flex-col gap-2 mb-4 pb-4 border-b border-[var(--border)]">
+                    <label className="text-sm font-semibold text-[var(--text)]">Imagem de Capa do Cardápio</label>
+                    <div className="flex items-center gap-4">
+                        <div className={`w-20 h-20 rounded-xl border-2 border-dashed border-[var(--border)] flex items-center justify-center overflow-hidden bg-[var(--surface-2)] ${coverPreview ? 'border-[var(--brand)]' : ''}`}>
+                            {coverPreview ? (
+                                <img src={coverPreview} alt="Capa Preview" className="w-full h-full object-cover" />
+                            ) : (
+                                <ImageIcon className="text-[var(--border)]" size={24} />
+                            )}
+                        </div>
+                        <div className="flex-1">
+                            <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
+                                <Upload size={16} /> Escolher Imagem
+                                <input type="file" className="hidden" accept="image/*" onChange={handleCoverFileChange} />
+                            </label>
+                            <p className="text-xs text-[var(--text-muted)] mt-2">Imagem de fundo/hero do cardápio (paisagem, ideal 1200x600px)</p>
+                        </div>
+                        {coverFile && (
+                            <Button onClick={handleSaveCover} isLoading={isSavingCover} aria-label="Salvar capa">
+                                Salvar Capa
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
                     <div>
                         <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço ({((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}%)</h4>

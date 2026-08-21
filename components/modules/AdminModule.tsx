@@ -6,7 +6,7 @@ import { SPRING_TAP } from '@/lib/motion';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
@@ -188,6 +188,11 @@ export const AdminModule: React.FC = () => {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
+  // Cover (capa do cardápio) Upload State — mesmo padrão do logo acima,
+  // Task 1 do redesign iFood (migration 047, `cover_url`).
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+
   // Certificado Digital Fiscal State
   const [certFile, setCertFile] = useState<File | null>(null);
   const [certPassword, setCertPassword] = useState('');
@@ -321,6 +326,8 @@ export const AdminModule: React.FC = () => {
       setEmiteNotaFiscal(false);
       setLogoFile(null);
       setLogoPreview(null);
+      setCoverFile(null);
+      setCoverPreview(null);
       setErrorMsg(null);
 
       setCertFile(null);
@@ -405,6 +412,8 @@ export const AdminModule: React.FC = () => {
       setServiceFeeRatePercent(store.config?.service_fee_rate != null ? store.config.service_fee_rate * 100 : 10);
       setLogoPreview(store.logo_url);
       setLogoFile(null);
+      setCoverPreview(store.cover_url);
+      setCoverFile(null);
       setErrorMsg(null);
 
       setCertFile(null);
@@ -499,6 +508,14 @@ export const AdminModule: React.FC = () => {
       if (file) {
           setLogoFile(file);
           setLogoPreview(URL.createObjectURL(file));
+      }
+  };
+
+  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          setCoverFile(file);
+          setCoverPreview(URL.createObjectURL(file));
       }
   };
 
@@ -656,11 +673,16 @@ export const AdminModule: React.FC = () => {
       setIsLoading(true);
 
       let finalLogoUrl = logoPreview;
+      let finalCoverUrl = coverPreview;
 
       try {
           // Upload Logo if new file selected
           if (logoFile) {
               finalLogoUrl = await uploadStoreLogo(logoFile);
+          }
+          // Upload Cover if new file selected
+          if (coverFile) {
+              finalCoverUrl = await uploadStoreCover(coverFile);
           }
 
           const params = {
@@ -672,6 +694,7 @@ export const AdminModule: React.FC = () => {
               periodMonths,
               isActive,
               logoUrl: finalLogoUrl,
+              coverUrl: finalCoverUrl,
               serviceFeeRate: serviceFeeRatePercent / 100,
           };
 
@@ -1070,6 +1093,28 @@ export const AdminModule: React.FC = () => {
                               <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
                           </label>
                           <p className="text-xs text-[var(--text-muted)] mt-2">Recomendado: 500x500px (PNG ou JPG)</p>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Cover (Capa) Upload — mesmo padrão do Logo acima, Task 1 do
+                  redesign iFood (migration 047, `cover_url`). */}
+              <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-[var(--text)]">Imagem de Capa do Cardápio</label>
+                  <div className="flex items-center gap-4">
+                      <div className={`w-20 h-20 rounded-xl border-2 border-dashed border-[var(--border)] flex items-center justify-center overflow-hidden bg-[var(--surface-2)] ${coverPreview ? 'border-[var(--brand)]' : ''}`}>
+                          {coverPreview ? (
+                              <img src={coverPreview} alt="Capa Preview" className="w-full h-full object-cover" />
+                          ) : (
+                              <Image className="text-[var(--border)]" size={24} />
+                          )}
+                      </div>
+                      <div className="flex-1">
+                          <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
+                              <Upload size={16} /> Escolher Imagem
+                              <input type="file" className="hidden" accept="image/*" onChange={handleCoverFileChange} />
+                          </label>
+                          <p className="text-xs text-[var(--text-muted)] mt-2">Imagem de fundo/hero do cardápio (paisagem, ideal 1200x600px)</p>
                       </div>
                   </div>
               </div>

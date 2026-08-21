@@ -7,7 +7,7 @@ const STORE: Store = {
   id: 'mock-store-1',
   name: 'Bistrô Demo',
   slug: 'bistro',
-  logo_url: null,
+  logo_url: null, cover_url: null,
   cnpj: '00.000.000/0001-00',
   is_active: true,
   contract_type: 'balcao_mesas',
@@ -20,7 +20,7 @@ const STORE2: Store = {
   id: 'mock-store-2',
   name: 'Pizzaria Napoli',
   slug: 'napoli',
-  logo_url: null,
+  logo_url: null, cover_url: null,
   cnpj: '11.111.111/0001-11',
   is_active: true,
   contract_type: 'balcao_mesas',
@@ -505,7 +505,7 @@ export const updateStoreConfig = async (storeId: string, config: any) => {
 
 export const createStore = async (params: any): Promise<{ success: boolean; message?: string }> => {
   await delay();
-  stores.push({ id: uid(), ...params, is_active: true, logo_url: null, cnpj: '00.000.000/0001-00', contract_type: 'balcao_mesas', contract_period_months: 12, activation_date: now() });
+  stores.push({ id: uid(), ...params, is_active: true, logo_url: null, cover_url: null, cnpj: '00.000.000/0001-00', contract_type: 'balcao_mesas', contract_period_months: 12, activation_date: now() });
   return { success: true };
 };
 

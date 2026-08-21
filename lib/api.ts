@@ -30,6 +30,27 @@ export const updateStoreConfig = async (storeId: string, config: any) => {
   if (error) throw error;
 };
 
+// Atualização isolada de `cover_url` (Task 1, imagem de capa do cardápio,
+// migration 047). O Master Admin grava `cover_url` como parte do payload
+// completo de `createStore`/`updateStore` (mesmo tratamento de `logo_url`,
+// já que "Editar Loja" já reúne todos os campos da loja). O lojista, em
+// `MenuManagementView` ("Configurações Gerais"), não tem — nem deveria
+// precisar montar — esse payload inteiro (nome/CNPJ/slug/contrato/mesas)
+// só pra trocar a capa; por isso uma função dedicada, mesmo padrão simples
+// de `updateStoreConfig` acima.
+export const updateStoreCoverUrl = async (storeId: string, coverUrl: string | null): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('stores')
+      .update({ cover_url: coverUrl })
+      .eq('id', storeId);
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro desconhecido ao salvar a capa.' };
+  }
+};
+
 // Idem authenticateAdmin: senha comparada dentro da function security definer
 // authenticate_store_user_secure, não mais no client (008_seguranca_login.sql).
 // A function não conhece/retorna a loja (só store_id), então busca à parte pra
@@ -907,6 +928,7 @@ const uploadToCloudinary = async (file: File): Promise<string> => {
 };
 
 export const uploadStoreLogo = async (file: File): Promise<string> => uploadToCloudinary(file);
+export const uploadStoreCover = async (file: File): Promise<string> => uploadToCloudinary(file);
 export const uploadProductImage = async (file: File): Promise<string> => uploadToCloudinary(file);
 
 // Certificado digital fiscal: NÃO usa Cloudinary (é público/sem controle de
@@ -1149,6 +1171,7 @@ export interface CreateStoreParams {
   periodMonths: number | null;
   isActive: boolean;
   logoUrl?: string | null;
+  coverUrl?: string | null;
   serviceFeeRate: number;
 }
 
@@ -1159,6 +1182,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
       .insert({
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
+        cover_url: params.coverUrl || null,
         config: { use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate },
       })
       .select()
@@ -1191,7 +1215,7 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
     const { data: newStore, error: createError } = await supabase
       .from('stores')
-      .insert({ name: `${originalStore.name} (1)`, cnpj: originalStore.cnpj, slug: newSlug, contract_type: originalStore.contract_type, contract_period_months: originalStore.contract_period_months, is_active: originalStore.is_active, logo_url: originalStore.logo_url, config: originalStore.config })
+      .insert({ name: `${originalStore.name} (1)`, cnpj: originalStore.cnpj, slug: newSlug, contract_type: originalStore.contract_type, contract_period_months: originalStore.contract_period_months, is_active: originalStore.is_active, logo_url: originalStore.logo_url, cover_url: originalStore.cover_url, config: originalStore.config })
       .select()
       .single();
 
@@ -1229,6 +1253,7 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
       .update({
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
+        cover_url: params.coverUrl,
         config: { ...(current?.config || {}), service_fee_rate: params.serviceFeeRate },
       })
       .eq('id', id);

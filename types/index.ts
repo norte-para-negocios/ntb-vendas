@@ -29,6 +29,7 @@ export interface Store {
   name: string;
   slug: string;
   logo_url: string | null;
+  cover_url: string | null;
   cnpj: string;
   is_active: boolean;
   is_test?: boolean;
