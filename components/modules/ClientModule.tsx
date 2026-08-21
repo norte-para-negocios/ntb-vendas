@@ -968,6 +968,37 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
 });
 ProductCard.displayName = 'ProductCard';
 
+// Cartão de Destaques (redesign iFood, Task 5): cartão de vitrine
+// independente do ProductCard acima. A linha do ProductCard (texto à
+// esquerda, miniatura quadrada à direita) não funciona dentro de uma faixa
+// de carrossel estreita — o destaque precisa do formato inverso (foto
+// quadrada em cima, texto embaixo). Por isso os dois formatos nunca se
+// aninham: cada um é seu próprio componente, sem reaproveitamento visual
+// entre eles. Reusa ProductThumb (size="featured", já quadrado full-width)
+// e PriceRow (size="featured", mesma composição efetivo+riscado+selo da
+// Task 4) — nenhuma das duas é reimplementada aqui.
+const FeaturedProductCard = React.memo(function FeaturedProductCard({ product, onSelect, disabled }: {
+    product: Product,
+    onSelect: (product: Product) => void,
+    disabled?: boolean,
+}) {
+    return (
+        <button
+            type="button"
+            onClick={() => onSelect(product)}
+            disabled={disabled}
+            aria-disabled={disabled}
+            className={`w-[165px] flex-shrink-0 text-left u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] rounded-[var(--r-sm)] ${disabled ? 'opacity-60 pointer-events-none' : ''}`}
+            style={{ scrollSnapAlign: 'start' }}
+        >
+            <ProductThumb src={product.image_url} name={product.name} size="featured" />
+            <PriceRow product={product} size="featured" variablePricing={hasVariablePricing(product)} className="mt-2" />
+            <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-2">{product.name}</p>
+        </button>
+    );
+});
+FeaturedProductCard.displayName = 'FeaturedProductCard';
+
 const ProductModal: React.FC<{
     product: Product | null,
     onClose: () => void,
@@ -2763,21 +2794,17 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             )}
 
             {/* Vitrine de Destaques (migration 019) — faixa horizontal rolável no
-                topo do cardápio, antes da navegação de categorias. Reusa o
-                ProductCard normal (mesma linha editorial), só envolto num
-                container de largura fixa pra virar "cartão" dentro do scroll
-                horizontal; `last:border-0` do próprio ProductCard já remove o
-                separador pontilhado de linha-de-lista porque cada um vira
-                filho único do seu wrapper. Produto destacado continua
+                topo do cardápio, antes da navegação de categorias. Redesign
+                iFood (Task 5): cartão próprio (FeaturedProductCard, definido
+                acima junto do ProductCard) em vez do ProductCard da lista —
+                a linha texto-esquerda/foto-direita não funciona como cartão
+                de carrossel. Sem ícone/régua dourada no título (gold sai do
+                cardápio inteiro no redesign). Produto destacado continua
                 aparecendo normalmente dentro da categoria dele também — esta
                 vitrine é além, não em vez disso. */}
             {featuredProducts.length > 0 && (
                 <div className={`px-4 pt-4 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                    <div className="flex items-center gap-2 mb-1.5 u-grow-in">
-                        <Star size={14} style={{ color: WINE_GOLD }} className="fill-current" />
-                        <h2 className="font-bold text-[var(--text)] text-[17px] tracking-tight">Destaques</h2>
-                        <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(212,175,92,0.5), transparent)' }} />
-                    </div>
+                    <h2 className="text-[19px] font-bold text-[var(--text)] mb-1.5 u-grow-in">Destaques</h2>
                     {/* Fade nas duas pontas sinalizando que dá pra rolar mais (útil em
                         desktop sem trackpad/touch, onde não há nenhuma outra pista
                         visual de overflow horizontal) — mesmo princípio do fade da
@@ -2786,29 +2813,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <div className="relative">
                         <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-4 z-10" style={{ background: 'linear-gradient(to right, var(--bg), transparent)' }} />
                         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10" style={{ background: 'linear-gradient(to left, var(--bg), transparent)' }} />
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1.5 px-1.5 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1.5 px-1.5 pb-1" style={{ scrollSnapType: 'x mandatory' }}>
                             {featuredProducts.map(product => (
-                                <div
+                                <FeaturedProductCard
                                     key={product.id}
-                                    className="w-64 flex-shrink-0 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)]"
-                                    style={{ scrollSnapAlign: 'start' }}
-                                >
-                                    <ProductCard
-                                        product={product}
-                                        onSelect={setSelectedProduct}
-                                        onQuickAdd={(p) => {
-                                            if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                            requestAccessThen(() => {
-                                                addToCart(p, 1, '', []);
-                                                toast.success(`${p.name} adicionado`);
-                                            });
-                                        }}
-                                        disabled={isWaitingBill}
-                                        isBestseller={bestsellerIds.has(product.id)}
-                                        isFavorite={favoriteIds.has(product.id)}
-                                        onToggleFavorite={toggleFavorite}
-                                    />
-                                </div>
+                                    product={product}
+                                    onSelect={setSelectedProduct}
+                                    disabled={isWaitingBill}
+                                />
                             ))}
                         </div>
                     </div>
