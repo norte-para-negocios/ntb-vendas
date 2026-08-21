@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight, Image as ImageIcon } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
-import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig } from '@/lib/api';
+import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
 import { supabase } from '@/lib/supabaseClient';
@@ -2178,6 +2178,62 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     );
 }
 
+// Endereço da loja no cartão do hero (redesign iFood, item 3/2026-08-21):
+// `store_fiscal_config` guarda os campos `endereco_*` em CAIXA ALTA sem
+// acento (dado fiscal, não pensado pra exibição — ver AGENTS.md,
+// "Configuração do emissor fiscal"). Este helper só normaliza capitalização
+// (Title Case, com preposições curtas em minúsculo pra ler como endereço de
+// verdade, e tokens tipo "S/N" preservados em maiúsculo) — NÃO tenta
+// restaurar acentuação perdida (ex.: "SAO JOAO" nunca vira "São João" sem
+// um dicionário; fora de escopo aqui, registrado no relatório desta task).
+const ADDRESS_LOWERCASE_WORDS = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+function titleCaseAddress(value: string): string {
+    return value
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .map((word, i) => {
+            if (!word) return word;
+            if (i > 0 && ADDRESS_LOWERCASE_WORDS.has(word)) return word;
+            // "s/n" (sem número) — mantém maiúsculo, não é uma palavra normal.
+            if (/^[a-z]\/[a-z]$/i.test(word)) return word.toUpperCase();
+            return word[0].toUpperCase() + word.slice(1);
+        })
+        .join(' ');
+}
+
+// Linha curta (bairro, cidade/UF) — a que aparece SEMPRE visível no cartão,
+// logo abaixo do nome da loja. `null` quando não há dado nenhum pra compor
+// (config nunca configurada, ou os 3 campos usados aqui vazios) — o card
+// nunca mostra placeholder/texto inventado nesse caso.
+function composeStoreAddressLine(config: StoreFiscalConfig | null): string | null {
+    if (!config) return null;
+    const bairro = config.endereco_bairro?.trim();
+    const cidade = config.endereco_cidade?.trim();
+    const uf = config.endereco_uf?.trim();
+    const parts: string[] = [];
+    if (bairro) parts.push(titleCaseAddress(bairro));
+    const cityUf = [cidade ? titleCaseAddress(cidade) : null, uf ? uf.toUpperCase() : null]
+        .filter((v): v is string => !!v)
+        .join('/');
+    if (cityUf) parts.push(cityUf);
+    return parts.length > 0 ? parts.join(', ') : null;
+}
+
+// Endereço completo (logradouro + número + a linha curta acima) — só
+// aparece quando o cliente expande a linha do nome da loja (item 2).
+function composeFullStoreAddress(config: StoreFiscalConfig | null): string | null {
+    if (!config) return null;
+    const logradouro = config.endereco_logradouro?.trim();
+    const numero = config.endereco_numero?.trim();
+    const street = [logradouro ? titleCaseAddress(logradouro) : null, numero ? titleCaseAddress(numero) : null]
+        .filter((v): v is string => !!v)
+        .join(', ');
+    const rest = composeStoreAddressLine(config);
+    const full = [street, rest].filter(Boolean).join(' - ');
+    return full || null;
+}
+
 export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [hasAccess, setHasAccess] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -2206,8 +2262,22 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showBill, setShowBill] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    // Ref pro input de busca da barra sticky (Task hero item 5): o botão de
+    // lupa sobre a capa não abre uma busca própria, só rola até essa mesma
+    // barra e foca este input — nunca um segundo mecanismo de busca.
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const [isLoading, setIsLoading] = useState(false);
     const isSubmittingOrderRef = useRef(false);
+
+    // Cartão da loja no hero (redesign iFood, item 2/3/2026-08-21): endereço
+    // fiscal (`store_fiscal_config`, mesma tabela/função já usada pelo
+    // Master Admin/lojista pra configuração fiscal — nunca uma query nova)
+    // e o estado de expandir/recolher a linha do nome pra revelar o
+    // endereço completo. Não existe tela de "informações da loja" nesta
+    // versão do app — em vez de linkar pra uma rota inexistente, a própria
+    // linha do nome expande em lugar (ver JSX do hero).
+    const [fiscalConfig, setFiscalConfig] = useState<StoreFiscalConfig | null>(null);
+    const [storeInfoExpanded, setStoreInfoExpanded] = useState(false);
 
     // New States
     const [showPin, setShowPin] = useState(false);
@@ -2321,6 +2391,20 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         } catch {
             setFavoriteIds(new Set());
         }
+    }, [currentStore?.id]);
+
+    // Endereço da loja (hero item 3): reusa fetchStoreFiscalConfig, já
+    // existente em lib/api.ts pro Master Admin/lojista — nenhuma query
+    // nova. `null` é estado normal (loja nunca configurou o cadastro
+    // fiscal), não erro; a linha de metadados só aparece quando há dado
+    // real (ver composeStoreAddressLine acima).
+    useEffect(() => {
+        if (!currentStore?.id) { setFiscalConfig(null); return; }
+        let cancelled = false;
+        fetchStoreFiscalConfig(currentStore.id).then(cfg => {
+            if (!cancelled) setFiscalConfig(cfg);
+        });
+        return () => { cancelled = true; };
     }, [currentStore?.id]);
 
     const toggleFavorite = useCallback((productId: string) => {
@@ -2838,6 +2922,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const heroMetaParts: string[] = [];
     if (currentStore.config?.charge_service_fee) heroMetaParts.push(`Taxa de serviço ${(serviceFeeRateForHero * 100).toFixed(0)}%`);
 
+    // Endereço do cartão do hero (item 3): linha curta sempre visível
+    // (bairro, cidade/UF) + linha completa (logradouro+número) só quando a
+    // linha do nome está expandida (item 2). Ambas `null` sem dado real —
+    // nunca placeholder.
+    const storeAddressLine = composeStoreAddressLine(fiscalConfig);
+    const storeAddressFull = composeFullStoreAddress(fiscalConfig);
+
     // Total de itens da comanda desta sessão de mesa (soma de todos os
     // pedidos já enviados, `mesaOrders` — dado real já carregado por
     // useMesaOrders, nunca um número inventado).
@@ -2908,8 +2999,15 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     </div>
 
                     {/* Controles sobre a capa. Sem botão de voltar (o cardápio é
-                        a raiz, não há pra onde voltar) nem coração/busca (a
-                        busca ganha lugar próprio na Task 3). */}
+                        a raiz, não há pra onde voltar). Coração e lupa
+                        (hero item 5, 2026-08-21): NÃO são um segundo
+                        mecanismo de busca/favoritos — reaproveitam o MESMO
+                        estado/input da barra sticky abaixo (favoritesOnly,
+                        searchInputRef), só dão um atalho de cima da capa,
+                        igual ao app de referência. Mesmo tratamento visual
+                        translúcido do ThemeToggle (bg-black/35 +
+                        backdrop-blur-sm), validado como legível sobre foto
+                        arbitrária de cliente. */}
                     <div
                         className="absolute right-3 z-10 flex items-center gap-2"
                         style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
@@ -2917,6 +3015,26 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         <div className="w-9 h-9 rounded-full overflow-hidden bg-black/35 backdrop-blur-sm">
                             <ThemeToggle variant="sidebar" />
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setFavoritesOnly(v => !v)}
+                            aria-label={favoritesOnly ? 'Mostrar todos os produtos' : 'Mostrar só favoritos'}
+                            aria-pressed={favoritesOnly}
+                            className={`w-9 h-9 grid place-items-center rounded-full backdrop-blur-sm text-white u-motion ${favoritesOnly ? 'bg-[var(--brand)]' : 'bg-black/35'}`}
+                        >
+                            <Heart size={16} className={favoritesOnly ? 'fill-current' : ''} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                stickyBarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                searchInputRef.current?.focus();
+                            }}
+                            aria-label="Buscar no cardápio"
+                            className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                        >
+                            <Search size={16} />
+                        </button>
                         {hasAccess && (
                             <button
                                 onClick={() => handleLogout(false)}
@@ -2963,8 +3081,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         também"/carrinho) nunca passam posição, só tamanho, e
                         continuam dependendo desse `relative` internamente pro
                         `fill` funcionar; trocar por prop explícita seria mudança
-                        de contrato do componente sem nenhum caller pedindo isso. */}
-                    <div className="absolute left-4 -bottom-8 z-10 w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]">
+                        de contrato do componente sem nenhum caller pedindo isso.
+
+                        Centralização (hero item 1, 2026-08-21): `left-4` virou
+                        `left-1/2 -translate-x-1/2` — centro horizontal exato
+                        sobre a borda inferior da capa, igual à referência do
+                        iFood. `-bottom-8` (a relação vertical) fica
+                        intocado: com w-16/h-16 (64px) e -bottom-8 (-32px), o
+                        topo do círculo fica 32px ACIMA da borda da capa e o
+                        fundo 32px ABAIXO dela (dentro do cartão) — ou seja, o
+                        logo cruza a borda cobrindo metade dela pra cada
+                        lado, exatamente a proporção pedida. */}
+                    <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 z-10 w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]">
                         <ProductThumb
                             src={currentStore.logo_url}
                             name={currentStore.name}
@@ -2983,9 +3111,36 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     style={{ boxShadow: 'var(--shadow-md)' }}
                 >
                     <div className="flex items-start justify-between gap-3">
-                        <h1 className="min-w-0 truncate text-[20px] font-semibold leading-tight text-[var(--text)]">
-                            {currentStore.name}
-                        </h1>
+                        {/* Linha do nome (hero item 2, 2026-08-21): virou um
+                            <button> de verdade — foco por teclado, nome
+                            acessível ("Informações da loja") — em vez de um
+                            <h1> mudo. Não existe tela de "informações da
+                            loja" nesta versão do app (nenhuma rota/modal
+                            equivalente), então em vez de linkar pra um
+                            destino fictício, a própria linha expande/
+                            recolhe em lugar pra revelar o endereço completo
+                            (storeAddressFull) — ver bloco abaixo. Ícone
+                            MapPin em IFOOD_RED (mesma paleta de ação/leitura
+                            já usada no resto do redesign), chevron
+                            empurrado pro fim do <button> (que é flex-1) —
+                            fica encostado no botão "Conta" quando ele existe,
+                            ou na borda direita do cartão quando não. */}
+                        <button
+                            type="button"
+                            onClick={() => setStoreInfoExpanded(v => !v)}
+                            aria-expanded={storeInfoExpanded}
+                            aria-label="Informações da loja"
+                            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] text-left u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                        >
+                            <MapPin size={16} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                            <h1 className="min-w-0 flex-1 truncate text-[20px] font-semibold leading-tight text-[var(--text)]">
+                                {currentStore.name}
+                            </h1>
+                            <ChevronRight
+                                size={18}
+                                className={`flex-shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${storeInfoExpanded ? 'rotate-90' : ''}`}
+                            />
+                        </button>
                         {currentTable && (
                             <button
                                 onClick={() => setShowBill(true)}
@@ -3000,9 +3155,38 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         )}
                     </div>
 
-                    {/* Linha de metadados: só fatos do salão (mesa/balcão, taxa de
-                        serviço) — nunca km, tempo de entrega, pedido mínimo ou
-                        avaliação, sem equivalente real neste app. */}
+                    {/* Linha de metadados (hero item 3, 2026-08-21): endereço
+                        real da loja (store_fiscal_config, título-caseado —
+                        ver composeStoreAddressLine), SEMPRE visível quando
+                        configurado. `null` (loja sem cadastro fiscal, estado
+                        normal) = nenhuma linha, nunca um placeholder. */}
+                    {storeAddressLine && (
+                        <p className="mt-1 flex items-center gap-1 text-[13px] text-[var(--text-muted)]">
+                            {storeAddressLine}
+                        </p>
+                    )}
+
+                    {/* Endereço completo — só ao expandir a linha do nome
+                        (item 2). AnimatePresence + SPRING_SHEET: mesmo
+                        spring já usado neste arquivo pra abrir/fechar
+                        acordeão (ver lib/motion.ts, comentário do preset),
+                        nunca um terceiro preset novo. */}
+                    <AnimatePresence>
+                        {storeInfoExpanded && storeAddressFull && (
+                            <motion.p
+                                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                                animate={{ opacity: 1, height: 'auto', marginTop: 4 }}
+                                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                transition={SPRING_SHEET}
+                                className="overflow-hidden text-[12px] text-[var(--text-muted)]"
+                            >
+                                {storeAddressFull}
+                            </motion.p>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Linha de metadados original (taxa de serviço) — mantida
+                        como estava, só deslocada pra depois do endereço. */}
                     {heroMetaParts.length > 0 && (
                         <p className="mt-1 text-[13px] text-[var(--text-muted)]">
                             {heroMetaParts.join(' • ')}
@@ -3043,6 +3227,54 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             )}
                         </div>
                     )}
+
+                    {/* Divisor + segunda linha (hero item 4, 2026-08-21): no
+                        iFood real esse é o espaço da nota (estrelas) — este
+                        app não tem avaliação agregada de loja nenhuma
+                        (order_ratings é por pedido, nunca seria uma média
+                        honesta de "nota da loja" sem uma feature nova) e
+                        não vou inventar uma. Equivalente honesto pro
+                        dine-in: reaproveita a MESMA derivação mesa/balcão
+                        já usada no chip de sessão logo acima
+                        (`currentTable ? 'Mesa N' : 'Balcão'`), nunca
+                        recalculada. Com sessão de mesa aberta, a linha é
+                        tappable de verdade (abre a Conta, mesmo destino do
+                        botão "Conta" do cabeçalho — reaproveitado, não
+                        duplicado). Sem sessão, é um convite tappable pra
+                        abrir a mesa/comanda (mesmo modal de login que já
+                        existe). Com sessão de BALCÃO (sem mesa), não há
+                        nenhuma tela real pra abrir a esta altura do pedido
+                        — a linha fica só informativa (sem chevron, sem
+                        <button>), pra nunca prometer uma ação que não
+                        existe. */}
+                    <div className="mt-3 border-t border-[var(--border)] pt-3">
+                        {hasAccess && currentTable ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowBill(true)}
+                                className="flex w-full items-center gap-2 text-left u-motion"
+                            >
+                                <LayoutGrid size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                                <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Mesa {currentTable.number} • ver conta</span>
+                                <ChevronRight size={16} className="flex-shrink-0 text-[var(--text-muted)]" />
+                            </button>
+                        ) : hasAccess ? (
+                            <div className="flex w-full items-center gap-2">
+                                <Coffee size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                                <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Pedido no balcão</span>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setIsLoginModalOpen(true)}
+                                className="flex w-full items-center gap-2 text-left u-motion"
+                            >
+                                <Info size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                                <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Toque para abrir sua mesa ou comanda</span>
+                                <ChevronRight size={16} className="flex-shrink-0 text-[var(--text-muted)]" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </header>
 
@@ -3113,6 +3345,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <div className="relative flex-1">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={18} />
                         <input
+                            ref={searchInputRef}
                             type="text"
                             aria-label={`Buscar em ${currentStore.name}`}
                             placeholder={`Buscar em ${currentStore.name}`}
