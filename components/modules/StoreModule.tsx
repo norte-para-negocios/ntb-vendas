@@ -244,6 +244,12 @@ const useStoreNotifications = (storeId: string | undefined) => {
     // nunca ao abrir a tela nem quando o total cai (item concluido/entregue).
     const prevTotalRef = useRef<number | null>(null);
 
+    // Rastreado separado de prevTotalRef (kitchen+bar) porque "mesa" precisa
+    // de um alerta com texto diferente ("chamada de mesa" vs "pedido novo") —
+    // ver achado real, reuniao 2026-08-19: chamada de garcom so mudava um
+    // numero no badge, sem som, porque só kitchen+bar disparavam alerta.
+    const prevTableCountRef = useRef<number | null>(null);
+
     useEffect(() => {
         if (!storeId) return;
 
@@ -299,6 +305,14 @@ const useStoreNotifications = (storeId: string | undefined) => {
                     playNewOrderAlert();
                     vibrateAlert([100, 60, 100]);
                     toast.info('Novo pedido chegou! 🔔');
+                }
+
+                const prevTableCount = prevTableCountRef.current;
+                prevTableCountRef.current = tableCount;
+                if (prevTableCount !== null && tableCount > prevTableCount) {
+                    playNewOrderAlert();
+                    vibrateAlert([100, 60, 100]);
+                    toast.info('Atenção na mesa! 🔔');
                 }
 
                 if (isMounted) setCounts({ tables: tableCount, kitchen: kitchenCount, bar: barCount });
