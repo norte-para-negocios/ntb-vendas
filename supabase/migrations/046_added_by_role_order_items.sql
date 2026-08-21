@@ -6,8 +6,20 @@
 -- na RPC, default 'cliente' pra nunca quebrar nenhuma chamada existente que
 -- nao passe o parametro.
 alter table order_items
-  add column added_by_role text not null default 'cliente'
+  add column if not exists added_by_role text not null default 'cliente'
   check (added_by_role in ('cliente', 'garcom'));
+
+-- Achado real ao aplicar (ver header de 033_ncm_em_create_update_product.sql
+-- pro precedente completo): `create or replace function` NAO substitui a
+-- function antiga quando a lista de parametros muda de tamanho (aqui, de 5
+-- pra 6) -- Postgres identifica uma function por (nome, tipos dos
+-- parametros), entao adicionar p_added_by_role cria um OVERLOAD novo em vez
+-- de substituir, deixando as duas versoes (5/6 args) coexistindo. Corrigido
+-- manualmente nos dois bancos ao vivo (Supabase Cloud dev + Postgres
+-- self-hosted de producao) rodando o drop abaixo por fora; adicionado aqui
+-- pra deixar o arquivo correto/idempotente pra qualquer ambiente futuro
+-- (staging, disaster recovery, reaplicacao).
+drop function if exists public.create_order_secure(uuid, uuid, text, text, jsonb);
 
 create or replace function public.create_order_secure(
   p_table_id uuid,

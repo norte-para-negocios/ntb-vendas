@@ -248,7 +248,20 @@ const useStoreNotifications = (storeId: string | undefined) => {
     // de um alerta com texto diferente ("chamada de mesa" vs "pedido novo") —
     // ver achado real, reuniao 2026-08-19: chamada de garcom so mudava um
     // numero no badge, sem som, porque só kitchen+bar disparavam alerta.
-    const prevTableCountRef = useRef<number | null>(null);
+    //
+    // Rastreado como CONJUNTO de table_id (nao so o numero agregado) --
+    // achado na revisao final: um numero liquido pode esconder uma chamada
+    // nova. Se, no mesmo poll, uma mesa e' dispensada (-1) e outra chama o
+    // garcom (+1) no mesmo tick, o numero liquido fica igual e nenhum alerta
+    // dispara -- exatamente o "miss silencioso" que esta feature existe pra
+    // evitar. Comparando os IDs (nao so a contagem), qualquer mesa NOVA no
+    // conjunto dispara o alerta, independente do que aconteceu com as outras.
+    const prevTableIdsRef = useRef<Set<string>>(new Set());
+    // Mesmo papel do "prevTotal !== null" abaixo (nao disparar no primeiro
+    // loadCounts() apos o mount) -- Set vazio por si so nao diferencia
+    // "nunca calculado" de "calculado e vazio", entao precisa de um flag
+    // proprio em vez de inferir isso do tamanho do Set.
+    const hasLoadedTableIdsRef = useRef(false);
 
     useEffect(() => {
         if (!storeId) return;
@@ -262,12 +275,14 @@ const useStoreNotifications = (storeId: string | undefined) => {
                 const activeOrdersData = await fetchActiveOrdersForTables(storeId);
                 
                 let tableCount = 0;
+                const tableIdsNeedingAttention = new Set<string>();
                 tablesData.forEach(t => {
                     const isOccupied = t.status === 'occupied' || t.status === 'waiting_bill';
                     if (!isOccupied) return;
 
                     if (t.waiter_requested || t.status === 'waiting_bill') {
                         tableCount++;
+                        tableIdsNeedingAttention.add(t.id);
                     } else if (t.status === 'occupied') {
                          // Check if new client entered (no active orders)
                          let hasActiveItems = false;
@@ -278,7 +293,8 @@ const useStoreNotifications = (storeId: string | undefined) => {
                          });
                          // No items ordered yet = new customer waiting to be acknowledged / waiting for menu / just entered
                          if (!hasActiveItems && t.current_host_name) {
-                             tableCount++; 
+                             tableCount++;
+                             tableIdsNeedingAttention.add(t.id);
                          }
                     }
                 });
@@ -307,13 +323,18 @@ const useStoreNotifications = (storeId: string | undefined) => {
                     toast.info('Novo pedido chegou! 🔔');
                 }
 
-                const prevTableCount = prevTableCountRef.current;
-                prevTableCountRef.current = tableCount;
-                if (prevTableCount !== null && tableCount > prevTableCount) {
+                const prevTableIds = prevTableIdsRef.current;
+                const hasNewTableAttention = [...tableIdsNeedingAttention].some(id => !prevTableIds.has(id));
+                prevTableIdsRef.current = tableIdsNeedingAttention;
+                if (hasLoadedTableIdsRef.current && hasNewTableAttention) {
                     playNewOrderAlert();
-                    vibrateAlert([100, 60, 100]);
+                    // Padrao distinto do kitchen/bar (acima: 2 pulsos curtos) --
+                    // 3 pulsos mais longos, pra dar pra reconhecer "mesa/garcom"
+                    // vs "cozinha/bar" só pela vibracao, sem olhar o toast.
+                    vibrateAlert([200, 100, 200, 100, 200]);
                     toast.info('Atenção na mesa! 🔔');
                 }
+                hasLoadedTableIdsRef.current = true;
 
                 if (isMounted) setCounts({ tables: tableCount, kitchen: kitchenCount, bar: barCount });
             } catch (err) {
