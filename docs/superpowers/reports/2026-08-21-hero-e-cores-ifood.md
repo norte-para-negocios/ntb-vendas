@@ -164,9 +164,82 @@ negrito, igual à referência do iFood — sem tocar em nenhum lugar do
 projeto onde alinhamento tabular genuinamente importa (painel do lojista,
 impressão térmica/A4).
 
-## Verificação
+## Verificação (1ª rodada)
 
 `npm run build` — compilou limpo, TypeScript sem erros, todas as rotas
 geradas normalmente (incluindo `/c/[slug]`). Não há suíte de testes neste
 repositório. **Não visualizei o resultado renderizado** — nenhum acesso a
 navegador nesta sessão; a revisão foi 100% por leitura de código + build.
+
+## Correção pós-revisão ao vivo — item 2 estava quebrado
+
+O coordenador dirigiu o resultado num navegador real e confirmou itens 1,
+3 e 4 corretos (hero 200px com textura+glifo lendo como "aqui vai a foto",
+sublinhado de aba e `+` vermelhos, preços em sans proporcional escuro).
+**Item 2 estava quebrado**: o círculo da logo renderizava no fluxo normal,
+canto superior-esquerdo da capa, em vez de cruzar a borda inferior.
+
+**Causa raiz** (medida ao vivo pelo coordenador, confirmada lendo o
+código): o `className` passado ao `ProductThumb` incluía `absolute
+left-4 -bottom-8 z-10 ring-4 ring-[var(--surface)]`, mas o próprio
+template raiz do `ProductThumb` já embute `relative` incondicionalmente —
+resultado, o elemento final carregava **as duas classes ao mesmo tempo**
+(`relative` E `absolute`). Como as duas são utilitárias de mesma
+especificidade CSS, quem vence não é a ordem no atributo `class`, é a
+ordem das regras na folha de estilo que o Tailwind gera — e `relative`
+vencia, deixando `left-4`/`-bottom-8` inertes. Consequência em cascata: com
+o logo fora do lugar, o `pt-12` do cartão de nome (que reserva espaço
+vertical exato pro logo cruzar a borda) sobrava como uma faixa vazia.
+
+**Por que o `relative` está lá**: não é um acidente nem um resquício —
+o branch com `src` de `ProductThumb` usa `<Image fill>`, que **exige** um
+ancestral posicionado pra se dimensionar (senão a foto de produto colapsa
+pra 0×0). É a mesma razão pela qual funciona normalmente nos outros 6
+lugares que chamam `ProductThumb` hoje (linha de produto, card de
+destaque, foto do `ProductModal`, opção de adicional, "Peça também",
+miniatura do carrinho) — **nenhum deles passa classe de posição**, todos
+só passam `size` (e um só, tamanho via `!w-full !h-16 !rounded-none`).
+Então o `relative` nunca tinha conflitado com nada antes desta chamada ser
+a primeira a tentar posicionar o componente pai de fora.
+
+**Fix aplicado** (`components/modules/ClientModule.tsx`, mesmo trecho do
+hero): removido o `className` de posição do `ProductThumb` e envolvido
+numa `<div>` externa que é quem recebe `absolute left-4 -bottom-8 z-10
+w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]`. O
+`ProductThumb` volta a só cuidar do próprio conteúdo (foto ou fallback),
+sem que o pai precise "furar" o `relative` interno dele.
+
+```tsx
+<div className="absolute left-4 -bottom-8 z-10 w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]">
+    <ProductThumb src={currentStore.logo_url} name={currentStore.name} size="store" />
+</div>
+```
+
+**Geometria esperada, verificada por conta (capa 200px, `-bottom-8` =
+-32px, círculo 64px):** topo do logo = 200 − 64 + 32 = 168; fundo do logo
+= 200 + 32 = **232**, exatamente `cover bottom + 32` como o coordenador
+pediu pra confirmar. O cartão de nome começa em `top: 184` (`-mt-4` sobre
+`top: 200`) e reserva `pt-12` (48px) até `184 + 48 = 232` — bate
+exatamente com o fundo do logo, sem gap nem sobreposição de conteúdo.
+
+**Sobre não remover o `relative` hardcoded do `ProductThumb`**: decisão
+deliberada, não omissão. Ele é necessário internamente pro `fill` do
+`next/image` funcionar em TODO caller atual, e nenhum dos outros 6 call
+sites hoje precisa (nem tenta) posicionar o componente de fora — só este
+novo (`size="store"` no hero) precisava, e a solução (wrapper externo) não
+exige nenhuma mudança de contrato do componente. Trocar o `relative`
+hardcoded por uma prop opcional seria mudança de API sem nenhum consumidor
+pedindo — deixei documentado inline no próprio JSX do hero (comentário
+extenso no local exato) pra qualquer sessão futura que for tocar
+`ProductThumb` de novo já saber por que o `relative` está lá e por que a
+posição deve continuar sendo responsabilidade do wrapper externo, nunca do
+`className` passado ao componente.
+
+## Verificação (2ª rodada, pós-correção)
+
+`npm run build` — compilou limpo de novo, TypeScript sem erros, mesmas 16
+rotas geradas (incluindo `/c/[slug]`). Itens 1/3/4 não foram tocados nesta
+rodada. **Ainda não visualizei o resultado renderizado eu mesmo** — a
+correção foi validada por leitura de código + cálculo manual da geometria
+esperada + build; a confirmação visual definitiva é do coordenador, que
+vai dirigir a UI de novo.

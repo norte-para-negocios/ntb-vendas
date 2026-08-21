@@ -2938,13 +2938,39 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         produto (hue por nome, tile em gradiente, inicial grande),
                         só redondo. ring-4 ring-[var(--surface)] preservado nos dois
                         casos, pra continuar lendo como "selo de logo" mesmo sem
-                        foto real. */}
-                    <ProductThumb
-                        src={currentStore.logo_url}
-                        name={currentStore.name}
-                        size="store"
-                        className="absolute left-4 -bottom-8 z-10 ring-4 ring-[var(--surface)]"
-                    />
+                        foto real.
+
+                        Fix ao vivo (2026-08-21, achado pelo coordenador dirigindo
+                        num navegador real): posicionamento NÃO pode ir no
+                        `className` do ProductThumb. A raiz do componente já vem
+                        com `relative` fixo no próprio template (necessário: o
+                        branch com `src` usa `<Image fill>`, que exige um ancestral
+                        posicionado — sem esse `relative`, a foto de produto/opção
+                        não teria como se dimensionar em NENHUM dos 6 outros lugares
+                        que já chamam ProductThumb hoje, nenhum dos quais passa
+                        classe de posição). Passar `absolute` via `className`
+                        empata `relative`/`absolute` na mesma tag — quem "ganha" é
+                        decidido pela ordem das regras na folha de estilo gerada
+                        pelo Tailwind, não pela ordem dos nomes de classe no HTML, e
+                        aqui `relative` vencia: `left-4`/`-bottom-8` ficavam inertes
+                        e o círculo caía no fluxo normal, encostado no topo. Corrigido
+                        envolvendo o ProductThumb num `<div>` externo que é quem
+                        recebe `absolute`/posição/anel/recorte — o ProductThumb
+                        continua só cuidando do próprio conteúdo (foto ou
+                        fallback), sem nunca precisar saber como o pai o posiciona.
+                        Não removi o `relative` hardcoded do componente em si — os
+                        outros 6 call sites (linha/destaque/hero/opção/"peça
+                        também"/carrinho) nunca passam posição, só tamanho, e
+                        continuam dependendo desse `relative` internamente pro
+                        `fill` funcionar; trocar por prop explícita seria mudança
+                        de contrato do componente sem nenhum caller pedindo isso. */}
+                    <div className="absolute left-4 -bottom-8 z-10 w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]">
+                        <ProductThumb
+                            src={currentStore.logo_url}
+                            name={currentStore.name}
+                            size="store"
+                        />
+                    </div>
                 </div>
 
                 {/* Cartão de identificação da loja. pt-12 fixo agora (correção
