@@ -1208,7 +1208,13 @@ const ProductModal: React.FC<{
                                 return (
                                     <label
                                         key={opt.id}
-                                        className={`flex items-center gap-3 px-4 py-3 min-h-11 border-b border-[var(--border)] ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                        // Fix round 1 (revisão, Minor #4): focus-within estende o anel de
+                                        // foco pra linha inteira (não só o controle circular/quadrado à
+                                        // direita) — um usuário de teclado navegando da esquerda enxerga o
+                                        // foco assim que chega na linha, não só quando o olhar já está no
+                                        // canto direito. ring-inset evita que o anel seja cortado pelo
+                                        // scroll container (o modal inteiro tem overflow-y-auto).
+                                        className={`flex items-center gap-3 px-4 py-3 min-h-11 border-b border-[var(--border)] focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--brand)] ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                     >
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[14px] text-[var(--text)]">{opt.name}</span>
@@ -1314,8 +1320,14 @@ const ProductModal: React.FC<{
                                     onClick={() => onSelectRecommended(rec)}
                                     className="flex-shrink-0 w-24 text-left border border-[var(--border)] rounded-[var(--r-md)] overflow-hidden bg-[var(--surface)] u-motion hover:border-[var(--brand)]"
                                 >
-                                    <div className="w-full h-16 bg-[var(--surface-2)] flex items-center justify-center overflow-hidden">
-                                        <ProductThumb src={rec.image_url} name={rec.name} size="option" />
+                                    <div className="w-full h-16 bg-[var(--surface-2)] overflow-hidden">
+                                        {/* Fix round 1 (revisão, Minor #3): size="option" do ProductThumb é
+                                            um quadrado fixo de 56px — dentro deste wrapper de 96x64 sobrava
+                                            gutter visível em --surface-2. !w-full/!h-16/!rounded-none (via
+                                            className, ponto de extensão que o próprio componente já aceita)
+                                            fazem a miniatura preencher o wrapper inteiro, sem reimplementar
+                                            nada do ProductThumb. */}
+                                        <ProductThumb src={rec.image_url} name={rec.name} size="option" className="!w-full !h-16 !rounded-none" />
                                     </div>
                                     <div className="p-1.5">
                                         <p className="text-[11px] font-medium text-[var(--text)] leading-tight line-clamp-2">{rec.name}</p>
@@ -1327,14 +1339,18 @@ const ProductModal: React.FC<{
                     </div>
                 )}
 
-                {missingRequired && (
-                    <p className="px-4 pb-2 text-[12px] text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>
-                )}
-
                 {/* Passo 4 (rodapé): quantidade (limites 1-99 preservados) + botão
                     Adicionar com o total dentro do próprio botão. sticky bottom-0
                     dentro do container com overflow-y-auto do Modal (ui.tsx) — não
-                    precisa de scroll container próprio. */}
+                    precisa de scroll container próprio.
+                    Fix round 1 (revisão): a mensagem de grupo obrigatório faltando
+                    precisa viajar com o rodapé fixo (senão o cliente vê um botão
+                    desabilitado sem explicação até rolar até o fim). Em vez de
+                    alterar a classlist exata do próprio rodapé (mandada verbatim
+                    pelo brief), a mensagem entra num wrapper novo ao lado do
+                    seletor de quantidade — o rodapé continua tendo só 2 filhos
+                    diretos (quantidade + este wrapper), "flex items-center gap-3"
+                    intacto. */}
                 <div
                     className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-3 flex items-center gap-3"
                     style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
@@ -1344,12 +1360,24 @@ const ProductModal: React.FC<{
                         <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
                         <button onClick={() => setQty(q => Math.min(99, q + 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
                     </div>
-                    <Button className="flex-1 h-12" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                        <span className="w-full flex items-center justify-between text-[15px]">
-                            <span>Adicionar</span>
-                            <span className="num">R$ {(unitPrice * qty).toFixed(2)}</span>
-                        </span>
-                    </Button>
+                    <div className="flex-1 flex flex-col gap-1 min-w-0">
+                        {missingRequired && (
+                            <p id="product-modal-required-error" className="text-[12px] text-center text-[var(--err)]">
+                                Escolha uma opção obrigatória para continuar.
+                            </p>
+                        )}
+                        <Button
+                            className="w-full h-12"
+                            disabled={missingRequired}
+                            aria-describedby={missingRequired ? 'product-modal-required-error' : undefined}
+                            onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}
+                        >
+                            <span className="w-full flex items-center justify-between text-[15px]">
+                                <span>Adicionar</span>
+                                <span className="num">R$ {(unitPrice * qty).toFixed(2)}</span>
+                            </span>
+                        </Button>
+                    </div>
                 </div>
             </div>
         </Modal>
