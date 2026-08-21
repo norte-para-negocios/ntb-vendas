@@ -1011,6 +1011,40 @@ function getOptionGroupRuleLabel(group: ProductOptionGroup): string {
     return 'Escolha quantas quiser';
 }
 
+// Fix round 2/3 (revisão, Finding 5): o rodapé do ProductModal é
+// `position: sticky` dentro do container com scroll do Modal (ui.tsx) —
+// participa do fluxo normal (diferente de `fixed`), mas como é o último
+// elemento do conteúdo, ao rolar até o fim ele "gruda" no rodapé do
+// container e passa a sobrepor o que estava rolando por baixo dele (é
+// assim que sticky funciona, de propósito) — sem nenhuma folga reservada
+// depois dele, isso cobria parte do campo de observação (o penúltimo
+// elemento) permanentemente, em qualquer altura de scroll.
+//
+// Fix round 2 tentou reservar esse espaço medindo o rodapé ao vivo via
+// `ResizeObserver` (JS) — e não funcionou: o efeito usava deps `[]` (roda
+// uma única vez, no primeiro mount de `ProductModal`), e o primeiro mount
+// acontece com `incomingProduct === null` (o componente é montado
+// incondicionalmente em `ClientModule`, antes de qualquer produto ser
+// selecionado). Como `if (!product) return null` faz o componente devolver
+// `null` nesse instante, o `ref` do rodapé também nunca chegava a apontar
+// pra nenhum elemento real quando o efeito rodava — o observer nunca era
+// criado, e como o efeito nunca roda de novo (deps vazias), o estado ficava
+// em 0 pra sempre, mesmo com o rodapé de verdade existindo no DOM em
+// qualquer produto aberto depois. Trocado por uma reserva 100% CSS: sem
+// estado, sem observer, sem depender de QUANDO um efeito roda em relação a
+// quando o rodapé existe — não tem como silenciosamente virar 0.
+//
+// O valor cobre com folga o pior caso real do rodapé: `py-3` (12px topo +
+// 12px base) + borda (1px) + o mais alto entre o seletor de quantidade e a
+// coluna [mensagem de erro + botão] — o botão sozinho (`h-12`=48px) ou,
+// quando `missingRequired` aparece, mensagem (~14px) + `gap-1`(4px) +
+// botão(48px) ≈ 66px de conteúdo. Total real ≈ 91px no pior caso (medido ao
+// vivo pelo revisor em 79px no caso sem mensagem). `9rem` (144px) reserva
+// ~53px de margem sobre esse pior caso; `env(safe-area-inset-bottom)` é
+// somado à parte porque o rodapé já soma isso na própria `paddingBottom`
+// dele — o spacer precisa espelhar, não só a parte fixa.
+const PRODUCT_MODAL_FOOTER_SPACER_HEIGHT = 'calc(9rem + env(safe-area-inset-bottom))';
+
 const ProductModal: React.FC<{
     product: Product | null,
     onClose: () => void,
@@ -1036,30 +1070,6 @@ const ProductModal: React.FC<{
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
-    // Fix round 2 (revisão, Finding 5): o rodapé é `position: sticky` DENTRO
-    // do container com scroll do Modal (ui.tsx) — ele participa do fluxo
-    // normal (diferente de `fixed`), mas como é o último elemento do
-    // conteúdo, ao rolar até o fim ele "gruda" no rodapé do container e
-    // passa a sobrepor o que estava rolando por baixo dele (é assim que
-    // sticky funciona, de propósito) — e sem nenhuma folga reservada
-    // depois dele, isso cobria parte do campo de observação (o
-    // penúltimo elemento) permanentemente, em qualquer altura de scroll.
-    // A altura do rodapé varia (linha extra quando `missingRequired`
-    // aparece, `env(safe-area-inset-bottom)` diferente por aparelho), por
-    // isso é medida ao vivo via ResizeObserver em vez de um valor chumbado
-    // — um spacer do tamanho exato do rodapé, logo depois dele no fluxo,
-    // garante que sempre existe scroll suficiente pra tudo que vem antes
-    // (observação, "Peça também") ficar totalmente visível acima do
-    // rodapé "grudado", em vez de ficar embaixo dele.
-    const footerRef = useRef<HTMLDivElement>(null);
-    const [footerHeight, setFooterHeight] = useState(0);
-    useLayoutEffect(() => {
-        const el = footerRef.current;
-        if (!el) return;
-        const ro = new ResizeObserver(([entry]) => setFooterHeight(entry.contentRect.height));
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
     // Modal (variant="sheet") precisa continuar renderizando o conteúdo
     // durante a animação de saída (~0.4s, spring) — se este componente
     // retornasse null no instante em que incomingProduct vira null, o
@@ -1376,7 +1386,6 @@ const ProductModal: React.FC<{
                     diretos (quantidade + este wrapper), "flex items-center gap-3"
                     intacto. */}
                 <div
-                    ref={footerRef}
                     className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-3 flex items-center gap-3"
                     style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
                 >
@@ -1404,12 +1413,13 @@ const ProductModal: React.FC<{
                         </Button>
                     </div>
                 </div>
-                {/* Fix round 2 (revisão, Finding 5): spacer do tamanho exato do
-                    rodapé (medido acima via ResizeObserver), pra garantir scroll
-                    suficiente e o campo de observação nunca ficar parcialmente
-                    escondido atrás do rodapé "grudado". Puramente estrutural —
-                    sem conteúdo, sem cor, invisível pro leitor de tela. */}
-                <div aria-hidden="true" style={{ height: footerHeight }} />
+                {/* Fix round 3 (revisão, Finding 5): spacer 100% CSS (ver
+                    PRODUCT_MODAL_FOOTER_SPACER_HEIGHT acima) que garante scroll
+                    suficiente pra tudo que vem antes do rodapé (observação, "Peça
+                    também") nunca ficar parcialmente escondido atrás dele quando
+                    "gruda" no fim do scroll. Puramente estrutural — sem conteúdo,
+                    sem cor, invisível pro leitor de tela. */}
+                <div aria-hidden="true" style={{ height: PRODUCT_MODAL_FOOTER_SPACER_HEIGHT }} />
             </div>
         </Modal>
     );
