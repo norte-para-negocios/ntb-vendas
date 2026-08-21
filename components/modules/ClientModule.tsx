@@ -43,6 +43,15 @@ function hasActivePromo(product: { price: number; promo_price?: number | null })
     return product.promo_price != null && product.promo_price < product.price;
 }
 
+// Produto com grupo de opção que tem ALGUMA variação de preço real (ex.:
+// "Tamanho" G custa mais que M) precisa do prefixo "A partir de" — senão o
+// preço fixo do card é enganoso (mostra só o preço da variação mais barata
+// como se fosse o preço do produto inteiro). Grupos só com price_delta=0 em
+// todas as opções (ex.: "Ponto da carne", sem custo extra) não contam.
+function hasVariablePricing(product: { option_groups?: { options: { price_delta: number }[] }[] }): boolean {
+    return (product.option_groups || []).some((g) => g.options.some((o) => o.price_delta > 0));
+}
+
 // Muitos vinhos vêm do Omie com o país de origem no fim do nome ("- ARG",
 // "- FR"). Extrai isso pra virar uma etiqueta de proveniência em vez de
 // ficar preso no nome corrido.
@@ -881,7 +890,9 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                             {hasActivePromo(product) && (
                                 <span className="text-[11.5px] text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
                             )}
-                            <span className="font-bold num text-[15px]" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
+                            <span className="font-bold num text-[15px]" style={{ color: WINE_GOLD }}>
+                                {hasVariablePricing(product) && <span className="font-normal text-[11px] mr-0.5">A partir de</span>} R$ {getEffectivePrice(product).toFixed(2)}
+                            </span>
                         </span>
                     </div>
                 </div>
