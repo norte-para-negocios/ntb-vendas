@@ -156,7 +156,18 @@ export const Modal: React.FC<{
   // via Motion) pra todo consumidor existente (admin/lojista), não é mais
   // CSS fadeIn/slideUp — mesma linguagem de spring do resto do app.
   variant?: 'center' | 'sheet';
-}> = ({ isOpen, onClose, title, children, width = 'max-w-md', variant = 'center' }) => {
+  // 'opaque' (2026-08-21, revisão final do cardápio): opt-out do vidro pra
+  // essa sheet específica — usa os tokens normais (--surface/--surface-2/
+  // --text) em vez de forçar os valores escuros do .on-glass. Default
+  // 'glass' preserva o visual de todo consumidor existente (CartModal,
+  // OrderStatusModal, BillSplitter) — só o ProductModal passa 'opaque'.
+  surface?: 'glass' | 'opaque';
+  // Esconde visualmente o <h3> da barra de título sem tirá-lo do DOM (o
+  // dialog continua com aria-labelledby apontando pra ele) — usado só pelo
+  // ProductModal, que já mostra o nome do produto no próprio conteúdo
+  // (<h2>) e não quer o nome duplicado na chrome bar.
+  hideTitle?: boolean;
+}> = ({ isOpen, onClose, title, children, width = 'max-w-md', variant = 'center', surface = 'glass', hideTitle = false }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
   // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de
@@ -303,16 +314,42 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col u-glass-modal on-glass`}
-              style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+              className={`w-full ${width} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col ${
+                surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
+              }`}
+              style={
+                surface === 'opaque'
+                  ? { border: '1px solid var(--border)', boxShadow: 'var(--shadow-md), 0 -8px 40px -8px rgba(0,0,0,0.35)' }
+                  : { border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
-                <div className="w-10 h-1 rounded-full bg-white/20" />
+                <div className={`w-10 h-1 rounded-full ${surface === 'opaque' ? 'bg-[var(--border)]' : 'bg-white/20'}`} />
               </div>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 flex-shrink-0">
-                <h3 id={titleId} className="text-[15px] font-semibold text-white">{title}</h3>
-                <button onClick={onClose} className="text-white/60 hover:text-white hover:bg-white/10 p-1 rounded-[var(--r-sm)] u-motion">
+              <div
+                className={`flex items-center justify-between px-5 py-3 flex-shrink-0 ${
+                  surface === 'opaque' ? 'border-b border-[var(--border)]' : 'border-b border-white/10'
+                }`}
+              >
+                {/* hideTitle: some sheets (ProductModal) já mostram o nome no
+                    próprio conteúdo (<h2>) e não querem repeti-lo na barra —
+                    o <h3> continua no DOM (aria-labelledby do dialog aponta
+                    pra ele), só fica visualmente oculto via sr-only. */}
+                <h3
+                  id={titleId}
+                  className={`text-[15px] font-semibold ${hideTitle ? 'sr-only' : ''} ${surface === 'opaque' ? 'text-[var(--text)]' : 'text-white'}`}
+                >
+                  {title}
+                </h3>
+                <button
+                  onClick={onClose}
+                  className={`p-1 rounded-[var(--r-sm)] u-motion ${hideTitle ? 'ml-auto' : ''} ${
+                    surface === 'opaque'
+                      ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
+                  }`}
+                >
                   <X size={16} />
                 </button>
               </div>

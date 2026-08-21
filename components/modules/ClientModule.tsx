@@ -15,7 +15,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, SERVICE_FEE_RATE } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, SERVICE_FEE_RATE } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
@@ -31,10 +31,6 @@ import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 // consts de marca do projeto (AuthBackdrop, app/page.tsx) — não é um
 // token do design system porque só existe nesta tela.
 const WINE_GOLD = '#D4AF5C';
-// Tom mais escuro só pro texto sobre o fundo claro da etiqueta de tag no
-// ProductModal: o dourado puro em cima do próprio tom claro (rgba 0.08)
-// não tem contraste suficiente.
-const WINE_GOLD_DARK = '#8A6A2B';
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
 // E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
@@ -51,15 +47,6 @@ function hasActivePromo(product: { price: number; promo_price?: number | null })
 // todas as opções (ex.: "Ponto da carne", sem custo extra) não contam.
 function hasVariablePricing(product: { option_groups?: { options: { price_delta: number }[] }[] }): boolean {
     return (product.option_groups || []).some((g) => g.options.some((o) => o.price_delta > 0));
-}
-
-// Muitos vinhos vêm do Omie com o país de origem no fim do nome ("- ARG",
-// "- FR"). Extrai isso pra virar uma etiqueta de proveniência em vez de
-// ficar preso no nome corrido.
-function parseOrigin(name: string): { clean: string; origin: string | null } {
-    const m = name.match(/^(.*)\s-\s([A-ZÇ]{2,4})$/);
-    if (m) return { clean: m[1].trim(), origin: m[2] };
-    return { clean: name, origin: null };
 }
 
 // Composição de preço (redesign iFood, Task 4): preço efetivo em --brand +
@@ -102,12 +89,14 @@ function PriceRow({ product, size = 'row', variablePricing = false, className = 
                 {variablePricing && (
                     <span className={`font-normal text-[var(--text-muted)] ${cfg.prefix} mr-0.5`}>A partir de</span>
                 )}
-                {' '}R$ {effective.toFixed(2)}
+                {' '}R$ {formatBRL(effective)}
             </span>
             {promo && pct !== null && (
                 <>
-                    <span className={`text-[var(--text-muted)] line-through num ${cfg.full}`}>R$ {product.price.toFixed(2)}</span>
-                    <span className={`rounded-full font-bold text-white bg-[var(--brand)] ${cfg.badge}`}>-{pct}%</span>
+                    <span className={`text-[var(--text-muted)] line-through num ${cfg.full}`}>R$ {formatBRL(product.price)}</span>
+                    {pct > 0 && (
+                        <span className={`rounded-full font-bold text-white bg-[var(--brand)] ${cfg.badge}`}>-{pct}%</span>
+                    )}
                 </>
             )}
         </span>
@@ -567,7 +556,7 @@ function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: (
         >
             <div
                 className={`p-2 rounded-full shrink-0 ${isReady ? 'bg-[var(--ok)]/15 text-[var(--ok)]' : ''}`}
-                style={isReady ? undefined : { background: 'rgba(212,175,92,0.15)', color: WINE_GOLD }}
+                style={isReady ? undefined : { background: 'color-mix(in srgb, var(--brand) 15%, transparent)', color: 'var(--brand)' }}
             >
                 <Icon size={18} />
             </div>
@@ -859,7 +848,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // Layout iFood (redesign 2026-08-21, Task 4): coluna de texto (nome,
 // descrição 2 linhas, linha de preço) à esquerda + miniatura quadrada à
 // direita (ProductThumb, Task 1) — substitui a linha "carta de vinhos"
-// (sem foto, preço dourado, etiqueta de origem via parseOrigin). Sem gold
+// (sem foto, preço dourado, etiqueta de origem extraída do nome). Sem gold
 // nesta linha: preço e selo de desconto usam --brand (regra do redesign,
 // gold sai do cardápio). Continua funcionando bem SEM foto real — hoje
 // 0/1109 produtos têm `image_url` (catálogo vem do Omie) — porque é
@@ -1136,7 +1125,7 @@ const ProductModal: React.FC<{
     });
 
     return (
-        <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet">
+        <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet" surface="opaque" hideTitle>
             {/* -m-5 cancela o p-5 do container de conteúdo do Modal (ui.tsx) —
                 só a foto do topo (Passo 1) precisa sangrar de borda a borda;
                 cada seção abaixo reintroduz o próprio px-4. O botão de fechar
@@ -1254,7 +1243,7 @@ const ProductModal: React.FC<{
                                             <span className="block text-[14px] text-[var(--text)]">{opt.name}</span>
                                             {opt.price_delta > 0 && (
                                                 <span className="block text-[13px] text-[var(--text-muted)] num mt-0.5">
-                                                    + R$ {opt.price_delta.toFixed(2)}
+                                                    + R$ {formatBRL(opt.price_delta)}
                                                 </span>
                                             )}
                                         </span>
@@ -1365,7 +1354,7 @@ const ProductModal: React.FC<{
                                     </div>
                                     <div className="p-1.5">
                                         <p className="text-[11px] font-medium text-[var(--text)] leading-tight line-clamp-2">{rec.name}</p>
-                                        <p className="text-[11px] font-bold num mt-0.5 text-[var(--brand)]">R$ {getEffectivePrice(rec).toFixed(2)}</p>
+                                        <p className="text-[11px] font-bold num mt-0.5 text-[var(--brand)]">R$ {formatBRL(getEffectivePrice(rec))}</p>
                                     </div>
                                 </button>
                             ))}
@@ -1408,7 +1397,7 @@ const ProductModal: React.FC<{
                         >
                             <span className="w-full flex items-center justify-between text-[15px]">
                                 <span>Adicionar</span>
-                                <span className="num">R$ {(unitPrice * qty).toFixed(2)}</span>
+                                <span className="num">R$ {formatBRL(unitPrice * qty)}</span>
                             </span>
                         </Button>
                     </div>
@@ -1648,12 +1637,12 @@ const CartModal: React.FC<{
                                         {hasActivePromo(item.product) ? (
                                             <span className="flex flex-col items-end flex-shrink-0 leading-tight">
                                                 <span className="text-[11px] text-[var(--text-muted)] line-through num">
-                                                    R$ {((item.product.price + (item.selectedOptions || []).reduce((a, o) => a + o.price_delta, 0)) * item.quantity).toFixed(2)}
+                                                    R$ {formatBRL((item.product.price + (item.selectedOptions || []).reduce((a, o) => a + o.price_delta, 0)) * item.quantity)}
                                                 </span>
-                                                <span className="font-semibold text-sm num" style={{ color: WINE_GOLD }}>R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
+                                                <span className="font-semibold text-sm num" style={{ color: WINE_GOLD }}>R$ {formatBRL(calculateCartItemUnitPrice(item) * item.quantity)}</span>
                                             </span>
                                         ) : (
-                                            <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {(calculateCartItemUnitPrice(item) * item.quantity).toFixed(2)}</span>
+                                            <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {formatBRL(calculateCartItemUnitPrice(item) * item.quantity)}</span>
                                         )}
                                     </div>
                                     {item.notes && <p className="text-[12px] text-[var(--text-muted)] mt-0.5 italic">"{item.notes}"</p>}
@@ -1677,7 +1666,7 @@ const CartModal: React.FC<{
                 <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-2)] space-y-3">
                     <div className="flex justify-between items-center font-semibold text-[var(--text)]">
                         <span>Total</span>
-                        <span className="num">R$ {total.toFixed(2)}</span>
+                        <span className="num">R$ {formatBRL(total)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" onClick={onClose} className="w-full">
@@ -1987,9 +1976,9 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                 <div className="space-y-6 animate-fade-in pt-2">
                                     <div className="bg-[var(--brand)]/5 p-4 rounded-[var(--r-lg)] border border-[var(--brand)]/10 text-center">
                                         <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
-                                        <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {total.toFixed(2)}</p>
+                                        <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {formatBRL(total)}</p>
                                         {isServiceFeeEnabled && (
-                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {serviceFee.toFixed(2)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}% opcional)</p>
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {formatBRL(serviceFee)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}% opcional)</p>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
@@ -2002,7 +1991,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                     </div>
                                     <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
                                         <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
-                                        <p className="text-2xl font-bold text-[var(--text)] num">R$ {(total / people).toFixed(2)}</p>
+                                        <p className="text-2xl font-bold text-[var(--text)] num">R$ {formatBRL(total / people)}</p>
                                     </div>
                                     {/* List All Items for Context */}
                                     <div className="mt-4 pt-4 border-t border-[var(--border)]">
@@ -2014,7 +2003,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                         <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                         {getItemStatusBadge(it.status)}
                                                     </div>
-                                                    <span>{(it.price_at_time * it.quantity).toFixed(2)}</span>
+                                                    <span>{formatBRL(it.price_at_time * it.quantity)}</span>
                                                 </li>
                                             ))}
                                         </ul>
@@ -2029,7 +2018,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                         <div key={name} className="border border-[var(--border)] rounded-[var(--r-lg)] overflow-hidden">
                                             <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
                                                 <span className="font-bold text-[var(--text)] flex items-center gap-2"><User size={14}/> {name}</span>
-                                                <span className="font-bold text-[var(--brand)] num">R$ {data.total.toFixed(2)}</span>
+                                                <span className="font-bold text-[var(--brand)] num">R$ {formatBRL(data.total)}</span>
                                             </div>
                                             <div className="p-2 space-y-1">
                                                 {data.items.map((it: any) => (
@@ -2038,13 +2027,13 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                             {getItemStatusBadge(it.status)}
                                                             <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                         </div>
-                                                        <span className="num">{(it.price_at_time * it.quantity).toFixed(2)}</span>
+                                                        <span className="num">{formatBRL(it.price_at_time * it.quantity)}</span>
                                                     </div>
                                                 ))}
                                                 {isServiceFeeEnabled && (
                                                     <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
                                                         <span>Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
-                                                        <span className="num">{data.serviceFee.toFixed(2)}</span>
+                                                        <span className="num">{formatBRL(data.serviceFee)}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -2074,7 +2063,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                         <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
                                                             {getOrderItemDisplayName(item)}
                                                         </span>
-                                                        <span className="text-sm font-medium num">R$ {item.price_at_time.toFixed(2)}</span>
+                                                        <span className="text-sm font-medium num">R$ {formatBRL(item.price_at_time)}</span>
                                                     </div>
 
                                                     {isSelected && item.quantity > 1 && (
@@ -2103,11 +2092,11 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                 <div className="flex flex-col bg-[var(--ink)] text-white p-4 rounded-[var(--r-lg)]">
                                     <div className="flex justify-between items-center">
                                         <span className="font-bold">Total Selecionado</span>
-                                        <span className="font-black text-xl num">R$ {calculatorTotal.toFixed(2)}</span>
+                                        <span className="font-black text-xl num">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
                                     {isServiceFeeEnabled && (
                                         <div className="text-xs text-white/50 mt-1 text-right">
-                                            Inclui R$ {calculatorServiceFee.toFixed(2)} de taxa de serviço
+                                            Inclui R$ {formatBRL(calculatorServiceFee)} de taxa de serviço
                                         </div>
                                     )}
                                 </div>
@@ -2643,6 +2632,29 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return () => observer.disconnect();
     }, [visibleCategories, hasActiveFilter, stickyOffset]);
 
+    // Guarda de fim de página (achado da revisão final): `rootMargin` do
+    // IntersectionObserver acima observa só uma faixa fina perto do topo
+    // (`-65%` na base), então uma última categoria curta pode nunca cruzar
+    // essa faixa — o scroll chega ao fim da página com a penúltima tab ainda
+    // marcada como ativa. Ao detectar que o usuário rolou até o fim de
+    // verdade (scrollY + innerHeight cobre scrollHeight), força a última
+    // categoria visível como ativa, sobrescrevendo o que o observer decidiu.
+    useEffect(() => {
+        if (hasActiveFilter || visibleCategories.length === 0) return;
+
+        const checkBottom = () => {
+            const doc = document.documentElement;
+            if (window.scrollY + window.innerHeight >= doc.scrollHeight - 2) {
+                const last = visibleCategories[visibleCategories.length - 1];
+                if (last) setActiveCategory(last.id);
+            }
+        };
+
+        window.addEventListener('scroll', checkBottom, { passive: true });
+        checkBottom();
+        return () => window.removeEventListener('scroll', checkBottom);
+    }, [visibleCategories, hasActiveFilter]);
+
     // Traz a tab ativa pra vista dentro da faixa horizontal rolável sempre
     // que ela muda — tanto por clique quanto pelo scroll-spy. `tabButtonRefs`
     // só é populado quando a faixa de tabs está renderizada (!hasActiveFilter);
@@ -2767,8 +2779,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // equivalente real neste app). Taxa de serviço sempre lida de
     // lib/calc.ts (SERVICE_FEE_RATE como fallback), nunca reescrita aqui.
     const serviceFeeRateForHero = currentStore.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    // Mesa/Balcão NÃO entra aqui (achado da revisão final): já aparece no
+    // chip de sessão logo abaixo (que também carrega nome do cliente + PIN),
+    // renderizar de novo aqui duplicava a informação na mesma tela.
     const heroMetaParts: string[] = [];
-    if (hasAccess) heroMetaParts.push(currentTable ? `Mesa ${currentTable.number}` : 'Balcão');
     if (currentStore.config?.charge_service_fee) heroMetaParts.push(`Taxa de serviço ${(serviceFeeRateForHero * 100).toFixed(0)}%`);
 
     // Total de itens da comanda desta sessão de mesa (soma de todos os
@@ -2786,11 +2800,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 pedido mínimo, avaliação, cupom) tem equivalente real neste
                 app — nada disso é renderizado, nem como placeholder. */}
             <header className="relative">
-                <div className="relative h-[200px] w-full">
+                <div className={`relative w-full ${currentStore.cover_url ? 'h-[200px]' : 'h-[120px]'}`}>
                     {/* Mídia (foto/degradê + escurecimento) isolada num filho
-                        absolute+overflow-hidden: precisa recortar a capa nos
-                        200px da faixa, mas SEM recortar o logo circular logo
-                        abaixo, que atravessa a borda inferior de propósito. */}
+                        absolute+overflow-hidden: precisa recortar a capa na
+                        faixa (200px com foto real, 120px no fallback — ver
+                        abaixo), mas SEM recortar o logo circular logo abaixo,
+                        que atravessa a borda inferior de propósito. */}
                     <div className="absolute inset-0 overflow-hidden">
                         {currentStore.cover_url ? (
                             <Image
@@ -2807,12 +2822,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 style={{ background: 'linear-gradient(135deg, var(--ink), color-mix(in srgb, var(--ink) 82%, var(--brand)))' }}
                             />
                         )}
-                        {/* Escurecimento pro rodapé: sempre presente (com ou sem
-                            foto), garante contraste dos controles sobre a capa. */}
-                        <div
-                            className="absolute inset-0"
-                            style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.18), rgba(0,0,0,.55))' }}
-                        />
+                        {/* Escurecimento pro rodapé: só faz sentido sobre uma FOTO
+                            real (garante contraste dos controles) — sem capa, a
+                            faixa já é o degradê --ink→--brand sólido (achado da
+                            revisão final: aplicado incondicional, virava um
+                            vazio quase preto em cima do degradê já escuro, e é
+                            o fallback que hoje TODAS as 7 lojas mostram). */}
+                        {currentStore.cover_url && (
+                            <div
+                                className="absolute inset-0"
+                                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.18), rgba(0,0,0,.55))' }}
+                            />
+                        )}
                     </div>
 
                     {/* Controles sobre a capa. Sem botão de voltar (o cardápio é
@@ -2828,6 +2849,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         {hasAccess && (
                             <button
                                 onClick={() => handleLogout(false)}
+                                aria-label="Sair da sessão"
+                                title="Sair da sessão"
                                 className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
                             >
                                 <LogOut size={16} />
@@ -2985,6 +3008,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={18} />
                         <input
                             type="text"
+                            aria-label={`Buscar em ${currentStore.name}`}
                             placeholder={`Buscar em ${currentStore.name}`}
                             className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border border-transparent text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border)] transition-colors"
                             value={searchTerm}
@@ -3011,7 +3035,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             onClick={() => setSortMenuOpen(v => !v)}
                             className={`flex items-center justify-center w-11 h-11 rounded-full border u-motion u-press-sm ${sortBy !== 'default' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface-2)] border-transparent text-[var(--text-muted)]'}`}
                             title="Ordenar"
-                            aria-haspopup="true"
+                            aria-haspopup="menu"
                             aria-expanded={sortMenuOpen}
                         >
                             <ArrowUpDown size={16} />
@@ -3019,6 +3043,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         <AnimatePresence>
                             {sortMenuOpen && (
                                 <motion.div
+                                    role="menu"
+                                    aria-label="Ordenar cardápio"
                                     initial={{ opacity: 0, scale: 0.95, y: -4 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
@@ -3035,6 +3061,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         <button
                                             key={opt.key}
                                             type="button"
+                                            role="menuitem"
                                             onClick={() => { setSortBy(opt.key); setSortMenuOpen(false); }}
                                             className={`w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left u-motion ${sortBy === opt.key ? 'font-semibold text-[var(--brand)]' : 'text-[var(--text)]'}`}
                                         >
@@ -3053,7 +3080,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     embaixo, sem precisar de navegação por tab (ver
                     hasActiveFilter e a lista de seções logo abaixo). */}
                 {!hasActiveFilter && visibleCategories.length > 0 && (
-                    <div className="flex gap-5 overflow-x-auto no-scrollbar px-4 pb-2.5">
+                    <div role="group" aria-label="Categorias do cardápio" className="flex gap-5 overflow-x-auto no-scrollbar px-4 pb-2.5">
                         {visibleCategories.map(cat => {
                             const isActive = activeCategory === cat.id;
                             return (
@@ -3158,19 +3185,19 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 exit={{ y: 40, opacity: 0 }}
                                 transition={SPRING_SHEET}
                                 className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border u-glass-cart on-glass"
-                                style={{ borderColor: 'rgba(212,175,92,0.3)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
+                                style={{ borderColor: 'color-mix(in srgb, var(--brand) 30%, transparent)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
                             >
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2.5">
-                                        <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'rgba(212,175,92,0.15)' }}>
-                                            <Wine size={16} style={{ color: WINE_GOLD }} />
+                                        <div className="p-1.5 rounded-[var(--r-sm)]" style={{ background: 'color-mix(in srgb, var(--brand) 15%, transparent)' }}>
+                                            <ShoppingBag size={16} style={{ color: 'var(--brand)' }} />
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
                                             <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
                                         </div>
                                     </div>
-                                    <span className="text-[18px] font-bold num" style={{ color: WINE_GOLD }}>R$ {cartTotal.toFixed(2)}</span>
+                                    <span className="text-[18px] font-bold num" style={{ color: 'var(--brand)' }}>R$ {formatBRL(cartTotal)}</span>
                                 </div>
                                 <Button
                                     className="w-full"

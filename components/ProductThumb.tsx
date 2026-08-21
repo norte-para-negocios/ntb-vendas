@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 
 // Fallback de imagem de produto. Existe porque HOJE nenhum dos 1109
 // produtos das 7 lojas tem foto (o catalogo vem do Omie, que nao traz
@@ -26,7 +26,11 @@ const SIZES = {
 function hueFromName(name: string): number {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
-  return h;
+  // Clamp pra uma faixa brand-adjacent (azul-violeta, 220-310), como o
+  // comentário do arquivo já dizia ser a intenção ("estreita e dessaturada
+  // de propósito ... nunca virar arco-íris") — antes disso o `% 360` deixava
+  // passar o círculo inteiro, incluindo verde/vermelho/amarelo puros.
+  return 220 + (h % 90);
 }
 
 function initials(name: string): string {
@@ -56,17 +60,25 @@ export function ProductThumb({
     );
   }
 
+  const hue2 = (hue + 28) % 360;
+
   return (
     <div
       aria-hidden="true"
-      className={`${cfg.box} relative overflow-hidden flex-shrink-0 flex items-center justify-center ${className}`}
-      style={{
-        background: `linear-gradient(140deg, hsl(${hue} 24% 92%), hsl(${(hue + 28) % 360} 20% 86%))`,
-      }}
+      // product-thumb-fallback(-text) (app/globals.css): o gradiente/cor em
+      // si tem que mudar de verdade em modo escuro (não só ficar mais
+      // escuro por opacidade) — hsl(h 24% 92%) é um pastel bem claro,
+      // ilegível/berrante sobre --bg #0d0e12. Como a cor é computada por
+      // hue (dinâmico, um hash por produto), não dá pra escrever a versão
+      // dark direto numa classe Tailwind fixa: as duas custom properties
+      // (--thumb-hue/--thumb-hue-2) carregam o hue calculado, e a troca
+      // clara/escura vive no CSS (seletor `.dark`, mesma classe que já
+      // governa o resto do tema), não aqui.
+      className={`${cfg.box} product-thumb-fallback relative overflow-hidden flex-shrink-0 flex items-center justify-center ${className}`}
+      style={{ '--thumb-hue': hue, '--thumb-hue-2': hue2 } as CSSProperties}
     >
       <span
-        className={`${cfg.text} font-bold leading-none tracking-tight select-none`}
-        style={{ color: `hsl(${hue} 30% 62%)` }}
+        className={`${cfg.text} product-thumb-fallback-text font-bold leading-none tracking-tight select-none`}
       >
         {initials(name)}
       </span>

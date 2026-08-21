@@ -57,3 +57,10 @@ export function calculateCartItemUnitPrice(item: { product: { price: number; pro
 export function calculateCartTotal(cart: { product: { price: number; promo_price?: number | null }; quantity: number; selectedOptions?: { price_delta: number }[] }[]): number {
   return cart.reduce((acc, item) => acc + calculateCartItemUnitPrice(item) * item.quantity, 0);
 }
+
+// Formatação BRL (vírgula decimal) pra valores em real — antes disso todo
+// preço no cardápio do cliente usava `toFixed(2)` puro, que só produz ponto
+// ("44.90" em vez de "44,90"). Só o número: o prefixo "R$ " já existe nos
+// call sites, não duplicar aqui.
+export const formatBRL = (n: number): string =>
+  n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

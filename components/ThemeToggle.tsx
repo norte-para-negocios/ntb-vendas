@@ -15,7 +15,12 @@ export const THEME_INIT_SCRIPT = `
 
 const VARIANTS = {
   default: 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
-  sidebar: 'text-white/45 hover:text-white/80 hover:bg-white/8',
+  // sidebar (revisão final, 2026-08-16 → 08-21): text-white/45 falhava
+  // contraste sobre uma capa de loja clara — hoje só fica atrás de
+  // `bg-black/35` (ver header do cardápio do cliente, ClientModule.tsx),
+  // sem o fundo --ink sólido que essa variante tinha em outras telas.
+  // text-white/80 é só pra ESTA variante — as outras não mudam.
+  sidebar: 'text-white/80 hover:text-white hover:bg-white/8',
 };
 
 export function ThemeToggle({ className = '', variant = 'default' }: { className?: string; variant?: 'default' | 'sidebar' }) {

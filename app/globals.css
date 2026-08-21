@@ -158,6 +158,27 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 }
 
+/* Fallback tipográfico do ProductThumb (components/ProductThumb.tsx) — cor
+   computada por hash do nome (--thumb-hue/--thumb-hue-2, custom properties
+   setadas inline por produto), tema claro/escuro decidido aqui via .dark
+   (mesma classe que governa o resto do tema). Antes disso o fallback tinha
+   só a variante clara hardcoded (hsl(h 24% 92%) etc.) — em modo escuro virava
+   um ladrilho pastel brilhante sobre --bg quase preto, em ~684 linhas do
+   cardápio (nenhum dos 1109 produtos das 7 lojas tem foto, esse fallback é
+   a regra, não a exceção). */
+.product-thumb-fallback {
+  background: linear-gradient(140deg, hsl(var(--thumb-hue) 24% 92%), hsl(var(--thumb-hue-2) 20% 86%));
+}
+.product-thumb-fallback-text {
+  color: hsl(var(--thumb-hue) 30% 62%);
+}
+.dark .product-thumb-fallback {
+  background: linear-gradient(140deg, hsl(var(--thumb-hue) 18% 22%), hsl(var(--thumb-hue-2) 18% 22%));
+}
+.dark .product-thumb-fallback-text {
+  color: hsl(var(--thumb-hue) 25% 55%);
+}
+
 @layer base {
   * {
     border-color: var(--border);
