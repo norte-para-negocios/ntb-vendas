@@ -1036,6 +1036,30 @@ const ProductModal: React.FC<{
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
+    // Fix round 2 (revisão, Finding 5): o rodapé é `position: sticky` DENTRO
+    // do container com scroll do Modal (ui.tsx) — ele participa do fluxo
+    // normal (diferente de `fixed`), mas como é o último elemento do
+    // conteúdo, ao rolar até o fim ele "gruda" no rodapé do container e
+    // passa a sobrepor o que estava rolando por baixo dele (é assim que
+    // sticky funciona, de propósito) — e sem nenhuma folga reservada
+    // depois dele, isso cobria parte do campo de observação (o
+    // penúltimo elemento) permanentemente, em qualquer altura de scroll.
+    // A altura do rodapé varia (linha extra quando `missingRequired`
+    // aparece, `env(safe-area-inset-bottom)` diferente por aparelho), por
+    // isso é medida ao vivo via ResizeObserver em vez de um valor chumbado
+    // — um spacer do tamanho exato do rodapé, logo depois dele no fluxo,
+    // garante que sempre existe scroll suficiente pra tudo que vem antes
+    // (observação, "Peça também") ficar totalmente visível acima do
+    // rodapé "grudado", em vez de ficar embaixo dele.
+    const footerRef = useRef<HTMLDivElement>(null);
+    const [footerHeight, setFooterHeight] = useState(0);
+    useLayoutEffect(() => {
+        const el = footerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(([entry]) => setFooterHeight(entry.contentRect.height));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
     // Modal (variant="sheet") precisa continuar renderizando o conteúdo
     // durante a animação de saída (~0.4s, spring) — se este componente
     // retornasse null no instante em que incomingProduct vira null, o
@@ -1352,6 +1376,7 @@ const ProductModal: React.FC<{
                     diretos (quantidade + este wrapper), "flex items-center gap-3"
                     intacto. */}
                 <div
+                    ref={footerRef}
                     className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-3 flex items-center gap-3"
                     style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
                 >
@@ -1379,6 +1404,12 @@ const ProductModal: React.FC<{
                         </Button>
                     </div>
                 </div>
+                {/* Fix round 2 (revisão, Finding 5): spacer do tamanho exato do
+                    rodapé (medido acima via ResizeObserver), pra garantir scroll
+                    suficiente e o campo de observação nunca ficar parcialmente
+                    escondido atrás do rodapé "grudado". Puramente estrutural —
+                    sem conteúdo, sem cor, invisível pro leitor de tela. */}
+                <div aria-hidden="true" style={{ height: footerHeight }} />
             </div>
         </Modal>
     );
