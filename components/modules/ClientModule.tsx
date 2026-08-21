@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -2392,7 +2392,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // altura da barra (ex.: campo de busca quebrando linha em tela estreita);
     // as dependências extras forçam remedir quando a barra ganha/perde a
     // faixa de tabs ou muda de `top`.
-    useEffect(() => {
+    // `useLayoutEffect` (não `useEffect`): a medição precisa terminar ANTES
+    // do browser pintar, senão `scroll-margin-top` fica `0` por um frame
+    // (achado de code review) — como essa medição só lê/escreve DOM, sem
+    // I/O nenhum, rodar sincronamente antes da pintura não tem custo
+    // perceptível.
+    useLayoutEffect(() => {
         const el = stickyBarRef.current;
         if (!el) return;
         const updateOffset = () => {
@@ -2465,7 +2470,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return () => window.removeEventListener('scrollend', clear);
     }, []);
 
-    // Fecha o menu de ordenação ao clicar fora dele.
+    // Fecha o menu de ordenação ao clicar fora dele ou pressionar Esc
+    // (achado Minor de code review — não é um full popover com focus trap,
+    // só a tecla de saída que qualquer menu efêmero precisa ter).
     useEffect(() => {
         if (!sortMenuOpen) return;
         const handleClickOutside = (e: MouseEvent) => {
@@ -2473,8 +2480,15 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 setSortMenuOpen(false);
             }
         };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setSortMenuOpen(false);
+        };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
     }, [sortMenuOpen]);
 
     // Clique numa tab: rola a seção pra vista (scroll-margin-top da própria
@@ -2869,6 +2883,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     type="button"
                                     ref={el => { tabButtonRefs.current[cat.id] = el; }}
                                     onClick={() => handleTabClick(cat.id)}
+                                    aria-current={isActive ? 'true' : undefined}
                                     className={`flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap border-b-2 u-motion ${isActive ? 'text-[var(--text)] font-semibold border-[var(--brand)]' : 'text-[var(--text-muted)] border-transparent'}`}
                                 >
                                     {cat.name}
