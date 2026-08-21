@@ -3047,69 +3047,63 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         )}
                     </div>
 
-                    {/* Logo circular: SEMPRE renderiza agora (correção 2026-08-21,
-                        pedido direto do usuário — "a logo em cima"). Com logo_url,
-                        a foto real; sem, um placeholder desenhado que reusa o
-                        PRÓPRIO ProductThumb (size="store", ver ProductThumb.tsx) em
-                        vez de duplicar a lógica de hash/hue/gradiente num terceiro
-                        lugar — mesmo tratamento visual do fallback de miniatura de
-                        produto (hue por nome, tile em gradiente, inicial grande),
-                        só redondo. ring-4 ring-[var(--surface)] preservado nos dois
-                        casos, pra continuar lendo como "selo de logo" mesmo sem
-                        foto real.
+                </div>
 
-                        Fix ao vivo (2026-08-21, achado pelo coordenador dirigindo
-                        num navegador real): posicionamento NÃO pode ir no
-                        `className` do ProductThumb. A raiz do componente já vem
-                        com `relative` fixo no próprio template (necessário: o
-                        branch com `src` usa `<Image fill>`, que exige um ancestral
-                        posicionado — sem esse `relative`, a foto de produto/opção
-                        não teria como se dimensionar em NENHUM dos 6 outros lugares
-                        que já chamam ProductThumb hoje, nenhum dos quais passa
-                        classe de posição). Passar `absolute` via `className`
-                        empata `relative`/`absolute` na mesma tag — quem "ganha" é
-                        decidido pela ordem das regras na folha de estilo gerada
-                        pelo Tailwind, não pela ordem dos nomes de classe no HTML, e
-                        aqui `relative` vencia: `left-4`/`-bottom-8` ficavam inertes
-                        e o círculo caía no fluxo normal, encostado no topo. Corrigido
-                        envolvendo o ProductThumb num `<div>` externo que é quem
-                        recebe `absolute`/posição/anel/recorte — o ProductThumb
-                        continua só cuidando do próprio conteúdo (foto ou
-                        fallback), sem nunca precisar saber como o pai o posiciona.
-                        Não removi o `relative` hardcoded do componente em si — os
-                        outros 6 call sites (linha/destaque/hero/opção/"peça
-                        também"/carrinho) nunca passam posição, só tamanho, e
-                        continuam dependendo desse `relative` internamente pro
-                        `fill` funcionar; trocar por prop explícita seria mudança
-                        de contrato do componente sem nenhum caller pedindo isso.
+                {/* Cartão de identificação da loja (correção de geometria,
+                    2026-08-21, pedido direto do usuário comparando com a
+                    referência do iFood real): dois ajustes de composição, sem
+                    tocar em nenhum conteúdo.
 
-                        Centralização (hero item 1, 2026-08-21): `left-4` virou
-                        `left-1/2 -translate-x-1/2` — centro horizontal exato
-                        sobre a borda inferior da capa, igual à referência do
-                        iFood. `-bottom-8` (a relação vertical) fica
-                        intocado: com w-16/h-16 (64px) e -bottom-8 (-32px), o
-                        topo do círculo fica 32px ACIMA da borda da capa e o
-                        fundo 32px ABAIXO dela (dentro do cartão) — ou seja, o
-                        logo cruza a borda cobrindo metade dela pra cada
-                        lado, exatamente a proporção pedida. */}
-                    <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 z-10 w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]">
+                    1) Cartão agora INSET (mx-4) e arredondado nos 4 cantos
+                       (rounded-2xl, era só rounded-t-2xl full-bleed) — a capa
+                       fica visível dos dois lados no topo, o cartão lê como um
+                       painel flutuando SOBRE a foto, não como um sheet que a
+                       foto "vira". -mt-4 preservado (mesma sobreposição
+                       vertical de sempre, é isso que faz o cartão "subir"
+                       sobre a capa).
+
+                    2) O selo de logo (ver o <div> logo abaixo) deixou de ser
+                       filho do container da capa (ancorado na borda INFERIOR
+                       DA CAPA via -bottom-8) e virou filho deste cartão,
+                       ancorado na borda SUPERIOR DO CARTÃO via -top-8 — é
+                       essa borda (não a da capa) que a referência usa. Como
+                       este <div> já é `position: relative` (necessário pro
+                       `z-[5]` fazer sentido), um filho `absolute` com
+                       `top: -2rem` fica automaticamente centrado na própria
+                       borda superior do cartão: com w-16/h-16 (64px de
+                       diâmetro) e -top-8 (-32px), metade do círculo (32px)
+                       fica ACIMA dessa borda (sobre a capa, que continua
+                       visível ali por causa do -mt-4 acima) e a outra metade
+                       (32px) fica ABAIXO (sobre o fundo branco do cartão) —
+                       exatamente a proporção pedida, e sem depender de
+                       recalcular a altura da capa: funciona pra qualquer
+                       h-[...] da capa, desde que >= metade do logo. */}
+                <div
+                    className="relative z-[5] mx-4 -mt-4 rounded-2xl bg-[var(--surface)] px-4 pb-3 pt-10"
+                    style={{ boxShadow: 'var(--shadow-md)' }}
+                >
+                    {/* Selo de logo: SEMPRE renderiza (com logo_url real ou
+                        placeholder desenhado — mesmo ProductThumb size="store"
+                        reusado em todo o resto do cardápio, ring-4
+                        ring-[var(--surface)] preservado nos dois casos).
+                        Continua precisando do <div> wrapper externo pra
+                        posicionamento (ver histórico do achado ao vivo
+                        2026-08-21 no commit anterior desta feature): a raiz do
+                        ProductThumb já é `relative` fixo (o branch com `src`
+                        usa `<Image fill>`, que exige um ancestral posicionado
+                        — os outros 6 call sites do componente dependem disso),
+                        então `absolute`/`-top-8`/anel/recorte não podem ir no
+                        `className` do ProductThumb (empatariam
+                        `relative`/`absolute` na mesma tag) — só no `<div>` que
+                        o envolve, que é quem de fato ganha a posição. */}
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-8 z-10 w-16 h-16 rounded-full overflow-hidden ring-4 ring-[var(--surface)]">
                         <ProductThumb
                             src={currentStore.logo_url}
                             name={currentStore.name}
                             size="store"
                         />
                     </div>
-                </div>
 
-                {/* Cartão de identificação da loja. pt-12 fixo agora (correção
-                    2026-08-21) — antes branchava em currentStore.logo_url, mas o
-                    logo (real ou placeholder) sempre ocupa esse espaço agora, então
-                    a reserva vertical exata (64px, -bottom-8 na capa acima) é
-                    sempre necessária, não mais condicional. */}
-                <div
-                    className="relative z-[5] -mt-4 rounded-t-2xl bg-[var(--surface)] px-4 pb-3 pt-12"
-                    style={{ boxShadow: 'var(--shadow-md)' }}
-                >
                     <div className="flex items-start justify-between gap-3">
                         {/* Linha do nome (hero item 2, 2026-08-21): virou um
                             <button> de verdade — foco por teclado, nome
