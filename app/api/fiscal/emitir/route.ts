@@ -210,7 +210,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // 4. Itens da venda (com NCM do produto).
   const { data: items } = await admin
     .from('order_items')
-    .select('quantity, status, price_at_time, product:products(id, name, ncm, omie_codigo)')
+    .select('quantity, status, price_at_time, selected_options, product:products(id, name, ncm, omie_codigo)')
     .in('order_id', orderIds);
 
   const itensValidos = (items ?? []).filter((i) => i.status !== 'canceled');
@@ -377,16 +377,29 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     numero = numeroGerado as number;
 
     // 6. Monta itens do XML.
-    const itensXml: ItemNota[] = itensValidos.map((i) => ({
-      // omie_codigo é o SKU real (ex.: "90935"), legível no cupom impresso.
-      // Fallback pro UUID truncado só cobre produtos cadastrados manualmente
-      // sem vínculo com o Omie (omie_codigo null) — nunca deve faltar código.
-      cProd: (i as any).product.omie_codigo || String((i as any).product.id).slice(0, 8),
-      xProd: (i as any).product.name,
-      ncm: (i as any).product.ncm,
-      qCom: i.quantity,
-      vUnCom: Number(i.price_at_time),
-    }));
+    const itensXml: ItemNota[] = itensValidos.map((i) => {
+      const produto = (i as any).product;
+      // Descrição do item precisa incluir a variação/adicional escolhido
+      // (ex.: "Pizza Calabresa (Grande)") — sem isso, duas linhas de pedido
+      // do mesmo produto-base com tamanhos/sabores diferentes aparecem
+      // idênticas na nota/cupom (achado real, reunião 2026-08-19). Mesmo
+      // princípio de `getOrderItemDisplayName` (lib/labels.ts), sem o R$ dos
+      // adicionais (não cabe no xProd fiscal).
+      const adicionais = ((i as any).selected_options as { name: string }[] | null | undefined) || [];
+      const nomeComVariacao = adicionais.length
+        ? `${produto?.name ?? 'Produto'} (${adicionais.map((o) => o.name).join(', ')})`
+        : (produto?.name ?? 'Produto');
+      return {
+        // omie_codigo é o SKU real (ex.: "90935"), legível no cupom impresso.
+        // Fallback pro UUID truncado só cobre produtos cadastrados manualmente
+        // sem vínculo com o Omie (omie_codigo null) — nunca deve faltar código.
+        cProd: produto?.omie_codigo || String(produto?.id ?? '').slice(0, 8),
+        xProd: nomeComVariacao,
+        ncm: produto?.ncm,
+        qCom: i.quantity,
+        vUnCom: Number(i.price_at_time),
+      };
+    });
 
     // 7. Certificado — já baixado/extraído/validado contra stores.cnpj
     // ANTES da numeração (ver bloco `certificadoValidado` acima), reaproveitado
