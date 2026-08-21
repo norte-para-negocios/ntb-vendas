@@ -14,7 +14,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, SERVICE_FEE_RATE } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
@@ -2407,61 +2407,171 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     const isWaitingBill = currentTable?.status === TableStatus.WAITING_BILL;
 
+    // Hero da loja (Task 2): fatos do salão pra linha de metadados do cartão
+    // — nunca dado de entrega (km/tempo/pedido mínimo/avaliação/cupom, sem
+    // equivalente real neste app). Taxa de serviço sempre lida de
+    // lib/calc.ts (SERVICE_FEE_RATE como fallback), nunca reescrita aqui.
+    const serviceFeeRateForHero = currentStore.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    const heroMetaParts: string[] = [];
+    if (hasAccess) heroMetaParts.push(currentTable ? `Mesa ${currentTable.number}` : 'Balcão');
+    if (currentStore.config?.charge_service_fee) heroMetaParts.push(`Taxa de serviço ${(serviceFeeRateForHero * 100).toFixed(0)}%`);
+
+    // Total de itens da comanda desta sessão de mesa (soma de todos os
+    // pedidos já enviados, `mesaOrders` — dado real já carregado por
+    // useMesaOrders, nunca um número inventado).
+    const mesaItemCount = mesaOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+
     return (
         <MotionConfig reducedMotion="user">
             <div className="bg-[var(--bg)] min-h-screen pb-32">
-            {/* Header — banda de marca fixa (sempre --ink, não segue claro/escuro,
-                mesmo princípio do AuthBackdrop): é a "capa" da carta, rola junto
-                com a página em vez de ficar fixa, pra abrir espaço pro conteúdo. */}
-            <header className="relative overflow-hidden px-5 pt-5 pb-6" style={{ background: 'var(--ink)' }}>
-                <svg className="absolute -bottom-2 right-0 w-[65%] h-auto opacity-[0.07] pointer-events-none" viewBox="0 0 1443 912" fill="none" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
-                    <path d="M1443 203.5C1443 203.5 1156.08 94.5 868.5 293.5C580.92 492.5 558.996 755 582.5 911.5H1443V203.5Z" fill="#FFFFFF" />
-                </svg>
-                <div className="relative flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: WINE_GOLD }}>Norte Para Negócios</span>
-                        <h1 className="font-bold text-white text-[22px] leading-tight tracking-tight truncate mt-0.5">{currentStore.name}</h1>
-                        {/* Chips de sessão (nome/mesa/PIN) só existem depois que o
-                            cliente tentou adicionar algo e passou pelo modal de PIN
-                            (ver requestAccessThen) — antes disso não há sessão pra
-                            mostrar. */}
+            {/* Hero da loja (Task 2, redesign inspirado no iFood): capa full-bleed
+                + logo circular + cartão de identificação sobreposto, no lugar
+                da antiga banda sólida --ink com só o nome em texto branco.
+                Dine-in apenas: nenhum dado de entrega (km, tempo de entrega,
+                pedido mínimo, avaliação, cupom) tem equivalente real neste
+                app — nada disso é renderizado, nem como placeholder. */}
+            <header className="relative">
+                <div className="relative h-[200px] w-full">
+                    {/* Mídia (foto/degradê + escurecimento) isolada num filho
+                        absolute+overflow-hidden: precisa recortar a capa nos
+                        200px da faixa, mas SEM recortar o logo circular logo
+                        abaixo, que atravessa a borda inferior de propósito. */}
+                    <div className="absolute inset-0 overflow-hidden">
+                        {currentStore.cover_url ? (
+                            <Image
+                                src={currentStore.cover_url}
+                                alt=""
+                                fill
+                                priority
+                                sizes="100vw"
+                                className="object-cover"
+                            />
+                        ) : (
+                            <div
+                                className="absolute inset-0"
+                                style={{ background: 'linear-gradient(135deg, var(--ink), color-mix(in srgb, var(--ink) 82%, var(--brand)))' }}
+                            />
+                        )}
+                        {/* Escurecimento pro rodapé: sempre presente (com ou sem
+                            foto), garante contraste dos controles sobre a capa. */}
+                        <div
+                            className="absolute inset-0"
+                            style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.18), rgba(0,0,0,.55))' }}
+                        />
+                    </div>
+
+                    {/* Controles sobre a capa. Sem botão de voltar (o cardápio é
+                        a raiz, não há pra onde voltar) nem coração/busca (a
+                        busca ganha lugar próprio na Task 3). */}
+                    <div
+                        className="absolute right-3 z-10 flex items-center gap-2"
+                        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+                    >
+                        <div className="w-9 h-9 rounded-full overflow-hidden bg-black/35 backdrop-blur-sm">
+                            <ThemeToggle variant="sidebar" />
+                        </div>
                         {hasAccess && (
-                            <div className="flex items-center gap-1.5 text-[11px] mt-2 flex-wrap">
-                                <span className="flex items-center gap-1 bg-white/10 border border-white/15 text-white/80 px-2 py-1 rounded-full">
-                                    <User size={10} /> {clientName} {isHost ? '(Host)' : ''}
-                                </span>
-                                {currentTable ? (
-                                    <span className="font-semibold text-white/90 bg-white/10 border border-white/15 px-2 py-1 rounded-full">Mesa {currentTable.number}</span>
-                                ) : (
-                                    <span className="font-semibold px-2 py-1 rounded-full" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }}>Balcão</span>
-                                )}
-                                {isHost && currentTable && hostPin && (
-                                    <div className="flex items-center gap-1 px-2 py-1 rounded-full cursor-pointer" style={{ color: WINE_GOLD, background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.3)' }} onClick={() => setShowPin(!showPin)}>
-                                        <span className="num font-semibold tracking-wider">{showPin ? hostPin : '••••'}</span>
-                                        {showPin ? <EyeOff size={9} /> : <Eye size={9} />}
-                                    </div>
-                                )}
-                            </div>
+                            <button
+                                onClick={() => handleLogout(false)}
+                                className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                            >
+                                <LogOut size={16} />
+                            </button>
                         )}
                     </div>
-                    <div className="flex gap-1.5 flex-shrink-0">
+
+                    {currentStore.logo_url && (
+                        <Image
+                            src={currentStore.logo_url}
+                            alt=""
+                            width={64}
+                            height={64}
+                            className="absolute left-4 -bottom-8 z-10 w-16 h-16 rounded-full ring-4 ring-[var(--surface)] object-cover"
+                        />
+                    )}
+                </div>
+
+                {/* Cartão de identificação da loja. Com logo, ganha pt-12 em vez
+                    de pt-4 pra reservar espaço vertical exato pro logo (64px,
+                    -bottom-8 na capa acima) não cobrir o nome da loja. */}
+                <div
+                    className={`relative z-[5] -mt-4 rounded-t-2xl bg-[var(--surface)] px-4 pb-3 ${currentStore.logo_url ? 'pt-12' : 'pt-4'}`}
+                    style={{ boxShadow: 'var(--shadow-md)' }}
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <h1 className="min-w-0 truncate text-[20px] font-semibold leading-tight text-[var(--text)]">
+                            {currentStore.name}
+                        </h1>
                         {currentTable && (
                             <button
                                 onClick={() => setShowBill(true)}
-                                className={`flex items-center gap-1 rounded-full text-[12px] font-semibold px-3 h-8 u-motion ${isWaitingBill ? 'bg-[var(--warn)] text-white' : 'bg-white/10 border border-white/15 text-white hover:bg-white/20'}`}
+                                className={`flex h-8 flex-shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-semibold u-motion ${
+                                    isWaitingBill
+                                        ? 'bg-[var(--warn)] text-white'
+                                        : 'border border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-2)]'
+                                }`}
                             >
                                 {isWaitingBill ? <Clock size={12} /> : <Receipt size={12} />} Conta
                             </button>
                         )}
-                        <ThemeToggle className="w-8 h-8 rounded-full border border-white/15" variant="sidebar" />
-                        {hasAccess && (
-                            <button onClick={() => handleLogout(false)} className="w-8 h-8 flex items-center justify-center bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/20 rounded-full u-motion">
-                                <LogOut size={14} />
-                            </button>
-                        )}
                     </div>
+
+                    {/* Linha de metadados: só fatos do salão (mesa/balcão, taxa de
+                        serviço) — nunca km, tempo de entrega, pedido mínimo ou
+                        avaliação, sem equivalente real neste app. */}
+                    {heroMetaParts.length > 0 && (
+                        <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+                            {heroMetaParts.join(' • ')}
+                        </p>
+                    )}
+
+                    {/* Chips de sessão (nome/mesa/balcão/revelar PIN), realocados
+                        pra dentro do cartão — só existem depois que o cliente
+                        tentou adicionar algo e passou pelo modal de PIN (ver
+                        requestAccessThen), mesma condição de antes. */}
+                    {hasAccess && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text-muted)]">
+                                <User size={10} /> {clientName} {isHost ? '(Host)' : ''}
+                            </span>
+                            {currentTable ? (
+                                <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-semibold text-[var(--text)]">
+                                    Mesa {currentTable.number}
+                                </span>
+                            ) : (
+                                <span
+                                    className="rounded-full px-2 py-1 font-semibold"
+                                    style={{ color: 'var(--brand)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}
+                                >
+                                    Balcão
+                                </span>
+                            )}
+                            {isHost && currentTable && hostPin && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPin(!showPin)}
+                                    className="flex items-center gap-1 rounded-full px-2 py-1 font-semibold u-motion"
+                                    style={{ color: 'var(--brand)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}
+                                >
+                                    <span className="num tracking-wider">{showPin ? hostPin : '••••'}</span>
+                                    {showPin ? <EyeOff size={9} /> : <Eye size={9} />}
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </header>
+
+            {/* Barra de status da sessão: só existe fato real pra mostrar quando
+                há uma comanda de mesa com pelo menos 1 pedido já enviado
+                (mesaOrders, populado em submitOrder ao enviar pra cozinha —
+                nunca um número inventado). Sem sessão de mesa aberta, não
+                renderiza nada. */}
+            {hasAccess && mesaOrders.length > 0 && (
+                <div className="w-full bg-[var(--ink)] py-2 text-center text-[13px] text-white">
+                    Comanda aberta • {mesaItemCount} {mesaItemCount === 1 ? 'item' : 'itens'}
+                </div>
+            )}
 
             {/* Waiting Bill Banner */}
             {isWaitingBill && (
