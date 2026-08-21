@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
@@ -999,6 +999,18 @@ const FeaturedProductCard = React.memo(function FeaturedProductCard({ product, o
 });
 FeaturedProductCard.displayName = 'FeaturedProductCard';
 
+// Regra de seleção mostrada na faixa de cabeçalho de cada grupo (Task 6,
+// Passo 3) — sempre derivada de type/required/max_select, nunca hardcoded.
+// 'single' é sempre 0 ou 1 por natureza do radio (nunca tem max_select
+// próprio, ver ProductOptionGroup em types/index.ts), então não depende do
+// campo. 'multiple' deriva de max_select: com teto → "até N"; sem teto →
+// "quantas quiser".
+function getOptionGroupRuleLabel(group: ProductOptionGroup): string {
+    if (group.type === 'single') return 'Escolha 1 opção';
+    if (typeof group.max_select === 'number') return `Escolha até ${group.max_select} opções`;
+    return 'Escolha quantas quiser';
+}
+
 const ProductModal: React.FC<{
     product: Product | null,
     onClose: () => void,
@@ -1017,7 +1029,10 @@ const ProductModal: React.FC<{
     // contrário da vitrine de Destaques, que já filtra por isso. Mesmo
     // conjunto de ids que `visibleCategories` já calcula no ClientModule.
     visibleCategoryIds: Set<string>,
-}> = ({ product: incomingProduct, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds }) => {
+    // Task 6: pílula da loja sobre a foto (logo + nome), formato iFood.
+    // null enquanto currentStore ainda não carregou.
+    store: Store | null,
+}> = ({ product: incomingProduct, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds, store }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -1088,122 +1103,81 @@ const ProductModal: React.FC<{
 
     return (
         <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet">
-            <div className="relative space-y-4">
-                {/* Favoritar (Vende Mais II, 100% client-side, localStorage) — canto
-                    superior direito do modal, sobrepõe a foto quando existe; sem
-                    foto, fica sobre a descrição, mesmo canto. */}
-                <button
-                    type="button"
-                    aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
-                    onClick={() => onToggleFavorite(product.id)}
-                    // Sem `backdrop-blur-sm` (achado M3 da revisão final de
-                    // 2026-08-16): esse ícone já vive dentro de uma sheet de
-                    // vidro em animação (drag-transformada) — um segundo
-                    // backdrop-filter aninhado ali é um caso caro de
-                    // compositing em celular fraco. `bg-[var(--surface)]`
-                    // opaco (sem blur) fica visualmente equivalente.
-                    className="absolute top-0 right-0 z-10 p-2 rounded-full bg-[var(--surface)] border border-[var(--border)] u-motion u-press-sm"
-                >
-                    <Heart size={18} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : 'text-[var(--text-muted)]'} />
-                </button>
-                {product.image_url ? (
-                    <div className="relative w-full h-56 rounded-xl overflow-hidden shadow-sm">
-                        <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 100vw, 480px" className="object-cover" />
-                    </div>
-                ) : (
-                    // Sem foto (maioria dos produtos de ERP): só a etiqueta de
-                    // origem, se houver — sem ícone/medalhão (removido 2026-08-16,
-                    // mesmo motivo do ProductCard: só tipografia).
-                    (() => {
-                        const { origin } = parseOrigin(product.name);
-                        if (!origin) return null;
-                        return (
-                            <span
-                                className="inline-block text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-[3px] border u-grow-in"
-                                style={{ borderColor: 'rgba(212,175,92,0.4)', color: WINE_GOLD }}
-                            >
-                                {origin}
-                            </span>
-                        );
-                    })()
-                )}
-                <p className="text-[var(--text-muted)] leading-relaxed">{product.description}</p>
-
-                {/* Badges (migration 019): aqui, detalhe expandido, emoji + label
-                    completo — no ProductCard (linha da lista) é só o emoji. */}
-                {product.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                        {product.tags.map(tag => {
-                            const { label, emoji } = getTagDisplay(tag);
-                            return (
-                                <span
-                                    key={tag}
-                                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full border"
-                                    style={{ borderColor: 'rgba(212,175,92,0.35)', color: WINE_GOLD_DARK, background: 'rgba(212,175,92,0.08)' }}
-                                >
-                                    {emoji} {label}
-                                </span>
-                            );
-                        })}
-                    </div>
-                )}
-
-                <div className="flex items-center justify-between bg-[var(--surface-2)] px-4 py-3 rounded-[var(--r-md)] border border-[var(--border)]">
-                    {hasActivePromo(product) ? (
-                        <span className="flex items-baseline gap-2">
-                            <span className="text-sm text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
-                            <span className="text-xl font-semibold num" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(product).toFixed(2)}</span>
-                        </span>
-                    ) : (
-                        // Dourado, não azul da marca: o preço é dourado em TODO o resto
-                        // do cardápio (ProductCard, promo aqui em cima, "Peça também") —
-                        // este era o único lugar que ainda vazava a cor de ação.
-                        <span className="text-xl font-semibold num" style={{ color: WINE_GOLD }}>R$ {product.price.toFixed(2)}</span>
+            {/* -m-5 cancela o p-5 do container de conteúdo do Modal (ui.tsx) —
+                só a foto do topo (Passo 1) precisa sangrar de borda a borda;
+                cada seção abaixo reintroduz o próprio px-4. O botão de fechar
+                da sheet já vive na barra de título do Modal (ui.tsx), por
+                isso não há um segundo "X" aqui. */}
+            <div className="-m-5">
+                {/* Passo 1: foto sangrando + pílula da loja + favoritar */}
+                <div className="h-56 relative">
+                    <ProductThumb src={product.image_url} name={product.name} size="hero" />
+                    {store && (
+                        <div className="absolute left-3 bottom-3 max-w-[75%] flex items-center gap-1.5 bg-white rounded-full py-1 pl-1 pr-3 shadow-sm">
+                            {store.logo_url && (
+                                <Image
+                                    src={store.logo_url}
+                                    alt=""
+                                    width={22}
+                                    height={22}
+                                    className="w-[22px] h-[22px] rounded-full object-cover flex-shrink-0"
+                                />
+                            )}
+                            <span className="text-[12px] font-medium text-[var(--ink)] truncate">{store.name}</span>
+                        </div>
                     )}
-                    <div className="flex items-center gap-3 bg-[var(--surface)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)]" style={{boxShadow:'var(--shadow-sm)'}}>
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
-                        <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
-                        <button onClick={() => setQty(q => Math.min(99, q + 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
-                    </div>
+                    {/* Favoritar (Vende Mais II, 100% client-side, localStorage) — canto
+                        superior direito, sobre a foto. Sem `backdrop-blur-sm` (achado M3
+                        da revisão final de 2026-08-16): já é uma sheet de vidro em
+                        animação (drag-transformada), um segundo backdrop-filter aninhado
+                        é caro em celular fraco — `bg-[var(--surface)]` opaco equivale
+                        visualmente. */}
+                    <button
+                        type="button"
+                        aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
+                        onClick={() => onToggleFavorite(product.id)}
+                        className="absolute top-3 right-3 z-10 p-2 rounded-full bg-[var(--surface)] border border-[var(--border)] u-motion u-press-sm"
+                    >
+                        <Heart size={18} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : 'text-[var(--text-muted)]'} />
+                    </button>
                 </div>
 
-                {/* "Peça também" (migration 020, Vende Mais II): cross-sell manual
-                    do lojista (product_recommendations), já resolvido pelo
-                    fetchMenu contra a lista de produtos da loja (indisponível/
-                    excluído já filtrado antes de chegar em product.recommended_products).
-                    Cards compactos em linha rolável; clicar troca o produto do
-                    próprio modal (onSelectRecommended -> setSelectedProduct no
-                    ClientModule, mesmo mecanismo de estado de sempre). */}
-                {!!availableRecommended.length && (
-                    <div>
-                        <h4 className="text-[13px] font-semibold text-[var(--text)] mb-2 flex items-center gap-1.5">
-                            <Sparkles size={13} style={{ color: WINE_GOLD }} /> Peça também
-                        </h4>
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
-                            {availableRecommended.map(rec => (
-                                <button
-                                    key={rec.id}
-                                    type="button"
-                                    onClick={() => onSelectRecommended(rec)}
-                                    className="flex-shrink-0 w-24 text-left border border-[var(--border)] rounded-[var(--r-md)] overflow-hidden bg-[var(--surface)] u-motion hover:border-[var(--brand)]"
-                                >
-                                    <div className="w-full h-16 bg-[var(--surface-2)] flex items-center justify-center overflow-hidden">
-                                        {rec.image_url ? (
-                                            <Image src={rec.image_url} alt={rec.name} width={96} height={64} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <UtensilsCrossed size={16} className="text-[var(--text-muted)]/40" />
-                                        )}
-                                    </div>
-                                    <div className="p-1.5">
-                                        <p className="text-[11px] font-medium text-[var(--text)] leading-tight line-clamp-2">{rec.name}</p>
-                                        <p className="text-[11px] font-bold num mt-0.5" style={{ color: WINE_GOLD }}>R$ {getEffectivePrice(rec).toFixed(2)}</p>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                {/* Passo 2: bloco de identificação */}
+                <div className="px-4 pt-4">
+                    <h2 className="text-[22px] font-bold leading-tight text-[var(--text)]">{product.name}</h2>
+                    {!!product.description && (
+                        <p className="text-[14px] text-[var(--text-muted)] mt-1">{product.description}</p>
+                    )}
 
+                    {/* Badges (migration 019): catálogo fechado de lib/labels.ts, tom
+                        dourado trocado por --brand (redesign iFood — gold sai do
+                        cardápio inteiro, ver AGENTS.md "Identidade carta de vinhos"). */}
+                    {product.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                            {product.tags.map(tag => {
+                                const { label, emoji } = getTagDisplay(tag);
+                                return (
+                                    <span
+                                        key={tag}
+                                        className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full border border-[var(--brand)]/35 text-[var(--brand)] bg-[var(--brand)]/8"
+                                    >
+                                        {emoji} {label}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Linha de preço: mesma composição das Tasks 4/5 (PriceRow),
+                        consumida aqui, não reimplementada. Não exibir "Serve até N
+                        pessoas" — esse dado não existe no schema (regra do brief). */}
+                    <PriceRow product={product} size="page" variablePricing={hasVariablePricing(product)} className="mt-3" />
+                </div>
+
+                {/* Passo 3: grupos de opção — faixa de cabeçalho cinza + linhas de
+                    opção, um <fieldset>/<legend> por grupo (preserva a estrutura
+                    de acessibilidade existente: aria-required no input, legend
+                    como nome acessível do fieldset). */}
                 {groups.map(group => {
                     // Defesa client-side extra: o servidor (fetchMenu) já filtra
                     // product_options por available=true por padrão, mas manter
@@ -1214,33 +1188,74 @@ const ProductModal: React.FC<{
                     const atMaxLimit = hasMaxLimit && groupSelections.length >= (group.max_select as number);
 
                     return (
-                        <fieldset key={group.id} className="border border-[var(--border)] rounded-lg p-3">
-                            <legend className="w-full flex items-center justify-between gap-2 mb-2 px-1">
-                                <span className="font-semibold text-sm text-[var(--text)]">{group.name}</span>
-                                {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
+                        <fieldset key={group.id}>
+                            <legend className="w-full block bg-[var(--surface-2)] px-4 py-2.5 mt-4">
+                                <span className="flex items-center justify-between gap-2">
+                                    <span className="text-[15px] font-bold text-[var(--text)]">{group.name}</span>
+                                    {group.required && (
+                                        <span className="flex-shrink-0 bg-[var(--ink)] text-white text-[10px] font-bold tracking-wide rounded px-1.5 py-0.5">
+                                            OBRIGATÓRIO
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">
+                                    {getOptionGroupRuleLabel(group)}
+                                </span>
                             </legend>
-                            {hasMaxLimit && (
-                                <p className="text-xs text-[var(--text-muted)] mb-1.5">
-                                    {groupSelections.length} de {group.max_select} selecionados
-                                </p>
-                            )}
                             {visibleOptions.map(opt => {
                                 const isChecked = groupSelections.includes(opt.id);
                                 const isDisabled = atMaxLimit && !isChecked;
                                 return (
-                                    <label key={opt.id} className={`flex items-center justify-between py-1.5 min-h-11 cursor-pointer ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                        <span className="flex items-center gap-2 text-sm text-[var(--text)]">
-                                            <input
-                                                type={group.type === 'single' ? 'radio' : 'checkbox'}
-                                                name={`group-${group.id}`}
-                                                checked={isChecked}
-                                                disabled={isDisabled}
-                                                aria-required={group.required}
-                                                onChange={() => toggleOption(group, opt.id)}
-                                            />
-                                            {opt.name}
+                                    <label
+                                        key={opt.id}
+                                        className={`flex items-center gap-3 px-4 py-3 min-h-11 border-b border-[var(--border)] ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    >
+                                        <span className="flex-1 min-w-0">
+                                            <span className="block text-[14px] text-[var(--text)]">{opt.name}</span>
+                                            {opt.price_delta > 0 && (
+                                                <span className="block text-[13px] text-[var(--text-muted)] num mt-0.5">
+                                                    + R$ {opt.price_delta.toFixed(2)}
+                                                </span>
+                                            )}
                                         </span>
-                                        {opt.price_delta > 0 && <span className="num text-[var(--text-muted)] text-sm">+R$ {opt.price_delta.toFixed(2)}</span>}
+                                        <ProductThumb src={undefined} name={opt.name} size="option" />
+                                        {group.type === 'single' ? (
+                                            <span className="relative flex-shrink-0 w-5 h-5">
+                                                <input
+                                                    type="radio"
+                                                    name={`group-${group.id}`}
+                                                    checked={isChecked}
+                                                    disabled={isDisabled}
+                                                    aria-required={group.required}
+                                                    onChange={() => toggleOption(group, opt.id)}
+                                                    className="peer sr-only"
+                                                />
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={`absolute inset-0 rounded-full border-2 flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? 'border-[var(--brand)]' : 'border-[var(--border)]'}`}
+                                                >
+                                                    {isChecked && <span className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />}
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            <span className="relative flex-shrink-0 w-7 h-7">
+                                                <input
+                                                    type="checkbox"
+                                                    name={`group-${group.id}`}
+                                                    checked={isChecked}
+                                                    disabled={isDisabled}
+                                                    aria-required={group.required}
+                                                    onChange={() => toggleOption(group, opt.id)}
+                                                    className="peer sr-only"
+                                                />
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={`absolute inset-0 rounded-full border flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? 'bg-[var(--brand)] border-[var(--brand)] text-white' : 'border-[var(--brand)] text-[var(--brand)]'}`}
+                                                >
+                                                    {isChecked ? <Check size={14} /> : <Plus size={14} />}
+                                                </span>
+                                            </span>
+                                        )}
                                     </label>
                                 );
                             })}
@@ -1248,36 +1263,94 @@ const ProductModal: React.FC<{
                     );
                 })}
 
-                {/* Chips de observação rápida (migration 019, stores.config.note_suggestions,
-                    editado pelo lojista em MenuManagementView) — atalho de digitação, não
-                    é toggle: clicar só acrescenta o texto, o cliente ainda edita livremente
-                    depois. Some inteiro quando a loja não configurou nenhuma sugestão. */}
-                {noteSuggestions.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                        {noteSuggestions.map((suggestion, idx) => (
-                            <button
-                                key={idx}
-                                type="button"
-                                onClick={() => setNotes(prev => prev.trim() ? `${prev.trim()}, ${suggestion}` : suggestion)}
-                                className="inline-flex items-center min-h-11 text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)] hover:text-[var(--text)] u-motion u-press-sm"
-                            >
-                                {suggestion}
-                            </button>
-                        ))}
+                {/* Passo 4: observação — chips de sugestão já existentes + rótulo
+                    com contador. Nenhum fluxo de "Denunciar item" (não existe
+                    aqui, regra do brief). */}
+                <div className="px-4 mt-4">
+                    {noteSuggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                            {noteSuggestions.map((suggestion, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setNotes(prev => (prev.trim() ? `${prev.trim()}, ${suggestion}` : suggestion).slice(0, 140))}
+                                    className="inline-flex items-center min-h-11 text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)] hover:text-[var(--text)] u-motion u-press-sm"
+                                >
+                                    {suggestion}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex items-center justify-between mb-1">
+                        <label htmlFor="product-modal-notes" className="text-[13px] font-medium text-[var(--text-muted)]">
+                            Alguma observação?
+                        </label>
+                        <span className="text-[12px] text-[var(--text-muted)] num">{notes.length}/140</span>
+                    </div>
+                    <input
+                        id="product-modal-notes"
+                        maxLength={140}
+                        placeholder="Ex: tirar a cebola, maionese à parte etc."
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all"
+                    />
+                </div>
+
+                {/* "Peça também" (migration 020, Vende Mais II): cross-sell manual
+                    do lojista, movido pra cima do rodapé fixo (Task 6). Clicar
+                    troca o produto do próprio modal (onSelectRecommended ->
+                    setSelectedProduct no ClientModule, mesmo mecanismo de sempre). */}
+                {!!availableRecommended.length && (
+                    <div className="px-4 mt-4 pb-4">
+                        <h4 className="text-[13px] font-semibold text-[var(--text)] mb-2 flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-[var(--brand)]" /> Peça também
+                        </h4>
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+                            {availableRecommended.map(rec => (
+                                <button
+                                    key={rec.id}
+                                    type="button"
+                                    onClick={() => onSelectRecommended(rec)}
+                                    className="flex-shrink-0 w-24 text-left border border-[var(--border)] rounded-[var(--r-md)] overflow-hidden bg-[var(--surface)] u-motion hover:border-[var(--brand)]"
+                                >
+                                    <div className="w-full h-16 bg-[var(--surface-2)] flex items-center justify-center overflow-hidden">
+                                        <ProductThumb src={rec.image_url} name={rec.name} size="option" />
+                                    </div>
+                                    <div className="p-1.5">
+                                        <p className="text-[11px] font-medium text-[var(--text)] leading-tight line-clamp-2">{rec.name}</p>
+                                        <p className="text-[11px] font-bold num mt-0.5 text-[var(--brand)]">R$ {getEffectivePrice(rec).toFixed(2)}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
-                <Input
-                    label="Observações"
-                    placeholder="Ex: Tirar cebola, ponto da carne..."
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                />
+                {missingRequired && (
+                    <p className="px-4 pb-2 text-[12px] text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>
+                )}
 
-                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                    Adicionar • R$ {(unitPrice * qty).toFixed(2)}
-                </Button>
-                {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
+                {/* Passo 4 (rodapé): quantidade (limites 1-99 preservados) + botão
+                    Adicionar com o total dentro do próprio botão. sticky bottom-0
+                    dentro do container com overflow-y-auto do Modal (ui.tsx) — não
+                    precisa de scroll container próprio. */}
+                <div
+                    className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-3 flex items-center gap-3"
+                    style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+                >
+                    <div className="flex items-center gap-3 bg-[var(--surface-2)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)] flex-shrink-0">
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
+                        <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
+                        <button onClick={() => setQty(q => Math.min(99, q + 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
+                    </div>
+                    <Button className="flex-1 h-12" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                        <span className="w-full flex items-center justify-between text-[15px]">
+                            <span>Adicionar</span>
+                            <span className="num">R$ {(unitPrice * qty).toFixed(2)}</span>
+                        </span>
+                    </Button>
+                </div>
             </div>
         </Modal>
     );
@@ -3091,6 +3164,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isFavorite={!!selectedProduct && favoriteIds.has(selectedProduct.id)}
                 onToggleFavorite={toggleFavorite}
                 visibleCategoryIds={visibleCategoryIds}
+                store={currentStore}
             />
 
             <CounterConfirmModal
