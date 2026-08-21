@@ -7,6 +7,7 @@ import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
+import { ProductThumb } from '@/components/ProductThumb';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { playPreparingAlert, playReadyAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -59,6 +60,58 @@ function parseOrigin(name: string): { clean: string; origin: string | null } {
     const m = name.match(/^(.*)\s-\s([A-ZÇ]{2,4})$/);
     if (m) return { clean: m[1].trim(), origin: m[2] };
     return { clean: name, origin: null };
+}
+
+// Composição de preço (redesign iFood, Task 4): preço efetivo em --brand +
+// riscado + selo "-X%" quando há promoção ativa. Escrita 1x aqui e consumida
+// pela linha de produto (ProductCard, abaixo), pelo card de destaque (Task 5)
+// e pela página de produto (Task 6) — sem isso a mesma lógica de desconto
+// seria digitada 3x, exatamente o tipo de duplicação que review de código
+// pega. `size` só varia a escala tipográfica entre os 3 contextos; a regra
+// de exibição (o que mostrar e quando) é sempre a mesma, sempre lida de
+// getEffectivePrice/hasActivePromo (lib/calc.ts + acima), nunca duplicada.
+type PriceRowSize = 'row' | 'featured' | 'page';
+const PRICE_ROW_SIZES: Record<PriceRowSize, { effective: string; prefix: string; full: string; badge: string; gap: string }> = {
+    row: { effective: 'text-[15px]', prefix: 'text-[11px]', full: 'text-[13px]', badge: 'text-[11px] px-1.5 py-0.5', gap: 'gap-2' },
+    featured: { effective: 'text-[16px]', prefix: 'text-[11px]', full: 'text-[13px]', badge: 'text-[11px] px-1.5 py-0.5', gap: 'gap-2' },
+    page: { effective: 'text-[22px]', prefix: 'text-[13px]', full: 'text-[15px]', badge: 'text-[12px] px-2 py-0.5', gap: 'gap-2.5' },
+};
+function PriceRow({ product, size = 'row', variablePricing = false, className = '' }: {
+    product: { price: number; promo_price?: number | null },
+    size?: PriceRowSize,
+    // Task 4/5/6 controlam isso com a própria checagem de contexto deles
+    // (ex.: hasVariablePricing(product) aqui no card, algo equivalente na
+    // página de produto) — o componente só decide COMO renderizar o prefixo,
+    // nunca SE ele se aplica.
+    variablePricing?: boolean,
+    className?: string,
+}) {
+    const cfg = PRICE_ROW_SIZES[size];
+    const promo = hasActivePromo(product);
+    const effective = getEffectivePrice(product);
+    // pct só existe quando promo=true E promo_price não é null — a segunda
+    // checagem é só pro TypeScript estreitar o tipo (hasActivePromo já
+    // garante isso em runtime), evita non-null assertion.
+    const pct = promo && product.promo_price != null
+        ? Math.round((1 - product.promo_price / product.price) * 100)
+        : null;
+
+    return (
+        <span className={`flex items-center ${cfg.gap} flex-wrap ${className}`}>
+            <span className={`font-bold text-[var(--brand)] num ${cfg.effective}`}>
+                {variablePricing && (
+                    <span className={`font-normal text-[var(--text-muted)] ${cfg.prefix} mr-0.5`}>A partir de</span>
+                )}
+                {' '}R$ {effective.toFixed(2)}
+            </span>
+            {promo && pct !== null && (
+                <>
+                    <span className={`text-[var(--text-muted)] line-through num ${cfg.full}`}>R$ {product.price.toFixed(2)}</span>
+                    <span className={`rounded-full font-bold text-white bg-[var(--brand)] ${cfg.badge}`}>-{pct}%</span>
+                </>
+            )}
+        </span>
+    );
 }
 
 const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onConfirm: () => void, isLoading: boolean }> = ({ isOpen, onClose, onConfirm, isLoading }) => {
@@ -803,11 +856,14 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // (achado de performance #7). Também navegável por teclado: é um
 // <button> de verdade (Tab foca, Enter/Space aciona), em vez do <div
 // onClick> anterior (achado de UX #1).
-// Linha de "carta de vinhos" (não mais card com placeholder de foto): sem
-// fotos reais ainda pra a maioria dos 248 produtos, um card com caixa cinza
-// vazia parece quebrado. A fila tipográfica (medalhão com ícone da
-// nome, etiqueta de origem, preço em dourado) — sem ícone/medalhão (removido
-// 2026-08-16, pedido explícito do usuário: só tipografia, como carta impressa.
+// Layout iFood (redesign 2026-08-21, Task 4): coluna de texto (nome,
+// descrição 2 linhas, linha de preço) à esquerda + miniatura quadrada à
+// direita (ProductThumb, Task 1) — substitui a linha "carta de vinhos"
+// (sem foto, preço dourado, etiqueta de origem via parseOrigin). Sem gold
+// nesta linha: preço e selo de desconto usam --brand (regra do redesign,
+// gold sai do cardápio). Continua funcionando bem SEM foto real — hoje
+// 0/1109 produtos têm `image_url` (catálogo vem do Omie) — porque é
+// exatamente esse o caso normal que ProductThumb resolve.
 const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, isBestseller, isFavorite, onToggleFavorite }: {
     product: Product,
     onSelect: (product: Product) => void,
@@ -822,7 +878,6 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
     onToggleFavorite?: (productId: string) => void,
 }) {
     const open = () => { if (!disabled) onSelect(product); };
-    const { clean, origin } = parseOrigin(product.name);
     return (
         <div
             role="button"
@@ -830,111 +885,83 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             onClick={open}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
             aria-disabled={disabled}
-            className={`u-grow-in group flex items-start gap-3 py-3.5 px-1.5 text-left w-full u-motion border-b border-dotted border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] rounded-[var(--r-sm)] hover:bg-[var(--surface-2)]/60 ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
             style={style}
         >
-            {/* Sem ícone/medalhão (removido 2026-08-16, pedido explícito do
-                usuário — "cheio de circulozinhos" competindo entre si na
-                lista). Sem foto real (maioria dos produtos vindos de ERP),
-                a linha é só tipografia: nome + preço, igual carta impressa
-                de verdade. Foto, quando existe, continua aparecendo. */}
-            {product.image_url && (
-                <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 mt-0.5">
-                    <Image src={product.image_url} alt={product.name} width={44} height={44} className="w-full h-full object-cover u-motion group-hover:scale-105" />
-                </div>
-            )}
             <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold text-[var(--text)] leading-snug text-[14.5px]">
-                        {clean}
-                        {/* "Mais vendido" (migration 020, Vende Mais II): calculado a
-                            partir de venda real (get_bestseller_product_ids), não é
-                            tag manual do catálogo. Etiqueta 2026-08-16: só texto
-                            dourado, sem emoji/pílula — pedido explícito do usuário
-                            de cortar decoração "de app" da carta. */}
-                        {isBestseller && (
-                            <span
-                                className="ml-1.5 text-[10px] font-bold uppercase tracking-wide align-middle whitespace-nowrap"
-                                style={{ color: WINE_GOLD }}
-                                title="Um dos produtos mais vendidos desta loja"
-                            >
-                                Mais vendido
-                            </span>
-                        )}
-                    </h3>
-                    {/* Preço promocional (migration 019): cheio riscado + efetivo em
-                        destaque (mesmo dourado de sempre). getEffectivePrice é a mesma
-                        fonte que já decide quanto o carrinho cobra (lib/calc.ts).
-                        Favoritar (Vende Mais II, 100% client-side): coração ao LADO do
-                        preço, mesma linha (2026-08-16 — antes ficava empilhado em cima,
-                        empurrando o preço pra baixo do nome do produto) —
-                        stopPropagation pra não abrir o modal (o card inteiro já é
-                        clicável). */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {onToggleFavorite && (
-                            // Alvo de toque real de 44x44 (padrão do projeto) sem alterar o
-                            // layout compacto do card: padding aumenta a caixa clicável e a
-                            // margem negativa equivalente cancela o espaço extra reservado no
-                            // fluxo, então o ícone continua visualmente pequeno e no mesmo
-                            // lugar — só a área de toque invisível fica maior ao redor dele.
-                            <button
-                                type="button"
-                                aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
-                                onClick={(e) => { e.stopPropagation(); onToggleFavorite(product.id); }}
-                                className="p-[15px] -m-[15px] text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
-                            >
-                                <Heart size={14} className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : ''} />
-                            </button>
-                        )}
-                        <span className="flex items-baseline gap-1.5 whitespace-nowrap">
-                            {hasActivePromo(product) && (
-                                <span className="text-[11.5px] text-[var(--text-muted)] line-through num">R$ {product.price.toFixed(2)}</span>
-                            )}
-                            <span className="font-bold num text-[15px]" style={{ color: WINE_GOLD }}>
-                                {hasVariablePricing(product) && <span className="font-normal text-[11px] mr-0.5">A partir de</span>} R$ {getEffectivePrice(product).toFixed(2)}
-                            </span>
-                        </span>
-                    </div>
-                </div>
-                {(origin || product.description) && (
-                    <div className="flex items-center gap-2 mt-1">
-                        {origin && (
-                            <span
-                                className="text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded-[3px] border flex-shrink-0"
-                                style={{ borderColor: 'rgba(212,175,92,0.4)', color: WINE_GOLD }}
-                            >
-                                {origin}
-                            </span>
-                        )}
-                        {product.description && (
-                            <p className="text-[12px] text-[var(--text-muted)] line-clamp-1 min-w-0">{product.description}</p>
-                        )}
-                    </div>
+                <h3 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">
+                    {product.name}
+                </h3>
+                {product.description && (
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
                 )}
-                <div className="flex items-center justify-between mt-1.5 min-h-[32px]">
-                    {!!product.prep_time_minutes ? (
+                {/* Preço + "Mais vendido": mesma linha (mt-1.5 flex-wrap), pra caber
+                    junto sem empurrar layout quando os dois aparecem. PriceRow (acima
+                    no arquivo) é a fonte única da composição riscado+selo — reusada
+                    também pelo card de destaque (Task 5) e pela página de produto
+                    (Task 6). "Mais vendido" (migration 020, calculado a partir de
+                    venda real) virou selo discreto aqui em vez de texto dourado ao
+                    lado do nome — gold sai desta linha por completo. */}
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                    <PriceRow product={product} size="row" variablePricing={hasVariablePricing(product)} />
+                    {isBestseller && (
+                        <span
+                            className="inline-flex items-center gap-1 rounded-full bg-[var(--brand)]/10 text-[var(--brand)] text-[10px] font-bold px-1.5 py-0.5 whitespace-nowrap"
+                            title="Um dos produtos mais vendidos desta loja"
+                        >
+                            🔥 Mais vendido
+                        </span>
+                    )}
+                </div>
+                {!!product.prep_time_minutes && (
+                    <div className="mt-1">
                         <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
                             <Clock size={11} /> {product.prep_time_minutes} min
                         </span>
-                    ) : <span />}
-                    {onQuickAdd && (
-                        // Azul da marca (revertido 2026-08-16 — regra original do
-                        // projeto: dourado só pra preço/valor, azul pra ação. A rodada
-                        // anterior botou dourado até nos botões, ficou "amarelo demais").
-                        // whileTap com spring de verdade (lib `motion`) em vez do scale
-                        // CSS instantâneo do u-press — é o botão mais tocado da tela.
-                        <motion.button
-                            type="button"
-                            aria-label={`Adicionar ${product.name}`}
-                            onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
-                            whileTap={{ scale: 0.88 }}
-                            transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                            className="w-8 h-8 rounded-full bg-[var(--brand)] text-white flex items-center justify-center shadow-sm u-motion hover:bg-[var(--brand-strong)] flex-shrink-0"
-                        >
-                            <Plus size={17} />
-                        </motion.button>
-                    )}
-                </div>
+                    </div>
+                )}
+            </div>
+            {/* Miniatura à direita: relative pro "+" de adição rápida e o coração de
+                favorito ficarem sobrepostos nos cantos (mesmo padrão iFood). */}
+            <div className="relative flex-shrink-0">
+                <ProductThumb src={product.image_url} name={product.name} size="row" />
+                {onQuickAdd && (
+                    // Azul da marca (regra do redesign: gold só existia pro preço, que
+                    // também saiu — ação continua sempre --brand). whileTap com spring
+                    // de verdade (SPRING_TAP, lib/motion.ts — validado com o usuário,
+                    // não criar um terceiro preset) em vez do scale CSS instantâneo do
+                    // u-press: é o botão mais tocado da tela. stopPropagation preservado:
+                    // o card inteiro é clicável (abre o modal), o "+" não pode também abrir.
+                    <motion.button
+                        type="button"
+                        aria-label={`Adicionar ${product.name}`}
+                        onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
+                        whileTap={{ scale: 0.88 }}
+                        transition={SPRING_TAP}
+                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center text-[var(--brand)]"
+                    >
+                        <Plus size={15} />
+                    </motion.button>
+                )}
+                {onToggleFavorite && (
+                    // Mesmo alvo de toque de 44x44 já usado antes desta reescrita
+                    // (padding 15px + margem negativa -15px cancelando o espaço no
+                    // fluxo) — só que agora "fluxo" é a posição absoluta no canto
+                    // superior direito da miniatura, não mais ao lado do preço.
+                    // stopPropagation preservado: favoritar não abre o modal.
+                    <button
+                        type="button"
+                        aria-label={isFavorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}
+                        onClick={(e) => { e.stopPropagation(); onToggleFavorite(product.id); }}
+                        className="absolute top-0 right-0 p-[15px] -m-[15px] text-[var(--text-muted)] hover:text-[var(--err)] u-motion"
+                    >
+                        <Heart
+                            size={14}
+                            className={isFavorite ? 'fill-[var(--err)] text-[var(--err)]' : ''}
+                            style={{ filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.35))' }}
+                        />
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -1432,13 +1459,11 @@ const CartModal: React.FC<{
                     ) : (
                         cart.map((item, idx) => (
                             <div key={`${item.product.id}-${idx}`} className="flex gap-3 border border-[var(--border)] p-3 rounded-[var(--r-md)]" style={{boxShadow:'var(--shadow-sm)'}}>
-                                {item.product.image_url ? (
-                                    <Image src={item.product.image_url} alt="" width={56} height={56} className="w-14 h-14 rounded-[var(--r-sm)] object-cover bg-[var(--surface-2)] flex-shrink-0" />
-                                ) : (
-                                    <div className="w-14 h-14 rounded-[var(--r-sm)] bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-muted)]/40 flex-shrink-0">
-                                        <Coffee size={18}/>
-                                    </div>
-                                )}
+                                {/* Mesmo bloco de fallback tipográfico usado em toda a linha
+                                    de produto (ProductThumb, Task 1) — antes caía num ícone
+                                    Coffee fixo, um terceiro estilo de fallback inconsistente
+                                    com o resto do redesign iFood. */}
+                                <ProductThumb src={item.product.image_url} name={item.product.name} size="cart" />
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start gap-2">
                                         <h4 className="font-medium text-[var(--text)] text-sm truncate">
