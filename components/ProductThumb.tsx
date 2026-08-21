@@ -21,6 +21,11 @@ const SIZES = {
   option: { box: 'w-14 h-14 rounded-lg', text: 'text-[20px]', px: 56 },
   hero: { box: 'w-full h-full rounded-none', text: 'text-[72px]', px: 1200 },
   cart: { box: 'w-12 h-12 rounded-md', text: 'text-[18px]', px: 48 },
+  // Logo circular do cabeçalho do cardápio (correção 2026-08-21): mesmo
+  // tratamento de fallback (hue por hash, gradiente, inicial grande),
+  // só que redondo em vez de cantos arredondados — reusa o componente
+  // inteiro em vez de duplicar a lógica de hash/hue num terceiro lugar.
+  store: { box: 'w-16 h-16 rounded-full', text: 'text-[26px]', px: 64 },
 } as const;
 
 function hueFromName(name: string): number {

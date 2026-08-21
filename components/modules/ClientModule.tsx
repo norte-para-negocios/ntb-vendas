@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption } from '@/types';
@@ -31,6 +31,19 @@ import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 // consts de marca do projeto (AuthBackdrop, app/page.tsx) — não é um
 // token do design system porque só existe nesta tela.
 const WINE_GOLD = '#D4AF5C';
+
+// Paleta iFood (correção 2026-08-21, pedido direto do usuário: quer as
+// cores REAIS do iFood, não o azul desta empresa). iFood distingue AÇÃO de
+// PROMOÇÃO — não usa uma cor só pra "marca": botão/controle de adicionar,
+// aba ativa e seletor de opção são vermelho; preço com promoção ativa
+// (e o selo -X%) são roxo; preço SEM promoção nenhuma é só texto escuro
+// em negrito, nunca colorido (essa é a maioria absoluta do catálogo hoje —
+// 390 produtos ativos na loja piloto, 0 com promo_price). Hex fixo de
+// propósito, mesmo precedente de WINE_GOLD acima — só existe neste
+// arquivo, nunca o token global --brand (usado no painel do lojista e no
+// Master Admin, fora de escopo, tem que continuar azul).
+const IFOOD_RED = '#EA1D2C';
+const IFOOD_PURPLE = '#8E1CA8';
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
 // E menor que o preço cheio — mesma guarda de getEffectivePrice (lib/calc.ts),
@@ -85,7 +98,14 @@ function PriceRow({ product, size = 'row', variablePricing = false, className = 
 
     return (
         <span className={`flex items-center ${cfg.gap} flex-wrap ${className}`}>
-            <span className={`font-bold text-[var(--brand)] num ${cfg.effective}`}>
+            {/* Correção 2026-08-21: preço sem promoção é texto escuro em negrito
+                (var(--text)), NÃO colorido — no iFood real, cor no preço só
+                aparece em item com promoção/Clube. Como praticamente nenhum
+                produto tem promo_price hoje, isso é o estado normal da tela.
+                `num` (monoespaçado/tabular) também saiu — era um mismatch
+                visível com a tipografia proporcional do iFood; alinhamento
+                tabular só importa nas telas do lojista/documentos impressos. */}
+            <span className={`font-bold ${cfg.effective}`} style={{ color: promo ? IFOOD_PURPLE : 'var(--text)' }}>
                 {variablePricing && (
                     <span className={`font-normal text-[var(--text-muted)] ${cfg.prefix} mr-0.5`}>A partir de</span>
                 )}
@@ -93,9 +113,9 @@ function PriceRow({ product, size = 'row', variablePricing = false, className = 
             </span>
             {promo && pct !== null && (
                 <>
-                    <span className={`text-[var(--text-muted)] line-through num ${cfg.full}`}>R$ {formatBRL(product.price)}</span>
+                    <span className={`text-[var(--text-muted)] line-through ${cfg.full}`}>R$ {formatBRL(product.price)}</span>
                     {pct > 0 && (
-                        <span className={`rounded-full font-bold text-white bg-[var(--brand)] ${cfg.badge}`}>-{pct}%</span>
+                        <span className={`rounded-full font-bold text-white ${cfg.badge}`} style={{ background: IFOOD_PURPLE }}>-{pct}%</span>
                     )}
                 </>
             )}
@@ -915,8 +935,8 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             <div className="relative flex-shrink-0">
                 <ProductThumb src={product.image_url} name={product.name} size="row" />
                 {onQuickAdd && (
-                    // Azul da marca (regra do redesign: gold só existia pro preço, que
-                    // também saiu — ação continua sempre --brand). whileTap com spring
+                    // Vermelho iFood (correção 2026-08-21: --brand/azul saiu de toda
+                    // "ação" do cardápio, ver IFOOD_RED acima). whileTap com spring
                     // de verdade (SPRING_TAP, lib/motion.ts — validado com o usuário,
                     // não criar um terceiro preset) em vez do scale CSS instantâneo do
                     // u-press: é o botão mais tocado da tela. stopPropagation preservado:
@@ -927,7 +947,8 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
                         whileTap={{ scale: 0.88 }}
                         transition={SPRING_TAP}
-                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center text-[var(--brand)]"
+                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center"
+                        style={{ color: IFOOD_RED }}
                     >
                         <Plus size={15} />
                     </motion.button>
@@ -1242,7 +1263,7 @@ const ProductModal: React.FC<{
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[14px] text-[var(--text)]">{opt.name}</span>
                                             {opt.price_delta > 0 && (
-                                                <span className="block text-[13px] text-[var(--text-muted)] num mt-0.5">
+                                                <span className="block text-[13px] text-[var(--text-muted)] mt-0.5">
                                                     + R$ {formatBRL(opt.price_delta)}
                                                 </span>
                                             )}
@@ -1261,9 +1282,12 @@ const ProductModal: React.FC<{
                                                 />
                                                 <span
                                                     aria-hidden="true"
-                                                    className={`absolute inset-0 rounded-full border-2 flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? 'border-[var(--brand)]' : 'border-[var(--border)]'}`}
+                                                    // Vermelho iFood (correção 2026-08-21): "option radio/+ controls"
+                                                    // é AÇÃO na paleta iFood, não preço/marca — ver IFOOD_RED acima.
+                                                    className={`absolute inset-0 rounded-full border-2 flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? '' : 'border-[var(--border)]'}`}
+                                                    style={isChecked ? { borderColor: IFOOD_RED } : undefined}
                                                 >
-                                                    {isChecked && <span className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />}
+                                                    {isChecked && <span className="w-2.5 h-2.5 rounded-full" style={{ background: IFOOD_RED }} />}
                                                 </span>
                                             </span>
                                         ) : (
@@ -1279,7 +1303,11 @@ const ProductModal: React.FC<{
                                                 />
                                                 <span
                                                     aria-hidden="true"
-                                                    className={`absolute inset-0 rounded-full border flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? 'bg-[var(--brand)] border-[var(--brand)] text-white' : 'border-[var(--brand)] text-[var(--brand)]'}`}
+                                                    // Mesmo princípio do radio acima: controle de opção é AÇÃO,
+                                                    // vermelho iFood nos dois estados (borda sempre; fundo cheio
+                                                    // só quando marcado).
+                                                    className={`absolute inset-0 rounded-full border flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? 'text-white' : ''}`}
+                                                    style={{ borderColor: IFOOD_RED, ...(isChecked ? { backgroundColor: IFOOD_RED } : { color: IFOOD_RED }) }}
                                                 >
                                                     {isChecked ? <Check size={14} /> : <Plus size={14} />}
                                                 </span>
@@ -1354,7 +1382,10 @@ const ProductModal: React.FC<{
                                     </div>
                                     <div className="p-1.5">
                                         <p className="text-[11px] font-medium text-[var(--text)] leading-tight line-clamp-2">{rec.name}</p>
-                                        <p className="text-[11px] font-bold num mt-0.5 text-[var(--brand)]">R$ {formatBRL(getEffectivePrice(rec))}</p>
+                                        {/* Mesma regra de preço da PriceRow (correção 2026-08-21): escuro
+                                            sem promoção, roxo com promoção — nunca --brand, mesmo aqui num
+                                            card compacto que não passa pelo componente PriceRow. */}
+                                        <p className="text-[11px] font-bold mt-0.5" style={{ color: hasActivePromo(rec) ? IFOOD_PURPLE : 'var(--text)' }}>R$ {formatBRL(getEffectivePrice(rec))}</p>
                                     </div>
                                 </button>
                             ))}
@@ -1391,13 +1422,23 @@ const ProductModal: React.FC<{
                         )}
                         <Button
                             className="w-full h-12"
+                            // Vermelho iFood (correção 2026-08-21): "o botão Adicionar" é uma
+                            // das 4 ações explicitamente listadas pra virar IFOOD_RED. Estilo
+                            // inline porque o componente Button (components/ui.tsx) é
+                            // compartilhado com o painel do lojista/Master Admin — não dá pra
+                            // mudar a cor "primary" do componente em si sem afetar telas fora
+                            // de escopo, então só esta instância recebe a cor por style
+                            // (sempre vence a classe bg-[var(--brand)] do variant, sem tocar
+                            // no componente). Texto/total continuam brancos (herdado do
+                            // Button), contraste de branco sobre #EA1D2C é alto o bastante.
+                            style={{ backgroundColor: IFOOD_RED }}
                             disabled={missingRequired}
                             aria-describedby={missingRequired ? 'product-modal-required-error' : undefined}
                             onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}
                         >
                             <span className="w-full flex items-center justify-between text-[15px]">
                                 <span>Adicionar</span>
-                                <span className="num">R$ {formatBRL(unitPrice * qty)}</span>
+                                <span>R$ {formatBRL(unitPrice * qty)}</span>
                             </span>
                         </Button>
                     </div>
@@ -2812,11 +2853,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 pedido mínimo, avaliação, cupom) tem equivalente real neste
                 app — nada disso é renderizado, nem como placeholder. */}
             <header className="relative">
-                <div className={`relative w-full ${currentStore.cover_url ? 'h-[200px]' : 'h-[120px]'}`}>
-                    {/* Mídia (foto/degradê + escurecimento) isolada num filho
-                        absolute+overflow-hidden: precisa recortar a capa na
-                        faixa (200px com foto real, 120px no fallback — ver
-                        abaixo), mas SEM recortar o logo circular logo abaixo,
+                {/* Faixa da capa: SEMPRE 200px, com foto ou sem (correção
+                    2026-08-21). Uma rodada anterior colapsava pra h-[120px]
+                    sem capa "pra evitar banda morta" — decisão errada:
+                    removia exatamente o espaço que o usuário quer VER (é
+                    assim que o lojista também aprende onde a própria capa
+                    vai entrar). Hoje a loja piloto tem 0 capa e 0 logo — o
+                    catálogo inteiro está vazio — e é justo por isso que o
+                    estado vazio precisa ser desenhado, não colapsado. */}
+                <div className="relative w-full h-[200px]">
+                    {/* Mídia (foto/degradê+textura + escurecimento) isolada num
+                        filho absolute+overflow-hidden: precisa recortar a capa
+                        na faixa, mas SEM recortar o logo circular logo abaixo,
                         que atravessa a borda inferior de propósito. */}
                     <div className="absolute inset-0 overflow-hidden">
                         {currentStore.cover_url ? (
@@ -2829,17 +2877,28 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 className="object-cover"
                             />
                         ) : (
+                            // Estado vazio DESENHADO, não um vazio plano: gradiente de
+                            // marca (mesmo degradê --ink→--brand de sempre) + textura de
+                            // pontos sutil (dá profundidade sem competir com nada) + glifo
+                            // de foto/câmera baixo-contraste centralizado — lê como "aqui
+                            // vai a foto do restaurante", não como falha de carregamento.
                             <div
-                                className="absolute inset-0"
-                                style={{ background: 'linear-gradient(135deg, var(--ink), color-mix(in srgb, var(--ink) 82%, var(--brand)))' }}
-                            />
+                                className="absolute inset-0 flex items-center justify-center"
+                                style={{
+                                    backgroundImage:
+                                        'radial-gradient(circle, color-mix(in srgb, white 14%, transparent) 1px, transparent 1px), ' +
+                                        'linear-gradient(135deg, var(--ink), color-mix(in srgb, var(--ink) 82%, var(--brand)))',
+                                    backgroundSize: '16px 16px, 100% 100%',
+                                }}
+                            >
+                                <ImageIcon size={48} strokeWidth={1.5} className="text-white/15" aria-hidden="true" />
+                            </div>
                         )}
                         {/* Escurecimento pro rodapé: só faz sentido sobre uma FOTO
-                            real (garante contraste dos controles) — sem capa, a
-                            faixa já é o degradê --ink→--brand sólido (achado da
-                            revisão final: aplicado incondicional, virava um
-                            vazio quase preto em cima do degradê já escuro, e é
-                            o fallback que hoje TODAS as 7 lojas mostram). */}
+                            real (garante contraste dos controles) — sem capa, NÃO
+                            aplicar este overlay (achado da revisão anterior: aplicado
+                            incondicional, virava um "buraco preto" em cima do estado
+                            vazio já escuro — exatamente a reclamação corrigida aqui). */}
                         {currentStore.cover_url && (
                             <div
                                 className="absolute inset-0"
@@ -2870,22 +2929,31 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         )}
                     </div>
 
-                    {currentStore.logo_url && (
-                        <Image
-                            src={currentStore.logo_url}
-                            alt=""
-                            width={64}
-                            height={64}
-                            className="absolute left-4 -bottom-8 z-10 w-16 h-16 rounded-full ring-4 ring-[var(--surface)] object-cover"
-                        />
-                    )}
+                    {/* Logo circular: SEMPRE renderiza agora (correção 2026-08-21,
+                        pedido direto do usuário — "a logo em cima"). Com logo_url,
+                        a foto real; sem, um placeholder desenhado que reusa o
+                        PRÓPRIO ProductThumb (size="store", ver ProductThumb.tsx) em
+                        vez de duplicar a lógica de hash/hue/gradiente num terceiro
+                        lugar — mesmo tratamento visual do fallback de miniatura de
+                        produto (hue por nome, tile em gradiente, inicial grande),
+                        só redondo. ring-4 ring-[var(--surface)] preservado nos dois
+                        casos, pra continuar lendo como "selo de logo" mesmo sem
+                        foto real. */}
+                    <ProductThumb
+                        src={currentStore.logo_url}
+                        name={currentStore.name}
+                        size="store"
+                        className="absolute left-4 -bottom-8 z-10 ring-4 ring-[var(--surface)]"
+                    />
                 </div>
 
-                {/* Cartão de identificação da loja. Com logo, ganha pt-12 em vez
-                    de pt-4 pra reservar espaço vertical exato pro logo (64px,
-                    -bottom-8 na capa acima) não cobrir o nome da loja. */}
+                {/* Cartão de identificação da loja. pt-12 fixo agora (correção
+                    2026-08-21) — antes branchava em currentStore.logo_url, mas o
+                    logo (real ou placeholder) sempre ocupa esse espaço agora, então
+                    a reserva vertical exata (64px, -bottom-8 na capa acima) é
+                    sempre necessária, não mais condicional. */}
                 <div
-                    className={`relative z-[5] -mt-4 rounded-t-2xl bg-[var(--surface)] px-4 pb-3 ${currentStore.logo_url ? 'pt-12' : 'pt-4'}`}
+                    className="relative z-[5] -mt-4 rounded-t-2xl bg-[var(--surface)] px-4 pb-3 pt-12"
                     style={{ boxShadow: 'var(--shadow-md)' }}
                 >
                     <div className="flex items-start justify-between gap-3">
@@ -3102,7 +3170,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     ref={el => { tabButtonRefs.current[cat.id] = el; }}
                                     onClick={() => handleTabClick(cat.id)}
                                     aria-current={isActive ? 'true' : undefined}
-                                    className={`flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap border-b-2 u-motion ${isActive ? 'text-[var(--text)] font-semibold border-[var(--brand)]' : 'text-[var(--text-muted)] border-transparent'}`}
+                                    // Sublinhado da aba ativa: AÇÃO na paleta iFood (correção
+                                    // 2026-08-21) — vermelho via style, não classe (a cor depende
+                                    // do estado isActive, Tailwind não referencia var JS).
+                                    className={`flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap border-b-2 u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)] border-transparent'}`}
+                                    style={isActive ? { borderColor: IFOOD_RED } : undefined}
                                 >
                                     {cat.name}
                                 </button>
@@ -3209,7 +3281,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                             <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
                                         </div>
                                     </div>
-                                    <span className="text-[18px] font-bold num" style={{ color: 'var(--brand)' }}>R$ {formatBRL(cartTotal)}</span>
+                                    {/* Correção 2026-08-21: tirado do --brand azul (regra "preço sem
+                                        promoção não é colorido" também vale pra este total). Não vira
+                                        var(--text) aqui porque esta barra é um cartão de vidro ESCURO
+                                        (text-white/80 nos rótulos ao lado) — var(--text) é escuro no
+                                        tema claro e ficaria ilegível sobre este fundo; branco simples
+                                        é o equivalente correto de "não colorido" neste contexto. */}
+                                    <span className="text-[18px] font-bold text-white">R$ {formatBRL(cartTotal)}</span>
                                 </div>
                                 <Button
                                     className="w-full"
