@@ -2639,10 +2639,23 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // marcada como ativa. Ao detectar que o usuário rolou até o fim de
     // verdade (scrollY + innerHeight cobre scrollHeight), força a última
     // categoria visível como ativa, sobrescrevendo o que o observer decidiu.
+    // Só reage a eventos `scroll` de verdade — SEM chamada síncrona logo
+    // após o `addEventListener` (achado da 2ª revisão): um cardápio curto
+    // o bastante pra já nascer sem overflow bateria a condição de "fim de
+    // página" no mount, e como este efeito roda DEPOIS do efeito que
+    // define a 1ª categoria como padrão (declarado antes, mesmo commit),
+    // um `setActiveCategory` síncrono aqui sobrescreveria esse padrão pela
+    // ÚLTIMA categoria — corrida de efeitos, não scroll de verdade.
     useEffect(() => {
         if (hasActiveFilter || visibleCategories.length === 0) return;
 
         const checkBottom = () => {
+            // Mesma supressão do observer principal (linha ~2615) — sem isso,
+            // um clique em QUALQUER tab (não só a última) cuja seção é curta
+            // o suficiente pra `scrollIntoView` pousar a 2px do fim real da
+            // página dispara `scroll` durante a animação e este listener
+            // sobrescreve a tab recém-clicada pela última categoria.
+            if (isClickScrollingRef.current) return;
             const doc = document.documentElement;
             if (window.scrollY + window.innerHeight >= doc.scrollHeight - 2) {
                 const last = visibleCategories[visibleCategories.length - 1];
@@ -2651,7 +2664,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         };
 
         window.addEventListener('scroll', checkBottom, { passive: true });
-        checkBottom();
         return () => window.removeEventListener('scroll', checkBottom);
     }, [visibleCategories, hasActiveFilter]);
 
