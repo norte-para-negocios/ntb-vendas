@@ -1500,7 +1500,7 @@ NOTIFY pgrst, 'reload schema';`;
             // Reuses createOrder logic which handles adding to existing orders
             await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes, selectedOptions
-            }], loggedUser.name);
+            }], loggedUser.name, 'garcom');
 
             toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
             // Optional: Close menu to go back to bill, or stay to add more
@@ -1846,6 +1846,11 @@ NOTIFY pgrst, 'reload schema';`;
                                                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                                                 <span className="bg-[var(--surface-2)] px-1.5 rounded text-xs text-[var(--text-muted)]">x{item.quantity}</span>
                                                                 {getOrderItemDisplayName(item)}
+                                                                {item.added_by_role === 'garcom' && (
+                                                                    <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-[var(--info)]/15 text-[var(--info)]">
+                                                                        Garçom
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                             <div className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-1 ml-7">
                                                                 {item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :

@@ -2248,7 +2248,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         setIsLoading(true);
         try {
             const tableId = currentTable ? currentTable.id : null;
-            const result = await createOrder(tableId, currentStore.id, cart, clientName);
+            const result = await createOrder(tableId, currentStore.id, cart, clientName, 'cliente');
 
             if (result.success) {
                  clearCart();

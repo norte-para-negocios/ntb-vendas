@@ -767,6 +767,7 @@ export const createOrder = async (
   storeId: string,
   items: CartItem[],
   customerName?: string,
+  addedByRole: 'cliente' | 'garcom' = 'cliente',
 ): Promise<{ success: boolean; orderId?: string }> => {
   try {
     const isCounter = tableId === null;
@@ -788,6 +789,7 @@ export const createOrder = async (
       p_order_type: isCounter ? 'counter' : 'table',
       p_customer_name: customerName || null,
       p_items: pItems,
+      p_added_by_role: addedByRole,
     });
 
     if (error) throw error;
