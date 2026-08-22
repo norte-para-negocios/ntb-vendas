@@ -684,6 +684,52 @@ export const fetchKitchenOrders = async (storeId: string, destination: 'kitchen'
   return (data as any) || [];
 };
 
+// Task 3 (2026-08-22, Estação de Impressão) — mesmo canal/tabela de ping já
+// usado por KdsView/CounterView/TablesView (order_change_pings, filtrado por
+// store_id via migration 029 — ver comentário lá pro porquê de existir uma
+// tabela de ping sem dado sensível em vez de assinar orders/order_items
+// direto: RLS bloqueia SELECT nessas duas desde 022, e o Realtime só entrega
+// postgres_changes pra quem teria visibilidade via RLS). Extraído pra cá (em
+// vez de repetir supabase.channel(...) inline mais uma vez dentro do
+// componente da estação) só porque a estação também precisa reportar o
+// STATUS da conexão pra tela (Passo 3 do brief: "conectada ou não" tem que
+// ficar óbvio) — nenhum dos consumidores existentes (KdsView/CounterView/
+// TablesView) precisava disso, só chamavam .subscribe() sem callback.
+//
+// IMPORTANTE: order_change_pings não tem destino (cozinha/bar/caixa) — o
+// filtro por destino é feito depois, no client, ao decidir o que imprimir
+// (fetchKitchenOrders(storeId, 'kitchen'|'bar') já filtra isso). Esta
+// assinatura é só "algo mudou nesta loja, hora X" — o mesmo ping que já
+// aciona loadOrders(true) no KdsView aciona a reconciliação da estação.
+//
+// `onStatusChange` reflete o status bruto do canal Supabase Realtime
+// ('SUBSCRIBED'|'CLOSED'|'CHANNEL_ERROR'|'TIMED_OUT'|...), simplificado em 3
+// estados: 'connecting' (estado inicial/reconectando), 'connected'
+// (SUBSCRIBED), 'disconnected' (qualquer falha). A estação NÃO confia só
+// nisso pra decidir se perdeu pedido — reconcilia contra o servidor
+// (fetchKitchenOrders) em intervalo fixo e em todo reconnect/foco de aba,
+// independente do que este status disser (ver EstacaoModule.tsx). O status
+// aqui é só pra exibir "conectada"/"sem conexão" na tela, não é a garantia
+// de entrega.
+export type StoreOrdersConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
+export const subscribeToStoreOrderChanges = (
+  storeId: string,
+  onChange: () => void,
+  onStatusChange?: (status: StoreOrdersConnectionStatus) => void,
+): (() => void) => {
+  const channel = supabase
+    .channel(`estacao_${storeId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, onChange)
+    .subscribe((status) => {
+      if (!onStatusChange) return;
+      if (status === 'SUBSCRIBED') onStatusChange('connected');
+      else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onStatusChange('disconnected');
+      else onStatusChange('connecting');
+    });
+  return () => { supabase.removeChannel(channel); };
+};
+
 export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
   const { data, error } = await supabase.rpc('fetch_counter_orders_secure', { p_store_id: storeId });
   if (error) { console.error('Fetch Counter Orders Error', error); return []; }
