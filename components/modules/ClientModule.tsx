@@ -15,7 +15,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, SERVICE_FEE_RATE } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
@@ -1722,7 +1722,7 @@ const CartModal: React.FC<{
     );
 }
 
-const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable }) => {
+const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null, requestBillOnOpen?: boolean }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable, requestBillOnOpen = false }) => {
     const [tab, setTab] = useState<'split' | 'users' | 'calculator'>('split');
     const [people, setPeople] = useState(1);
     const [total, setTotal] = useState(0);
@@ -1740,7 +1740,13 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     const [serviceFee, setServiceFee] = useState(0);
     const [subtotal, setSubtotal] = useState(0);
     const [isServiceFeeEnabled, setIsServiceFeeEnabled] = useState(false);
-    const [serviceFeeRate, setServiceFeeRate] = useState(0.10);
+    const [serviceFeeRate, setServiceFeeRate] = useState(SERVICE_FEE_RATE);
+    // Task 3: distingue "a loja nunca cobra" de "a loja cobra, mas foi
+    // removida desta mesa" (`tables.service_fee_removed`, direito do
+    // cliente, nunca reativável por esta tela) — os dois têm o mesmo efeito
+    // no total (isServiceFeeEnabled=false), mas o texto explicativo precisa
+    // ser diferente pra não sugerir que a remoção nunca aconteceu.
+    const [isServiceFeeRemovedForTable, setIsServiceFeeRemovedForTable] = useState(false);
 
     // Defesa extra pro achado C2 da revisão final (2026-08-16): desde que
     // Modal variant="sheet" ficou montado durante a animação de saída em vez
@@ -1757,6 +1763,30 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
             setSelectedItems({});
         }
     }, [isOpen]);
+
+    // Task 4: entrada rápida vinda do controle do hero ("Pedir a conta"
+    // quando a sessão tem pedido em aberto) — pula direto pra esta mesma
+    // tela de confirmação, sem duplicar handleRequestBill/requestTableBill.
+    // Guard `!isWaitingBill`: se a conta já foi pedida, não faz sentido
+    // reabrir "Deseja realmente pedir a conta?" — o próprio conteúdo normal
+    // do modal já mostra "Conta Solicitada. Aguarde o garçom." nesse caso.
+    // Guard `!isLoading` (achado da revisão final, 2026-08-22): `loadBill`
+    // ainda está em voo no primeiro paint (`isLoading` começa `true`), então
+    // sem este guard a tela de confirmação abria ANTES de `items` chegar —
+    // `hasPendingItems` calculava `false` sobre uma lista vazia, o bloco
+    // `!hasPendingItems` (abaixo) renderizava com um único botão ("Sim,
+    // Fechar Conta"), e no instante seguinte, quando `loadBill` resolvia com
+    // itens pendentes de verdade, o layout virava pra dois botões com o
+    // destrutivo ("Cancelar Pendentes e Fechar", `variant="danger"`) no
+    // topo — exatamente onde o botão seguro acabara de estar. Esse atalho
+    // (Task 4) é o único caminho novo que abre esta confirmação com
+    // `isLoading` ainda `true`; pelo footer normal (`!isLoading` já
+    // filtrava a renderização de quem chamava) essa janela nunca existiu.
+    useEffect(() => {
+        if (isOpen && !isLoading && requestBillOnOpen && !isWaitingBill) {
+            setShowCloseConfirmation(true);
+        }
+    }, [isOpen, isLoading, requestBillOnOpen, isWaitingBill]);
 
     useEffect(() => {
         // Modal (variant="sheet") agora fica montado durante a animação de
@@ -1784,7 +1814,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
 
             // Calculate service fee
             const isFeeEnabled = !!(storeConfig?.charge_service_fee && !tableData?.service_fee_removed);
-            const feeRate = storeConfig?.service_fee_rate ?? 0.10;
+            const feeRate = storeConfig?.service_fee_rate ?? SERVICE_FEE_RATE;
             const calculatedSubtotal = data.total;
             const calculatedServiceFee = isFeeEnabled ? calculateServiceFee(calculatedSubtotal, feeRate) : 0;
 
@@ -1792,6 +1822,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
             setServiceFee(calculatedServiceFee);
             setTotal(calculateOrderTotal(calculatedSubtotal, isFeeEnabled, feeRate));
             setIsServiceFeeEnabled(isFeeEnabled);
+            setIsServiceFeeRemovedForTable(!!(storeConfig?.charge_service_fee && tableData?.service_fee_removed));
             setServiceFeeRate(feeRate);
 
             setItems(data.items);
@@ -1926,6 +1957,17 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     const calculatorServiceFee = isServiceFeeEnabled ? calculateServiceFee(calculatorSubtotal, serviceFeeRate) : 0;
     const calculatorTotal = calculateOrderTotal(calculatorSubtotal, isServiceFeeEnabled, serviceFeeRate);
 
+    // Task 3: quando a taxa NÃO está sendo cobrada nesta conta (loja nunca
+    // cobra, ou cobra por padrão mas foi removida desta mesa específica —
+    // `tables.service_fee_removed`, direito do cliente, nunca reativável
+    // por esta tela), a linha antes simplesmente sumia — ambíguo pro
+    // cliente ("pedi sem saber que ia pagar 10% a mais"). Sempre enuncia um
+    // dos dois estados de desligada; o estado ligada continua com o texto
+    // específico (valor + percentual) já existente em cada aba.
+    const serviceFeeOffText = isServiceFeeRemovedForTable
+        ? 'Taxa de serviço opcional removida nesta mesa'
+        : 'Esta loja não cobra taxa de serviço';
+
     // --- RENDER MODALS ---
 
     if (showCloseConfirmation) {
@@ -2018,8 +2060,23 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                     <div className="bg-[var(--brand)]/5 p-4 rounded-[var(--r-lg)] border border-[var(--brand)]/10 text-center">
                                         <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                         <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {formatBRL(total)}</p>
-                                        {isServiceFeeEnabled && (
-                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {formatBRL(serviceFee)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}% opcional)</p>
+                                        {/* Guard `items.length > 0` no ramo desligado (achado da
+                                            revisão final, 2026-08-22): esta aba mostrava
+                                            `serviceFeeOffText` incondicionalmente, enquanto a aba
+                                            "Por Cliente" (acima) já guardava a mesma frase em
+                                            `items.length > 0` -- uma mesa vazia (R$ 0,00, nenhum
+                                            pedido ainda) exibia "Esta loja não cobra taxa de
+                                            serviço" embaixo de um total zerado, sem nenhum item que
+                                            justificasse falar de taxa. Mesmo guard das duas abas
+                                            agora. Ramo ligado (fee real cobrada) não muda: mostrar
+                                            "Inclui R$ 0,00..." com a mesa ainda vazia não é a mesma
+                                            ambiguidade que este achado aponta. */}
+                                        {(isServiceFeeEnabled || items.length > 0) && (
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">
+                                                {isServiceFeeEnabled
+                                                    ? `Inclui R$ ${formatBRL(serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                                    : serviceFeeOffText}
+                                            </p>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
@@ -2055,6 +2112,12 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                             {/* TAB 2: BY USER */}
                             {tab === 'users' && (
                                 <div className="space-y-4 animate-fade-in pt-2">
+                                    {/* Task 3: uma nota só (não por cartão de pessoa, que
+                                        repetiria a mesma frase N vezes) quando a taxa não
+                                        está sendo cobrada nesta conta. */}
+                                    {!isServiceFeeEnabled && items.length > 0 && (
+                                        <p className="text-xs text-[var(--text-muted)] px-1">{serviceFeeOffText}</p>
+                                    )}
                                     {Object.entries(usersBreakdown).map(([name, data]: [string, any]) => (
                                         <div key={name} className="border border-[var(--border)] rounded-[var(--r-lg)] overflow-hidden">
                                             <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
@@ -2073,7 +2136,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                 ))}
                                                 {isServiceFeeEnabled && (
                                                     <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
-                                                        <span>Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
+                                                        <span>Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
                                                         <span className="num">{formatBRL(data.serviceFee)}</span>
                                                     </div>
                                                 )}
@@ -2135,11 +2198,11 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                         <span className="font-bold">Total Selecionado</span>
                                         <span className="font-black text-xl num">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
-                                    {isServiceFeeEnabled && (
-                                        <div className="text-xs text-white/50 mt-1 text-right">
-                                            Inclui R$ {formatBRL(calculatorServiceFee)} de taxa de serviço
-                                        </div>
-                                    )}
+                                    <div className="text-xs text-white/50 mt-1 text-right">
+                                        {isServiceFeeEnabled
+                                            ? `Inclui R$ ${formatBRL(calculatorServiceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            : serviceFeeOffText}
+                                    </div>
                                 </div>
                             ) : (
                                 !isWaitingBill && (
@@ -2261,6 +2324,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showBill, setShowBill] = useState(false);
+    // Task 4: quando o controle do hero abre a Conta a partir do estado
+    // "Pedir a conta" (pedido em aberto), pula direto pra tela de
+    // confirmação que já existe dentro do BillSplitter — mesma ação
+    // (handleRequestBill/requestTableBill) que "Pedir Conta (Bloquear
+    // Mesa)" já dispara lá dentro, só entrando por um atalho. Reseta ao
+    // fechar a Conta por qualquer caminho, pra nunca reabrir direto na
+    // confirmação da próxima vez que a Conta for aberta pelo botão normal.
+    const [billRequestIntent, setBillRequestIntent] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     // Ref pro input de busca da barra sticky (Task hero item 5): o botão de
     // lupa sobre a capa não abre uma busca própria, só rola até essa mesma
@@ -2324,8 +2395,26 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
     const [isCounterConfirmOpen, setIsCounterConfirmOpen] = useState(false);
     // Pedidos enviados NESTA sessão de mesa (várias rodadas possíveis) --
-    // não persiste entre reloads (aceitável: só perde o histórico do painel).
+    // não persiste em localStorage, mas é RESTAURADO a partir do banco pelo
+    // bloco de AUTO-LOGIN (fetchTableOrderSummary) sempre que a mesa segue
+    // OCCUPIED/WAITING_BILL. Deixou de ser "cosmético" em 2026-08-22: agora
+    // alimenta `hasOpenTableOrders`, que decide entre "Sair"/"Pedir a conta"
+    // no hero -- se ficasse vazio a cada F5 (celular trava, guia recarrega),
+    // o cliente veria "Sair" de novo com conta em aberto, exatamente o que a
+    // Task 4 existe pra evitar.
     const [mesaOrderIds, setMesaOrderIds] = useState<string[]>([]);
+    // Residual da Task 4 (2026-08-22): se o fetch de restauração acima falhar
+    // (rede instável, celular voltando de sinal fraco), `mesaOrderIds` fica
+    // vazio -- mas a mesa continua OCCUPIED/WAITING_BILL de verdade, então
+    // NÃO sabemos se há pedido em aberto, o que é diferente de "sabemos que
+    // não há". Esse flag carrega exatamente essa incerteza (nunca é usado
+    // pra inflar `mesaOrders`/contagem de itens -- não é um pedido falso,
+    // é só um sinal de UI); ver `hasOpenTableOrders` abaixo, que o soma ao
+    // gate por OR. Setado true só quando o fetch falha com a mesa nesse
+    // estado; limpo (false) em qualquer fetch que resolva (com sucesso ou
+    // não) a dúvida, pra não prender o cliente no fallback pro resto da
+    // sessão.
+    const [tableOrdersUnknown, setTableOrdersUnknown] = useState(false);
     const [isOrderStatusOpen, setIsOrderStatusOpen] = useState(false);
 
     const {
@@ -2418,6 +2507,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         });
     }, [currentStore?.id]);
 
+    // Ref pro valor mais recente de `tableOrdersUnknown`, lido de dentro do
+    // handler do canal realtime abaixo sem precisar entrar no array de
+    // dependências do useEffect (que forçaria reinscrever o canal a cada
+    // vez que a incerteza muda de estado -- mesmo padrão já usado em
+    // `orderIdsRef` dentro de `useMesaOrders` acima).
+    const tableOrdersUnknownRef = useRef(tableOrdersUnknown);
+    tableOrdersUnknownRef.current = tableOrdersUnknown;
+
     // Realtime Table Status Listener — assina a tabela de ping (sem dado
     // sensivel) e busca o estado real via RPC segura, que nunca inclui `pin`.
     // Antes disso o listener usava payload.new direto: o pin da PROPRIA mesa
@@ -2438,6 +2535,35 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                          toast.info("A mesa foi fechada pelo restaurante. Obrigado!", 3000);
                          localStorage.removeItem(`session_${slug}`);
                          setTimeout(() => window.location.reload(), 2500);
+                         return;
+                    }
+
+                    // Auto-cura de `tableOrdersUnknown` (achado da revisão final,
+                    // 2026-08-22): antes desta correção, o flag só era ligado
+                    // dentro do bloco de AUTO-LOGIN (uma vez por mount) e só era
+                    // desligado por uma restauração bem-sucedida OU um pedido
+                    // próprio bem-sucedido -- se nenhum dos dois acontecesse de
+                    // novo (wifi de restaurante instável na primeira tentativa,
+                    // cliente sem pressa pra pedir outra rodada), a incerteza
+                    // durava pelo resto da vida da página, e com ela sumia a
+                    // única saída (`handleLogout`) do hero -- só "Pedir a conta"
+                    // ficava disponível, que trava a mesa inteira em
+                    // `waiting_bill` se confirmado. Este handler já roda a cada
+                    // ping realtime da mesa (mudança de status, pedido novo de
+                    // QUALQUER dispositivo etc.), então é reaproveitado aqui pra
+                    // tentar resolver a dúvida em segundo plano sem esperar
+                    // reload ou pedido novo desta sessão -- sucesso resolve em
+                    // segundos (o intervalo natural entre pings); falha
+                    // simplesmente tenta de novo no próximo.
+                    if (tableOrdersUnknownRef.current) {
+                        const summary = await fetchTableOrderSummary(currentTable.id);
+                        if (!summary.error) {
+                            const restoredOrderIds = Array.from(new Set(
+                                summary.items.map((item: any) => item.order_id).filter(Boolean)
+                            )) as string[];
+                            setMesaOrderIds(restoredOrderIds);
+                            setTableOrdersUnknown(false);
+                        }
                     }
                 })
                 .subscribe();
@@ -2471,6 +2597,47 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 setIsHost(isReturningHost);
                                 setHostPin(isReturningHost ? (session.hostPin ?? null) : null);
                                 setHasAccess(true);
+
+                                // Restaura mesaOrderIds a partir do banco (mesma RPC que já
+                                // alimenta o BillSplitter, fetchTableOrderSummary/
+                                // fetch_table_order_summary_secure) -- sem isso,
+                                // hasOpenTableOrders voltava sempre `false` após qualquer
+                                // reload, mesmo com pedido real e não pago na mesa (achado
+                                // Critical da revisão da Task 4).
+                                //
+                                // Residual (2026-08-22): se ESTE fetch falhar (rede
+                                // instável), `mesaOrderIds` ficaria vazio de novo com a
+                                // mesa OCCUPIED/WAITING_BILL de verdade -- fail-open pro
+                                // "Sair" exatamente no caso que a Task 4 existe pra
+                                // fechar. `fetchTableOrderSummary` NUNCA rejeita a
+                                // promise (ela mesma engole o erro do `.rpc()` e devolve
+                                // `{ total: 0, items: [] }` -- comportamento antigo,
+                                // preservado pros outros chamadores/BillSplitter); por
+                                // isso o sinal de falha real é o campo `error` que ela
+                                // agora expõe, não uma exceção -- o catch aqui só cobre
+                                // um throw inesperado (defensivo, não é o caminho normal
+                                // de falha de rede). Sucesso restaura os ids normalmente
+                                // E resolve a dúvida (`tableOrdersUnknown = false`); falha
+                                // não injeta id nenhum falso em `mesaOrderIds` (isso
+                                // vazaria pra "Comanda aberta • N itens"/BillSplitter) --
+                                // em vez disso liga o flag de incerteza, que por si só já
+                                // empurra o hero pra "Pedir a conta" via
+                                // `hasOpenTableOrders` abaixo.
+                                try {
+                                    const summary = await fetchTableOrderSummary(table.id);
+                                    if (summary.error) {
+                                        setTableOrdersUnknown(true);
+                                    } else {
+                                        const restoredOrderIds = Array.from(new Set(
+                                            summary.items.map((item: any) => item.order_id).filter(Boolean)
+                                        )) as string[];
+                                        setMesaOrderIds(restoredOrderIds);
+                                        setTableOrdersUnknown(false);
+                                    }
+                                } catch (fetchErr) {
+                                    console.error("Falha ao restaurar pedidos da mesa", fetchErr);
+                                    setTableOrdersUnknown(true);
+                                }
                             } else {
                                 // Table closed or reset, clear session
                                 localStorage.removeItem(`session_${slug}`);
@@ -2550,6 +2717,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             localStorage.removeItem(`session_${slug}`);
             setTrackedOrderId(null);
             setMesaOrderIds([]);
+            setTableOrdersUnknown(false);
             setIsOrderStatusOpen(false);
 
             setHasAccess(false);
@@ -2592,6 +2760,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                      setIsCounterConfirmOpen(false); // Close the counter alert
                  } else {
                      if (result.orderId) setMesaOrderIds(prev => [...prev, result.orderId!]);
+                     // Um pedido próprio bem-sucedido já resolve qualquer incerteza
+                     // anterior sobre "há pedido em aberto" -- não precisa esperar
+                     // outro fetch de restauração pra limpar o fallback.
+                     setTableOrdersUnknown(false);
                      toast.success('Pedido enviado para a cozinha!');
                  }
             }
@@ -2919,8 +3091,22 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // Mesa/Balcão NÃO entra aqui (achado da revisão final): já aparece no
     // chip de sessão logo abaixo (que também carrega nome do cliente + PIN),
     // renderizar de novo aqui duplicava a informação na mesma tela.
+    //
+    // Task 3 (2026-08-22): antes só entrava aqui quando a taxa estava
+    // ligada — desligada, a linha simplesmente não aparecia, o que o dono
+    // do projeto apontou como ambíguo ("o cliente pede sem saber que vai
+    // pagar 10% a mais"). Agora sempre enuncia um dos dois estados. Este
+    // cartão é a política DA LOJA (visível antes de qualquer mesa/sessão
+    // escolhida) — a remoção por mesa específica (`service_fee_removed`)
+    // não cabe aqui por desenho: não há mesa selecionada ainda neste ponto
+    // do fluxo. Quem carrega uma sessão de mesa vê o estado por-mesa exato
+    // na Conta (BillSplitter, mais abaixo neste arquivo).
     const heroMetaParts: string[] = [];
-    if (currentStore.config?.charge_service_fee) heroMetaParts.push(`Taxa de serviço ${(serviceFeeRateForHero * 100).toFixed(0)}%`);
+    heroMetaParts.push(
+        currentStore.config?.charge_service_fee
+            ? `Taxa de serviço opcional de ${formatServiceFeeRate(serviceFeeRateForHero)}`
+            : 'Sem taxa de serviço'
+    );
 
     // Endereço do cartão do hero (item 3): linha curta sempre visível
     // (bairro, cidade/UF) + linha completa (logradouro+número) só quando a
@@ -2933,6 +3119,42 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // pedidos já enviados, `mesaOrders` — dado real já carregado por
     // useMesaOrders, nunca um número inventado).
     const mesaItemCount = mesaOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+
+    // Task 4: mesma derivação de "há pedido em aberto nesta sessão" que já
+    // alimenta a barra "Comanda aberta • N itens" acima (`mesaOrders.length
+    // > 0`, nunca recomputada) — decide se o controle do hero oferece
+    // "Sair" (sessão sem nada pedido, pode mesmo sair) ou "Pedir a conta"
+    // (pedido em aberto: sair "fecharia" só o aparelho, não a dívida —
+    // decisão do dono do projeto, 2026-08-22).
+    //
+    // `|| tableOrdersUnknown` (residual, 2026-08-22): quando o fetch de
+    // restauração falhou com a mesa OCCUPIED/WAITING_BILL, não sabemos se
+    // há pedido -- e "não sabemos" tem que se comportar como "pode haver",
+    // nunca como "não há". Errar nessa direção é seguro (pior caso: cliente
+    // sem nada a pagar toca "Pedir a conta" e o garçom limpa); errar pro
+    // outro lado é o cliente saindo com conta em aberto.
+    //
+    // `|| isWaitingBill` (achado da revisão final, 2026-08-22): `mesaOrders`
+    // só reflete pedidos que ESTE dispositivo enviou nesta sessão
+    // (`mesaOrderIds`), sem filtrar cancelado/pago -- ao vivo, na mesma
+    // sessão, ele acumula tudo que este aparelho mandou; após um reload, o
+    // AUTO-LOGIN o repopula a partir de `fetch_table_order_summary_secure`,
+    // que é table-scoped E filtra item cancelado/pedido
+    // `delivered`/`canceled`. A mesma mesa real, dependendo só do histórico
+    // de reload, podia dar "Sair" ou "Pedir a conta" pro MESMO estado real
+    // -- e um caso concreto sobrevivia aos dois: um cliente que entra numa
+    // mesa que OUTRO dispositivo já colocou em `waiting_bill` nunca passa
+    // pelo bloco de restauração (login novo, não reload de sessão salva),
+    // então `mesaOrders`/`tableOrdersUnknown` ficam vazios/false mesmo com
+    // a mesa já travada — via `isWaitingBill` (já em escopo, calculado bem
+    // acima a partir de `currentTable.status`), esse latecomer ganha
+    // "Sair" desabilitado bem debaixo do aviso "Conta Solicitada. Novos
+    // pedidos bloqueados.", contradição visual pura, e o próprio caso que
+    // este OR fecha. `isWaitingBill` é o sinal de mesa mais autoritativo já
+    // disponível (vem direto de `currentTable.status`, não de uma
+    // derivação local) -- somá-lo por OR nunca esconde "Sair" quando não
+    // deveria, só garante que uma mesa em `waiting_bill` nunca a oferece.
+    const hasOpenTableOrders = mesaOrders.length > 0 || tableOrdersUnknown || isWaitingBill;
 
     return (
         <MotionConfig reducedMotion="user">
@@ -3035,15 +3257,47 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         >
                             <Search size={16} />
                         </button>
+                        {/* Task 4 (2026-08-22): com pedido em aberto nesta sessão, "Sair"
+                            deixa de existir — o cliente não fecha a mesa nem a conta
+                            saindo do aparelho (handleLogout só limpa localStorage/estado
+                            local, a mesa e a dívida continuam abertas; ver confirm() logo
+                            abaixo). O que ele quer nesse momento é pedir a conta, então o
+                            controle vira exatamente isso: mesmo ícone/mecanismo já usado
+                            em "Pedir Conta (Bloquear Mesa)" dentro da Conta (BillSplitter,
+                            via requestBillOnOpen — não uma segunda chamada a
+                            requestTableBill). Sem pedido nenhum na sessão (mesa errada,
+                            desistiu, só olhando o cardápio), "Sair" continua existindo e
+                            funcionando como sempre — não pode ficar sem saída. */}
                         {hasAccess && (
-                            <button
-                                onClick={() => handleLogout(false)}
-                                aria-label="Sair da sessão"
-                                title="Sair da sessão"
-                                className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
-                            >
-                                <LogOut size={16} />
-                            </button>
+                            hasOpenTableOrders ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setBillRequestIntent(true);
+                                        setShowBill(true);
+                                    }}
+                                    // Com a mesa já em waiting_bill, o clique não "pede" a conta
+                                    // de novo (o BillSplitter só mostra "Aguarde o garçom" nesse
+                                    // caso, ver requestBillOnOpen/!isWaitingBill acima) -- rótulo
+                                    // reflete isso pra não prometer uma ação que já aconteceu,
+                                    // agora que este estado fica alcançável em qualquer reload.
+                                    aria-label={isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
+                                    title={isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
+                                    className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                                >
+                                    <Receipt size={16} />
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => handleLogout(false)}
+                                    aria-label="Sair deste aparelho"
+                                    title="Sair deste aparelho"
+                                    className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                                >
+                                    <LogOut size={16} />
+                                </button>
+                            )
                         )}
                     </div>
 
@@ -3633,13 +3887,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {currentTable && currentStore && (
                 <BillSplitter
                     isOpen={showBill}
-                    onClose={() => setShowBill(false)}
+                    onClose={() => { setShowBill(false); setBillRequestIntent(false); }}
                     tableId={currentTable.id}
                     storeId={currentStore.id}
                     clientName={clientName}
                     isWaitingBill={isWaitingBill}
                     currentStore={currentStore}
                     currentTable={currentTable}
+                    requestBillOnOpen={billRequestIntent}
                 />
             )}
 
