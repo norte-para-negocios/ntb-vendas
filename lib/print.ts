@@ -83,24 +83,66 @@ function printHtmlDocument(title: string, styles: string, bodyHtml: string) {
     iframe.remove();
   };
 
-  iframe.onload = () => {
+  // `triggered` impede chamar print() duas vezes: o load do iframe e o
+  // fallback abaixo podem, em tese, disparar os dois (achado #3 da revisão
+  // de código — ver comentário no fallback).
+  let triggered = false;
+  const triggerPrint = () => {
+    if (triggered) return;
+    triggered = true;
     const win = iframe.contentWindow;
     if (!win) {
       cleanup();
       return;
     }
-    // Mesma folga que o setTimeout original (500ms): o load do iframe já
-    // confirma que o document.write()/close() terminou, isso só dá tempo do
-    // layout/paint assentar antes do print() em navegadores mais lentos.
-    setTimeout(() => {
+    try {
       win.focus();
       win.print();
-      // 'afterprint' não dispara em todo navegador (ex.: Safari mobile) —
-      // o timeout de segurança garante a limpeza de qualquer forma.
+    } finally {
+      // Arma a limpeza MESMO se focus()/print() lançar (achado #1 da
+      // revisão de código): sem o `finally`, um print() que falha — rate
+      // limit do navegador, restrição de ambiente, quirk específico —
+      // nunca chegava a registrar 'afterprint' nem o timeout de segurança
+      // abaixo, e o iframe ficava pra sempre no DOM. Com `finally`, a
+      // limpeza é armada de qualquer jeito.
       win.onafterprint = cleanup;
-      setTimeout(cleanup, 3000);
-    }, 500);
+      // Backstop de última instância, só pra garantir que nada vaza se
+      // 'afterprint' nunca disparar (não é evento garantido em toda
+      // engine — ex.: Safari mobile). 60s é DELIBERADAMENTE folgado: o
+      // valor anterior (3s, achado #2 da revisão) corria risco real de
+      // remover o iframe — e com ele o conteúdo que o navegador ainda
+      // pode estar lendo pro job de impressão — enquanto o usuário só
+      // está escolhendo a impressora ou confirmando o diálogo do SO; 3s
+      // não é tempo suficiente pra isso na primeira impressão do turno,
+      // com uma impressora ainda não memorizada pelo navegador. Em uso
+      // normal 'afterprint' já terá disparado e chamado `cleanup()` bem
+      // antes dos 60s (a flag `cleaned` impede dupla remoção); este
+      // timeout só chega a agir quando 'afterprint' realmente nunca vem.
+      setTimeout(cleanup, 60000);
+    }
   };
+
+  iframe.onload = () => {
+    // Mesma folga que o setTimeout original (500ms, e que agora também
+    // unifica o antigo 400ms que só o relatório de vendas usava — nunca
+    // foi uma diferença intencional, era resíduo de dois blocos de código
+    // copiados em momentos diferentes): dá tempo do layout/paint assentar
+    // antes do print() em navegadores mais lentos.
+    setTimeout(triggerPrint, 500);
+  };
+
+  // Fallback pro load do iframe nunca disparar (achado #3 da revisão de
+  // código: o brief já citava esse risco explicitamente). Depender de um
+  // único sinal que pode não vir em toda engine/cenário é exatamente a
+  // classe de bug que motivou esta correção inteira — window.open() com
+  // noopener retornando null e a função saindo em silêncio, sem imprimir
+  // nada e sem erro. Sem este fallback, um 'load' que nunca dispara
+  // recriaria o mesmo sintoma, só que por outro caminho. `doc.write()`/
+  // `doc.close()` abaixo já rodam de forma síncrona, antes deste timeout
+  // poder disparar, então o conteúdo já está pronto independente de qual
+  // dos dois caminhos aciona `triggerPrint` primeiro; a flag `triggered`
+  // garante que só um deles efetivamente chama print().
+  setTimeout(triggerPrint, 1200);
 
   doc.open();
   doc.write(`
