@@ -13,9 +13,23 @@ export type StoreModules = {
 };
 export type OrderFlow = 'kds' | 'direct_print';
 
+// Task 4 (2026-08-22, módulo Caixa): `caixa` é o ÚNICO módulo desta lista que
+// não é "tudo ligado" por padrão — default `false`, ao contrário dos outros
+// 6. Nome `ALL_ON` mantido (evita renomear em todo lugar que já importa),
+// mas não é mais literal pra este campo específico. Motivo: `caixa` é a
+// primeira entrada de StoreModules cujo valor `true` MUDA COMPORTAMENTO pra
+// um usuário que já existia antes desta feature (quem finaliza uma mesa) —
+// diferente de kitchen_kds/bar_kds/etc., cujo "ligado" só decide se uma ABA
+// aparece, nunca tira uma capacidade que alguém já tinha. Ligar por padrão
+// romperia a garantia central deste plano ("loja sem config = comportamento
+// de hoje") pra qualquer waiter futuro cadastrado em qualquer uma das 7
+// lojas reais, mesmo sem o Master Admin jamais ter tocado nesta seção —
+// exatamente o mesmo cuidado já usado em `resolveOrderFlow`/
+// `resolvePrintTarget` abaixo (ausência de config = valor SEGURO, nunca o
+// novo). Ver canFinalizeBill mais abaixo pra como isto é consumido.
 export const ALL_ON: StoreModules = {
   tables: true, counter: true, kitchen_kds: true,
-  bar_kds: true, caixa: true, menu: true, admin: true,
+  bar_kds: true, caixa: false, menu: true, admin: true,
 };
 
 export const resolveStoreModules = (store?: { config?: any } | null): StoreModules => {
@@ -104,6 +118,58 @@ export const computeAccessibleTabIds = (
     return hasPermission(tabId);
   });
   return reachable.length > 0 ? new Set(reachable) : new Set(['admin']);
+};
+
+// Permissão mínima que um usuário precisa pra ver uma ABA — não confundir
+// com StoreModules acima (que é por LOJA, não por usuário). Consolidada
+// aqui porque a mesma checagem (`role==='owner' || permissions[tabId] !==
+// false`) estava duplicada em 3 lugares de StoreModule.tsx (StoreLayout,
+// pickInitialStoreTab, canAccess) — cada cópia corria o risco de divergir
+// silenciosamente (foi exatamente esse tipo de duplicação que motivou
+// computeAccessibleTabIds acima).
+//
+// Módulo Caixa (Task 4): quem tem a permissão `caixa` marcada enxerga a aba
+// 'tables' mesmo sem o checkbox "Gestão de Mesas" estar marcado — "Caixa tem
+// acesso à gestão de mesa igual ao garçom" (brief da Task 4) não deveria
+// depender do Master Admin lembrar de marcar as DUAS caixinhas ao criar um
+// caixa novo. Único caso especial; toda outra aba continua só no padrão
+// permissivo genérico (ausência de chave = true, pensado pras 6 permissões
+// que já existem em todo store_user real).
+export const hasTabPermission = (
+  user: { role: string; permissions?: Record<string, any> },
+  tabId: string
+): boolean => {
+  if (user.role === 'owner') return true;
+  if (tabId === 'tables' && user.permissions?.caixa === true) return true;
+  return user.permissions?.[tabId] !== false;
+};
+
+// Quem pode FINALIZAR o pagamento de uma mesa (Task 4, módulo Caixa) — em
+// vez de só pedir a conta. O MÓDULO da loja é o interruptor mestre, não a
+// permissão do usuário isolada:
+//
+// - `modules.caixa === false` (o default — ver comentário de ALL_ON acima):
+//   comportamento de hoje pra QUALQUER usuário com acesso à mesa, dono ou
+//   não, existente ou futuro — ninguém fica restrito, exatamente como antes
+//   desta feature existir. É esta linha (não a ausência de permissão em
+//   store_users específicos) que garante "loja sem módulo caixa = sem
+//   mudança nenhuma", inclusive pra um waiter que ainda nem foi criado
+//   hoje. Confirmado em produção (2026-08-22): nenhuma das 7 lojas reais
+//   tem `config.modules` — todas resolvem `caixa: false` por este default,
+//   então esta função é sempre `true` nelas, sem depender de quem loga.
+// - `modules.caixa === true` (só depois de o Master Admin ligar
+//   explicitamente, ex.: Sertão na Task 5): a partir daí, só quem tem a
+//   permissão `caixa` marcada (ou é dono/universal, bypass de sempre)
+//   finaliza — todo o resto (inclusive um garçom recém-criado sem ninguém
+//   pensar nisso) passa a só poder pedir a conta. É o comportamento novo
+//   que o brief pede, e só existe onde foi pedido de propósito.
+export const canFinalizeBill = (
+  user: { role: string; permissions?: { caixa?: boolean } },
+  store?: { config?: any } | null
+): boolean => {
+  if (user.role === 'owner' || user.role === 'universal') return true;
+  if (!resolveStoreModules(store).caixa) return true;
+  return user.permissions?.caixa === true;
 };
 
 // true quando o perfil bate exatamente com o default "tudo ligado". Usado

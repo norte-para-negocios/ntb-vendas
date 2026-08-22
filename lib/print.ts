@@ -8,6 +8,11 @@
 // `(rate * 100).toFixed(0) + '%'` inline, que já tinha desalinhado deste arquivo com
 // lib/calc.ts uma vez.
 import { formatServiceFeeRate } from './calc';
+// Task 4 (2026-08-22, módulo Caixa): rótulo de forma de pagamento/bandeira
+// no comprovante impresso vem sempre daqui — nunca escrito inline aqui
+// (regra do projeto, já foi bug real 3x). Sem dependência de volta pra
+// print.ts em lib/labels.ts, então importar aqui não cria ciclo.
+import { getPaymentMethodLabel, getCardBrandLabel } from './labels';
 
 // Nome do cliente e observação do pedido são texto livre digitado pelo cliente final e
 // vão parar aqui sem passar por nenhum framework de render (é document.write puro) — sem
@@ -278,6 +283,23 @@ export interface BillServiceFeeInfo {
   removedForTable: boolean;
 }
 
+// Task 4 (2026-08-22, módulo Caixa): forma(s) de pagamento já recebida(s) —
+// o mesmo shape que o modal de pagamento monta e persiste em
+// orders.payment_details (StoreModule.tsx, handleFinishPayment/
+// paymentMethods), nunca recalculado aqui. `changeDue` também vem pronto
+// (lib/calc.ts calculateChange), este arquivo só formata.
+export interface BillPaymentMethodDetail {
+  method: string;
+  amount: number;
+  /** Só relevante pra CREDIT/DEBIT — catálogo fechado, ver CARD_BRAND_LABELS. */
+  brand?: string | null;
+}
+
+export interface BillPaymentInfo {
+  methods: BillPaymentMethodDetail[];
+  changeDue: number;
+}
+
 export function printBillReceipt(opts: {
   storeName: string;
   cnpj?: string | null;
@@ -286,6 +308,11 @@ export function printBillReceipt(opts: {
   subtotal: number;
   serviceFee?: BillServiceFeeInfo;
   total: number;
+  // Opcional e aditivo: o único chamador anterior a esta task
+  // (printTableBill em StoreModule.tsx, usado ANTES do pagamento pra
+  // conferência da conta) nunca passa isto — continua idêntico. Só o
+  // comprovante impresso DEPOIS do caixa finalizar preenche este campo.
+  payment?: BillPaymentInfo;
 }): Promise<boolean> {
   const feeRow = opts.serviceFee
     ? opts.serviceFee.charged
@@ -295,6 +322,29 @@ export function printBillReceipt(opts: {
             ? 'Taxa de serviço opcional removida nesta mesa'
             : 'Este estabelecimento não cobra taxa de serviço'
         }</td></tr>`
+    : '';
+  // getPaymentMethodLabel/getCardBrandLabel só devolvem texto de um catálogo
+  // fechado (lib/labels.ts) — nunca texto livre do cliente/lojista — então,
+  // ao contrário do nome de produto/loja, não precisam de escapeHtml aqui
+  // (mesmo raciocínio já aplicado a `opts.kind` em printKitchenTicket).
+  const paymentRows = opts.payment
+    ? opts.payment.methods
+        .map((m) => {
+          const brandSuffix = m.brand ? ` (${getCardBrandLabel(m.brand)})` : '';
+          return `<tr><td>${getPaymentMethodLabel(m.method)}${brandSuffix}</td><td class="right">R$ ${m.amount.toFixed(2)}</td></tr>`;
+        })
+        .join('')
+    : '';
+  const changeRow =
+    opts.payment && opts.payment.changeDue > 0
+      ? `<tr><td>Troco</td><td class="right">R$ ${opts.payment.changeDue.toFixed(2)}</td></tr>`
+      : '';
+  const paymentSection = opts.payment
+    ? `<table class="summary-table" style="margin-top:6px;border-top:1px dashed #000;padding-top:4px;">
+        <tr><td colspan="2" style="font-weight:bold;">FORMA DE PAGAMENTO</td></tr>
+        ${paymentRows}
+        ${changeRow}
+      </table>`
     : '';
   const body = `
     <div class="header">
@@ -329,6 +379,7 @@ export function printBillReceipt(opts: {
         : ''
     }
     <div class="total">TOTAL: R$ ${opts.total.toFixed(2)}</div>
+    ${paymentSection}
     <div class="footer">Obrigado pela preferência!</div>
   `;
   return openThermalPrint(`Comprovante - ${opts.label}`, body);

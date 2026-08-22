@@ -29,10 +29,11 @@ import { Printer, Wifi, WifiOff, Settings, RotateCcw, CheckCircle2, XCircle, Che
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
-import { fetchStoreBySlug, fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus } from '@/lib/api';
-import { printKitchenTicket } from '@/lib/print';
+import { fetchStoreBySlug, fetchKitchenOrders, fetchSalesHistory, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus } from '@/lib/api';
+import { printKitchenTicket, printBillReceipt } from '@/lib/print';
 import { getOrderItemDisplayName } from '@/lib/labels';
-import { Store, OrderItem } from '@/types';
+import { calculateChange } from '@/lib/calc';
+import { Store, OrderItem, Order } from '@/types';
 
 // --- Configuração persistida no aparelho (localStorage) ---------------
 
@@ -185,6 +186,19 @@ function ticketDescription(item: OrderItem): string {
   return `${item.quantity}x ${getOrderItemDisplayName(item)} — ${local}`;
 }
 
+// Task 4 (2026-08-22, módulo Caixa): generaliza o rastreio de falha/retry
+// pra caber tanto ticket de cozinha/bar (por item) quanto comprovante de
+// caixa (por fechamento de mesa, ver reconcileCaixa abaixo) — antes disto
+// `failedRef` guardava o `OrderItem` inteiro e chamava printKitchenTicket
+// direto no retry, o que só fazia sentido pro caso de cozinha/bar. `retry`
+// é a própria chamada de impressão já montada (closure), então
+// retryItem/o botão "Reimprimir" não precisam saber qual dos dois casos é.
+interface FailedEntry {
+  description: string;
+  attempts: number;
+  retry: () => Promise<boolean>;
+}
+
 export const EstacaoModule: React.FC = () => {
   const [config, setConfig] = useState<StationConfig | null | undefined>(undefined); // undefined = ainda não leu localStorage
   const [store, setStore] = useState<Store | null>(null);
@@ -207,14 +221,14 @@ export const EstacaoModule: React.FC = () => {
   const [lastReconcileAt, setLastReconcileAt] = useState<string | null>(null);
 
   const [events, setEvents] = useState<PrintEvent[]>([]);
-  const [failedItems, setFailedItems] = useState<Map<string, { item: OrderItem; attempts: number }>>(new Map());
+  const [failedItems, setFailedItems] = useState<Map<string, FailedEntry>>(new Map());
 
   // Espelhos em ref: reconcile() é chamada por timers/callbacks que não
   // podem depender de re-render pra enxergar o estado mais recente (closure
   // stale clássica). O estado React acima existe só pra desenhar a tela; a
   // fonte de verdade operacional destes três é sempre a ref.
   const printedIdsRef = useRef<Set<string>>(new Set());
-  const failedRef = useRef<Map<string, { item: OrderItem; attempts: number }>>(new Map());
+  const failedRef = useRef<Map<string, FailedEntry>>(new Map());
   const reconcileLockRef = useRef(false);
   const storeRef = useRef<Store | null>(null);
   const destinationRef = useRef<StationDestination>('cozinha');
@@ -307,94 +321,196 @@ export const EstacaoModule: React.FC = () => {
   // em 4 gatilhos independentes: ao ativar, a cada ping Realtime, num
   // intervalo fixo (backstop caso o ping se perca), e quando a aba volta a
   // ficar visível/online (aparelho que hibernou ou perdeu rede).
-  const reconcile = useCallback(async () => {
-    const s = storeRef.current;
-    const destination = destinationRef.current;
-    const productDestination = productDestinationFor(destination);
-    if (!s || !productDestination || reconcileLockRef.current) return;
-    reconcileLockRef.current = true;
-    try {
-      const items = await fetchKitchenOrders(s.id, productDestination);
-      setLastReconcileAt(new Date().toISOString());
-      // Mais antigo primeiro — mesma ordem que fetch_kitchen_orders_secure
-      // já devolve (order by oi.created_at), preservada aqui de propósito:
-      // se vários pedidos novos chegaram durante uma queda, eles saem na
-      // cozinha na ordem em que foram feitos.
-      const toPrint = items.filter((it) => !printedIdsRef.current.has(it.id));
-      for (const item of toPrint) {
-        const fail = failedRef.current.get(item.id);
-        if (fail && fail.attempts >= MAX_AUTO_RETRIES) continue; // aguardando reimpressão manual, ver banner
-        const kind = productDestination === 'bar' ? 'BAR' : 'COZINHA';
-        const orderType = item.order?.order_type;
-        const tableNumber = item.order?.tables?.number;
-        // eslint-disable-next-line no-await-in-loop -- impressão precisa ser sequencial: dois print() quase simultâneos (dois pedidos chegando juntos) empilhariam diálogos nativos no mesmo instante.
-        const ok = await printKitchenTicket({
-          kind,
-          storeName: s.name,
-          orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
-          identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
-          quantity: item.quantity,
-          productName: item.product?.name || 'Produto indisponível',
-          addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
-          observation: item.notes || undefined,
-          orderIdShort: item.order_id.slice(0, 8),
-        });
+  const reconcileKitchen = useCallback(async (s: Store, destination: StationDestination, productDestination: 'kitchen' | 'bar') => {
+    const items = await fetchKitchenOrders(s.id, productDestination);
+    // Mais antigo primeiro — mesma ordem que fetch_kitchen_orders_secure
+    // já devolve (order by oi.created_at), preservada aqui de propósito:
+    // se vários pedidos novos chegaram durante uma queda, eles saem na
+    // cozinha na ordem em que foram feitos.
+    const toPrint = items.filter((it) => !printedIdsRef.current.has(it.id));
+    for (const item of toPrint) {
+      const fail = failedRef.current.get(item.id);
+      if (fail && fail.attempts >= MAX_AUTO_RETRIES) continue; // aguardando reimpressão manual, ver banner
+      const kind = productDestination === 'bar' ? 'BAR' : 'COZINHA';
+      const orderType = item.order?.order_type;
+      const tableNumber = item.order?.tables?.number;
+      const description = ticketDescription(item);
+      const doPrint = () => printKitchenTicket({
+        kind,
+        storeName: s.name,
+        orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
+        identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
+        quantity: item.quantity,
+        productName: item.product?.name || 'Produto indisponível',
+        addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
+        observation: item.notes || undefined,
+        orderIdShort: item.order_id.slice(0, 8),
+      });
+      // eslint-disable-next-line no-await-in-loop -- impressão precisa ser sequencial: dois print() quase simultâneos (dois pedidos chegando juntos) empilhariam diálogos nativos no mesmo instante.
+      const ok = await doPrint();
 
-        if (ok) {
-          printedIdsRef.current.add(item.id);
-          savePrintedIds(s.id, destination, printedIdsRef.current);
-          if (failedRef.current.has(item.id)) {
-            failedRef.current.delete(item.id);
-            setFailedItems(new Map(failedRef.current));
-          }
-          pushEvent(s.id, destination, { itemId: item.id, time: new Date().toISOString(), description: ticketDescription(item), success: true });
-        } else {
-          const attempts = (fail?.attempts || 0) + 1;
-          failedRef.current.set(item.id, { item, attempts });
+      if (ok) {
+        printedIdsRef.current.add(item.id);
+        savePrintedIds(s.id, destination, printedIdsRef.current);
+        if (failedRef.current.has(item.id)) {
+          failedRef.current.delete(item.id);
           setFailedItems(new Map(failedRef.current));
-          pushEvent(s.id, destination, { itemId: item.id, time: new Date().toISOString(), description: ticketDescription(item), success: false });
         }
+        pushEvent(s.id, destination, { itemId: item.id, time: new Date().toISOString(), description, success: true });
+      } else {
+        const attempts = (fail?.attempts || 0) + 1;
+        failedRef.current.set(item.id, { description, attempts, retry: doPrint });
+        setFailedItems(new Map(failedRef.current));
+        pushEvent(s.id, destination, { itemId: item.id, time: new Date().toISOString(), description, success: false });
       }
-    } finally {
-      reconcileLockRef.current = false;
     }
   }, [pushEvent]);
 
-  // Reimpressão manual de um item que falhou (Passo do brief: "falha de
-  // impressão precisa ser visível E recuperável"). Toque explícito do
-  // operador = gesto novo, então também contorna qualquer limitação de
-  // diálogo repetido do navegador que a tentativa automática possa ter
-  // acionado.
-  const retryItem = useCallback(async (itemId: string) => {
+  // Módulo Caixa (Task 4, 2026-08-22) — o "gancho" que o EstacaoModule já
+  // deixou documentado desde a Task 3 ("quando essa tarefa existir, ela
+  // dispara um print aqui do mesmo jeito"). Diferente de cozinha/bar (uma
+  // fonte por ITEM via fetch_kitchen_orders_secure), aqui a fonte é por
+  // MESA FECHADA — não existe RPC nem coluna nova pra isso: reaproveita
+  // fetch_sales_history_secure (já devolve orders com payment_details,
+  // order_items e tables embutidos) e agrupa client-side.
+  //
+  // Por que dá pra saber "a mesa fechou" sem nenhuma migration: o ping
+  // Realtime que já dispara `reconcile()` (order_change_pings, migration
+  // 029) tem um trigger em QUALQUER insert/update/delete de `orders` — e
+  // close_table_orders_secure faz um UPDATE em orders (status/
+  // payment_method/payment_details) ao fechar a mesa. O ping já chega
+  // sozinho, sem precisar de nada novo no banco.
+  //
+  // Agrupamento por "um comprovante por fechamento, não por order row": uma
+  // mesa pode ter vários `orders` abertos (um por vez que o garçom mandou
+  // pro servidor) e close_table_orders_secure fecha TODOS de uma vez numa
+  // única transação — o Postgres usa o MESMO valor de `now()` pra todas as
+  // linhas atualizadas dentro de uma transação, então pedidos do mesmo
+  // fechamento compartilham `updated_at` exato. Não existe (e não é
+  // permitido criar, por causa da restrição de "nenhuma migration") um id
+  // de "evento de fechamento" — `table_id + updated_at` é o substituto sem
+  // schema novo.
+  const CAIXA_LOOKBACK_HOURS = 24;
+  const reconcileCaixa = useCallback(async (s: Store, destination: StationDestination) => {
+    const sinceIso = new Date(Date.now() - CAIXA_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+    const orders = await fetchSalesHistory(s.id, sinceIso);
+    const tableOrders = orders.filter((o) => o.order_type === 'table' && o.table_id && o.updated_at);
+
+    const groups = new Map<string, Order[]>();
+    for (const o of tableOrders) {
+      const key = `${o.table_id}__${o.updated_at}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(o);
+    }
+
+    for (const [key, group] of groups) {
+      if (printedIdsRef.current.has(key)) continue;
+      const fail = failedRef.current.get(key);
+      if (fail && fail.attempts >= MAX_AUTO_RETRIES) continue;
+
+      const items = group.flatMap((o) => (o.order_items || []).filter((i) => i.status !== 'canceled'));
+      if (items.length === 0) {
+        // Mesa fechada sem nenhum item cobrável (ex.: só itens cancelados) —
+        // não há comprovante nenhum pra imprimir; marca como "visto" pra não
+        // ficar reavaliando o mesmo grupo em todo reconcile().
+        printedIdsRef.current.add(key);
+        savePrintedIds(s.id, destination, printedIdsRef.current);
+        continue;
+      }
+
+      const subtotal = items.reduce((acc, i) => acc + i.price_at_time * i.quantity, 0);
+      const tableNumber = group[0].tables?.number ?? '?';
+      const paymentDetails = group[0].payment_details as { total?: number; methods?: { method: string; amount: number; brand?: string | null }[] } | null | undefined;
+      const total = paymentDetails?.total ?? subtotal;
+      const methods = paymentDetails?.methods && paymentDetails.methods.length > 0
+        ? paymentDetails.methods
+        : (group[0].payment_method ? [{ method: group[0].payment_method, amount: total }] : []);
+      // Mesma correção de StoreModule.tsx (handleFinishPayment): troco é
+      // sobre o que o dinheiro precisava cobrir (total menos o que outros
+      // métodos já pagaram), nunca sobre o total cheio da conta — senão
+      // parte-cartão-parte-dinheiro sempre dava troco zero.
+      const cashPaid = methods.filter((m) => m.method === 'CASH').reduce((acc, m) => acc + m.amount, 0);
+      const nonCashPaid = methods.filter((m) => m.method !== 'CASH').reduce((acc, m) => acc + m.amount, 0);
+      const amountOwedInCash = Math.max(0, total - nonCashPaid);
+      const changeDue = calculateChange(cashPaid, amountOwedInCash);
+      const description = `Mesa ${tableNumber} — R$ ${total.toFixed(2)}`;
+
+      const doPrint = () => printBillReceipt({
+        storeName: s.name,
+        cnpj: s.cnpj,
+        label: `MESA ${tableNumber} - COMPROVANTE`,
+        items: items.map((i) => ({ quantity: i.quantity, name: getOrderItemDisplayName(i), total: i.price_at_time * i.quantity })),
+        subtotal,
+        total,
+        payment: methods.length > 0 ? { methods, changeDue } : undefined,
+      });
+      // eslint-disable-next-line no-await-in-loop -- mesmo motivo do reconcileKitchen: impressão sequencial, nunca dois print() simultâneos.
+      const ok = await doPrint();
+
+      if (ok) {
+        printedIdsRef.current.add(key);
+        savePrintedIds(s.id, destination, printedIdsRef.current);
+        if (failedRef.current.has(key)) {
+          failedRef.current.delete(key);
+          setFailedItems(new Map(failedRef.current));
+        }
+        pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: true });
+      } else {
+        const attempts = (fail?.attempts || 0) + 1;
+        failedRef.current.set(key, { description, attempts, retry: doPrint });
+        setFailedItems(new Map(failedRef.current));
+        pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: false });
+      }
+    }
+  }, [pushEvent]);
+
+  // --- Reconciliação: busca o estado real do servidor e imprime o que
+  // ainda não foi impresso. É o mecanismo que realmente garante "nenhum
+  // pedido perdido" (Passo 2/3 do brief) — a assinatura Realtime abaixo é
+  // só um jeito de disparar isto mais rápido, nunca a única fonte. Chamada
+  // em 4 gatilhos independentes: ao ativar, a cada ping Realtime, num
+  // intervalo fixo (backstop caso o ping se perca), e quando a aba volta a
+  // ficar visível/online (aparelho que hibernou ou perdeu rede).
+  const reconcile = useCallback(async () => {
     const s = storeRef.current;
     const destination = destinationRef.current;
-    const entry = failedRef.current.get(itemId);
+    if (!s || reconcileLockRef.current) return;
+    reconcileLockRef.current = true;
+    try {
+      const productDestination = productDestinationFor(destination);
+      if (productDestination) {
+        await reconcileKitchen(s, destination, productDestination);
+      } else if (destination === 'caixa') {
+        await reconcileCaixa(s, destination);
+      }
+      setLastReconcileAt(new Date().toISOString());
+    } finally {
+      reconcileLockRef.current = false;
+    }
+  }, [reconcileKitchen, reconcileCaixa]);
+
+  // Reimpressão manual de um item/grupo que falhou (Passo do brief: "falha
+  // de impressão precisa ser visível E recuperável"). Toque explícito do
+  // operador = gesto novo, então também contorna qualquer limitação de
+  // diálogo repetido do navegador que a tentativa automática possa ter
+  // acionado. Genérico desde a Task 4: `entry.retry()` já é a chamada de
+  // impressão certa (kitchen ticket ou comprovante de caixa), montada no
+  // momento em que a falha foi registrada.
+  const retryItem = useCallback(async (key: string) => {
+    const s = storeRef.current;
+    const destination = destinationRef.current;
+    const entry = failedRef.current.get(key);
     if (!s || !entry) return;
-    const item = entry.item;
-    const productDestination = productDestinationFor(destination);
-    const kind = productDestination === 'bar' ? 'BAR' : 'COZINHA';
-    const orderType = item.order?.order_type;
-    const tableNumber = item.order?.tables?.number;
-    const ok = await printKitchenTicket({
-      kind,
-      storeName: s.name,
-      orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
-      identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
-      quantity: item.quantity,
-      productName: item.product?.name || 'Produto indisponível',
-      addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
-      observation: item.notes || undefined,
-      orderIdShort: item.order_id.slice(0, 8),
-    });
+    const ok = await entry.retry();
     if (ok) {
-      printedIdsRef.current.add(itemId);
+      printedIdsRef.current.add(key);
       savePrintedIds(s.id, destination, printedIdsRef.current);
-      failedRef.current.delete(itemId);
+      failedRef.current.delete(key);
       setFailedItems(new Map(failedRef.current));
-      pushEvent(s.id, destination, { itemId, time: new Date().toISOString(), description: ticketDescription(item), success: true });
+      pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description: entry.description, success: true });
       toast.success('Reimpresso com sucesso.');
     } else {
-      failedRef.current.set(itemId, { item, attempts: 0 }); // zera contagem: reimpressão manual sempre pode tentar de novo depois
+      failedRef.current.set(key, { ...entry, attempts: 0 }); // zera contagem: reimpressão manual sempre pode tentar de novo depois
       setFailedItems(new Map(failedRef.current));
       toast.error('A reimpressão também falhou. Verifique a impressora.');
     }
@@ -488,17 +604,29 @@ export const EstacaoModule: React.FC = () => {
 
   const handleTestPrint = async () => {
     if (!store) return;
-    const kind = productDestinationFor(destinationRef.current) === 'bar' ? 'BAR' : 'COZINHA';
-    const ok = await printKitchenTicket({
-      kind,
-      storeName: store.name,
-      orderType: 'TESTE',
-      identifier: 'TICKET DE TESTE',
-      quantity: 1,
-      productName: 'Impressão de teste da estação',
-      orderIdShort: 'TESTE',
-    });
-    if (ok) toast.success('Ticket de teste enviado para impressão.');
+    // Módulo Caixa (Task 4): teste de uma estação 'caixa' precisa sair como
+    // comprovante (printBillReceipt), não como ticket de cozinha — senão o
+    // teste imprime um documento de um tipo que essa estação nunca vai
+    // realmente usar, e não prova nada sobre a impressora certa.
+    const ok = destinationRef.current === 'caixa'
+      ? await printBillReceipt({
+          storeName: store.name,
+          cnpj: store.cnpj,
+          label: 'TESTE - COMPROVANTE',
+          items: [{ quantity: 1, name: 'Impressão de teste da estação', total: 0 }],
+          subtotal: 0,
+          total: 0,
+        })
+      : await printKitchenTicket({
+          kind: productDestinationFor(destinationRef.current) === 'bar' ? 'BAR' : 'COZINHA',
+          storeName: store.name,
+          orderType: 'TESTE',
+          identifier: 'TICKET DE TESTE',
+          quantity: 1,
+          productName: 'Impressão de teste da estação',
+          orderIdShort: 'TESTE',
+        });
+    if (ok) toast.success('Impressão de teste enviada.');
     else toast.error('A impressão de teste falhou — confira a impressora antes de deixar a estação sozinha.');
   };
 
@@ -592,9 +720,8 @@ export const EstacaoModule: React.FC = () => {
   const destination = config.destination;
   const DestIcon = DESTINATION_ICON[destination];
   const isConnected = connectionStatus === 'connected' && online;
-  const failedList = Array.from(failedItems.values());
+  const failedList = Array.from(failedItems.entries());
   const lastEvent = events[0] || null;
-  const productDestination = productDestinationFor(destination);
 
   // Tela B — pedir o gesto de ativação
   if (!activated) {
@@ -658,10 +785,11 @@ export const EstacaoModule: React.FC = () => {
           </Badge>
         </div>
 
-        {productDestination === null && (
+        {destination === 'caixa' && (
           <Card className="p-4 mb-6 bg-[var(--info)]/5 border-[var(--info)]/20">
             <p className="text-sm text-[var(--text)]">
-              Nenhum pedido é destinado ao caixa hoje — esta tela fica pronta e conectada, mas o disparo automático (comprovante ao receber a conta) é do módulo Caixa, ainda não construído.
+              Esta estação imprime o comprovante automaticamente sempre que uma mesa é fechada pelo caixa
+              (Gestão de Mesas → Receber Pagamento). Nada pra fazer aqui além de manter a impressora ligada.
             </p>
           </Card>
         )}
@@ -669,13 +797,13 @@ export const EstacaoModule: React.FC = () => {
         {failedList.length > 0 && (
           <Card className="p-4 mb-6 border-[var(--err)]/40 bg-[var(--err)]/5">
             <div className="flex items-center gap-2 mb-3 text-[var(--err)] font-bold text-sm">
-              <XCircle size={18} /> {failedList.length} impressão(ões) falharam — avise a cozinha manualmente e reimprima
+              <XCircle size={18} /> {failedList.length} impressão(ões) falharam — avise {destination === 'caixa' ? 'o caixa' : 'a cozinha'} manualmente e reimprima
             </div>
             <div className="space-y-2">
-              {failedList.map(({ item }) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 bg-[var(--surface)] rounded-lg p-3 border border-[var(--border)]">
-                  <span className="text-sm text-[var(--text)] truncate">{ticketDescription(item)}</span>
-                  <Button size="sm" variant="danger" onClick={() => retryItem(item.id)}>
+              {failedList.map(([key, entry]) => (
+                <div key={key} className="flex items-center justify-between gap-3 bg-[var(--surface)] rounded-lg p-3 border border-[var(--border)]">
+                  <span className="text-sm text-[var(--text)] truncate">{entry.description}</span>
+                  <Button size="sm" variant="danger" onClick={() => retryItem(key)}>
                     <RotateCcw size={14} className="mr-1" /> Reimprimir
                   </Button>
                 </div>

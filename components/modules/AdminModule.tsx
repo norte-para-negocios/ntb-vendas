@@ -195,7 +195,15 @@ export const AdminModule: React.FC = () => {
   const [modCounter, setModCounter] = useState(true);
   const [modKitchenKds, setModKitchenKds] = useState(true);
   const [modBarKds, setModBarKds] = useState(true);
-  const [modCaixa, setModCaixa] = useState(true);
+  // Task 4 (módulo Caixa): ao contrário dos outros módulos acima, o default
+  // é DESLIGADO — ver comentário de ALL_ON em lib/storeModules.ts pro
+  // porquê (caixa é o único módulo cujo "ligado" tira uma capacidade que um
+  // usuário já tinha, não só mostra/esconde aba). Precisa bater com
+  // ALL_ON.caixa aqui: se essa constante mudasse pra `true` de novo sem
+  // atualizar este `useState`, toda loja NOVA criada sem mexer nesta seção
+  // sairia com `config.modules.caixa: true` gravado à toa (isDefaultStoreModules
+  // trataria como "diferente do default" e persistiria o objeto inteiro).
+  const [modCaixa, setModCaixa] = useState(false);
   const [modMenu, setModMenu] = useState(true);
   const [modAdmin, setModAdmin] = useState(true);
   const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
