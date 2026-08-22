@@ -4,13 +4,14 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
+import { resolveStoreModules, TAB_MODULE_KEY } from '@/lib/storeModules';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -34,10 +35,25 @@ const StoreDashboardView = dynamic(
 
 // --- COMPONENTS ---
 
-// Permissões fixas da conta universal: acesso total, sempre. Não é uma
-// linha de store_users (essa loja pode nem ter usuário nenhum ainda), é
-// sintetizada no client depois de escolher a loja na tela de seleção.
-const UNIVERSAL_PERMISSIONS = { tables: true, counter: true, kitchen: true, bar: true, menu: true, admin: true };
+// Permissões da conta universal: era um objeto fixo com as 6 permissões
+// `true` (acesso total sempre) — motivo real de a aba Bar aparecer no
+// Sertão mesmo sem nenhum store_user cadastrado lá (Task 1, plano
+// 2026-08-22: perfil de módulos por loja). Agora deriva do perfil da
+// própria loja (resolveStoreModules) — a conta universal continua vendo
+// tudo que a loja tem, e nada do que ela não tem. Não é uma linha de
+// store_users (a loja pode nem ter usuário nenhum), é sintetizada no client
+// depois de escolher a loja na tela de seleção.
+const universalPermissionsFor = (store: Store): StoreUserPermissions => {
+    const modules = resolveStoreModules(store);
+    return {
+        tables: modules.tables,
+        counter: modules.counter,
+        kitchen: modules.kitchen_kds,
+        bar: modules.bar_kds,
+        menu: modules.menu,
+        admin: modules.admin,
+    };
+};
 
 const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => void }> = ({ onLogin }) => {
     const [email, setEmail] = useState('');
@@ -134,7 +150,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
             email: universalUser.email,
             role: 'universal',
             must_change_password: false,
-            permissions: UNIVERSAL_PERMISSIONS,
+            permissions: universalPermissionsFor(store),
             store,
         });
     };
@@ -400,7 +416,16 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     { id: 'admin', icon: BarChart3, label: 'Administração', permission: 'admin' }
   ];
 
-  const visibleTabs = allTabs.filter(tab => user.role === 'owner' || user.permissions?.[tab.permission as keyof typeof user.permissions] !== false);
+  // Task 1 (perfil de módulos por loja): uma aba só aparece se o USUÁRIO tem
+  // permissão E a LOJA tem o módulo ligado — antes só a permissão era
+  // checada aqui, então uma loja sem nenhum store_user (como o Sertão hoje)
+  // sempre via as 6 abas via conta universal, mesmo sem cozinha/bar.
+  const storeModules = resolveStoreModules(user.store);
+  const visibleTabs = allTabs.filter(tab => {
+    const moduleKey = TAB_MODULE_KEY[tab.id];
+    if (moduleKey && !storeModules[moduleKey]) return false;
+    return user.role === 'owner' || user.permissions?.[tab.permission as keyof typeof user.permissions] !== false;
+  });
   const bottomNavTabs = visibleTabs.filter(item => ['tables', 'counter', 'kitchen', 'bar'].includes(item.id));
 
   return (
@@ -5600,14 +5625,21 @@ const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
 
 // Mesma regra de "primeira aba visível" usada tanto no login normal quanto na
 // restauração de sessão — extraída pra não duplicar a cascata de permissões.
+// Task 1 (perfil de módulos por loja): a cascata agora também pula módulo
+// desligado na loja, não só permissão negada — senão um usuário cujo
+// primeiro módulo na ordem (ex.: "tables") está desligado na loja cairia lá
+// mesmo assim e bateria na tela de "sem permissão" em vez de ir pra próxima
+// aba válida.
 const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
-    if (u.role === 'owner') return 'tables';
-    if (u.permissions?.tables !== false) return 'tables';
-    if (u.permissions?.counter !== false) return 'counter';
-    if (u.permissions?.kitchen !== false) return 'kitchen';
-    if (u.permissions?.bar !== false) return 'bar';
-    if (u.permissions?.menu !== false) return 'menu';
-    return 'admin';
+    const modules = resolveStoreModules(u.store);
+    const hasPermission = (tabId: string) => u.role === 'owner' || u.permissions?.[tabId as keyof typeof u.permissions] !== false;
+    const isAccessible = (tabId: string) => {
+        const moduleKey = TAB_MODULE_KEY[tabId];
+        if (moduleKey && !modules[moduleKey]) return false;
+        return hasPermission(tabId);
+    };
+    const candidates = ['tables', 'counter', 'kitchen', 'bar', 'menu', 'admin'];
+    return candidates.find(isAccessible) ?? 'admin';
 };
 
 export const StoreModule: React.FC = () => {
@@ -5652,7 +5684,7 @@ export const StoreModule: React.FC = () => {
                             email: universalUser.email,
                             role: 'universal',
                             must_change_password: false,
-                            permissions: UNIVERSAL_PERMISSIONS,
+                            permissions: universalPermissionsFor(store),
                             store,
                         };
                     }
@@ -5722,8 +5754,14 @@ export const StoreModule: React.FC = () => {
         );
     }
 
-    // Permission Check
+    // Permission Check — Task 1 (perfil de módulos por loja): agora exige as
+    // DUAS coisas, o usuário ter permissão E a loja ter o módulo ligado.
+    // 'kitchen'/'bar' (nomes de aba/permissão) mapeiam pros módulos mais
+    // específicos kitchen_kds/bar_kds via TAB_MODULE_KEY.
+    const storeModules = resolveStoreModules(user.store);
     const canAccess = (t: string) => {
+        const moduleKey = TAB_MODULE_KEY[t];
+        if (moduleKey && !storeModules[moduleKey]) return false;
         if (user.role === 'owner') return true;
         if (!user.permissions) return true; // Default to true if no permissions defined (legacy)
         return user.permissions[t as keyof typeof user.permissions] !== false;

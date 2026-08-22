@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
+import { resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, StoreModules, OrderFlow } from '@/lib/storeModules';
+import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
@@ -184,6 +185,21 @@ export const AdminModule: React.FC = () => {
   // já existente em store_fiscal_config (nfce quando ligado, nenhuma quando desligado).
   const [emiteNotaFiscal, setEmiteNotaFiscal] = useState(false);
 
+  // Perfil de módulos por loja (Task 1, plano 2026-08-22-perfis-de-loja-e-caixa)
+  // — quais telas essa loja tem. Loja nova nasce com tudo ligado + fluxo KDS
+  // (mesmos defaults de ALL_ON/resolveOrderFlow em lib/storeModules.ts), igual
+  // ao comportamento de hoje. Ver handleSaveStore: só grava `config.modules`/
+  // `config.order_flow` se o admin realmente desligar algo ou trocar o fluxo —
+  // nunca escreve o default explícito (ausência de chave já significa isso).
+  const [modTables, setModTables] = useState(true);
+  const [modCounter, setModCounter] = useState(true);
+  const [modKitchenKds, setModKitchenKds] = useState(true);
+  const [modBarKds, setModBarKds] = useState(true);
+  const [modCaixa, setModCaixa] = useState(true);
+  const [modMenu, setModMenu] = useState(true);
+  const [modAdmin, setModAdmin] = useState(true);
+  const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
+
   // Logo Upload State
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -324,6 +340,14 @@ export const AdminModule: React.FC = () => {
       setIsActive(true);
       setServiceFeeRatePercent(10);
       setEmiteNotaFiscal(false);
+      setModTables(true);
+      setModCounter(true);
+      setModKitchenKds(true);
+      setModBarKds(true);
+      setModCaixa(true);
+      setModMenu(true);
+      setModAdmin(true);
+      setOrderFlow('kds');
       setLogoFile(null);
       setLogoPreview(null);
       setCoverFile(null);
@@ -410,6 +434,20 @@ export const AdminModule: React.FC = () => {
       setPeriodMonths(store.contract_period_months);
       setIsActive(store.is_active);
       setServiceFeeRatePercent(store.config?.service_fee_rate != null ? store.config.service_fee_rate * 100 : 10);
+
+      // Perfil de módulos por loja — resolveStoreModules já devolve tudo
+      // ligado quando a loja nunca configurou nada (comportamento atual),
+      // então essa loja edita a partir do estado real, nunca de um "vazio".
+      const storeModules = resolveStoreModules(store);
+      setModTables(storeModules.tables);
+      setModCounter(storeModules.counter);
+      setModKitchenKds(storeModules.kitchen_kds);
+      setModBarKds(storeModules.bar_kds);
+      setModCaixa(storeModules.caixa);
+      setModMenu(storeModules.menu);
+      setModAdmin(storeModules.admin);
+      setOrderFlow(resolveOrderFlow(store));
+
       setLogoPreview(store.logo_url);
       setLogoFile(null);
       setCoverPreview(store.cover_url);
@@ -685,6 +723,16 @@ export const AdminModule: React.FC = () => {
               finalCoverUrl = await uploadStoreCover(coverFile);
           }
 
+          const modules: StoreModules = {
+              tables: modTables,
+              counter: modCounter,
+              kitchen_kds: modKitchenKds,
+              bar_kds: modBarKds,
+              caixa: modCaixa,
+              menu: modMenu,
+              admin: modAdmin,
+          };
+
           const params = {
               name: trimmedName,
               cnpj,
@@ -696,6 +744,13 @@ export const AdminModule: React.FC = () => {
               logoUrl: finalLogoUrl,
               coverUrl: finalCoverUrl,
               serviceFeeRate: serviceFeeRatePercent / 100,
+              // Perfil de módulos por loja — createStore/updateStore só gravam
+              // config.modules/config.order_flow quando isso realmente difere
+              // do default (ver isDefaultStoreModules em lib/storeModules.ts);
+              // uma loja criada/editada sem mexer nesta seção continua com o
+              // config idêntico ao de antes desta feature.
+              modules,
+              orderFlow,
           };
 
           let result;
@@ -1175,6 +1230,77 @@ export const AdminModule: React.FC = () => {
                   >
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emiteNotaFiscal ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
+              </div>
+
+              {/* Módulos desta loja (Task 1, plano 2026-08-22-perfis-de-loja-e-caixa)
+                  — quais telas essa loja tem, no painel do lojista (/loja).
+                  Disponível já na criação (loja nova nasce com tudo ligado +
+                  fluxo KDS, igual ao comportamento atual das 6 lojas reais,
+                  nenhuma tem isso configurado) e na edição (ex.: o Sertão,
+                  que não deve ter Cozinha/Bar nem tela de acompanhamento —
+                  só Caixa, Garçom e Gestão de Mesa, fluxo "Envia direto pra
+                  impressão"). Ver lib/storeModules.ts pro mecanismo de
+                  resolução (resolveStoreModules/resolveOrderFlow) e
+                  StoreModule.tsx (canAccess, sidebar/bottom nav) por onde
+                  isso é consumido. */}
+              <div className="p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] space-y-3">
+                  <div>
+                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><LayoutGrid size={14}/> Módulos desta loja</h4>
+                      <p className="text-xs text-[var(--text-muted)]">Desligue o que essa loja não usa — a aba some do painel do lojista por completo (sidebar e barra inferior), sem depender de usuário nenhum.</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {([
+                          { key: 'tables', label: 'Mesas', icon: LayoutDashboard, value: modTables, set: setModTables },
+                          { key: 'counter', label: 'Balcão', icon: Coffee, value: modCounter, set: setModCounter },
+                          { key: 'kitchen_kds', label: 'Cozinha (KDS)', icon: ChefHat, value: modKitchenKds, set: setModKitchenKds },
+                          { key: 'bar_kds', label: 'Bar (KDS)', icon: Wine, value: modBarKds, set: setModBarKds },
+                          { key: 'caixa', label: 'Caixa', icon: Wallet, value: modCaixa, set: setModCaixa },
+                          { key: 'menu', label: 'Cardápio', icon: UtensilsCrossed, value: modMenu, set: setModMenu },
+                          { key: 'admin', label: 'Administração', icon: BarChart3, value: modAdmin, set: setModAdmin },
+                      ] as const).map(({ key, label, icon: Icon, value, set }) => (
+                          <button
+                              key={key}
+                              type="button"
+                              role="switch"
+                              aria-checked={value}
+                              aria-label={label}
+                              onClick={() => set(!value)}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold u-motion u-press-sm transition-colors ${value ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                          >
+                              <Icon size={14} className="shrink-0" />
+                              <span className="truncate">{label}</span>
+                          </button>
+                      ))}
+                  </div>
+
+                  <div className="pt-3 border-t border-[var(--border)] space-y-2">
+                      <label className="text-xs font-semibold text-[var(--text)]">Fluxo de pedidos</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                              type="button"
+                              role="radio"
+                              aria-checked={orderFlow === 'kds'}
+                              onClick={() => setOrderFlow('kds')}
+                              className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${orderFlow === 'kds' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                          >
+                              Acompanhamento na tela (KDS)
+                          </button>
+                          <button
+                              type="button"
+                              role="radio"
+                              aria-checked={orderFlow === 'direct_print'}
+                              onClick={() => setOrderFlow('direct_print')}
+                              className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${orderFlow === 'direct_print' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                          >
+                              Envia direto para impressão
+                          </button>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                          {orderFlow === 'direct_print'
+                              ? 'Ao enviar, o pedido vai direto pra impressão — sem tela de acompanhamento de cozinha/bar.'
+                              : 'Pedido enviado aparece na tela da Cozinha/Bar até ser preparado e entregue.'}
+                      </p>
+                  </div>
               </div>
 
               {/* Criar no NTB Estoque também — só em "Nova Loja" (loja já

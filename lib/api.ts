@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
+import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -1181,7 +1182,36 @@ export interface CreateStoreParams {
   logoUrl?: string | null;
   coverUrl?: string | null;
   serviceFeeRate: number;
+  // Perfil de módulos por loja (Task 1, plano 2026-08-22). Sempre o perfil
+  // completo escolhido no formulário (AdminModule.tsx) — createStore/
+  // updateStore são quem decide se isso vira `config.modules`/
+  // `config.order_flow` de verdade (só quando difere do default "tudo
+  // ligado + kds", ver isDefaultStoreModules em lib/storeModules.ts). Uma
+  // loja criada/editada sem tocar nesta seção nunca ganha essas chaves.
+  modules?: StoreModules;
+  orderFlow?: OrderFlow;
 }
+
+// Perfil de módulos por loja (Task 1): decide se `params.modules`/
+// `params.orderFlow` viram `config.modules`/`config.order_flow` de verdade.
+// Nunca grava o default explícito (tudo ligado + 'kds') — ausência de chave
+// já significa isso (ver lib/storeModules.ts) — e remove a chave de um
+// config existente se o admin editar uma loja de volta pro default (senão
+// "desfazer" a customização no formulário nunca desfaria no banco).
+const applyModulesConfigFields = (config: Record<string, any>, params: CreateStoreParams): Record<string, any> => {
+  const next = { ...config };
+  if (params.modules && !isDefaultStoreModules(params.modules)) {
+    next.modules = params.modules;
+  } else {
+    delete next.modules;
+  }
+  if (params.orderFlow === 'direct_print') {
+    next.order_flow = 'direct_print';
+  } else {
+    delete next.order_flow;
+  }
+  return next;
+};
 
 export const createStore = async (params: CreateStoreParams): Promise<{ success: boolean; message?: string; storeId?: string }> => {
   try {
@@ -1191,7 +1221,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
         cover_url: params.coverUrl || null,
-        config: { use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate },
+        config: applyModulesConfigFields({ use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate }, params),
       })
       .select()
       .single();
@@ -1252,9 +1282,10 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
 export const updateStore = async (id: string, params: CreateStoreParams): Promise<{ success: boolean; message?: string }> => {
   try {
-    // Busca o config atual pra só sobrescrever service_fee_rate, sem apagar
-    // outras flags (use_pin, allow_client_open, require_pin_for_open,
-    // charge_service_fee) que o lojista já pode ter configurado.
+    // Busca o config atual pra só sobrescrever service_fee_rate (e o perfil
+    // de módulos, ver applyModulesConfigFields), sem apagar outras flags
+    // (use_pin, allow_client_open, require_pin_for_open, charge_service_fee)
+    // que o lojista já pode ter configurado.
     const { data: current } = await supabase.from('stores').select('config').eq('id', id).single();
     const { error } = await supabase
       .from('stores')
@@ -1262,7 +1293,7 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
         cover_url: params.coverUrl,
-        config: { ...(current?.config || {}), service_fee_rate: params.serviceFeeRate },
+        config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate }, params),
       })
       .eq('id', id);
 

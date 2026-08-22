@@ -1,3 +1,5 @@
+import { StoreModules, OrderFlow } from '@/lib/storeModules';
+
 export enum UserRole {
   ADMIN = 'admin',
   OWNER = 'owner',
@@ -50,6 +52,14 @@ export interface Store {
     // no cardapio do cliente. undefined/false = nenhum badge aparece
     // (comportamento atual, sem mudanca).
     show_bestsellers?: boolean;
+    // Perfil de módulos por loja (Task 1, plano 2026-08-22). undefined =
+    // todos os módulos ligados e fluxo 'kds' — comportamento atual de todas
+    // as 6 lojas reais, nenhuma delas tem essa chave. Ver
+    // lib/storeModules.ts (resolveStoreModules/resolveOrderFlow) pra
+    // resolução com esse default; nunca ler config.modules/order_flow
+    // direto, sempre por essas funções.
+    modules?: Partial<StoreModules>;
+    order_flow?: OrderFlow;
   };
 }
 
