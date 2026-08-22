@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, TAB_MODULE_KEY } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, TAB_MODULE_KEY } from '@/lib/storeModules';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -1100,6 +1100,12 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
     const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    // Task 2 (2026-08-22, plano perfis-de-loja-e-caixa): loja sem `config`
+    // (as 6 lojas reais de hoje) resolve pra 'kds' — nada aqui muda o
+    // comportamento delas. Só o Sertão (order_flow: 'direct_print') entra
+    // nos ramos novos abaixo (impressão no clique de handleAddItem, gate de
+    // fechamento sem exigir status, histórico de envios).
+    const orderFlow = resolveOrderFlow(store);
     const watchedTables = useWatchedTables(storeId);
     const isFinishingRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
@@ -1142,6 +1148,12 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
             toast.error("Erro ao atualizar configuração.");
         }
     };
+
+    // Task 2 (2026-08-22): "Histórico de Pedidos Enviados" — substituto do
+    // KDS pra lojas em direct_print. Só existe o estado do modal aqui
+    // porque a lista em si (sentHistoryItems abaixo) é derivada, não
+    // buscada à parte.
+    const [showSentHistory, setShowSentHistory] = useState(false);
 
     const [paymentMethods, setPaymentMethods] = useState<{ method: string, amount: number }[]>([]);
     const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
@@ -1216,6 +1228,48 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
 
         return breakdown;
     }, [currentTableSummary]);
+
+    // Task 2 (2026-08-22) — "Histórico de Pedidos Enviados": substituto do
+    // KDS pra lojas em direct_print. Sem RPC/migration nova (restrição do
+    // plano): deriva de `activeOrders`, o MESMO dado que já alimenta os
+    // cards de mesa (fetch_active_table_orders_secure, Realtime já ligado
+    // via loadData/canal `tables_dashboard_*` logo abaixo) — não é uma
+    // fonte nova, só uma projeção plana dele. Alcance real, registrado
+    // aqui por transparência: só cobre mesas ainda ABERTAS, porque a RPC
+    // já exclui order.status IN ('delivered','canceled') por design (é o
+    // mesmo filtro que faz o card de mesa sumir da lista quando a conta
+    // fecha — não dá pra reaproveitar o dado sem herdar o filtro). Uma vez
+    // que a mesa fecha, o pedido sai daqui e passa a viver só no Histórico
+    // de Vendas (StoreAdminView, fetchSalesHistory) — que já existe e já é
+    // acessível ao lojista/caixa; não duplicado aqui de propósito.
+    const sentHistoryItems = useMemo(() => {
+        if (orderFlow !== 'direct_print') return [];
+        const tableNumberById = new Map(tables.map(t => [t.id, t.number]));
+        const rows: {
+            id: string;
+            time: string;
+            tableNumber: number | string;
+            productName: string;
+            quantity: number;
+            destination: 'kitchen' | 'bar';
+            addons?: string;
+        }[] = [];
+        activeOrders.forEach(order => {
+            (order.order_items || []).forEach(item => {
+                if (item.status === OrderStatus.CANCELED) return;
+                rows.push({
+                    id: item.id,
+                    time: item.created_at,
+                    tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? '?',
+                    productName: item.product?.name || 'Produto indisponível',
+                    quantity: item.quantity,
+                    destination: item.product?.destination === 'bar' ? 'bar' : 'kitchen',
+                    addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
+                });
+            });
+        });
+        return rows.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    }, [orderFlow, activeOrders, tables]);
 
     const toggleSelection = (itemId: string, maxQty: number) => {
         setPaymentSelectedItems(prev => {
@@ -1454,12 +1508,24 @@ NOTIFY pgrst, 'reload schema';`;
         try {
             const summary = getTableSummary(selectedTable.id);
 
-            const pendingCount = summary.allItems.filter(
-                (item) => item.status !== OrderStatus.DELIVERED && item.status !== OrderStatus.CANCELED
-            ).length;
-            if (pendingCount > 0) {
-                toast.error(`Ainda tem ${pendingCount} item(ns) em preparo — marque como entregue ou cancele antes de fechar a mesa.`);
-                return;
+            // Task 2 (2026-08-22): este gate existe pra impedir fechar a
+            // mesa com item ainda "em preparo" no KDS — status só avança
+            // pending/accepted→preparing→ready→delivered através de um
+            // clique no KdsView. Fluxo direct_print não tem KDS nenhum: o
+            // item nasce 'pending' e é assim que fica pra sempre (sem RPC
+            // nova pra "marcar entregue" — decisão do plano, ver
+            // handleAddItem abaixo), porque a única confirmação de envio
+            // que existe é o ticket já ter saído impresso no clique. Manter
+            // este gate ligado aqui prenderia a mesa pra sempre, sem
+            // nenhuma tela onde apertar o botão que ele está pedindo.
+            if (orderFlow !== 'direct_print') {
+                const pendingCount = summary.allItems.filter(
+                    (item) => item.status !== OrderStatus.DELIVERED && item.status !== OrderStatus.CANCELED
+                ).length;
+                if (pendingCount > 0) {
+                    toast.error(`Ainda tem ${pendingCount} item(ns) em preparo — marque como entregue ou cancele antes de fechar a mesa.`);
+                    return;
+                }
             }
 
             const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
@@ -1560,11 +1626,41 @@ NOTIFY pgrst, 'reload schema';`;
 
         try {
             // Reuses createOrder logic which handles adding to existing orders
-            await createOrder(selectedTable.id, storeId, [{
+            const result = await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes, selectedOptions
             }], loggedUser.name, 'garcom');
 
             toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
+
+            // Task 2 (2026-08-22, plano perfis-de-loja-e-caixa): loja sem
+            // KDS — este clique EM "Lançar Pedido" já É o "enviar". Imprime
+            // o ticket na mesma resposta ao gesto, logo depois do único
+            // await desta função (createOrder, uma chamada RPC — não há
+            // nenhum await encadeado depois disso até aqui, então o
+            // contexto de gesto do clique ainda deve estar "sticky" o
+            // suficiente pra window.print() funcionar sem exigir um 2º
+            // clique; não verificado em todo navegador, ver relatório).
+            // Cozinha vs. bar decide pelo destino do PRODUTO
+            // (product.destination), mesmo default 'kitchen' já usado em
+            // fetchKitchenOrders/updateProduct (lib/api.ts:418) — cada
+            // clique já é um único item, então "um ticket por destino por
+            // envio" e "um ticket por item" (granularidade nativa de
+            // printKitchenTicket) coincidem aqui: nenhuma mudança em
+            // lib/print.ts foi necessária.
+            if (result.orderId && orderFlow === 'direct_print') {
+                printKitchenTicket({
+                    kind: product.destination === 'bar' ? 'BAR' : 'COZINHA',
+                    storeName: store.name,
+                    orderType: 'MESA',
+                    identifier: `MESA ${selectedTable.number}`,
+                    client: loggedUser.name,
+                    quantity: qty,
+                    productName: product.name,
+                    addons: selectedOptions.map(o => o.name).join(', ') || undefined,
+                    observation: notes || undefined,
+                    orderIdShort: result.orderId.slice(0, 8),
+                });
+            }
             // Optional: Close menu to go back to bill, or stay to add more
             // setShowMenuMode(false);
         } catch (e) {
@@ -1605,6 +1701,23 @@ NOTIFY pgrst, 'reload schema';`;
                     {areCardsCollapsed ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                     {areCardsCollapsed ? "Expandir Cards" : "Colapsar Cards"}
                 </Button>
+
+                {/* Task 2 (2026-08-22) — só aparece em direct_print: é o
+                    substituto do KDS pra esta loja, "acessível para garçom
+                    e caixa" (o brief pede os dois; hoje só quem acessa
+                    TablesView tem permissão 'tables' — caixa ganha a mesma
+                    tela na Task 4). Nas 6 lojas com KDS, orderFlow é
+                    sempre 'kds' e este botão nunca renderiza. */}
+                {orderFlow === 'direct_print' && (
+                    <Button
+                        variant="secondary"
+                        onClick={() => setShowSentHistory(true)}
+                        className="flex items-center gap-2 text-sm"
+                    >
+                        <FileText size={18} />
+                        Pedidos Enviados
+                    </Button>
+                )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -2390,6 +2503,40 @@ NOTIFY pgrst, 'reload schema';`;
                     <div className="flex justify-end pt-2">
                         <Button onClick={() => setShowFixDbModal(false)}>Entendi</Button>
                     </div>
+                </div>
+            </Modal>
+
+            {/* Task 2 (2026-08-22) — "Histórico de Pedidos Enviados": lista
+                plana (hora, mesa, item, destino), sem status nem coluna de
+                fluxo nenhuma — só responde "o pedido já foi?" pra quem não
+                tem KDS. Ver sentHistoryItems acima pro alcance real (só
+                mesas ainda abertas). */}
+            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos Enviados" variant="sheet">
+                <div className="space-y-3">
+                    <p className="text-xs text-[var(--text-muted)]">
+                        Tudo que já foi lançado e impresso nas mesas abertas, do mais recente pro mais antigo. Some daqui quando a mesa fecha — depois disso, fica no Histórico de Vendas.
+                    </p>
+                    {sentHistoryItems.length === 0 ? (
+                        <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum pedido enviado ainda nas mesas abertas.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-[65vh] overflow-y-auto">
+                            {sentHistoryItems.map(row => (
+                                <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-[var(--text)] truncate">
+                                            {row.quantity}x {row.productName}{row.addons ? ` (${row.addons})` : ''}
+                                        </p>
+                                        <p className="text-xs text-[var(--text-muted)]">
+                                            Mesa {row.tableNumber} · {new Date(row.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                    </div>
+                                    <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
+                                        {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
+                                    </Badge>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </Modal>
         </>
