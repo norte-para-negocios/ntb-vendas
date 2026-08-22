@@ -197,15 +197,49 @@ export interface BillReceiptItem {
   total: number;
 }
 
+// Task 3 (2026-08-22): estado explícito da taxa de serviço nesta conta —
+// antes o comprovante só tinha `serviceFee?: number` e, quando ausente, a
+// linha inteira sumia (ambíguo: cliente não tinha como saber, no papel, se
+// a loja simplesmente não cobra taxa ou se esqueceram de imprimir). Também
+// corrige um achado real: o template tinha "Taxa de Serviço (10%)"
+// hardcoded, ignorando `store.config.service_fee_rate` — `rate` aqui é
+// SEMPRE o percentual de verdade da loja (lib/calc.ts SERVICE_FEE_RATE só
+// como fallback no caller), nunca um literal.
+//
+// Ausente (`undefined`) = documento sem nenhum conceito de taxa de serviço
+// (hoje só o comprovante de balcão, que estruturalmente nunca cobra taxa —
+// não é "ambíguo", é inaplicável). Qualquer comprovante de MESA deve
+// sempre passar este objeto.
+export interface BillServiceFeeInfo {
+  /** Taxa está sendo cobrada nesta conta específica. */
+  charged: boolean;
+  /** Percentual real da loja (nunca hardcoded). */
+  rate: number;
+  /** Valor calculado da taxa; só relevante quando charged=true. */
+  amount: number;
+  /** Loja cobra por padrão, mas a taxa foi removida desta mesa específica
+   * (direito do cliente, ver `tables.service_fee_removed`). */
+  removedForTable: boolean;
+}
+
 export function printBillReceipt(opts: {
   storeName: string;
   cnpj?: string | null;
   label: string;
   items: BillReceiptItem[];
   subtotal: number;
-  serviceFee?: number;
+  serviceFee?: BillServiceFeeInfo;
   total: number;
 }) {
+  const feeRow = opts.serviceFee
+    ? opts.serviceFee.charged
+      ? `<tr><td>Taxa de Serviço (${(opts.serviceFee.rate * 100).toFixed(0)}% opcional)</td><td class="right">R$ ${opts.serviceFee.amount.toFixed(2)}</td></tr>`
+      : `<tr><td colspan="2" style="font-style:italic;">${
+          opts.serviceFee.removedForTable
+            ? 'Taxa de serviço opcional removida nesta mesa'
+            : 'Este estabelecimento não cobra taxa de serviço'
+        }</td></tr>`
+    : '';
   const body = `
     <div class="header">
       <div class="store-name">${escapeHtml(opts.storeName)}</div>
@@ -234,7 +268,7 @@ export function printBillReceipt(opts: {
       opts.serviceFee
         ? `<table class="summary-table">
             <tr><td>Subtotal</td><td class="right">R$ ${opts.subtotal.toFixed(2)}</td></tr>
-            <tr><td>Taxa de Serviço (10%)</td><td class="right">R$ ${opts.serviceFee.toFixed(2)}</td></tr>
+            ${feeRow}
           </table>`
         : ''
     }

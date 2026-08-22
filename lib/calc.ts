@@ -8,6 +8,18 @@ export function calculateServiceFee(subtotal: number, rate: number = SERVICE_FEE
   return subtotal * rate;
 }
 
+// Formata a taxa como percentual inteiro pra exibição (0.10 -> "10%"). Antes
+// disso, cada tela reescrevia `(rate * 100).toFixed(0) + '%'` na hora de
+// montar o texto — inofensivo hoje (nunca é `subtotal * 0.1`, sempre deriva
+// de um `rate` já vindo de `store.config.service_fee_rate`/SERVICE_FEE_RATE),
+// mas centralizado aqui pelo mesmo motivo do resto do arquivo: quando o
+// percentual virar configurável por loja de verdade (Task 3, deixar a taxa
+// explícita em toda tela — ver AGENTS.md), toda exibição de "X%" já deriva
+// automaticamente do valor real, sem precisar caçar cada call site.
+export function formatServiceFeeRate(rate: number): string {
+  return `${(rate * 100).toFixed(0)}%`;
+}
+
 export function calculateOrderTotal(subtotal: number, chargeServiceFee: boolean, rate: number = SERVICE_FEE_RATE, serviceFeeRemoved?: boolean): number {
   if (!chargeServiceFee || serviceFeeRemoved) return subtotal;
   return subtotal + calculateServiceFee(subtotal, rate);

@@ -15,7 +15,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, SERVICE_FEE_RATE } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE } from '@/lib/calc';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
@@ -1740,7 +1740,13 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     const [serviceFee, setServiceFee] = useState(0);
     const [subtotal, setSubtotal] = useState(0);
     const [isServiceFeeEnabled, setIsServiceFeeEnabled] = useState(false);
-    const [serviceFeeRate, setServiceFeeRate] = useState(0.10);
+    const [serviceFeeRate, setServiceFeeRate] = useState(SERVICE_FEE_RATE);
+    // Task 3: distingue "a loja nunca cobra" de "a loja cobra, mas foi
+    // removida desta mesa" (`tables.service_fee_removed`, direito do
+    // cliente, nunca reativável por esta tela) — os dois têm o mesmo efeito
+    // no total (isServiceFeeEnabled=false), mas o texto explicativo precisa
+    // ser diferente pra não sugerir que a remoção nunca aconteceu.
+    const [isServiceFeeRemovedForTable, setIsServiceFeeRemovedForTable] = useState(false);
 
     // Defesa extra pro achado C2 da revisão final (2026-08-16): desde que
     // Modal variant="sheet" ficou montado durante a animação de saída em vez
@@ -1784,7 +1790,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
 
             // Calculate service fee
             const isFeeEnabled = !!(storeConfig?.charge_service_fee && !tableData?.service_fee_removed);
-            const feeRate = storeConfig?.service_fee_rate ?? 0.10;
+            const feeRate = storeConfig?.service_fee_rate ?? SERVICE_FEE_RATE;
             const calculatedSubtotal = data.total;
             const calculatedServiceFee = isFeeEnabled ? calculateServiceFee(calculatedSubtotal, feeRate) : 0;
 
@@ -1792,6 +1798,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
             setServiceFee(calculatedServiceFee);
             setTotal(calculateOrderTotal(calculatedSubtotal, isFeeEnabled, feeRate));
             setIsServiceFeeEnabled(isFeeEnabled);
+            setIsServiceFeeRemovedForTable(!!(storeConfig?.charge_service_fee && tableData?.service_fee_removed));
             setServiceFeeRate(feeRate);
 
             setItems(data.items);
@@ -1926,6 +1933,17 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     const calculatorServiceFee = isServiceFeeEnabled ? calculateServiceFee(calculatorSubtotal, serviceFeeRate) : 0;
     const calculatorTotal = calculateOrderTotal(calculatorSubtotal, isServiceFeeEnabled, serviceFeeRate);
 
+    // Task 3: quando a taxa NÃO está sendo cobrada nesta conta (loja nunca
+    // cobra, ou cobra por padrão mas foi removida desta mesa específica —
+    // `tables.service_fee_removed`, direito do cliente, nunca reativável
+    // por esta tela), a linha antes simplesmente sumia — ambíguo pro
+    // cliente ("pedi sem saber que ia pagar 10% a mais"). Sempre enuncia um
+    // dos dois estados de desligada; o estado ligada continua com o texto
+    // específico (valor + percentual) já existente em cada aba.
+    const serviceFeeOffText = isServiceFeeRemovedForTable
+        ? 'Taxa de serviço opcional removida nesta mesa'
+        : 'Esta loja não cobra taxa de serviço';
+
     // --- RENDER MODALS ---
 
     if (showCloseConfirmation) {
@@ -2018,9 +2036,11 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                     <div className="bg-[var(--brand)]/5 p-4 rounded-[var(--r-lg)] border border-[var(--brand)]/10 text-center">
                                         <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                         <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {formatBRL(total)}</p>
-                                        {isServiceFeeEnabled && (
-                                            <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {formatBRL(serviceFee)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}% opcional)</p>
-                                        )}
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                                            {isServiceFeeEnabled
+                                                ? `Inclui R$ ${formatBRL(serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                                : serviceFeeOffText}
+                                        </p>
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
                                         <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
@@ -2055,6 +2075,12 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                             {/* TAB 2: BY USER */}
                             {tab === 'users' && (
                                 <div className="space-y-4 animate-fade-in pt-2">
+                                    {/* Task 3: uma nota só (não por cartão de pessoa, que
+                                        repetiria a mesma frase N vezes) quando a taxa não
+                                        está sendo cobrada nesta conta. */}
+                                    {!isServiceFeeEnabled && items.length > 0 && (
+                                        <p className="text-xs text-[var(--text-muted)] px-1">{serviceFeeOffText}</p>
+                                    )}
                                     {Object.entries(usersBreakdown).map(([name, data]: [string, any]) => (
                                         <div key={name} className="border border-[var(--border)] rounded-[var(--r-lg)] overflow-hidden">
                                             <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
@@ -2073,7 +2099,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                 ))}
                                                 {isServiceFeeEnabled && (
                                                     <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
-                                                        <span>Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
+                                                        <span>Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
                                                         <span className="num">{formatBRL(data.serviceFee)}</span>
                                                     </div>
                                                 )}
@@ -2135,11 +2161,11 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                         <span className="font-bold">Total Selecionado</span>
                                         <span className="font-black text-xl num">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
-                                    {isServiceFeeEnabled && (
-                                        <div className="text-xs text-white/50 mt-1 text-right">
-                                            Inclui R$ {formatBRL(calculatorServiceFee)} de taxa de serviço
-                                        </div>
-                                    )}
+                                    <div className="text-xs text-white/50 mt-1 text-right">
+                                        {isServiceFeeEnabled
+                                            ? `Inclui R$ ${formatBRL(calculatorServiceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            : serviceFeeOffText}
+                                    </div>
                                 </div>
                             ) : (
                                 !isWaitingBill && (
@@ -2919,8 +2945,22 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // Mesa/Balcão NÃO entra aqui (achado da revisão final): já aparece no
     // chip de sessão logo abaixo (que também carrega nome do cliente + PIN),
     // renderizar de novo aqui duplicava a informação na mesma tela.
+    //
+    // Task 3 (2026-08-22): antes só entrava aqui quando a taxa estava
+    // ligada — desligada, a linha simplesmente não aparecia, o que o dono
+    // do projeto apontou como ambíguo ("o cliente pede sem saber que vai
+    // pagar 10% a mais"). Agora sempre enuncia um dos dois estados. Este
+    // cartão é a política DA LOJA (visível antes de qualquer mesa/sessão
+    // escolhida) — a remoção por mesa específica (`service_fee_removed`)
+    // não cabe aqui por desenho: não há mesa selecionada ainda neste ponto
+    // do fluxo. Quem carrega uma sessão de mesa vê o estado por-mesa exato
+    // na Conta (BillSplitter, mais abaixo neste arquivo).
     const heroMetaParts: string[] = [];
-    if (currentStore.config?.charge_service_fee) heroMetaParts.push(`Taxa de serviço ${(serviceFeeRateForHero * 100).toFixed(0)}%`);
+    heroMetaParts.push(
+        currentStore.config?.charge_service_fee
+            ? `Taxa de serviço opcional de ${formatServiceFeeRate(serviceFeeRateForHero)}`
+            : 'Sem taxa de serviço'
+    );
 
     // Endereço do cartão do hero (item 3): linha curta sempre visível
     // (bairro, cidade/UF) + linha completa (logradouro+número) só quando a

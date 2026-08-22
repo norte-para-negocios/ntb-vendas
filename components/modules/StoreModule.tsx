@@ -20,7 +20,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem, getEffectivePrice } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -1074,7 +1074,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 
 const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
-    const serviceFeeRate = store.config?.service_fee_rate ?? 0.10;
+    const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
     const watchedTables = useWatchedTables(storeId);
     const isFinishingRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
@@ -1155,9 +1155,14 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         });
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id));
+        // Task 3: distingue "loja nunca cobra" de "loja cobra, mas foi
+        // removida desta mesa" (mesmo botão "Remover Taxa" da comanda) —
+        // os dois zeram isServiceFeeEnabled, mas o texto explicativo pro
+        // garçom precisa dizer qual dos dois é, não só "sem taxa".
+        const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(selectedTable.id));
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
-        return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled };
+        return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled, isServiceFeeRemovedForTable };
     }, [selectedTable, activeOrders, store, removedServiceFees]);
 
     const usersBreakdown = useMemo(() => {
@@ -1322,10 +1327,11 @@ NOTIFY pgrst, 'reload schema';`;
         
         const table = tables.find(t => t.id === tableId);
         const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(tableId));
+        const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(tableId));
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
 
-        return { subtotal, serviceFee, total, count: items.length, items: items.slice(0, 3), allItems: items, isServiceFeeEnabled }; // Show top 3
+        return { subtotal, serviceFee, total, count: items.length, items: items.slice(0, 3), allItems: items, isServiceFeeEnabled, isServiceFeeRemovedForTable }; // Show top 3
     };
 
     // Totais da aba de Pagamento: quanto falta pagar e, quando o dinheiro
@@ -1351,7 +1357,17 @@ NOTIFY pgrst, 'reload schema';`;
                 total: item.price_at_time * item.quantity,
             })),
             subtotal: summary.subtotal,
-            serviceFee: summary.isServiceFeeEnabled ? summary.serviceFee : undefined,
+            // Task 3: sempre manda o objeto (nunca `undefined`) pra
+            // printBillReceipt sempre enunciar o estado da taxa nesta
+            // comanda — cobrando, removida desta mesa, ou loja sem taxa.
+            // Ausente só faz sentido pro comprovante de balcão
+            // (printCounterReceipt), que estruturalmente nunca tem taxa.
+            serviceFee: {
+                charged: summary.isServiceFeeEnabled,
+                rate: serviceFeeRate,
+                amount: summary.serviceFee,
+                removedForTable: summary.isServiceFeeRemovedForTable,
+            },
             total: summary.total,
         });
     };
@@ -1892,15 +1908,21 @@ NOTIFY pgrst, 'reload schema';`;
                                                         </div>
                                                     </div>
                                                 ))}
-                                                {summary?.isServiceFeeEnabled && (
+                                                {/* Task 3: linha da taxa de serviço agora SEMPRE aparece na
+                                                    comanda, nos 3 estados possíveis — antes só existia
+                                                    quando cobrando, e desligada (loja sem taxa OU taxa
+                                                    removida desta mesa) a linha simplesmente sumia, o que
+                                                    o dono do projeto apontou como ambíguo pro garçom
+                                                    também, não só pro cliente. */}
+                                                {summary?.isServiceFeeEnabled ? (
                                                     <div className="flex justify-between p-3 border-b border-[var(--border)] text-sm bg-[var(--info)]/5">
                                                         <div className="flex-1">
-                                                            <span className="font-bold text-[var(--text)]">Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
+                                                            <span className="font-bold text-[var(--text)]">Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
                                                             <div className="text-xs text-[var(--text-muted)] mt-1">Opcional</div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <span className="font-medium text-[var(--text)]">R$ {summary.serviceFee.toFixed(2)}</span>
-                                                            <button 
+                                                            <button
                                                                 onClick={() => {
                                                                     setRemovedServiceFees(prev => {
                                                                         const next = new Set(prev);
@@ -1914,6 +1936,14 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 <Trash2 size={16} />
                                                             </button>
                                                         </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex justify-between items-center p-3 border-b border-[var(--border)] text-sm text-[var(--text-muted)]">
+                                                        <span className="italic">
+                                                            {summary?.isServiceFeeRemovedForTable
+                                                                ? 'Taxa de serviço opcional removida nesta mesa'
+                                                                : 'Esta loja não cobra taxa de serviço'}
+                                                        </span>
                                                     </div>
                                                 )}
                                             </>
@@ -2147,9 +2177,13 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="bg-[var(--brand)]/5 p-4 rounded-xl border border-[var(--brand)]/10 text-center">
                                     <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                     <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {currentTableSummary.total.toFixed(2)}</p>
-                                    {currentTableSummary.isServiceFeeEnabled && (
-                                        <p className="text-xs text-[var(--text-muted)] mt-1">Inclui R$ {currentTableSummary.serviceFee.toFixed(2)} de taxa de serviço ({(serviceFeeRate * 100).toFixed(0)}%)</p>
-                                    )}
+                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                        {currentTableSummary.isServiceFeeEnabled
+                                            ? `Inclui R$ ${currentTableSummary.serviceFee.toFixed(2)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            : currentTableSummary.isServiceFeeRemovedForTable
+                                                ? 'Taxa de serviço opcional removida nesta mesa'
+                                                : 'Esta loja não cobra taxa de serviço'}
+                                    </p>
                                 </div>
                                 <div className="flex items-center justify-center gap-6 py-2">
                                     <button onClick={() => setPaymentPeople(Math.max(1, paymentPeople - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
@@ -2178,6 +2212,15 @@ NOTIFY pgrst, 'reload schema';`;
 
                         {paymentTab === 'users' && (
                             <div className="space-y-4 pt-2 animate-fade-in">
+                                {/* Task 3: uma nota só (não por cartão de pessoa) quando a
+                                    taxa não está sendo cobrada nesta comanda. */}
+                                {currentTableSummary && !currentTableSummary.isServiceFeeEnabled && currentTableSummary.allItems.length > 0 && (
+                                    <p className="text-xs text-[var(--text-muted)] px-1">
+                                        {currentTableSummary.isServiceFeeRemovedForTable
+                                            ? 'Taxa de serviço opcional removida nesta mesa'
+                                            : 'Esta loja não cobra taxa de serviço'}
+                                    </p>
+                                )}
                                 {Object.entries(usersBreakdown).map(([name, data]: [string, any]) => (
                                     <div key={name} className="border border-[var(--border)] rounded-xl overflow-hidden">
                                         <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
@@ -2195,7 +2238,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             ))}
                                             {currentTableSummary?.isServiceFeeEnabled && (
                                                 <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
-                                                    <span>Taxa de Serviço ({(serviceFeeRate * 100).toFixed(0)}%)</span>
+                                                    <span>Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
                                                     <span>{data.serviceFee.toFixed(2)}</span>
                                                 </div>
                                             )}
@@ -2262,11 +2305,13 @@ NOTIFY pgrst, 'reload schema';`;
                                         <span className="font-bold">Total Selecionado</span>
                                         <span className="font-black text-xl">R$ {calculatorTotal.toFixed(2)}</span>
                                     </div>
-                                    {currentTableSummary.isServiceFeeEnabled && (
-                                        <div className="text-xs text-white/50 mt-1 text-right">
-                                            Inclui R$ {calculatorServiceFee.toFixed(2)} de taxa de serviço
-                                        </div>
-                                    )}
+                                    <div className="text-xs text-white/50 mt-1 text-right">
+                                        {currentTableSummary.isServiceFeeEnabled
+                                            ? `Inclui R$ ${calculatorServiceFee.toFixed(2)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            : currentTableSummary.isServiceFeeRemovedForTable
+                                                ? 'Taxa de serviço opcional removida nesta mesa'
+                                                : 'Esta loja não cobra taxa de serviço'}
+                                    </div>
                                     <Button
                                         className="w-full mt-3 bg-white text-[var(--ink)] hover:bg-[var(--surface-2)]"
                                         onClick={() => {
@@ -3346,8 +3391,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
                 <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
                     <div>
-                        <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço ({((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}%)</h4>
-                        <p className="text-sm text-[var(--text-muted)]">Aplica {((store.config?.service_fee_rate ?? 0.10) * 100).toFixed(0)}% de taxa opcional no total das comandas e pedidos.</p>
+                        <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço ({formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)})</h4>
+                        <p className="text-sm text-[var(--text-muted)]">Aplica {formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)} de taxa opcional no total das comandas e pedidos.</p>
                     </div>
                     <button
                         onClick={handleToggleServiceFee}
