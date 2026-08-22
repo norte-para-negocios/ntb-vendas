@@ -51,11 +51,23 @@ const THERMAL_STYLES = `
 // que SEMPRE retornava `null` — é o próprio propósito de `noopener`, cortar o
 // vínculo com a janela aberta — e fazia as duas funções públicas saírem em
 // silêncio, sem imprimir nada, nas 7 lojas, sempre (bug real, reproduzido ao
-// vivo, ver AGENTS.md "Impressão"). O `noopener` estava ali para isolar o
-// `document.write()` do documento principal (a observação do pedido é texto
-// livre do cliente — sem isolamento é XSS armazenado); o iframe preserva
-// exatamente esse isolamento (o HTML só existe dentro do `document` do
-// iframe, nunca é injetado na página em si) enquanto imprime de verdade.
+// vivo, ver AGENTS.md "Impressão").
+//
+// ATENÇÃO — isto NÃO tem o mesmo isolamento que o `noopener` antigo tinha.
+// Um popup com `noopener` corta de propósito o vínculo `window.opener`: o
+// popup não enxerga o `window` do painel do lojista logado. Um iframe
+// same-origin é o oposto disso — `iframe.contentWindow.parent` é o próprio
+// `window` do painel, com acesso total a `localStorage`, ao DOM da página
+// logada e a qualquer variável em escopo. Trocar `noopener` por iframe
+// resolveu o bug de impressão, mas NÃO preserva isolamento nenhum contra o
+// documento pai.
+// A única coisa que impede um campo de texto livre (nome do cliente,
+// observação do pedido) de rodar JavaScript dentro desse iframe — e dali
+// alcançar o painel logado via `parent` — é `escapeHtml()` (definida
+// abaixo) aplicada em TODA interpolação. Isso é obrigatório, não
+// opcional: ao adicionar qualquer campo novo aos templates deste arquivo,
+// passar por `escapeHtml()` sempre, mesmo que o valor pareça controlado
+// internamente.
 //
 // O iframe fica fora do fluxo/visão via posição fora da tela + tamanho 1px —
 // nunca `display:none`: vários navegadores (Firefox e Safari incluídos)
@@ -102,17 +114,25 @@ function printHtmlDocument(title: string, styles: string, bodyHtml: string) {
       cleanup();
       return;
     }
+    // `onafterprint` precisa estar armado ANTES de chamar print(), não
+    // depois (correção da revisão final de branch, 2026-08-22): em Firefox
+    // e WebKit, `window.print()` BLOQUEIA a thread até o diálogo do SO
+    // fechar, e o evento 'afterprint' pode disparar DURANTE essa chamada —
+    // um handler atribuído só depois que print() retorna (ex.: dentro do
+    // `finally` abaixo) nunca é visto por essas engines, porque o evento já
+    // passou. Nesse cenário a limpeza caía inteiramente no backstop de 60s,
+    // deixando o iframe de 1px no DOM por um minuto inteiro a cada
+    // impressão nesses navegadores.
     try {
       win.focus();
+      win.onafterprint = cleanup;
       win.print();
     } finally {
-      // Arma a limpeza MESMO se focus()/print() lançar (achado #1 da
-      // revisão de código): sem o `finally`, um print() que falha — rate
-      // limit do navegador, restrição de ambiente, quirk específico —
-      // nunca chegava a registrar 'afterprint' nem o timeout de segurança
-      // abaixo, e o iframe ficava pra sempre no DOM. Com `finally`, a
-      // limpeza é armada de qualquer jeito.
-      win.onafterprint = cleanup;
+      // O `finally` continua armando só o backstop (não o `onafterprint`,
+      // que já foi armado acima) — isso preserva a garantia original: se
+      // `focus()`/`print()` lançar antes de o `onafterprint` acima ter
+      // chance de disparar, o iframe ainda precisa de uma rede de
+      // segurança pra não vazar pra sempre no DOM.
       // Backstop de última instância, só pra garantir que nada vaza se
       // 'afterprint' nunca disparar (não é evento garantido em toda
       // engine — ex.: Safari mobile). 60s é DELIBERADAMENTE folgado: o

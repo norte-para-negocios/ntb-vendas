@@ -1770,11 +1770,23 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
     // Guard `!isWaitingBill`: se a conta já foi pedida, não faz sentido
     // reabrir "Deseja realmente pedir a conta?" — o próprio conteúdo normal
     // do modal já mostra "Conta Solicitada. Aguarde o garçom." nesse caso.
+    // Guard `!isLoading` (achado da revisão final, 2026-08-22): `loadBill`
+    // ainda está em voo no primeiro paint (`isLoading` começa `true`), então
+    // sem este guard a tela de confirmação abria ANTES de `items` chegar —
+    // `hasPendingItems` calculava `false` sobre uma lista vazia, o bloco
+    // `!hasPendingItems` (abaixo) renderizava com um único botão ("Sim,
+    // Fechar Conta"), e no instante seguinte, quando `loadBill` resolvia com
+    // itens pendentes de verdade, o layout virava pra dois botões com o
+    // destrutivo ("Cancelar Pendentes e Fechar", `variant="danger"`) no
+    // topo — exatamente onde o botão seguro acabara de estar. Esse atalho
+    // (Task 4) é o único caminho novo que abre esta confirmação com
+    // `isLoading` ainda `true`; pelo footer normal (`!isLoading` já
+    // filtrava a renderização de quem chamava) essa janela nunca existiu.
     useEffect(() => {
-        if (isOpen && requestBillOnOpen && !isWaitingBill) {
+        if (isOpen && !isLoading && requestBillOnOpen && !isWaitingBill) {
             setShowCloseConfirmation(true);
         }
-    }, [isOpen, requestBillOnOpen, isWaitingBill]);
+    }, [isOpen, isLoading, requestBillOnOpen, isWaitingBill]);
 
     useEffect(() => {
         // Modal (variant="sheet") agora fica montado durante a animação de
@@ -2048,11 +2060,24 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                     <div className="bg-[var(--brand)]/5 p-4 rounded-[var(--r-lg)] border border-[var(--brand)]/10 text-center">
                                         <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                         <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {formatBRL(total)}</p>
-                                        <p className="text-xs text-[var(--text-muted)] mt-1">
-                                            {isServiceFeeEnabled
-                                                ? `Inclui R$ ${formatBRL(serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
-                                                : serviceFeeOffText}
-                                        </p>
+                                        {/* Guard `items.length > 0` no ramo desligado (achado da
+                                            revisão final, 2026-08-22): esta aba mostrava
+                                            `serviceFeeOffText` incondicionalmente, enquanto a aba
+                                            "Por Cliente" (acima) já guardava a mesma frase em
+                                            `items.length > 0` -- uma mesa vazia (R$ 0,00, nenhum
+                                            pedido ainda) exibia "Esta loja não cobra taxa de
+                                            serviço" embaixo de um total zerado, sem nenhum item que
+                                            justificasse falar de taxa. Mesmo guard das duas abas
+                                            agora. Ramo ligado (fee real cobrada) não muda: mostrar
+                                            "Inclui R$ 0,00..." com a mesa ainda vazia não é a mesma
+                                            ambiguidade que este achado aponta. */}
+                                        {(isServiceFeeEnabled || items.length > 0) && (
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">
+                                                {isServiceFeeEnabled
+                                                    ? `Inclui R$ ${formatBRL(serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                                    : serviceFeeOffText}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="flex items-center justify-center gap-6 py-2">
                                         <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
@@ -2482,6 +2507,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         });
     }, [currentStore?.id]);
 
+    // Ref pro valor mais recente de `tableOrdersUnknown`, lido de dentro do
+    // handler do canal realtime abaixo sem precisar entrar no array de
+    // dependências do useEffect (que forçaria reinscrever o canal a cada
+    // vez que a incerteza muda de estado -- mesmo padrão já usado em
+    // `orderIdsRef` dentro de `useMesaOrders` acima).
+    const tableOrdersUnknownRef = useRef(tableOrdersUnknown);
+    tableOrdersUnknownRef.current = tableOrdersUnknown;
+
     // Realtime Table Status Listener — assina a tabela de ping (sem dado
     // sensivel) e busca o estado real via RPC segura, que nunca inclui `pin`.
     // Antes disso o listener usava payload.new direto: o pin da PROPRIA mesa
@@ -2502,6 +2535,35 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                          toast.info("A mesa foi fechada pelo restaurante. Obrigado!", 3000);
                          localStorage.removeItem(`session_${slug}`);
                          setTimeout(() => window.location.reload(), 2500);
+                         return;
+                    }
+
+                    // Auto-cura de `tableOrdersUnknown` (achado da revisão final,
+                    // 2026-08-22): antes desta correção, o flag só era ligado
+                    // dentro do bloco de AUTO-LOGIN (uma vez por mount) e só era
+                    // desligado por uma restauração bem-sucedida OU um pedido
+                    // próprio bem-sucedido -- se nenhum dos dois acontecesse de
+                    // novo (wifi de restaurante instável na primeira tentativa,
+                    // cliente sem pressa pra pedir outra rodada), a incerteza
+                    // durava pelo resto da vida da página, e com ela sumia a
+                    // única saída (`handleLogout`) do hero -- só "Pedir a conta"
+                    // ficava disponível, que trava a mesa inteira em
+                    // `waiting_bill` se confirmado. Este handler já roda a cada
+                    // ping realtime da mesa (mudança de status, pedido novo de
+                    // QUALQUER dispositivo etc.), então é reaproveitado aqui pra
+                    // tentar resolver a dúvida em segundo plano sem esperar
+                    // reload ou pedido novo desta sessão -- sucesso resolve em
+                    // segundos (o intervalo natural entre pings); falha
+                    // simplesmente tenta de novo no próximo.
+                    if (tableOrdersUnknownRef.current) {
+                        const summary = await fetchTableOrderSummary(currentTable.id);
+                        if (!summary.error) {
+                            const restoredOrderIds = Array.from(new Set(
+                                summary.items.map((item: any) => item.order_id).filter(Boolean)
+                            )) as string[];
+                            setMesaOrderIds(restoredOrderIds);
+                            setTableOrdersUnknown(false);
+                        }
                     }
                 })
                 .subscribe();
@@ -3071,7 +3133,28 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // nunca como "não há". Errar nessa direção é seguro (pior caso: cliente
     // sem nada a pagar toca "Pedir a conta" e o garçom limpa); errar pro
     // outro lado é o cliente saindo com conta em aberto.
-    const hasOpenTableOrders = mesaOrders.length > 0 || tableOrdersUnknown;
+    //
+    // `|| isWaitingBill` (achado da revisão final, 2026-08-22): `mesaOrders`
+    // só reflete pedidos que ESTE dispositivo enviou nesta sessão
+    // (`mesaOrderIds`), sem filtrar cancelado/pago -- ao vivo, na mesma
+    // sessão, ele acumula tudo que este aparelho mandou; após um reload, o
+    // AUTO-LOGIN o repopula a partir de `fetch_table_order_summary_secure`,
+    // que é table-scoped E filtra item cancelado/pedido
+    // `delivered`/`canceled`. A mesma mesa real, dependendo só do histórico
+    // de reload, podia dar "Sair" ou "Pedir a conta" pro MESMO estado real
+    // -- e um caso concreto sobrevivia aos dois: um cliente que entra numa
+    // mesa que OUTRO dispositivo já colocou em `waiting_bill` nunca passa
+    // pelo bloco de restauração (login novo, não reload de sessão salva),
+    // então `mesaOrders`/`tableOrdersUnknown` ficam vazios/false mesmo com
+    // a mesa já travada — via `isWaitingBill` (já em escopo, calculado bem
+    // acima a partir de `currentTable.status`), esse latecomer ganha
+    // "Sair" desabilitado bem debaixo do aviso "Conta Solicitada. Novos
+    // pedidos bloqueados.", contradição visual pura, e o próprio caso que
+    // este OR fecha. `isWaitingBill` é o sinal de mesa mais autoritativo já
+    // disponível (vem direto de `currentTable.status`, não de uma
+    // derivação local) -- somá-lo por OR nunca esconde "Sair" quando não
+    // deveria, só garante que uma mesa em `waiting_bill` nunca a oferece.
+    const hasOpenTableOrders = mesaOrders.length > 0 || tableOrdersUnknown || isWaitingBill;
 
     return (
         <MotionConfig reducedMotion="user">

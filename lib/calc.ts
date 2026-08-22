@@ -8,16 +8,20 @@ export function calculateServiceFee(subtotal: number, rate: number = SERVICE_FEE
   return subtotal * rate;
 }
 
-// Formata a taxa como percentual inteiro pra exibição (0.10 -> "10%"). Antes
-// disso, cada tela reescrevia `(rate * 100).toFixed(0) + '%'` na hora de
-// montar o texto — inofensivo hoje (nunca é `subtotal * 0.1`, sempre deriva
-// de um `rate` já vindo de `store.config.service_fee_rate`/SERVICE_FEE_RATE),
-// mas centralizado aqui pelo mesmo motivo do resto do arquivo: quando o
-// percentual virar configurável por loja de verdade (Task 3, deixar a taxa
-// explícita em toda tela — ver AGENTS.md), toda exibição de "X%" já deriva
-// automaticamente do valor real, sem precisar caçar cada call site.
+// Formata a taxa como percentual pra exibição (0.10 -> "10%", 0.125 -> "12,5%").
+// Antes disso, cada tela reescrevia `(rate * 100).toFixed(0) + '%'` na hora de
+// montar o texto — e o Master Admin permite taxa fracionária
+// (`AdminModule.tsx`, `<Input type="number" step="0.1">`), então `.toFixed(0)`
+// arredondava e imprimia um percentual que contradizia o valor real cobrado
+// (ex.: loja em 12,5% mostrava "13%" ao lado de "R$ 12,50"). Preserva número
+// inteiro limpo ("10%") e usa vírgula decimal pt-BR só quando há fração
+// ("12,5%"). Centralizado aqui pelo mesmo motivo do resto do arquivo: toda
+// exibição de "X%" deriva automaticamente do valor real, sem precisar caçar
+// cada call site.
 export function formatServiceFeeRate(rate: number): string {
-  return `${(rate * 100).toFixed(0)}%`;
+  const pct = Number((rate * 100).toFixed(2));
+  const formatted = pct.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  return `${formatted}%`;
 }
 
 export function calculateOrderTotal(subtotal: number, chargeServiceFee: boolean, rate: number = SERVICE_FEE_RATE, serviceFeeRemoved?: boolean): number {
