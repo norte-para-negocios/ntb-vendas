@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
-import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
+import { StoreModules, OrderFlow, PrintTarget, isDefaultStoreModules } from '@/lib/storeModules';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -1190,13 +1190,20 @@ export interface CreateStoreParams {
   // loja criada/editada sem tocar nesta seção nunca ganha essas chaves.
   modules?: StoreModules;
   orderFlow?: OrderFlow;
+  // Fix round 1 (correção de design, plano 2026-08-22): destino da impressão
+  // do ticket em `order_flow === 'direct_print'` — 'device' (default, mesmo
+  // comportamento que a Task 2 já entregou) ou 'station' (a Estação de
+  // Impressão da Task 3 é quem imprime; o aparelho do garçom não imprime
+  // nada, pra não sair duplicado). Ver lib/storeModules.ts (resolvePrintTarget).
+  printTarget?: PrintTarget;
 }
 
 // Perfil de módulos por loja (Task 1): decide se `params.modules`/
-// `params.orderFlow` viram `config.modules`/`config.order_flow` de verdade.
-// Nunca grava o default explícito (tudo ligado + 'kds') — ausência de chave
-// já significa isso (ver lib/storeModules.ts) — e remove a chave de um
-// config existente se o admin editar uma loja de volta pro default (senão
+// `params.orderFlow`/`params.printTarget` viram `config.modules`/
+// `config.order_flow`/`config.print_target` de verdade. Nunca grava o
+// default explícito (tudo ligado + 'kds' + 'device') — ausência de chave já
+// significa isso (ver lib/storeModules.ts) — e remove a chave de um config
+// existente se o admin editar uma loja de volta pro default (senão
 // "desfazer" a customização no formulário nunca desfaria no banco).
 const applyModulesConfigFields = (config: Record<string, any>, params: CreateStoreParams): Record<string, any> => {
   const next = { ...config };
@@ -1209,6 +1216,11 @@ const applyModulesConfigFields = (config: Record<string, any>, params: CreateSto
     next.order_flow = 'direct_print';
   } else {
     delete next.order_flow;
+  }
+  if (params.printTarget === 'station') {
+    next.print_target = 'station';
+  } else {
+    delete next.print_target;
   }
   return next;
 };

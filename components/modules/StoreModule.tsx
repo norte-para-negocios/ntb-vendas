@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, TAB_MODULE_KEY } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, resolvePrintTarget, computeAccessibleTabIds, TAB_IDS } from '@/lib/storeModules';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -15,6 +15,7 @@ import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermiss
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
+import { alertError } from '@/components/AlertDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay } from '@/lib/labels';
@@ -420,12 +421,15 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // permissão E a LOJA tem o módulo ligado — antes só a permissão era
   // checada aqui, então uma loja sem nenhum store_user (como o Sertão hoje)
   // sempre via as 6 abas via conta universal, mesmo sem cozinha/bar.
+  // Fix round 1 (Task 1 review, Important #1): usa computeAccessibleTabIds
+  // (lib/storeModules.ts) em vez de repetir a checagem de módulo aqui — ela
+  // garante que 'admin' nunca fica fora do alcance de todo mundo ao mesmo
+  // tempo (ver comentário lá pro porquê).
   const storeModules = resolveStoreModules(user.store);
-  const visibleTabs = allTabs.filter(tab => {
-    const moduleKey = TAB_MODULE_KEY[tab.id];
-    if (moduleKey && !storeModules[moduleKey]) return false;
-    return user.role === 'owner' || user.permissions?.[tab.permission as keyof typeof user.permissions] !== false;
-  });
+  const hasPermission = (tabId: string) =>
+    user.role === 'owner' || user.permissions?.[tabId as keyof typeof user.permissions] !== false;
+  const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
+  const visibleTabs = allTabs.filter(tab => accessibleTabIds.has(tab.id));
   const bottomNavTabs = visibleTabs.filter(item => ['tables', 'counter', 'kitchen', 'bar'].includes(item.id));
 
   return (
@@ -1106,8 +1110,20 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // nos ramos novos abaixo (impressão no clique de handleAddItem, gate de
     // fechamento sem exigir status, histórico de envios).
     const orderFlow = resolveOrderFlow(store);
+    // Fix round 1 (correção de design, plano 2026-08-22): quando a estação
+    // de impressão (Task 3, ainda não construída) é quem imprime esta loja,
+    // o aparelho do garçom não pode imprimir também — senão cada pedido sai
+    // duplicado. Ver lib/storeModules.ts (resolvePrintTarget). Ausência de
+    // config = 'device', preserva exatamente o que a Task 2 já entregou.
+    const printTarget = resolvePrintTarget(store);
     const watchedTables = useWatchedTables(storeId);
     const isFinishingRef = useRef(false);
+    // Fix round 1 (Task 2 review, Minor #3): mesmo estilo de guarda que
+    // isFinishingRef já usa em handleFinishPayment — sem isso, um duplo
+    // toque rápido em "Lançar Pedido" dispara duas createOrder e, em
+    // direct_print, imprime dois tickets físicos + duplica o pedido na
+    // cozinha.
+    const isAddingItemRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
@@ -1621,6 +1637,14 @@ NOTIFY pgrst, 'reload schema';`;
     
     const handleAddItem = async (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => {
         if (!selectedTable) return;
+        // Fix round 1 (Task 2 review, Minor #3): mesmo padrão de guarda
+        // síncrona que handleFinishPayment já usa (isFinishingRef) — sem
+        // isso, um duplo toque rápido em "Lançar Pedido" (antes do primeiro
+        // clique re-renderizar/desabilitar o botão) dispara duas
+        // createOrder, e em direct_print cada uma imprime seu próprio
+        // ticket físico.
+        if (isAddingItemRef.current) return;
+        isAddingItemRef.current = true;
 
         const finalNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
 
@@ -1647,8 +1671,24 @@ NOTIFY pgrst, 'reload schema';`;
             // envio" e "um ticket por item" (granularidade nativa de
             // printKitchenTicket) coincidem aqui: nenhuma mudança em
             // lib/print.ts foi necessária.
-            if (result.orderId && orderFlow === 'direct_print') {
-                printKitchenTicket({
+            //
+            // Fix round 1 (correção de design): `printTarget === 'device'`
+            // é o segundo portão — quando a loja usa uma Estação de
+            // Impressão (Task 3), este aparelho não imprime nada, senão o
+            // pedido sairia duplicado (uma vez aqui, outra na estação).
+            if (result.orderId && orderFlow === 'direct_print' && printTarget === 'device') {
+                // Fix round 1 (Task 2 review, Important #2): printKitchenTicket
+                // agora devolve Promise<boolean> — antes disso, uma falha
+                // silenciosa (iframe sem contentDocument/contentWindow) não
+                // tinha NENHUM jeito de chegar até aqui: o toast de sucesso
+                // já tinha aparecido, o pedido já estava salvo, e ninguém
+                // saberia que a comida nunca chegou na cozinha até o
+                // cliente reclamar. Nesta loja a impressão é o ÚNICO
+                // mecanismo de entrega do pedido (sem KDS, sem tela de
+                // acompanhamento) — por isso o aviso de falha usa
+                // alertError() (modal bloqueante, exige toque explícito),
+                // não toast.error() (some sozinho em alguns segundos).
+                const printed = await printKitchenTicket({
                     kind: product.destination === 'bar' ? 'BAR' : 'COZINHA',
                     storeName: store.name,
                     orderType: 'MESA',
@@ -1660,12 +1700,21 @@ NOTIFY pgrst, 'reload schema';`;
                     observation: notes || undefined,
                     orderIdShort: result.orderId.slice(0, 8),
                 });
+
+                if (!printed) {
+                    await alertError({
+                        title: 'A impressão falhou',
+                        message: `O pedido foi salvo, mas o ticket de ${qty}x ${product.name} (Mesa ${selectedTable.number}) NÃO imprimiu. Avise a cozinha manualmente sobre este item.`,
+                    });
+                }
             }
             // Optional: Close menu to go back to bill, or stay to add more
             // setShowMenuMode(false);
         } catch (e) {
             toast.error("Erro ao adicionar item.");
             console.error(e);
+        } finally {
+            isAddingItemRef.current = false;
         }
     };
 
@@ -5777,16 +5826,21 @@ const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
 // primeiro módulo na ordem (ex.: "tables") está desligado na loja cairia lá
 // mesmo assim e bateria na tela de "sem permissão" em vez de ir pra próxima
 // aba válida.
+//
+// Fix round 1 (Task 1 review, Important #1 — "self-inflicted lockout"): o
+// fallback antigo (`?? 'admin'`) devolvia o literal 'admin' sem checar se
+// 'admin' de fato estava acessível, então uma loja com todos os módulos
+// desligados (sem validação nenhuma impedindo o Master Admin de salvar
+// assim) estranhava o dono/conta universal numa aba sem conteúdo e sem
+// NENHUMA aba visível na sidebar pra sair de lá. `computeAccessibleTabIds`
+// (lib/storeModules.ts) já garante que 'admin' sobra acessível quando mais
+// nenhuma aba sobraria — aqui só percorremos TAB_IDS na ordem de sempre até
+// achar a primeira que está nesse conjunto.
 const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
     const modules = resolveStoreModules(u.store);
     const hasPermission = (tabId: string) => u.role === 'owner' || u.permissions?.[tabId as keyof typeof u.permissions] !== false;
-    const isAccessible = (tabId: string) => {
-        const moduleKey = TAB_MODULE_KEY[tabId];
-        if (moduleKey && !modules[moduleKey]) return false;
-        return hasPermission(tabId);
-    };
-    const candidates = ['tables', 'counter', 'kitchen', 'bar', 'menu', 'admin'];
-    return candidates.find(isAccessible) ?? 'admin';
+    const accessible = computeAccessibleTabIds(modules, hasPermission);
+    return TAB_IDS.find((t) => accessible.has(t)) ?? 'admin';
 };
 
 export const StoreModule: React.FC = () => {
@@ -5904,15 +5958,19 @@ export const StoreModule: React.FC = () => {
     // Permission Check — Task 1 (perfil de módulos por loja): agora exige as
     // DUAS coisas, o usuário ter permissão E a loja ter o módulo ligado.
     // 'kitchen'/'bar' (nomes de aba/permissão) mapeiam pros módulos mais
-    // específicos kitchen_kds/bar_kds via TAB_MODULE_KEY.
+    // específicos kitchen_kds/bar_kds via TAB_MODULE_KEY (dentro de
+    // computeAccessibleTabIds). Fix round 1 (Important #1): usa a mesma
+    // função compartilhada de pickInitialStoreTab/StoreLayout.visibleTabs —
+    // ela garante que 'admin' nunca fica fora de alcance de todo mundo ao
+    // mesmo tempo (ver lib/storeModules.ts).
     const storeModules = resolveStoreModules(user.store);
-    const canAccess = (t: string) => {
-        const moduleKey = TAB_MODULE_KEY[t];
-        if (moduleKey && !storeModules[moduleKey]) return false;
+    const hasPermission = (t: string) => {
         if (user.role === 'owner') return true;
         if (!user.permissions) return true; // Default to true if no permissions defined (legacy)
         return user.permissions[t as keyof typeof user.permissions] !== false;
     };
+    const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
+    const canAccess = (t: string) => accessibleTabIds.has(t);
 
     // Terceiro wrap de MotionConfig (view autenticada) — ver comentário
     // acima dos dois primeiros (loading/login) pro porquê de precisar de um

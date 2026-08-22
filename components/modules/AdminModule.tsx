@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, StoreModules, OrderFlow } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, resolvePrintTarget, isDefaultStoreModules, StoreModules, OrderFlow, PrintTarget } from '@/lib/storeModules';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -199,6 +199,12 @@ export const AdminModule: React.FC = () => {
   const [modMenu, setModMenu] = useState(true);
   const [modAdmin, setModAdmin] = useState(true);
   const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
+  // Fix round 1 (correção de design, plano 2026-08-22) — onde o ticket
+  // imprime quando orderFlow === 'direct_print'. Ver lib/storeModules.ts
+  // (resolvePrintTarget) e o comentário de applyModulesConfigFields em
+  // lib/api.ts. Loja nova nasce em 'device' (mesmo comportamento que a
+  // Task 2 já entregou), igual ao resto deste perfil.
+  const [printTarget, setPrintTarget] = useState<PrintTarget>('device');
 
   // Logo Upload State
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -348,6 +354,7 @@ export const AdminModule: React.FC = () => {
       setModMenu(true);
       setModAdmin(true);
       setOrderFlow('kds');
+      setPrintTarget('device');
       setLogoFile(null);
       setLogoPreview(null);
       setCoverFile(null);
@@ -447,6 +454,7 @@ export const AdminModule: React.FC = () => {
       setModMenu(storeModules.menu);
       setModAdmin(storeModules.admin);
       setOrderFlow(resolveOrderFlow(store));
+      setPrintTarget(resolvePrintTarget(store));
 
       setLogoPreview(store.logo_url);
       setLogoFile(null);
@@ -751,6 +759,7 @@ export const AdminModule: React.FC = () => {
               // config idêntico ao de antes desta feature.
               modules,
               orderFlow,
+              printTarget,
           };
 
           let result;
@@ -1301,6 +1310,42 @@ export const AdminModule: React.FC = () => {
                               : 'Pedido enviado aparece na tela da Cozinha/Bar até ser preparado e entregue.'}
                       </p>
                   </div>
+
+                  {/* Fix round 1 (correção de design, plano 2026-08-22) —
+                      só faz sentido perguntar isso quando o pedido de fato
+                      imprime ao ser enviado (fluxo "Envia direto para
+                      impressão"). Ausência de config = 'device', mesmo
+                      comportamento que a Task 2 já entregou. */}
+                  {orderFlow === 'direct_print' && (
+                      <div className="pt-3 border-t border-[var(--border)] space-y-2">
+                          <label className="text-xs font-semibold text-[var(--text)]">Onde imprime</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={printTarget === 'device'}
+                                  onClick={() => setPrintTarget('device')}
+                                  className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${printTarget === 'device' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                              >
+                                  Neste aparelho
+                              </button>
+                              <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={printTarget === 'station'}
+                                  onClick={() => setPrintTarget('station')}
+                                  className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${printTarget === 'station' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                              >
+                                  Numa estação de impressão
+                              </button>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)]">
+                              {printTarget === 'station'
+                                  ? 'O aparelho de quem lançou o pedido não imprime nada — quem imprime é a estação fixa (ex.: na cozinha).'
+                                  : 'O pedido imprime no próprio aparelho de quem lançou (precisa de impressora ligada nele).'}
+                          </p>
+                      </div>
+                  )}
               </div>
 
               {/* Criar no NTB Estoque também — só em "Nova Loja" (loja já

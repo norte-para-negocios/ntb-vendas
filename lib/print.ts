@@ -75,117 +75,146 @@ const THERMAL_STYLES = `
 // Nenhum atributo `sandbox`: `escapeHtml()` já protege todo o texto livre
 // interpolado nos templates abaixo, e um `sandbox` mal configurado pode
 // bloquear a própria impressão sem necessidade.
-function printHtmlDocument(title: string, styles: string, bodyHtml: string) {
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.top = '-10000px';
-  iframe.style.left = '-10000px';
-  iframe.style.width = '1px';
-  iframe.style.height = '1px';
-  iframe.style.border = '0';
-  iframe.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(iframe);
+// Fix round 1 (Task 2 review, Important #2): esta função era `void` e saía
+// em silêncio nos dois pontos em que `doc`/`contentWindow` vêm `null` —
+// exatamente os dois jeitos "novos" (iframe) de reproduzir o mesmo sintoma
+// do bug antigo do `window.open(..., 'noopener')`: nada imprime, e nenhum
+// chamador tem como saber. Passa a devolver `Promise<boolean>` — `true`
+// assim que `win.print()` é chamado sem lançar, `false` em qualquer um dos
+// pontos de saída silenciosa (doc/contentWindow ausente) ou se
+// `focus()`/`print()` lançar. Isso NÃO garante que o papel saiu da
+// impressora (o navegador não devolve esse sinal) — garante exatamente o
+// que os pontos de falha documentados abaixo tornavam impossível saber: se
+// o transporte de impressão sequer foi acionado. Nenhuma mudança na lógica
+// de cleanup/`triggered`/`cleaned`/timeouts abaixo, só a adição do
+// `resolve(...)` nos mesmos pontos que já existiam.
+function printHtmlDocument(title: string, styles: string, bodyHtml: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-10000px';
+    iframe.style.left = '-10000px';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    iframe.style.border = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
 
-  const doc = iframe.contentDocument;
-  if (!doc) {
-    iframe.remove();
-    return;
-  }
-
-  // Garante que o iframe some do DOM mesmo em cenários que podem chamar
-  // isso mais de uma vez (evento 'afterprint' + timeout de segurança) —
-  // imprimir 3x seguidas nunca deixa iframe acumulado.
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    iframe.remove();
-  };
-
-  // `triggered` impede chamar print() duas vezes: o load do iframe e o
-  // fallback abaixo podem, em tese, disparar os dois (achado #3 da revisão
-  // de código — ver comentário no fallback).
-  let triggered = false;
-  const triggerPrint = () => {
-    if (triggered) return;
-    triggered = true;
-    const win = iframe.contentWindow;
-    if (!win) {
-      cleanup();
+    const doc = iframe.contentDocument;
+    if (!doc) {
+      iframe.remove();
+      resolve(false);
       return;
     }
-    // `onafterprint` precisa estar armado ANTES de chamar print(), não
-    // depois (correção da revisão final de branch, 2026-08-22): em Firefox
-    // e WebKit, `window.print()` BLOQUEIA a thread até o diálogo do SO
-    // fechar, e o evento 'afterprint' pode disparar DURANTE essa chamada —
-    // um handler atribuído só depois que print() retorna (ex.: dentro do
-    // `finally` abaixo) nunca é visto por essas engines, porque o evento já
-    // passou. Nesse cenário a limpeza caía inteiramente no backstop de 60s,
-    // deixando o iframe de 1px no DOM por um minuto inteiro a cada
-    // impressão nesses navegadores.
-    try {
-      win.focus();
-      win.onafterprint = cleanup;
-      win.print();
-    } finally {
-      // O `finally` continua armando só o backstop (não o `onafterprint`,
-      // que já foi armado acima) — isso preserva a garantia original: se
-      // `focus()`/`print()` lançar antes de o `onafterprint` acima ter
-      // chance de disparar, o iframe ainda precisa de uma rede de
-      // segurança pra não vazar pra sempre no DOM.
-      // Backstop de última instância, só pra garantir que nada vaza se
-      // 'afterprint' nunca disparar (não é evento garantido em toda
-      // engine — ex.: Safari mobile). 60s é DELIBERADAMENTE folgado: o
-      // valor anterior (3s, achado #2 da revisão) corria risco real de
-      // remover o iframe — e com ele o conteúdo que o navegador ainda
-      // pode estar lendo pro job de impressão — enquanto o usuário só
-      // está escolhendo a impressora ou confirmando o diálogo do SO; 3s
-      // não é tempo suficiente pra isso na primeira impressão do turno,
-      // com uma impressora ainda não memorizada pelo navegador. Em uso
-      // normal 'afterprint' já terá disparado e chamado `cleanup()` bem
-      // antes dos 60s (a flag `cleaned` impede dupla remoção); este
-      // timeout só chega a agir quando 'afterprint' realmente nunca vem.
-      setTimeout(cleanup, 60000);
-    }
-  };
 
-  iframe.onload = () => {
-    // Mesma folga que o setTimeout original (500ms, e que agora também
-    // unifica o antigo 400ms que só o relatório de vendas usava — nunca
-    // foi uma diferença intencional, era resíduo de dois blocos de código
-    // copiados em momentos diferentes): dá tempo do layout/paint assentar
-    // antes do print() em navegadores mais lentos.
-    setTimeout(triggerPrint, 500);
-  };
+    // Garante que o iframe some do DOM mesmo em cenários que podem chamar
+    // isso mais de uma vez (evento 'afterprint' + timeout de segurança) —
+    // imprimir 3x seguidas nunca deixa iframe acumulado.
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      iframe.remove();
+    };
 
-  // Fallback pro load do iframe nunca disparar (achado #3 da revisão de
-  // código: o brief já citava esse risco explicitamente). Depender de um
-  // único sinal que pode não vir em toda engine/cenário é exatamente a
-  // classe de bug que motivou esta correção inteira — window.open() com
-  // noopener retornando null e a função saindo em silêncio, sem imprimir
-  // nada e sem erro. Sem este fallback, um 'load' que nunca dispara
-  // recriaria o mesmo sintoma, só que por outro caminho. `doc.write()`/
-  // `doc.close()` abaixo já rodam de forma síncrona, antes deste timeout
-  // poder disparar, então o conteúdo já está pronto independente de qual
-  // dos dois caminhos aciona `triggerPrint` primeiro; a flag `triggered`
-  // garante que só um deles efetivamente chama print().
-  setTimeout(triggerPrint, 1200);
+    // `settled` impede resolver a promise duas vezes, mesma ideia de
+    // `triggered`/`cleaned` abaixo — só um caminho decide o resultado.
+    let settled = false;
+    const settle = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
 
-  doc.open();
-  doc.write(`
-    <html>
-      <head>
-        <title>${escapeHtml(title)}</title>
-        <style>${styles}</style>
-      </head>
-      <body>${bodyHtml}</body>
-    </html>
-  `);
-  doc.close();
+    // `triggered` impede chamar print() duas vezes: o load do iframe e o
+    // fallback abaixo podem, em tese, disparar os dois (achado #3 da revisão
+    // de código — ver comentário no fallback).
+    let triggered = false;
+    const triggerPrint = () => {
+      if (triggered) return;
+      triggered = true;
+      const win = iframe.contentWindow;
+      if (!win) {
+        cleanup();
+        settle(false);
+        return;
+      }
+      // `onafterprint` precisa estar armado ANTES de chamar print(), não
+      // depois (correção da revisão final de branch, 2026-08-22): em Firefox
+      // e WebKit, `window.print()` BLOQUEIA a thread até o diálogo do SO
+      // fechar, e o evento 'afterprint' pode disparar DURANTE essa chamada —
+      // um handler atribuído só depois que print() retorna (ex.: dentro do
+      // `finally` abaixo) nunca é visto por essas engines, porque o evento já
+      // passou. Nesse cenário a limpeza caía inteiramente no backstop de 60s,
+      // deixando o iframe de 1px no DOM por um minuto inteiro a cada
+      // impressão nesses navegadores.
+      try {
+        win.focus();
+        win.onafterprint = cleanup;
+        win.print();
+        settle(true);
+      } catch {
+        settle(false);
+      } finally {
+        // O `finally` continua armando só o backstop (não o `onafterprint`,
+        // que já foi armado acima) — isso preserva a garantia original: se
+        // `focus()`/`print()` lançar antes de o `onafterprint` acima ter
+        // chance de disparar, o iframe ainda precisa de uma rede de
+        // segurança pra não vazar pra sempre no DOM.
+        // Backstop de última instância, só pra garantir que nada vaza se
+        // 'afterprint' nunca disparar (não é evento garantido em toda
+        // engine — ex.: Safari mobile). 60s é DELIBERADAMENTE folgado: o
+        // valor anterior (3s, achado #2 da revisão) corria risco real de
+        // remover o iframe — e com ele o conteúdo que o navegador ainda
+        // pode estar lendo pro job de impressão — enquanto o usuário só
+        // está escolhendo a impressora ou confirmando o diálogo do SO; 3s
+        // não é tempo suficiente pra isso na primeira impressão do turno,
+        // com uma impressora ainda não memorizada pelo navegador. Em uso
+        // normal 'afterprint' já terá disparado e chamado `cleanup()` bem
+        // antes dos 60s (a flag `cleaned` impede dupla remoção); este
+        // timeout só chega a agir quando 'afterprint' realmente nunca vem.
+        setTimeout(cleanup, 60000);
+      }
+    };
+
+    iframe.onload = () => {
+      // Mesma folga que o setTimeout original (500ms, e que agora também
+      // unifica o antigo 400ms que só o relatório de vendas usava — nunca
+      // foi uma diferença intencional, era resíduo de dois blocos de código
+      // copiados em momentos diferentes): dá tempo do layout/paint assentar
+      // antes do print() em navegadores mais lentos.
+      setTimeout(triggerPrint, 500);
+    };
+
+    // Fallback pro load do iframe nunca disparar (achado #3 da revisão de
+    // código: o brief já citava esse risco explicitamente). Depender de um
+    // único sinal que pode não vir em toda engine/cenário é exatamente a
+    // classe de bug que motivou esta correção inteira — window.open() com
+    // noopener retornando null e a função saindo em silêncio, sem imprimir
+    // nada e sem erro. Sem este fallback, um 'load' que nunca dispara
+    // recriaria o mesmo sintoma, só que por outro caminho. `doc.write()`/
+    // `doc.close()` abaixo já rodam de forma síncrona, antes deste timeout
+    // poder disparar, então o conteúdo já está pronto independente de qual
+    // dos dois caminhos aciona `triggerPrint` primeiro; a flag `triggered`
+    // garante que só um deles efetivamente chama print().
+    setTimeout(triggerPrint, 1200);
+
+    doc.open();
+    doc.write(`
+      <html>
+        <head>
+          <title>${escapeHtml(title)}</title>
+          <style>${styles}</style>
+        </head>
+        <body>${bodyHtml}</body>
+      </html>
+    `);
+    doc.close();
+  });
 }
 
-function openThermalPrint(title: string, bodyHtml: string) {
-  printHtmlDocument(title, THERMAL_STYLES, bodyHtml);
+function openThermalPrint(title: string, bodyHtml: string): Promise<boolean> {
+  return printHtmlDocument(title, THERMAL_STYLES, bodyHtml);
 }
 
 export function printKitchenTicket(opts: {
@@ -199,7 +228,7 @@ export function printKitchenTicket(opts: {
   addons?: string;
   observation?: string;
   orderIdShort: string;
-}) {
+}): Promise<boolean> {
   const body = `
     <div class="header">
       ${opts.storeName ? `<div class="store-name">${escapeHtml(opts.storeName)}</div>` : ''}
@@ -215,7 +244,7 @@ export function printKitchenTicket(opts: {
     ${opts.observation ? `<div class="obs">OBS: ${escapeHtml(opts.observation)}</div>` : ''}
     <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;
-  openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body);
+  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body);
 }
 
 export interface BillReceiptItem {
@@ -257,7 +286,7 @@ export function printBillReceipt(opts: {
   subtotal: number;
   serviceFee?: BillServiceFeeInfo;
   total: number;
-}) {
+}): Promise<boolean> {
   const feeRow = opts.serviceFee
     ? opts.serviceFee.charged
       ? `<tr><td>Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)} opcional)</td><td class="right">R$ ${opts.serviceFee.amount.toFixed(2)}</td></tr>`
@@ -302,7 +331,7 @@ export function printBillReceipt(opts: {
     <div class="total">TOTAL: R$ ${opts.total.toFixed(2)}</div>
     <div class="footer">Obrigado pela preferência!</div>
   `;
-  openThermalPrint(`Comprovante - ${opts.label}`, body);
+  return openThermalPrint(`Comprovante - ${opts.label}`, body);
 }
 
 const REPORT_STYLES = `
@@ -336,7 +365,7 @@ export function printSalesReport(opts: {
   periodLabel: string;
   rows: SalesReportRow[];
   totalRevenue: number;
-}) {
+}): Promise<boolean> {
   const body = `
     <div class="report-header">
       <h1>${escapeHtml(opts.storeName)}</h1>
@@ -367,5 +396,5 @@ export function printSalesReport(opts: {
       </tfoot>
     </table>
   `;
-  printHtmlDocument(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
+  return printHtmlDocument(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
 }
