@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, resolvePrintTarget, isDefaultStoreModules, StoreModules, OrderFlow, PrintTarget } from '@/lib/storeModules';
+import { ALL_ON, resolveStoreModules, resolveOrderFlow, resolvePrintTarget, isDefaultStoreModules, StoreModules, OrderFlow, PrintTarget } from '@/lib/storeModules';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -191,21 +191,17 @@ export const AdminModule: React.FC = () => {
   // ao comportamento de hoje. Ver handleSaveStore: só grava `config.modules`/
   // `config.order_flow` se o admin realmente desligar algo ou trocar o fluxo —
   // nunca escreve o default explícito (ausência de chave já significa isso).
-  const [modTables, setModTables] = useState(true);
-  const [modCounter, setModCounter] = useState(true);
-  const [modKitchenKds, setModKitchenKds] = useState(true);
-  const [modBarKds, setModBarKds] = useState(true);
-  // Task 4 (módulo Caixa): ao contrário dos outros módulos acima, o default
-  // é DESLIGADO — ver comentário de ALL_ON em lib/storeModules.ts pro
-  // porquê (caixa é o único módulo cujo "ligado" tira uma capacidade que um
-  // usuário já tinha, não só mostra/esconde aba). Precisa bater com
-  // ALL_ON.caixa aqui: se essa constante mudasse pra `true` de novo sem
-  // atualizar este `useState`, toda loja NOVA criada sem mexer nesta seção
-  // sairia com `config.modules.caixa: true` gravado à toa (isDefaultStoreModules
-  // trataria como "diferente do default" e persistiria o objeto inteiro).
-  const [modCaixa, setModCaixa] = useState(false);
-  const [modMenu, setModMenu] = useState(true);
-  const [modAdmin, setModAdmin] = useState(true);
+  // Fix round 2: derivam de ALL_ON em vez de literais. O `caixa` é o único
+  // módulo cujo "ligado" TIRA uma capacidade de quem já a tinha (fechar conta)
+  // em vez de só mostrar uma aba — por isso ele nasce desligado lá. Manter
+  // esses valores como literais aqui já causou um bug real (ver resetForm).
+  const [modTables, setModTables] = useState(ALL_ON.tables);
+  const [modCounter, setModCounter] = useState(ALL_ON.counter);
+  const [modKitchenKds, setModKitchenKds] = useState(ALL_ON.kitchen_kds);
+  const [modBarKds, setModBarKds] = useState(ALL_ON.bar_kds);
+  const [modCaixa, setModCaixa] = useState(ALL_ON.caixa);
+  const [modMenu, setModMenu] = useState(ALL_ON.menu);
+  const [modAdmin, setModAdmin] = useState(ALL_ON.admin);
   const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
   // Fix round 1 (correção de design, plano 2026-08-22) — onde o ticket
   // imprime quando orderFlow === 'direct_print'. Ver lib/storeModules.ts
@@ -354,13 +350,21 @@ export const AdminModule: React.FC = () => {
       setIsActive(true);
       setServiceFeeRatePercent(10);
       setEmiteNotaFiscal(false);
-      setModTables(true);
-      setModCounter(true);
-      setModKitchenKds(true);
-      setModBarKds(true);
-      setModCaixa(true);
-      setModMenu(true);
-      setModAdmin(true);
+      // Fix round 2 (revisão da Task 4, Critical #1): estes sete valores eram
+      // literais `true` escritos à mão, e o `true` do caixa aqui anulava o
+      // `useState(false)` acima — `resetForm()` roda logo antes de abrir o
+      // modal de "Nova Loja", então era ELE quem valia na criação. Efeito:
+      // toda loja nova gravava `config.modules` com `caixa: true` e travava
+      // todo garçom (DEFAULT_TEAM_PERMISSIONS.caixa = false) fora de fechar
+      // conta — inclusive a loja que abre em 01/09. Agora deriva de ALL_ON,
+      // que é a fonte única: os dois lugares não têm mais como divergir.
+      setModTables(ALL_ON.tables);
+      setModCounter(ALL_ON.counter);
+      setModKitchenKds(ALL_ON.kitchen_kds);
+      setModBarKds(ALL_ON.bar_kds);
+      setModCaixa(ALL_ON.caixa);
+      setModMenu(ALL_ON.menu);
+      setModAdmin(ALL_ON.admin);
       setOrderFlow('kds');
       setPrintTarget('device');
       setLogoFile(null);
