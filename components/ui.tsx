@@ -168,21 +168,49 @@ export const Modal: React.FC<{
   // (<h2>) e não quer o nome duplicado na chrome bar.
   hideTitle?: boolean;
   // 'size' (opt-in, Task 2 2026-08-22): 'lg' mira ~75-80% da largura da
-  // viewport no desktop (usado só pelos modais de pedido/pagamento do
-  // painel do lojista em StoreModule.tsx — mesa, item de comanda, receber
-  // pagamento), com teto de 1100px pra não virar uma faixa esticada num
-  // monitor de 27", e degrada pra largura cheia (só a margem do scrim) em
-  // telas pequenas — abaixo do breakpoint `sm` não há nenhum max-width
-  // aplicado, então o painel se comporta exatamente como no celular hoje.
+  // viewport no desktop (usado só pelo modal de "Receber Pagamento" e pelo
+  // modal de "Mesa X" no painel do lojista em StoreModule.tsx — os dois
+  // fluxos com layout genuinamente largo: abas/grade de método de
+  // pagamento, comanda completa, busca de produto embutida), com teto de
+  // 1100px pra não virar uma faixa esticada num monitor de 27", e degrada
+  // pra largura cheia (só a margem do scrim) em telas pequenas — abaixo do
+  // breakpoint `sm` não há nenhum max-width aplicado, então o painel se
+  // comporta exatamente como no celular hoje. Faixa `sm`→`lg` (640–1023px)
+  // ajustada no fix de revisão (2026-08-22) de `92vw` pra `85vw` — o valor
+  // antigo ficava perto demais de full-bleed nessa faixa, perdendo a
+  // sensação de "janela em camada" e passando do alvo de ~75-80% do brief;
+  // `85vw` já é o mesmo valor usado a partir do breakpoint `lg`, então a
+  // faixa toda (640px até o teto fixo de 1100px em `xl`) agora é uma curva
+  // só, sem degrau no meio.
+  //
+  // 'md' (opt-in, fix de revisão 2026-08-22): ~600-650px fixos
+  // (`max-w-[640px]`), usado só pelo `StoreProductModal` ("Adicionar
+  // Item") do garçom. Esse modal não é nem o caso `lg` (não tem abas/grade
+  // de pagamento) nem o caso `sm` puro (produto com vários grupos de
+  // adicional fica espremido em 448px) — em `lg` um produto sem nenhum
+  // adicional (ex.: Bruschetta) renderiza como uma coluna estreita
+  // esticada por ~1100px de largura, o que lê como quebrado, não como
+  // espaçoso. `640px` é só um teto (sem prefixo de breakpoint), então
+  // degrada pra largura cheia em telas pequenas pelo mesmo mecanismo do
+  // `lg`: abaixo de 640px de viewport o `w-full` já é menor que o teto, o
+  // `max-w` nunca chega a restringir nada.
+  //
   // Default 'sm' preserva byte a byte o `max-w-md` (448px) que já é o
   // comportamento de TODO consumidor existente — em especial o cardápio do
   // cliente (CartModal/ProductModal/BillSplitter em ClientModule.tsx), que
-  // não pode mudar 1px (revisão visual concluída essa semana).
-  size?: 'sm' | 'lg';
+  // não pode mudar 1px (revisão visual concluída essa semana). Verificado
+  // de novo depois deste fix: dialog do ProductModal do cliente segue
+  // medindo exatamente 448px.
+  size?: 'sm' | 'md' | 'lg';
 }> = ({ isOpen, onClose, title, children, width, variant = 'center', surface = 'glass', hideTitle = false, size = 'sm' }) => {
   // `width` continua aceito como override explícito (compat, nenhum call
   // site usa hoje); na ausência dele, `size` decide a largura.
-  const resolvedWidth = width ?? (size === 'lg' ? 'sm:max-w-[92vw] lg:max-w-[85vw] xl:max-w-[1100px]' : 'max-w-md');
+  const SIZE_WIDTH_CLASSES: Record<'sm' | 'md' | 'lg', string> = {
+    sm: 'max-w-md',
+    md: 'max-w-[640px]',
+    lg: 'sm:max-w-[85vw] xl:max-w-[1100px]',
+  };
+  const resolvedWidth = width ?? SIZE_WIDTH_CLASSES[size];
   const containerRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
   // Achado real da Task 7 (QA ao vivo com mouse, não só revisão de

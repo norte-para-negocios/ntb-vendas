@@ -904,7 +904,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
     const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
     return (
-        <Modal isOpen={!!product} onClose={onClose} title="Adicionar Item" size="lg">
+        <Modal isOpen={!!product} onClose={onClose} title="Adicionar Item" size="md">
             <div className="space-y-4">
                 <div className="flex gap-4">
                     {product.image_url && (
