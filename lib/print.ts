@@ -2,6 +2,13 @@
 // relatório de vendas). Antes o ticket de cozinha e o de bar eram uma cópia exata um do
 // outro (só o título mudava) e cada função duplicava o mesmo bloco de HTML/CSS inline.
 
+// formatServiceFeeRate é pura, sem dependência (lib/calc.ts), então importá-la aqui não
+// tem nenhum efeito sobre document.write()/o transporte de impressão (iframe oculto) —
+// só formatação de string. Task 3 (2026-08-22): evita reimplementar
+// `(rate * 100).toFixed(0) + '%'` inline, que já tinha desalinhado deste arquivo com
+// lib/calc.ts uma vez.
+import { formatServiceFeeRate } from './calc';
+
 // Nome do cliente e observação do pedido são texto livre digitado pelo cliente final e
 // vão parar aqui sem passar por nenhum framework de render (é document.write puro) — sem
 // escapar, é XSS armazenado (achado de segurança #4 da varredura de 2026-07-02). Aplicada
@@ -233,7 +240,7 @@ export function printBillReceipt(opts: {
 }) {
   const feeRow = opts.serviceFee
     ? opts.serviceFee.charged
-      ? `<tr><td>Taxa de Serviço (${(opts.serviceFee.rate * 100).toFixed(0)}% opcional)</td><td class="right">R$ ${opts.serviceFee.amount.toFixed(2)}</td></tr>`
+      ? `<tr><td>Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)} opcional)</td><td class="right">R$ ${opts.serviceFee.amount.toFixed(2)}</td></tr>`
       : `<tr><td colspan="2" style="font-style:italic;">${
           opts.serviceFee.removedForTable
             ? 'Taxa de serviço opcional removida nesta mesa'
