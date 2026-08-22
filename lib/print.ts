@@ -40,23 +40,83 @@ const THERMAL_STYLES = `
   @media print { @page { margin: 0; size: auto; } body { margin: 0; padding: 0; } }
 `;
 
-function openThermalPrint(title: string, bodyHtml: string) {
-  const printWindow = window.open('', '_blank', 'width=300,height=500,noopener');
-  if (!printWindow) return;
-  printWindow.document.write(`
+// Impressão via iframe oculto. Substitui o antigo `window.open(..., 'noopener')`,
+// que SEMPRE retornava `null` — é o próprio propósito de `noopener`, cortar o
+// vínculo com a janela aberta — e fazia as duas funções públicas saírem em
+// silêncio, sem imprimir nada, nas 7 lojas, sempre (bug real, reproduzido ao
+// vivo, ver AGENTS.md "Impressão"). O `noopener` estava ali para isolar o
+// `document.write()` do documento principal (a observação do pedido é texto
+// livre do cliente — sem isolamento é XSS armazenado); o iframe preserva
+// exatamente esse isolamento (o HTML só existe dentro do `document` do
+// iframe, nunca é injetado na página em si) enquanto imprime de verdade.
+//
+// O iframe fica fora do fluxo/visão via posição fora da tela + tamanho 1px —
+// nunca `display:none`: vários navegadores (Firefox e Safari incluídos)
+// simplesmente não imprimem o conteúdo de um iframe com `display:none`.
+// Nenhum atributo `sandbox`: `escapeHtml()` já protege todo o texto livre
+// interpolado nos templates abaixo, e um `sandbox` mal configurado pode
+// bloquear a própria impressão sem necessidade.
+function printHtmlDocument(title: string, styles: string, bodyHtml: string) {
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.top = '-10000px';
+  iframe.style.left = '-10000px';
+  iframe.style.width = '1px';
+  iframe.style.height = '1px';
+  iframe.style.border = '0';
+  iframe.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    iframe.remove();
+    return;
+  }
+
+  // Garante que o iframe some do DOM mesmo em cenários que podem chamar
+  // isso mais de uma vez (evento 'afterprint' + timeout de segurança) —
+  // imprimir 3x seguidas nunca deixa iframe acumulado.
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    iframe.remove();
+  };
+
+  iframe.onload = () => {
+    const win = iframe.contentWindow;
+    if (!win) {
+      cleanup();
+      return;
+    }
+    // Mesma folga que o setTimeout original (500ms): o load do iframe já
+    // confirma que o document.write()/close() terminou, isso só dá tempo do
+    // layout/paint assentar antes do print() em navegadores mais lentos.
+    setTimeout(() => {
+      win.focus();
+      win.print();
+      // 'afterprint' não dispara em todo navegador (ex.: Safari mobile) —
+      // o timeout de segurança garante a limpeza de qualquer forma.
+      win.onafterprint = cleanup;
+      setTimeout(cleanup, 3000);
+    }, 500);
+  };
+
+  doc.open();
+  doc.write(`
     <html>
       <head>
         <title>${escapeHtml(title)}</title>
-        <style>${THERMAL_STYLES}</style>
+        <style>${styles}</style>
       </head>
       <body>${bodyHtml}</body>
     </html>
   `);
-  printWindow.document.close();
-  setTimeout(() => {
-    printWindow.print();
-    printWindow.onafterprint = () => printWindow.close();
-  }, 500);
+  doc.close();
+}
+
+function openThermalPrint(title: string, bodyHtml: string) {
+  printHtmlDocument(title, THERMAL_STYLES, bodyHtml);
 }
 
 export function printKitchenTicket(opts: {
@@ -174,8 +234,6 @@ export function printSalesReport(opts: {
   rows: SalesReportRow[];
   totalRevenue: number;
 }) {
-  const printWindow = window.open('', '_blank', 'width=900,height=700,noopener');
-  if (!printWindow) return;
   const body = `
     <div class="report-header">
       <h1>${escapeHtml(opts.storeName)}</h1>
@@ -206,15 +264,5 @@ export function printSalesReport(opts: {
       </tfoot>
     </table>
   `;
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>${escapeHtml(`Relatório de Vendas - ${opts.storeName}`)}</title>
-        <style>${REPORT_STYLES}</style>
-      </head>
-      <body>${body}</body>
-    </html>
-  `);
-  printWindow.document.close();
-  setTimeout(() => printWindow.print(), 400);
+  printHtmlDocument(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
 }
