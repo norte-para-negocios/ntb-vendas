@@ -2370,7 +2370,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
     const [isCounterConfirmOpen, setIsCounterConfirmOpen] = useState(false);
     // Pedidos enviados NESTA sessão de mesa (várias rodadas possíveis) --
-    // não persiste entre reloads (aceitável: só perde o histórico do painel).
+    // não persiste em localStorage, mas é RESTAURADO a partir do banco pelo
+    // bloco de AUTO-LOGIN (fetchTableOrderSummary) sempre que a mesa segue
+    // OCCUPIED/WAITING_BILL. Deixou de ser "cosmético" em 2026-08-22: agora
+    // alimenta `hasOpenTableOrders`, que decide entre "Sair"/"Pedir a conta"
+    // no hero -- se ficasse vazio a cada F5 (celular trava, guia recarrega),
+    // o cliente veria "Sair" de novo com conta em aberto, exatamente o que a
+    // Task 4 existe pra evitar.
     const [mesaOrderIds, setMesaOrderIds] = useState<string[]>([]);
     const [isOrderStatusOpen, setIsOrderStatusOpen] = useState(false);
 
@@ -2517,6 +2523,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 setIsHost(isReturningHost);
                                 setHostPin(isReturningHost ? (session.hostPin ?? null) : null);
                                 setHasAccess(true);
+
+                                // Restaura mesaOrderIds a partir do banco (mesma RPC que já
+                                // alimenta o BillSplitter, fetchTableOrderSummary/
+                                // fetch_table_order_summary_secure) -- sem isso,
+                                // hasOpenTableOrders voltava sempre `false` após qualquer
+                                // reload, mesmo com pedido real e não pago na mesa (achado
+                                // Critical da revisão da Task 4).
+                                const summary = await fetchTableOrderSummary(table.id);
+                                const restoredOrderIds = Array.from(new Set(
+                                    summary.items.map((item: any) => item.order_id).filter(Boolean)
+                                )) as string[];
+                                setMesaOrderIds(restoredOrderIds);
                             } else {
                                 // Table closed or reset, clear session
                                 localStorage.removeItem(`session_${slug}`);
@@ -3122,8 +3140,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         setBillRequestIntent(true);
                                         setShowBill(true);
                                     }}
-                                    aria-label="Pedir a conta"
-                                    title="Pedir a conta"
+                                    // Com a mesa já em waiting_bill, o clique não "pede" a conta
+                                    // de novo (o BillSplitter só mostra "Aguarde o garçom" nesse
+                                    // caso, ver requestBillOnOpen/!isWaitingBill acima) -- rótulo
+                                    // reflete isso pra não prometer uma ação que já aconteceu,
+                                    // agora que este estado fica alcançável em qualquer reload.
+                                    aria-label={isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
+                                    title={isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
                                     className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
                                 >
                                     <Receipt size={16} />
