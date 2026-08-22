@@ -1722,7 +1722,7 @@ const CartModal: React.FC<{
     );
 }
 
-const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable }) => {
+const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null, requestBillOnOpen?: boolean }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable, requestBillOnOpen = false }) => {
     const [tab, setTab] = useState<'split' | 'users' | 'calculator'>('split');
     const [people, setPeople] = useState(1);
     const [total, setTotal] = useState(0);
@@ -1763,6 +1763,18 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
             setSelectedItems({});
         }
     }, [isOpen]);
+
+    // Task 4: entrada rápida vinda do controle do hero ("Pedir a conta"
+    // quando a sessão tem pedido em aberto) — pula direto pra esta mesma
+    // tela de confirmação, sem duplicar handleRequestBill/requestTableBill.
+    // Guard `!isWaitingBill`: se a conta já foi pedida, não faz sentido
+    // reabrir "Deseja realmente pedir a conta?" — o próprio conteúdo normal
+    // do modal já mostra "Conta Solicitada. Aguarde o garçom." nesse caso.
+    useEffect(() => {
+        if (isOpen && requestBillOnOpen && !isWaitingBill) {
+            setShowCloseConfirmation(true);
+        }
+    }, [isOpen, requestBillOnOpen, isWaitingBill]);
 
     useEffect(() => {
         // Modal (variant="sheet") agora fica montado durante a animação de
@@ -2287,6 +2299,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showBill, setShowBill] = useState(false);
+    // Task 4: quando o controle do hero abre a Conta a partir do estado
+    // "Pedir a conta" (pedido em aberto), pula direto pra tela de
+    // confirmação que já existe dentro do BillSplitter — mesma ação
+    // (handleRequestBill/requestTableBill) que "Pedir Conta (Bloquear
+    // Mesa)" já dispara lá dentro, só entrando por um atalho. Reseta ao
+    // fechar a Conta por qualquer caminho, pra nunca reabrir direto na
+    // confirmação da próxima vez que a Conta for aberta pelo botão normal.
+    const [billRequestIntent, setBillRequestIntent] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     // Ref pro input de busca da barra sticky (Task hero item 5): o botão de
     // lupa sobre a capa não abre uma busca própria, só rola até essa mesma
@@ -2974,6 +2994,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // useMesaOrders, nunca um número inventado).
     const mesaItemCount = mesaOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
 
+    // Task 4: mesma derivação de "há pedido em aberto nesta sessão" que já
+    // alimenta a barra "Comanda aberta • N itens" acima (`mesaOrders.length
+    // > 0`, nunca recomputada) — decide se o controle do hero oferece
+    // "Sair" (sessão sem nada pedido, pode mesmo sair) ou "Pedir a conta"
+    // (pedido em aberto: sair "fecharia" só o aparelho, não a dívida —
+    // decisão do dono do projeto, 2026-08-22).
+    const hasOpenTableOrders = mesaOrders.length > 0;
+
     return (
         <MotionConfig reducedMotion="user">
             <div className="bg-[var(--bg)] min-h-screen pb-32">
@@ -3075,15 +3103,42 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         >
                             <Search size={16} />
                         </button>
+                        {/* Task 4 (2026-08-22): com pedido em aberto nesta sessão, "Sair"
+                            deixa de existir — o cliente não fecha a mesa nem a conta
+                            saindo do aparelho (handleLogout só limpa localStorage/estado
+                            local, a mesa e a dívida continuam abertas; ver confirm() logo
+                            abaixo). O que ele quer nesse momento é pedir a conta, então o
+                            controle vira exatamente isso: mesmo ícone/mecanismo já usado
+                            em "Pedir Conta (Bloquear Mesa)" dentro da Conta (BillSplitter,
+                            via requestBillOnOpen — não uma segunda chamada a
+                            requestTableBill). Sem pedido nenhum na sessão (mesa errada,
+                            desistiu, só olhando o cardápio), "Sair" continua existindo e
+                            funcionando como sempre — não pode ficar sem saída. */}
                         {hasAccess && (
-                            <button
-                                onClick={() => handleLogout(false)}
-                                aria-label="Sair da sessão"
-                                title="Sair da sessão"
-                                className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
-                            >
-                                <LogOut size={16} />
-                            </button>
+                            hasOpenTableOrders ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setBillRequestIntent(true);
+                                        setShowBill(true);
+                                    }}
+                                    aria-label="Pedir a conta"
+                                    title="Pedir a conta"
+                                    className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                                >
+                                    <Receipt size={16} />
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => handleLogout(false)}
+                                    aria-label="Sair deste aparelho"
+                                    title="Sair deste aparelho"
+                                    className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                                >
+                                    <LogOut size={16} />
+                                </button>
+                            )
                         )}
                     </div>
 
@@ -3673,13 +3728,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             {currentTable && currentStore && (
                 <BillSplitter
                     isOpen={showBill}
-                    onClose={() => setShowBill(false)}
+                    onClose={() => { setShowBill(false); setBillRequestIntent(false); }}
                     tableId={currentTable.id}
                     storeId={currentStore.id}
                     clientName={clientName}
                     isWaitingBill={isWaitingBill}
                     currentStore={currentStore}
                     currentTable={currentTable}
+                    requestBillOnOpen={billRequestIntent}
                 />
             )}
 
