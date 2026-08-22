@@ -904,7 +904,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
     const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
     return (
-        <Modal isOpen={!!product} onClose={onClose} title="Adicionar Item">
+        <Modal isOpen={!!product} onClose={onClose} title="Adicionar Item" size="lg">
             <div className="space-y-4">
                 <div className="flex gap-4">
                     {product.image_url && (
@@ -1737,7 +1737,7 @@ NOTIFY pgrst, 'reload schema';`;
             </div>
 
             {/* MODAL DA MESA */}
-            <Modal isOpen={!!selectedTable} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number} - ${selectedTable?.current_host_name || 'Lojista'}`}>
+            <Modal isOpen={!!selectedTable} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number} - ${selectedTable?.current_host_name || 'Lojista'}`} size="lg">
                 <div className="space-y-4">
                     <div className="flex justify-between p-3 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] items-center">
                         <span className="text-[var(--text-muted)] font-medium text-sm">Status Atual</span>
@@ -1989,7 +1989,7 @@ NOTIFY pgrst, 'reload schema';`;
             </Modal>
 
             {/* PAYMENT MODAL */}
-            <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Receber Pagamento">
+            <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Receber Pagamento" size="lg">
                 <div className="space-y-4">
                     {/* Tabs */}
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-lg">
