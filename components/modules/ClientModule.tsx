@@ -2378,6 +2378,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // o cliente veria "Sair" de novo com conta em aberto, exatamente o que a
     // Task 4 existe pra evitar.
     const [mesaOrderIds, setMesaOrderIds] = useState<string[]>([]);
+    // Residual da Task 4 (2026-08-22): se o fetch de restauração acima falhar
+    // (rede instável, celular voltando de sinal fraco), `mesaOrderIds` fica
+    // vazio -- mas a mesa continua OCCUPIED/WAITING_BILL de verdade, então
+    // NÃO sabemos se há pedido em aberto, o que é diferente de "sabemos que
+    // não há". Esse flag carrega exatamente essa incerteza (nunca é usado
+    // pra inflar `mesaOrders`/contagem de itens -- não é um pedido falso,
+    // é só um sinal de UI); ver `hasOpenTableOrders` abaixo, que o soma ao
+    // gate por OR. Setado true só quando o fetch falha com a mesa nesse
+    // estado; limpo (false) em qualquer fetch que resolva (com sucesso ou
+    // não) a dúvida, pra não prender o cliente no fallback pro resto da
+    // sessão.
+    const [tableOrdersUnknown, setTableOrdersUnknown] = useState(false);
     const [isOrderStatusOpen, setIsOrderStatusOpen] = useState(false);
 
     const {
@@ -2530,11 +2542,40 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 // hasOpenTableOrders voltava sempre `false` após qualquer
                                 // reload, mesmo com pedido real e não pago na mesa (achado
                                 // Critical da revisão da Task 4).
-                                const summary = await fetchTableOrderSummary(table.id);
-                                const restoredOrderIds = Array.from(new Set(
-                                    summary.items.map((item: any) => item.order_id).filter(Boolean)
-                                )) as string[];
-                                setMesaOrderIds(restoredOrderIds);
+                                //
+                                // Residual (2026-08-22): se ESTE fetch falhar (rede
+                                // instável), `mesaOrderIds` ficaria vazio de novo com a
+                                // mesa OCCUPIED/WAITING_BILL de verdade -- fail-open pro
+                                // "Sair" exatamente no caso que a Task 4 existe pra
+                                // fechar. `fetchTableOrderSummary` NUNCA rejeita a
+                                // promise (ela mesma engole o erro do `.rpc()` e devolve
+                                // `{ total: 0, items: [] }` -- comportamento antigo,
+                                // preservado pros outros chamadores/BillSplitter); por
+                                // isso o sinal de falha real é o campo `error` que ela
+                                // agora expõe, não uma exceção -- o catch aqui só cobre
+                                // um throw inesperado (defensivo, não é o caminho normal
+                                // de falha de rede). Sucesso restaura os ids normalmente
+                                // E resolve a dúvida (`tableOrdersUnknown = false`); falha
+                                // não injeta id nenhum falso em `mesaOrderIds` (isso
+                                // vazaria pra "Comanda aberta • N itens"/BillSplitter) --
+                                // em vez disso liga o flag de incerteza, que por si só já
+                                // empurra o hero pra "Pedir a conta" via
+                                // `hasOpenTableOrders` abaixo.
+                                try {
+                                    const summary = await fetchTableOrderSummary(table.id);
+                                    if (summary.error) {
+                                        setTableOrdersUnknown(true);
+                                    } else {
+                                        const restoredOrderIds = Array.from(new Set(
+                                            summary.items.map((item: any) => item.order_id).filter(Boolean)
+                                        )) as string[];
+                                        setMesaOrderIds(restoredOrderIds);
+                                        setTableOrdersUnknown(false);
+                                    }
+                                } catch (fetchErr) {
+                                    console.error("Falha ao restaurar pedidos da mesa", fetchErr);
+                                    setTableOrdersUnknown(true);
+                                }
                             } else {
                                 // Table closed or reset, clear session
                                 localStorage.removeItem(`session_${slug}`);
@@ -2614,6 +2655,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             localStorage.removeItem(`session_${slug}`);
             setTrackedOrderId(null);
             setMesaOrderIds([]);
+            setTableOrdersUnknown(false);
             setIsOrderStatusOpen(false);
 
             setHasAccess(false);
@@ -2656,6 +2698,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                      setIsCounterConfirmOpen(false); // Close the counter alert
                  } else {
                      if (result.orderId) setMesaOrderIds(prev => [...prev, result.orderId!]);
+                     // Um pedido próprio bem-sucedido já resolve qualquer incerteza
+                     // anterior sobre "há pedido em aberto" -- não precisa esperar
+                     // outro fetch de restauração pra limpar o fallback.
+                     setTableOrdersUnknown(false);
                      toast.success('Pedido enviado para a cozinha!');
                  }
             }
@@ -3018,7 +3064,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // "Sair" (sessão sem nada pedido, pode mesmo sair) ou "Pedir a conta"
     // (pedido em aberto: sair "fecharia" só o aparelho, não a dívida —
     // decisão do dono do projeto, 2026-08-22).
-    const hasOpenTableOrders = mesaOrders.length > 0;
+    //
+    // `|| tableOrdersUnknown` (residual, 2026-08-22): quando o fetch de
+    // restauração falhou com a mesa OCCUPIED/WAITING_BILL, não sabemos se
+    // há pedido -- e "não sabemos" tem que se comportar como "pode haver",
+    // nunca como "não há". Errar nessa direção é seguro (pior caso: cliente
+    // sem nada a pagar toca "Pedir a conta" e o garçom limpa); errar pro
+    // outro lado é o cliente saindo com conta em aberto.
+    const hasOpenTableOrders = mesaOrders.length > 0 || tableOrdersUnknown;
 
     return (
         <MotionConfig reducedMotion="user">

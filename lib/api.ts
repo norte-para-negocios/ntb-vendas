@@ -663,9 +663,17 @@ export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order
   return orders;
 };
 
-export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: number; items: any[] }> => {
+export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: number; items: any[]; error?: boolean }> => {
   const { data, error } = await supabase.rpc('fetch_table_order_summary_secure', { p_table_id: tableId });
-  if (error || !data) return { total: 0, items: [] };
+  // `error: true` só aparece quando a chamada em si falhou (rede/RPC) --
+  // distinto de "mesa sem nenhum pedido", que também bate no `!data` de
+  // um jeito legítimo (RPC sem erro, só não achou nada pra somar) e por
+  // isso não marca `error`. Campo opcional: os dois chamadores existentes
+  // (BillSplitter, `lib/api-mock.ts`) seguem ignorando-o sem quebrar --
+  // só o restore de sessão da mesa (ClientModule, Task 4) precisa
+  // distinguir "sem pedido" de "não deu pra saber".
+  if (error) return { total: 0, items: [], error: true };
+  if (!data) return { total: 0, items: [] };
   return { total: Number((data as any).total) || 0, items: (data as any).items || [] };
 };
 
