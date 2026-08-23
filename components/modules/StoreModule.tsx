@@ -4,25 +4,26 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
+import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -35,6 +36,14 @@ const StoreDashboardView = dynamic(
 );
 
 // --- COMPONENTS ---
+
+// Dourado padrão usado como fallback em ClientModule.tsx (WINE_GOLD, hex
+// local só naquele arquivo, "carta de vinhos") — replicado aqui só pra
+// inicializar o `<input type="color">`/preview do seletor de cor de destaque
+// (Task 6) quando a loja ainda não tem `config.accent_color` próprio. Mesmo
+// precedente de const de cor fixa por arquivo já usado no projeto
+// (IFOOD_RED/IFOOD_PURPLE em ClientModule.tsx).
+const WINE_GOLD_DEFAULT = '#D4AF5C';
 
 // Permissões da conta universal: era um objeto fixo com as 6 permissões
 // `true` (acesso total sempre) — motivo real de a aba Bar aparecer no
@@ -976,11 +985,11 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                             const hasActivePromo = effectivePrice < product.price;
                             return hasActivePromo ? (
                                 <span className="flex items-baseline gap-1.5 mt-1">
-                                    <span className="text-xs text-[var(--text-muted)] line-through">R$ {product.price.toFixed(2)}</span>
-                                    <span className="text-[var(--brand)] font-bold">R$ {effectivePrice.toFixed(2)}</span>
+                                    <span className="text-xs text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
+                                    <span className="text-[var(--brand)] font-bold">R$ {formatBRL(effectivePrice)}</span>
                                 </span>
                             ) : (
-                                <span className="text-[var(--brand)] font-bold mt-1 block">R$ {product.price.toFixed(2)}</span>
+                                <span className="text-[var(--brand)] font-bold mt-1 block">R$ {formatBRL(product.price)}</span>
                             );
                         })()}
                     </div>
@@ -1013,7 +1022,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                                     />
                                     {opt.name}
                                 </span>
-                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-xs font-semibold">+R$ {opt.price_delta.toFixed(2)}</span>}
+                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-xs font-semibold">+R$ {formatBRL(opt.price_delta)}</span>}
                             </label>
                         ))}
                     </div>
@@ -1027,7 +1036,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                 />
 
                 <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                    Lançar Pedido • R$ {(unitPrice * qty).toFixed(2)}
+                    Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
                 </Button>
                 {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
             </div>
@@ -1099,11 +1108,11 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                 const hasActivePromo = effectivePrice < product.price;
                                 return hasActivePromo ? (
                                     <span className="flex items-baseline gap-1">
-                                        <span className="text-[10px] text-[var(--text-muted)] line-through">R$ {product.price.toFixed(2)}</span>
-                                        <span className="text-[var(--brand)] font-bold text-xs">R$ {effectivePrice.toFixed(2)}</span>
+                                        <span className="text-[10px] text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
+                                        <span className="text-[var(--brand)] font-bold text-xs">R$ {formatBRL(effectivePrice)}</span>
                                     </span>
                                 ) : (
-                                    <span className="text-[var(--brand)] font-bold text-xs">R$ {product.price.toFixed(2)}</span>
+                                    <span className="text-[var(--brand)] font-bold text-xs">R$ {formatBRL(product.price)}</span>
                                 );
                             })()}
                         </div>
@@ -1164,16 +1173,28 @@ const PaymentCaptureFields: React.FC<{
     onFinish: () => void;
     finishDisabled: boolean;
     finishLabel: string;
+    // Task 4 (2026-08-23, resolução backlog pendente): opt-out por venda,
+    // em cima do default por loja (`modelo_emissao_automatica`) que já
+    // existe. Só aparece quando o CALLER já confirmou que a loja tem
+    // emissão automática configurada (`showEmitirNotaToggle`) — loja sem
+    // isso continua sem ganhar nada de novo aqui. `emitirNota` sempre
+    // nasce `true` no caller (mesmo comportamento de hoje: toda venda
+    // emite); só um `false` explícito muda o resultado, ver o early-exit
+    // em app/api/fiscal/emitir/route.ts.
+    showEmitirNotaToggle?: boolean;
+    emitirNota?: boolean;
+    onEmitirNotaChange?: (value: boolean) => void;
     children?: React.ReactNode;
 }> = ({
     total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
     currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
-    changeDue, onFinish, finishDisabled, finishLabel, children,
+    changeDue, onFinish, finishDisabled, finishLabel,
+    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, children,
 }) => (
     <div className="space-y-6 pt-2">
         <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
             <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total a Receber</p>
-            <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {total.toFixed(2)}</p>
+            <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {formatBRL(total)}</p>
         </div>
 
         {/* Payment Methods */}
@@ -1255,7 +1276,7 @@ const PaymentCaptureFields: React.FC<{
                                 </span>
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="font-mono font-bold">R$ {p.amount.toFixed(2)}</span>
+                                <span className="font-mono font-bold">R$ {formatBRL(p.amount)}</span>
                                 <button onClick={() => onRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
                                     <Trash2 size={16} />
                                 </button>
@@ -1268,6 +1289,29 @@ const PaymentCaptureFields: React.FC<{
             )}
         </div>
 
+        {/* Task 4 (2026-08-23): toggle "Emitir nota fiscal desta venda" —
+            rótulo neutro de propósito, nunca menciona imposto/carga
+            tributária (ver AGENTS.md/backlog item 13). Usos legítimos já
+            documentados: cortesia interna, loja sem módulo fiscal
+            contratado, emissão por outro sistema, contingência SEFAZ —
+            nenhum precisa de texto explicativo aqui, o toggle já é
+            autoexplicativo. */}
+        {showEmitirNotaToggle && (
+            <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
+                <span className="text-sm font-bold text-[var(--text)]">Emitir nota fiscal desta venda</span>
+                <button
+                    type="button"
+                    onClick={() => onEmitirNotaChange?.(!emitirNota)}
+                    role="switch"
+                    aria-checked={!!emitirNota}
+                    aria-label="Emitir nota fiscal desta venda"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${emitirNota ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emitirNota ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+        )}
+
         {children}
 
         {/* Summary & Action */}
@@ -1276,14 +1320,14 @@ const PaymentCaptureFields: React.FC<{
                 <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
                     <span className="font-bold text-[var(--err)]">
-                        R$ {remainingToPay.toFixed(2)}
+                        R$ {formatBRL(remainingToPay)}
                     </span>
                 </div>
                 {changeDue > 0 && (
                     <div className="flex justify-between text-sm">
                         <span className="text-[var(--text-muted)]">Troco:</span>
                         <span className="font-bold text-[var(--ok)]">
-                            R$ {changeDue.toFixed(2)}
+                            R$ {formatBRL(changeDue)}
                         </span>
                     </div>
                 )}
@@ -1362,8 +1406,14 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const [areCardsCollapsed, setAreCardsCollapsed] = useState(false);
     const [pinBlockEnabled, setPinBlockEnabled] = useState(store.config?.require_pin_for_open || false);
 
-    const togglePin = (e: React.MouseEvent, tableId: string) => {
+    const togglePin = (e: React.MouseEvent, tableId: string, inJurisdiction: boolean = true) => {
         e.stopPropagation();
+        // Trava de jurisdicao (Task 3): `disabled` no <button> ja tira o
+        // elemento do tab order e bloqueia Enter/Space nativamente, mas o
+        // handler tambem no-opa por defesa em profundidade — nunca confiar
+        // só no atributo pra impedir a acao (ex.: gesto de ativacao de leitor
+        // de tela nao passa necessariamente por keydown/click do DOM).
+        if (!inJurisdiction) return;
         setVisiblePins(prev => {
             const next = new Set(prev);
             if (next.has(tableId)) next.delete(tableId);
@@ -1436,6 +1486,16 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
     const [paymentDestCpfCnpj, setPaymentDestCpfCnpj] = useState('');
     const [paymentDestNome, setPaymentDestNome] = useState('');
+
+    // Task 4 (2026-08-23): idem, mas pra decidir se mostra o toggle
+    // "Emitir nota fiscal desta venda" — qualquer modelo configurado
+    // (nfce OU nfe), não só nfe como `nfeModeloAtivo` acima (aquele é
+    // específico do campo de destinatário, que só existe pra NF-e).
+    // `emitirNotaFiscal` nasce sempre `true` (default ligado — mesmo
+    // comportamento de hoje) e é resetado a cada abertura do modal de
+    // pagamento, nunca herda o valor da venda anterior.
+    const [emissaoFiscalConfigurada, setEmissaoFiscalConfigurada] = useState(false);
+    const [emitirNotaFiscal, setEmitirNotaFiscal] = useState(true);
 
     const currentTableSummary = useMemo(() => {
         if (!selectedTable) return null;
@@ -1710,8 +1770,18 @@ NOTIFY pgrst, 'reload schema';`;
     // normal da maioria das lojas, não um erro pra atrapalhar o fechamento.
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
-            .then((cfg) => setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe'))
-            .catch(() => setNfeModeloAtivo(false));
+            .then((cfg) => {
+                setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe');
+                // Task 4: qualquer modelo configurado (nfce OU nfe) já é
+                // "emissão automática ligada" pra fins do toggle de opt-out
+                // — loja sem NENHUMA config (cfg null) ou com
+                // 'nenhuma' explícito não ganha o toggle.
+                setEmissaoFiscalConfigurada(!!cfg && cfg.modelo_emissao_automatica !== 'nenhuma');
+            })
+            .catch(() => {
+                setNfeModeloAtivo(false);
+                setEmissaoFiscalConfigurada(false);
+            });
     }, [storeId]);
 
     // SYNC MODAL WITH REALTIME TABLE DATA
@@ -1850,6 +1920,9 @@ NOTIFY pgrst, 'reload schema';`;
         setPaymentSelectedItems({});
         setPaymentDestCpfCnpj('');
         setPaymentDestNome('');
+        // Task 4: sempre nasce ligado — default de hoje (emite normal),
+        // nunca herda o valor escolhido na venda anterior desta mesma mesa.
+        setEmitirNotaFiscal(true);
         setShowPaymentModal(true);
     };
 
@@ -1912,9 +1985,15 @@ NOTIFY pgrst, 'reload schema';`;
                 return;
             }
 
+            // Task 4: `emitir_nota` só entra no payload quando a loja tem
+            // emissão automática configurada — pra loja sem isso, o objeto
+            // fica idêntico ao de sempre (sem a chave), então
+            // payment_details.emitir_nota nunca existe pras 7 lojas reais
+            // de hoje. Ver early-exit em app/api/fiscal/emitir/route.ts.
             const paymentData = {
                 total: summary.total,
-                methods: paymentMethods
+                methods: paymentMethods,
+                ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
             };
 
             // Destinatário (Task 17) — opcional mesmo em modelo NF-e; deixado
@@ -2006,8 +2085,13 @@ NOTIFY pgrst, 'reload schema';`;
     // mesa sem cobrar nada e sem checar quem tem permissão. Confirmado sem
     // call site algum antes de remover.
 
-    const handleBlockToggle = async (e: React.MouseEvent, table: Table) => {
+    const handleBlockToggle = async (e: React.MouseEvent, table: Table, inJurisdiction: boolean = true) => {
         e.stopPropagation();
+        // Trava de jurisdicao (Task 3, mesma defesa em profundidade de
+        // togglePin acima): sem isso, um garcom conseguia bloquear de
+        // verdade uma mesa fora da sua area via teclado (Tab + Enter),
+        // apesar do card estar visualmente inerte.
+        if (!inJurisdiction) return;
         await toggleTableBlock(table.id, table.status);
     };
 
@@ -2162,6 +2246,15 @@ NOTIFY pgrst, 'reload schema';`;
                     const isOccupied = table.status === 'occupied' || table.status === 'waiting_bill';
                     const isWaiterRequested = table.waiter_requested;
                     const hasOrders = summary.count > 0;
+                    // Jurisdicao de mesas por garcom (Task 3, migration 049).
+                    // Mesa fora da jurisdicao continua renderizada normalmente
+                    // (numero/status/PIN) mas inteiramente nao-interativa —
+                    // `pointer-events-none` bloqueia tanto abrir o card quanto
+                    // os botoes internos (bloquear, ver PIN, atender garcom)
+                    // numa unica trava, sem precisar desabilitar cada acao
+                    // isoladamente. owner/universal nunca sao restringidos
+                    // (ver isTableInJurisdiction).
+                    const inJurisdiction = isTableInJurisdiction(loggedUser, table.id);
 
                     return (
                         <motion.div
@@ -2173,8 +2266,8 @@ NOTIFY pgrst, 'reload schema';`;
                             transition={SPRING_TAP}
                         >
                         <Card
-                            hoverable
-                            onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
+                            hoverable={inJurisdiction}
+                            onClick={() => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
                             className={`relative flex flex-col justify-between p-4 transition-[height,background-color,border-color,box-shadow] duration-300 border-2 group ${
                                 areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
                             } ${
@@ -2183,9 +2276,18 @@ NOTIFY pgrst, 'reload schema';`;
                                 isWaiterRequested ? 'border-[var(--err)]/50 bg-[var(--err)]/5 shadow-xl animate-pulse' :
                                 isOccupied ? 'bg-[var(--info)]/5 border-[var(--info)]/25 shadow-lg' :
                                 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30 hover:shadow-lg'
-                            }`}
+                            } ${!inJurisdiction ? 'opacity-50 pointer-events-none grayscale' : ''}`}
                             style={stagger(Math.min(tableIdx, 10) * 30)}
                         >
+                            {/* Jurisdicao: mesa fora da area do usuario logado */}
+                            {!inJurisdiction && (
+                                <div className="absolute top-2 left-2 z-20">
+                                    <span className="px-1.5 py-0.5 bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold rounded border border-[var(--border)] uppercase tracking-wider">
+                                        {TABLE_OUT_OF_JURISDICTION_LABEL}
+                                    </span>
+                                </div>
+                            )}
+
                             {/* Waiter Alert Overlay */}
                             {isWaiterRequested && (
                                 <div className="absolute -top-3 -right-3 z-20">
@@ -2213,8 +2315,9 @@ NOTIFY pgrst, 'reload schema';`;
                                                 {visiblePins.has(table.id) ? table.pin : '••••'}
                                             </span>
                                             <button
-                                                onClick={(e) => togglePin(e, table.id)}
-                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press"
+                                                onClick={(e) => togglePin(e, table.id, inJurisdiction)}
+                                                disabled={!inJurisdiction}
+                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
                                                 title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
                                             >
                                                 {visiblePins.has(table.id) ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -2222,12 +2325,12 @@ NOTIFY pgrst, 'reload schema';`;
                                         </div>
                                     </div>
                                 </div>
-                                <button 
+                                <button
                                     onClick={(e) => {
                                         if(!isBlocked && hasOrders) return; // Prevent blocking if has orders
-                                        handleBlockToggle(e, table);
+                                        handleBlockToggle(e, table, inJurisdiction);
                                     }}
-                                    disabled={!isBlocked && hasOrders}
+                                    disabled={(!isBlocked && hasOrders) || !inJurisdiction}
                                     className={`p-2 rounded-lg u-motion u-press z-10 ${
                                         isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
                                         (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
@@ -2273,7 +2376,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Últimos Pedidos</span>
                                             <div className="text-right leading-none">
                                                 <span className="block text-[10px] text-[var(--text-muted)]">Total</span>
-                                                <span className="font-bold text-[var(--brand)] num">R$ {summary.total.toFixed(2)}</span>
+                                                <span className="font-bold text-[var(--brand)] num">R$ {formatBRL(summary.total)}</span>
                                             </div>
                                         </div>
 
@@ -2310,7 +2413,8 @@ NOTIFY pgrst, 'reload schema';`;
                             {isWaiterRequested && (
                                 <div className="mt-3 pt-2 border-t border-[var(--border)] flex flex-col items-center">
                                     <Button
-                                        onClick={(e) => { e.stopPropagation(); handleDismissWaiter(table.id); }}
+                                        onClick={(e) => { e.stopPropagation(); if (!inJurisdiction) return; handleDismissWaiter(table.id); }}
+                                        disabled={!inJurisdiction}
                                         className="w-full h-8 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
                                     >
                                         <BellRing size={14} className="mr-1"/> ATENDER GARÇOM
@@ -2373,7 +2477,7 @@ NOTIFY pgrst, 'reload schema';`;
                                              <div className="text-center leading-tight">
                                                  <span className="block font-bold text-sm">Ver Comanda</span>
                                                  <span className="text-xs font-normal">
-                                                     R$ {selectedTable ? getTableSummary(selectedTable.id).total.toFixed(2) : '0.00'}
+                                                     R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
                                                  </span>
                                              </div>
                                          </Button>
@@ -2480,11 +2584,11 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 {item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
                                                                  item.status === 'preparing' ? <span className="text-[var(--info)] flex items-center gap-1"><ChefHat size={10}/> Preparando</span> :
                                                                  <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>}
-                                                                <span>• R$ {item.price_at_time.toFixed(2)} un.</span>
+                                                                <span>• R$ {formatBRL(item.price_at_time)} un.</span>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="font-medium text-[var(--text)]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
@@ -2508,7 +2612,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                             <div className="text-xs text-[var(--text-muted)] mt-1">Opcional</div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="font-medium text-[var(--text)]">R$ {summary.serviceFee.toFixed(2)}</span>
+                                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(summary.serviceFee)}</span>
                                                             <button
                                                                 onClick={() => {
                                                                     setRemovedServiceFees(prev => {
@@ -2541,7 +2645,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="bg-[var(--surface-2)] p-4 border-t border-[var(--border)] flex justify-between items-center">
                                     <span className="font-bold text-lg text-[var(--text)]">Total Final</span>
                                     <span className="font-black text-2xl text-[var(--brand)]">
-                                        R$ {selectedTable ? getTableSummary(selectedTable.id).total.toFixed(2) : '0.00'}
+                                        R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
                                     </span>
                                 </div>
                             </div>
@@ -2652,6 +2756,9 @@ NOTIFY pgrst, 'reload schema';`;
                                 onFinish={handleFinishPayment}
                                 finishDisabled={remainingToPay > 0.01}
                                 finishLabel="FINALIZAR MESA"
+                                showEmitirNotaToggle={emissaoFiscalConfigurada}
+                                emitirNota={emitirNotaFiscal}
+                                onEmitirNotaChange={setEmitirNotaFiscal}
                             >
                                 {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
                                     automaticamente; NFC-e não tem <dest>, não mostra nada aqui. */}
@@ -2687,10 +2794,10 @@ NOTIFY pgrst, 'reload schema';`;
                             <div className="space-y-6 pt-2 animate-fade-in">
                                 <div className="bg-[var(--brand)]/5 p-4 rounded-xl border border-[var(--brand)]/10 text-center">
                                     <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
-                                    <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {currentTableSummary.total.toFixed(2)}</p>
+                                    <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {formatBRL(currentTableSummary.total)}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
                                         {currentTableSummary.isServiceFeeEnabled
-                                            ? `Inclui R$ ${currentTableSummary.serviceFee.toFixed(2)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            ? `Inclui R$ ${formatBRL(currentTableSummary.serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : currentTableSummary.isServiceFeeRemovedForTable
                                                 ? 'Taxa de serviço opcional removida nesta mesa'
                                                 : 'Esta loja não cobra taxa de serviço'}
@@ -2706,7 +2813,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                                 <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
                                     <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
-                                    <p className="text-2xl font-bold text-[var(--text)]">R$ {(currentTableSummary.total / paymentPeople).toFixed(2)}</p>
+                                    <p className="text-2xl font-bold text-[var(--text)]">R$ {formatBRL(currentTableSummary.total / paymentPeople)}</p>
                                     <Button 
                                         className="mt-4" 
                                         variant="secondary"
@@ -2736,7 +2843,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <div key={name} className="border border-[var(--border)] rounded-xl overflow-hidden">
                                         <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
                                             <span className="font-bold text-[var(--text)] flex items-center gap-2"><User size={14}/> {name}</span>
-                                            <span className="font-bold text-[var(--brand)]">R$ {data.total.toFixed(2)}</span>
+                                            <span className="font-bold text-[var(--brand)]">R$ {formatBRL(data.total)}</span>
                                         </div>
                                         <div className="p-2 space-y-1">
                                             {data.items.map((it: any) => (
@@ -2791,7 +2898,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
                                                         {getOrderItemDisplayName(item)}
                                                     </span>
-                                                    <span className="text-sm font-medium">R$ {item.price_at_time.toFixed(2)}</span>
+                                                    <span className="text-sm font-medium">R$ {formatBRL(item.price_at_time)}</span>
                                                 </div>
 
                                                 {isSelected && item.quantity > 1 && (
@@ -2814,11 +2921,11 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="mt-4 p-4 bg-[var(--ink)] text-white rounded-xl">
                                     <div className="flex justify-between items-center">
                                         <span className="font-bold">Total Selecionado</span>
-                                        <span className="font-black text-xl">R$ {calculatorTotal.toFixed(2)}</span>
+                                        <span className="font-black text-xl">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
                                     <div className="text-xs text-white/50 mt-1 text-right">
                                         {currentTableSummary.isServiceFeeEnabled
-                                            ? `Inclui R$ ${calculatorServiceFee.toFixed(2)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            ? `Inclui R$ ${formatBRL(calculatorServiceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : currentTableSummary.isServiceFeeRemovedForTable
                                                 ? 'Taxa de serviço opcional removida nesta mesa'
                                                 : 'Esta loja não cobra taxa de serviço'}
@@ -2950,6 +3057,11 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
     // usada pra decidir se mostra o modal de captura opcional de CPF/CNPJ
     // antes de fechar o pedido de balcão.
     const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
+    // Task 4 (2026-08-23): mesmo state espelhado de TablesView, ver
+    // comentário lá — qualquer modelo configurado (nfce OU nfe) já mostra
+    // o toggle "Emitir nota fiscal desta venda".
+    const [emissaoFiscalConfigurada, setEmissaoFiscalConfigurada] = useState(false);
+    const [emitirNotaFiscal, setEmitirNotaFiscal] = useState(true);
     const [closingOrder, setClosingOrder] = useState<Order | null>(null);
     const [destCpfCnpj, setDestCpfCnpj] = useState('');
     const [destNome, setDestNome] = useState('');
@@ -2994,8 +3106,14 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
 
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
-            .then((cfg) => setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe'))
-            .catch(() => setNfeModeloAtivo(false));
+            .then((cfg) => {
+                setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe');
+                setEmissaoFiscalConfigurada(!!cfg && cfg.modelo_emissao_automatica !== 'nenhuma');
+            })
+            .catch(() => {
+                setNfeModeloAtivo(false);
+                setEmissaoFiscalConfigurada(false);
+            });
     }, [storeId]);
 
     const getOrderTotal = (order: Order) =>
@@ -3007,7 +3125,7 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
     // idêntico ao de sempre.
     const closeOrderNow = async (
         orderId: string,
-        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string }[] },
+        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string }[]; emitir_nota?: boolean },
         destinatario?: { cpfCnpj: string; nome: string },
     ) => {
         try {
@@ -3041,6 +3159,8 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
             setCurrentPaymentBrand('');
             setDestCpfCnpj('');
             setDestNome('');
+            // Task 4: sempre nasce ligado, mesmo motivo de TablesView.
+            setEmitirNotaFiscal(true);
             return;
         }
         // Loja SEM o módulo Caixa — comportamento de hoje, intocado. Em
@@ -3125,7 +3245,13 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                 return;
             }
 
-            const paymentData = { total, methods: paymentMethods };
+            // Task 4: mesmo princípio de TablesView — a chave só entra no
+            // payload quando a loja tem emissão automática configurada.
+            const paymentData = {
+                total,
+                methods: paymentMethods,
+                ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
+            };
             const destinatario = buildDestinatario(destCpfCnpj, destNome);
             await closeOrderNow(paymentOrder.id, paymentData, destinatario);
 
@@ -3278,7 +3404,7 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                          <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
                              <div>
                                  <p className="text-xs text-[var(--text-muted)] font-bold uppercase">Total</p>
-                                 <p className="text-xl font-black text-[var(--text)] num">R$ {total.toFixed(2)}</p>
+                                 <p className="text-xl font-black text-[var(--text)] num">R$ {formatBRL(total)}</p>
                              </div>
                              <button
                                  onClick={() => printCounterReceipt(order)}
@@ -3380,6 +3506,9 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                     onFinish={handleFinishCounterPayment}
                     finishDisabled={remainingToPay > 0.01}
                     finishLabel="FINALIZAR VENDA"
+                    showEmitirNotaToggle={emissaoFiscalConfigurada}
+                    emitirNota={emitirNotaFiscal}
+                    onEmitirNotaChange={setEmitirNotaFiscal}
                 >
                     {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
                         automaticamente; mesma posição/campos que TablesView usa. */}
@@ -4004,6 +4133,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [newNoteSuggestion, setNewNoteSuggestion] = useState('');
     const [isSavingNoteSuggestions, setIsSavingNoteSuggestions] = useState(false);
 
+    // Cor de destaque por loja (Task 6, stores.config.accent_color).
+    // Rascunho local (accentColorDraft) segue o dedo no picker sem salvar a
+    // cada pixel; só persiste ao clicar "Salvar Cor", que passa pela trava
+    // de contraste em updateStoreAccentColor (lib/api.ts) — pode ser
+    // recusado.
+    const [accentColorDraft, setAccentColorDraft] = useState<string>(store.config?.accent_color || WINE_GOLD_DEFAULT);
+    const [accentColorError, setAccentColorError] = useState<string | null>(null);
+    const [isSavingAccentColor, setIsSavingAccentColor] = useState(false);
+
     // A `store` recebida via prop ja e a fonte da verdade (StoreModule mantem
     // `user.store` atualizado via `onStoreUpdate` a cada mudanca real de
     // config) — nao ha motivo pra rebuscar do banco aqui (achado de
@@ -4016,6 +4154,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
+        setAccentColorDraft(store.config?.accent_color || WINE_GOLD_DEFAULT);
+        setAccentColorError(null);
     }, [store]);
 
     const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4079,6 +4219,32 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             console.error("Error updating bestsellers config", e);
             setShowBestsellersEnabled(!newValue); // revert on error
             toast.error("Erro ao atualizar configuração de mais vendidos.");
+        }
+    };
+
+    // Cor de destaque (Task 6) — ao contrário dos toggles acima, NÃO é
+    // otimista: a trava de contraste em updateStoreAccentColor (lib/api.ts)
+    // pode recusar o salvamento, então só atualiza `currentStoreConfig`/
+    // `onStoreUpdate` depois de confirmado. `hexColor=null` (botão "Restaurar
+    // padrão") nunca é recusado — limpar a cor sempre volta pro WINE_GOLD
+    // padrão de ClientModule.tsx.
+    const handleSaveAccentColor = async (hexColor: string | null) => {
+        setAccentColorError(null);
+        setIsSavingAccentColor(true);
+        try {
+            const newConfig = await updateStoreAccentColor(store.id, currentStoreConfig, hexColor);
+            setCurrentStoreConfig(newConfig);
+            setAccentColorDraft(hexColor || WINE_GOLD_DEFAULT);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+            toast.success(hexColor ? 'Cor de destaque atualizada!' : 'Cor de destaque restaurada para o padrão.');
+        } catch (e: any) {
+            const message = e?.message || 'Erro ao atualizar a cor de destaque.';
+            setAccentColorError(message);
+            toast.error(message);
+        } finally {
+            setIsSavingAccentColor(false);
         }
     };
 
@@ -4209,6 +4375,49 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBestsellersEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
+                </div>
+
+                {/* Cor de destaque por loja (Task 6, stores.config.accent_color) —
+                    substitui o WINE_GOLD fixo de ClientModule.tsx no preço e na
+                    categoria ativa do cardápio do cliente. Preview usa a MESMA
+                    marcação (font-semibold text-sm num, "R$ 32,90") do preço real
+                    do carrinho em ClientModule.tsx, sobre o mesmo fundo escuro
+                    (MENU_DARK_BG_HEX) onde essa cor realmente aparece — não é uma
+                    segunda implementação de preview divergente. */}
+                <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                    <h4 className="font-bold text-[var(--text)]">Cor de destaque do cardápio</h4>
+                    <p className="text-sm text-[var(--text-muted)] mb-3">
+                        Cor usada no preço e na categoria ativa do cardápio do cliente. Sem cor própria definida, o
+                        cardápio usa o dourado padrão.
+                    </p>
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <input
+                            type="color"
+                            aria-label="Escolher cor de destaque"
+                            value={accentColorDraft}
+                            onChange={e => { setAccentColorDraft(e.target.value); setAccentColorError(null); }}
+                            className="w-12 h-12 rounded-lg border border-[var(--border)] cursor-pointer p-0.5 bg-[var(--surface)]"
+                        />
+                        <div className="px-4 py-3 rounded-lg border border-[var(--border)]" style={{ background: MENU_DARK_BG_HEX }}>
+                            <span className="text-[10px] uppercase tracking-wide text-white/40 block mb-1">Pré-visualização</span>
+                            <span className="font-semibold text-sm num" style={{ color: accentColorDraft }}>R$ 32,90</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button onClick={() => handleSaveAccentColor(accentColorDraft)} isLoading={isSavingAccentColor}>
+                                Salvar Cor
+                            </Button>
+                            {!!store.config?.accent_color && (
+                                <Button variant="outline" onClick={() => handleSaveAccentColor(null)} isLoading={isSavingAccentColor}>
+                                    Restaurar padrão
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                    {accentColorError && (
+                        <p className="text-xs text-[var(--err)] mt-2 flex items-center gap-1.5">
+                            <AlertCircle size={13} className="flex-shrink-0" /> {accentColorError}
+                        </p>
+                    )}
                 </div>
 
                 {/* Sugestoes de observacao rapida (migration 019) — chips de atalho
@@ -4455,11 +4664,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                                     const hasActivePromo = effectivePrice < prod.price;
                                                                                     return hasActivePromo ? (
                                                                                         <span className="flex flex-col items-end leading-tight flex-shrink-0">
-                                                                                            <span className="text-[11px] text-[var(--text-muted)] line-through">R$ {prod.price.toFixed(2)}</span>
-                                                                                            <span className="font-bold text-[var(--brand)]">R$ {effectivePrice.toFixed(2)}</span>
+                                                                                            <span className="text-[11px] text-[var(--text-muted)] line-through">R$ {formatBRL(prod.price)}</span>
+                                                                                            <span className="font-bold text-[var(--brand)]">R$ {formatBRL(effectivePrice)}</span>
                                                                                         </span>
                                                                                     ) : (
-                                                                                        <span className="font-bold text-[var(--brand)] flex-shrink-0">R$ {prod.price.toFixed(2)}</span>
+                                                                                        <span className="font-bold text-[var(--brand)] flex-shrink-0">R$ {formatBRL(prod.price)}</span>
                                                                                     );
                                                                                 })()}
                                                                             </div>
@@ -4820,11 +5029,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         />
                                         <div>
                                             <p className="text-sm font-medium text-[var(--text)]">{p.name}</p>
-                                            <p className="text-xs text-[var(--text-muted)]">R$ {p.price.toFixed(2)}{p.omie_codigo ? ` · Omie ${p.omie_codigo}` : ''}</p>
+                                            <p className="text-xs text-[var(--text-muted)]">R$ {formatBRL(p.price)}{p.omie_codigo ? ` · Omie ${p.omie_codigo}` : ''}</p>
                                         </div>
                                     </div>
                                     {groupBaseId !== p.id && (
-                                        <span className="text-xs font-bold text-[var(--brand)] flex-shrink-0">+ R$ {delta.toFixed(2)}</span>
+                                        <span className="text-xs font-bold text-[var(--brand)] flex-shrink-0">+ R$ {formatBRL(delta)}</span>
                                     )}
                                 </label>
                             );
@@ -4871,6 +5080,15 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('waiter');
     const [permissions, setPermissions] = useState({ ...DEFAULT_TEAM_PERMISSIONS });
+    // Jurisdicao de mesas por garcom (Task 3, migration 049). `restrictTables
+    // = false` grava `null` (sem restricao, "Todas as mesas") — o mesmo
+    // valor que TODO store_user real ja tem hoje. So' faz sentido pra
+    // role 'waiter'/'cashier' (seção abaixo escondida pros outros papéis),
+    // mas o state existe sempre pra não perder seleção ao trocar de role
+    // no mesmo formulário.
+    const [restrictTables, setRestrictTables] = useState(false);
+    const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+    const [storeTables, setStoreTables] = useState<Table[]>([]);
 
     const loadUsers = async () => {
         const data = await fetchStoreTeamMembers(storeId);
@@ -4878,6 +5096,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     };
 
     useEffect(() => { loadUsers(); }, [storeId]);
+    useEffect(() => { fetchTables(storeId).then(setStoreTables); }, [storeId]);
 
     const openModal = (user?: StoreUser) => {
         if (user) {
@@ -4920,6 +5139,9 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 caixa: user.permissions?.caixa === true,
             });
             setPassword(''); // Don't show password
+            const assignedIds = user.assigned_table_ids;
+            setRestrictTables(!!(assignedIds && assignedIds.length > 0));
+            setSelectedTableIds(assignedIds || []);
         } else {
             setEditingUser(null);
             setName('');
@@ -4927,20 +5149,32 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             setPassword('');
             setRole('waiter');
             setPermissions({ ...DEFAULT_TEAM_PERMISSIONS });
+            setRestrictTables(false);
+            setSelectedTableIds([]);
         }
         setIsModalOpen(true);
+    };
+
+    const toggleTableSelection = (tableId: string) => {
+        setSelectedTableIds(prev => prev.includes(tableId) ? prev.filter(id => id !== tableId) : [...prev, tableId]);
     };
 
     const handleSave = async () => {
         if (!name || !email || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
         setIsLoading(true);
         try {
-            const userData = { name, email, role, permissions, ...(password ? { password } : {}) };
+            // Jurisdicao de mesas (Task 3): restrictTables=false ou lista
+            // vazia sempre grava null ("Todas as mesas") — nunca um array
+            // vazio, que a function `update_store_user_secure` já trata como
+            // sinônimo de null, mas fica explícito aqui pra não depender
+            // disso silenciosamente.
+            const assignedTableIds = restrictTables && selectedTableIds.length > 0 ? selectedTableIds : null;
+            const userData = { name, email, role, permissions, assigned_table_ids: assignedTableIds, ...(password ? { password } : {}) };
 
             if (editingUser) {
                 await updateStoreTeamMember(editingUser.id, userData);
             } else {
-                await createStoreTeamMember(storeId, userData);
+                await createStoreTeamMember(storeId, { ...userData, assignedTableIds });
             }
             setIsModalOpen(false);
             loadUsers();
@@ -5055,6 +5289,55 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </p>
                         </div>
                     </div>
+
+                    {/* Jurisdicao de mesas por garcom (Task 3, migration 049) —
+                        só faz sentido pra quem de fato opera mesa em campo.
+                        Reaproveita o MESMO padrão visual do bloco de
+                        Permissões acima (checkbox list em card cinza), como
+                        pedido no brief: nenhum componente novo. */}
+                    {(role === 'waiter' || role === 'cashier') && (
+                        <div className="bg-[var(--surface-2)] p-3 rounded-lg border border-[var(--border)]">
+                            <label className="text-sm font-bold text-[var(--text)] mb-2 block">Jurisdição de Mesas</label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer mb-2">
+                                <input
+                                    type="checkbox"
+                                    checked={!restrictTables}
+                                    onChange={() => setRestrictTables(prev => !prev)}
+                                    className="rounded text-[var(--brand)] focus:ring-[var(--brand)]"
+                                />
+                                Todas as mesas (sem restrição)
+                            </label>
+                            {restrictTables && (
+                                <div className="space-y-2 border-t border-[var(--border)] pt-2 mt-1">
+                                    <p className="text-[11px] text-[var(--text-muted)]">
+                                        Escolha as mesas que este usuário pode operar. Mesas fora da
+                                        seleção continuam visíveis pra ele, só ficam bloqueadas.
+                                    </p>
+                                    {storeTables.length === 0 ? (
+                                        <p className="text-xs text-[var(--text-muted)] italic">Nenhuma mesa cadastrada nesta loja.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                            {storeTables.sort((a, b) => a.number - b.number).map(t => (
+                                                <label key={t.id} className={`flex items-center justify-center gap-1 text-sm rounded-lg border px-2 py-1.5 cursor-pointer u-motion ${
+                                                    selectedTableIds.includes(t.id)
+                                                        ? 'bg-[var(--brand)]/10 border-[var(--brand)] text-[var(--brand)] font-bold'
+                                                        : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
+                                                }`}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedTableIds.includes(t.id)}
+                                                        onChange={() => toggleTableSelection(t.id)}
+                                                        className="sr-only"
+                                                    />
+                                                    {t.number}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <Button className="w-full mt-2" onClick={handleSave} isLoading={isLoading}>Salvar Usuário</Button>
                 </div>
@@ -5807,7 +6090,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Faturamento Total</p>
-                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">R$ {totalRevenue.toFixed(2)}</h3>
+                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">R$ {formatBRL(totalRevenue)}</h3>
                                 </div>
                                 <div className="p-3 bg-[var(--brand)]/10 rounded-full text-[var(--brand)]">
                                     <Receipt size={24} />
@@ -5830,7 +6113,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Ticket Médio</p>
                                     <h3 className="text-3xl font-black text-[var(--text)] mt-1">
-                                        R$ {filteredAndSortedSales.length > 0 ? (totalRevenue / filteredAndSortedSales.length).toFixed(2) : '0.00'}
+                                        R$ {filteredAndSortedSales.length > 0 ? formatBRL(totalRevenue / filteredAndSortedSales.length) : '0,00'}
                                     </h3>
                                 </div>
                                 <div className="p-3 bg-[var(--info)]/10 rounded-full text-[var(--info)]">
@@ -5998,7 +6281,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-bold text-[var(--text)]">
-                                                        R$ {orderTotal.toFixed(2)}
+                                                        R$ {formatBRL(orderTotal)}
                                                     </td>
                                                 </tr>
                                             );
@@ -6060,7 +6343,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                             <span className="font-medium text-[var(--text-muted)]">{item.quantity}x</span>
                                             <span className="text-[var(--text)]">{getOrderItemDisplayName(item)}</span>
                                         </div>
-                                        <span className="text-[var(--text-muted)]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                        <span className="text-[var(--text-muted)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -6076,14 +6359,14 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                                 {getPaymentMethodLabel(m.method)}
                                                 {m.brand && ` · ${getCardBrandLabel(m.brand)}`}
                                             </span>
-                                            <span className="font-medium text-[var(--text)]">R$ {m.amount.toFixed(2)}</span>
+                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(m.amount)}</span>
                                         </div>
                                     ))
                                 ) : (
                                     <div className="flex justify-between">
                                         <span className="text-[var(--text-muted)]">{getPaymentMethodLabel(selectedOrderDetails.payment_method)}</span>
                                         <span className="font-medium text-[var(--text)]">
-                                            R$ {(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0).toFixed(2)}
+                                            R$ {formatBRL(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0)}
                                         </span>
                                     </div>
                                 )}
@@ -6093,7 +6376,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                         <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
                             <span className="font-bold text-lg text-[var(--text)]">Total Pago</span>
                             <span className="font-black text-2xl text-[var(--brand)]">
-                                R$ {(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0).toFixed(2)}
+                                R$ {formatBRL(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0)}
                             </span>
                         </div>
                     </div>
@@ -6169,9 +6452,48 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     // — NF-e e NFC-e vinham sempre juntas na mesma lista, sem jeito de olhar
     // só um tipo. Mesmo padrão do filtro de ambiente acima.
     const [tipoFilter, setTipoFilter] = useState<'todos' | '55' | '65'>('todos');
+    // Filtro de período pro "Exportar período" (Task 5, 2026-08-23) — reaproveita
+    // o mesmo padrão de Data Inicial/Data Final já usado no Histórico de Vendas
+    // (StoreAdminView acima), <Input type="date"> simples. Não filtra a tabela
+    // em si (isso já é feito pelos filtros de ambiente/tipo acima) — só delimita
+    // o intervalo mandado pra rota de exportação.
+    const [exportStartDate, setExportStartDate] = useState('');
+    const [exportEndDate, setExportEndDate] = useState('');
+    const [isExporting, setIsExporting] = useState(false);
     const filteredNotas = notas
         .filter(n => ambienteFilter === 'todos' || n.ambiente === ambienteFilter)
         .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter);
+
+    // Baixa o ZIP (XMLs + CSV) do período via app/api/fiscal/exportar — a
+    // rota resolve as notas server-side só por storeId+intervalo (nunca por
+    // uma lista de ids que este componente mandasse), então não precisa (e
+    // não deve) mandar `filteredNotas`/ids nenhum aqui, só o intervalo.
+    const handleExportPeriodo = async () => {
+        setIsExporting(true);
+        try {
+            const params = new URLSearchParams({ storeId });
+            if (exportStartDate) params.set('startDate', exportStartDate);
+            if (exportEndDate) params.set('endDate', exportEndDate);
+            const res = await fetch(`/api/fiscal/exportar?${params.toString()}`);
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.message || 'Falha ao exportar notas fiscais.');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `notas-fiscais${exportStartDate ? `_${exportStartDate}` : ''}${exportEndDate ? `_a_${exportEndDate}` : ''}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            toast.error(e.message || 'Erro ao exportar notas fiscais.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const load = async () => {
         setIsLoading(true);
@@ -6289,33 +6611,51 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     return (
         <div className="space-y-6">
             <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
-                <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex justify-between items-center">
-                    <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
-                    <div className="flex items-center gap-2">
-                        <select
-                            className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-                            value={tipoFilter}
-                            onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
-                        >
-                            <option value="todos">NF-e e NFC-e</option>
-                            <option value="55">Só NF-e</option>
-                            <option value="65">Só NFC-e</option>
-                        </select>
-                        <select
-                            className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-                            value={ambienteFilter}
-                            onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
-                        >
-                            <option value="todos">Todos os ambientes</option>
-                            <option value="homologacao">Só Homologação</option>
-                            <option value="producao">Só Produção</option>
-                        </select>
-                        <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
-                            <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-3">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                        <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <select
+                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                                value={tipoFilter}
+                                onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
+                            >
+                                <option value="todos">NF-e e NFC-e</option>
+                                <option value="55">Só NF-e</option>
+                                <option value="65">Só NFC-e</option>
+                            </select>
+                            <select
+                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                                value={ambienteFilter}
+                                onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
+                            >
+                                <option value="todos">Todos os ambientes</option>
+                                <option value="homologacao">Só Homologação</option>
+                                <option value="producao">Só Produção</option>
+                            </select>
+                            <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
+                                <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                            </Button>
+                            <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
+                                {filteredNotas.length} {filteredNotas.length === 1 ? 'nota' : 'notas'}
+                            </Badge>
+                        </div>
+                    </div>
+                    {/* Filtro de período + exportação em lote (Task 5, 2026-08-23) — a
+                        rota app/api/fiscal/exportar resolve as notas server-side só por
+                        storeId + este intervalo, nunca por uma lista mandada daqui. */}
+                    <div className="flex items-end gap-2 flex-wrap">
+                        <div>
+                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Inicial</label>
+                            <Input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Final</label>
+                            <Input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <Button variant="secondary" className="h-8 px-3 text-xs" onClick={handleExportPeriodo} isLoading={isExporting}>
+                            <Download size={14} className="mr-1.5" /> Exportar período
                         </Button>
-                        <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
-                            {filteredNotas.length} {filteredNotas.length === 1 ? 'nota' : 'notas'}
-                        </Badge>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -6357,7 +6697,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             {new Date(nota.created_at).toLocaleDateString()} <span className="text-xs text-[var(--text-muted)]/70 ml-1">{new Date(nota.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </td>
                                         <td className="px-4 py-3 text-right font-bold text-[var(--text)] whitespace-nowrap">
-                                            R$ {(nota.valor_total ?? 0).toFixed(2)}
+                                            R$ {formatBRL(nota.valor_total ?? 0)}
                                         </td>
                                         <td className="px-4 py-3 text-[var(--text-muted)]">
                                             {nota.modelo === '55' ? 'NF-e' : 'NFC-e'}

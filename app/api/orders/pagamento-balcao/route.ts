@@ -24,12 +24,17 @@ const MAX_METHODS = 20;
 // regressão desta rota, mas é o lugar certo pra parar aqui também.
 function isValidPaymentDetails(
   details: unknown
-): details is { total: number; methods: { method: string; amount: number; brand?: string | null }[] } {
+): details is { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean } {
   if (!details || typeof details !== 'object') return false;
   const d = details as Record<string, unknown>;
   if (!Number.isFinite(d.total)) return false;
   if (!Array.isArray(d.methods)) return false;
   if (d.methods.length === 0 || d.methods.length > MAX_METHODS) return false;
+  // Task 4 (2026-08-23): `emitir_nota`, quando presente, precisa ser
+  // boolean de verdade — mesmo princípio de validação estrita de shape já
+  // seguido no resto desta function (nunca confiar que o JSON que chegou
+  // bate com o tipo TypeScript só porque o compilador achou bonito).
+  if (d.emitir_nota !== undefined && typeof d.emitir_nota !== 'boolean') return false;
 
   return d.methods.every((m) => {
     if (!m || typeof m !== 'object') return false;
@@ -74,6 +79,7 @@ interface RequestBody {
   paymentDetails?: {
     total: number;
     methods: { method: string; amount: number; brand?: string | null }[];
+    emitir_nota?: boolean;
   };
 }
 

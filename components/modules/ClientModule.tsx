@@ -738,11 +738,11 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     <Image src={store.logo_url} alt={`Logo de ${store.name}`} width={80} height={80} className="w-20 h-20 rounded-[1.4rem] mx-auto mb-4 object-cover" style={{ boxShadow: '0 18px 40px -12px rgba(0,0,0,0.5)', border: '2px solid rgba(212,175,92,0.45)' }} />
                 ) : (
                     <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.35)' }}>
-                        <Wine size={26} style={{ color: WINE_GOLD }} />
+                        <Wine size={26} style={{ color: store?.config?.accent_color || WINE_GOLD }} />
                     </div>
                 )}
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
-                <p className="text-sm" style={{ color: WINE_GOLD }}>Identifique-se para continuar seu pedido</p>
+                <p className="text-sm" style={{ color: store?.config?.accent_color || WINE_GOLD }}>Identifique-se para continuar seu pedido</p>
             </div>
             <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)', border: '1px solid rgba(212,175,92,0.3)' }}>
                 {onClose && (
@@ -1639,8 +1639,9 @@ const CartModal: React.FC<{
     isLoading: boolean,
     total: number,
     onUpdateQty: (item: CartItem, delta: number) => void,
-    onRemove: (item: CartItem) => void
-}> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove }) => {
+    onRemove: (item: CartItem) => void,
+    accentColor: string
+}> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove, accentColor }) => {
     return (
         <BottomSheet isOpen={isOpen} onClose={onClose} title="Seu Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
@@ -1680,7 +1681,7 @@ const CartModal: React.FC<{
                                                 <span className="text-[11px] text-[var(--text-muted)] line-through num">
                                                     R$ {formatBRL((item.product.price + (item.selectedOptions || []).reduce((a, o) => a + o.price_delta, 0)) * item.quantity)}
                                                 </span>
-                                                <span className="font-semibold text-sm num" style={{ color: WINE_GOLD }}>R$ {formatBRL(calculateCartItemUnitPrice(item) * item.quantity)}</span>
+                                                <span className="font-semibold text-sm num" style={{ color: accentColor }}>R$ {formatBRL(calculateCartItemUnitPrice(item) * item.quantity)}</span>
                                             </span>
                                         ) : (
                                             <span className="font-semibold text-[var(--text)] text-sm num flex-shrink-0">R$ {formatBRL(calculateCartItemUnitPrice(item) * item.quantity)}</span>
@@ -3876,6 +3877,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isLoading={isLoading}
                 onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
                 onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
+                accentColor={currentStore?.config?.accent_color || WINE_GOLD}
             />
 
             <OrderStatusModal

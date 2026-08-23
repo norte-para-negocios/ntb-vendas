@@ -60,6 +60,13 @@ export interface Store {
     // direto, sempre por essas funções.
     modules?: Partial<StoreModules>;
     order_flow?: OrderFlow;
+    // Cor de destaque por loja (Task 6). Hex '#RRGGBB', opcional. Ausente/null
+    // = WINE_GOLD padrão em ClientModule.tsx, byte-idêntico ao comportamento
+    // anterior a esta feature. Validada contra um piso de contraste (WCAG
+    // 2.1, ver lib/colorContrast.ts) em `updateStoreAccentColor` (lib/api.ts)
+    // ANTES de persistir — nunca salva uma cor ilegível sobre o fundo escuro
+    // do cardápio.
+    accent_color?: string | null;
   };
 }
 
@@ -90,6 +97,13 @@ export interface StoreUser {
   role: string;
   must_change_password: boolean;
   permissions: StoreUserPermissions;
+  // Jurisdicao de mesas por garcom (Task 3, migration 049). null/undefined
+  // ou array vazio = sem restricao (todas as mesas, comportamento de hoje
+  // de TODO store_user real). So' faz sentido pra role 'waiter'/'cashier'
+  // na UI de atribuicao, mas o enforcement (lib/storeModules.ts,
+  // isTableInJurisdiction) e' generico por role owner/universal, nao por
+  // este campo estar presente ou nao.
+  assigned_table_ids?: string[] | null;
 }
 
 export interface Table {

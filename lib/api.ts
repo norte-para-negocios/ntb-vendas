@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
+import { checkAccentColorContrast } from '@/lib/colorContrast';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -29,6 +30,26 @@ export const updateStoreConfig = async (storeId: string, config: any) => {
     .update({ config })
     .eq('id', storeId);
   if (error) throw error;
+};
+
+// Cor de destaque por loja (Task 6, stores.config.accent_color) — mesmo padrão
+// jsonb de service_fee_rate/note_suggestions (sem coluna nova), mas com uma
+// trava de contraste ENFORCED aqui, não só sugerida na UI: qualquer hex que
+// não atinja o mínimo legível contra o fundo escuro real do cardápio
+// (`.on-glass`, `#15171d` — ver lib/colorContrast.ts) é recusado ANTES de
+// chamar updateStoreConfig, nunca persistido. `hexColor: null` limpa a
+// config (volta pro WINE_GOLD padrão em ClientModule.tsx, sem trava nenhuma
+// já que não há cor nenhuma sendo salva).
+export const updateStoreAccentColor = async (storeId: string, currentConfig: any, hexColor: string | null): Promise<any> => {
+  if (hexColor) {
+    const check = checkAccentColorContrast(hexColor);
+    if (!check.legible) {
+      throw new Error(check.message || 'Cor de destaque inválida.');
+    }
+  }
+  const newConfig = { ...(currentConfig || {}), accent_color: hexColor };
+  await updateStoreConfig(storeId, newConfig);
+  return newConfig;
 };
 
 // Atualização isolada de `cover_url` (Task 1, imagem de capa do cardápio,
@@ -122,7 +143,9 @@ export const fetchStoreTeamMembers = async (storeId: string): Promise<StoreUser[
   return data || [];
 };
 
-export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any }) => {
+// assignedTableIds (Task 3, migration 049): null/undefined = sem restrição
+// (todas as mesas) — mesmo default de todo store_user existente.
+export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any; assignedTableIds?: string[] | null }) => {
   const { data, error } = await supabase.rpc('create_store_team_member_secure', {
     p_store_id: storeId,
     p_name: userData.name,
@@ -130,13 +153,14 @@ export const createStoreTeamMember = async (storeId: string, userData: { name: s
     p_password: userData.password || '123456',
     p_role: userData.role,
     p_permissions: userData.permissions,
+    p_assigned_table_ids: userData.assignedTableIds ?? null,
   });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Erro ao criar usuário.');
   return data;
 };
 
-export const updateStoreTeamMember = async (userId: string, userData: { name?: string; email?: string; role?: string; permissions?: any; password?: string }) => {
+export const updateStoreTeamMember = async (userId: string, userData: { name?: string; email?: string; role?: string; permissions?: any; password?: string; assigned_table_ids?: string[] | null }) => {
   const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: userData });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Erro ao atualizar usuário.');
@@ -832,7 +856,13 @@ export const sendOrderToKitchen = async (orderId: string) => {
 // duplicada) e tenta fechar de novo.
 export const closeCounterOrder = async (
   orderId: string,
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
+  // Task 4 (2026-08-23, resolução backlog pendente): `emitir_nota` é novo e
+  // opcional — mesmo padrão aditivo do resto deste objeto. Vai direto pra
+  // dentro de `payment_details` (nenhuma coluna nova, ver AGENTS.md), lido
+  // por app/api/fiscal/emitir/route.ts ANTES de qualquer trabalho real de
+  // emissão. Ausente (todo call site de hoje, toda loja sem o toggle
+  // renderizado) = comportamento idêntico ao de sempre, emite normal.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
   if (paymentData) {
@@ -1001,7 +1031,8 @@ export const closeTableSession = async (
   // Sem declarar aqui, um refactor futuro que trocasse o call site por
   // um literal (ex.: `{ total, methods: [{method, amount}] }`) perderia
   // a bandeira do cartão silenciosamente, sem nenhum erro de tipo.
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
+  // Task 4: idem closeCounterOrder acima — `emitir_nota` é novo e opcional.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
   try {
