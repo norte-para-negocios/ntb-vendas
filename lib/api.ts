@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
+import { checkAccentColorContrast } from '@/lib/colorContrast';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -29,6 +30,26 @@ export const updateStoreConfig = async (storeId: string, config: any) => {
     .update({ config })
     .eq('id', storeId);
   if (error) throw error;
+};
+
+// Cor de destaque por loja (Task 6, stores.config.accent_color) — mesmo padrão
+// jsonb de service_fee_rate/note_suggestions (sem coluna nova), mas com uma
+// trava de contraste ENFORCED aqui, não só sugerida na UI: qualquer hex que
+// não atinja o mínimo legível contra o fundo escuro real do cardápio
+// (`.on-glass`, `#15171d` — ver lib/colorContrast.ts) é recusado ANTES de
+// chamar updateStoreConfig, nunca persistido. `hexColor: null` limpa a
+// config (volta pro WINE_GOLD padrão em ClientModule.tsx, sem trava nenhuma
+// já que não há cor nenhuma sendo salva).
+export const updateStoreAccentColor = async (storeId: string, currentConfig: any, hexColor: string | null): Promise<any> => {
+  if (hexColor) {
+    const check = checkAccentColorContrast(hexColor);
+    if (!check.legible) {
+      throw new Error(check.message || 'Cor de destaque inválida.');
+    }
+  }
+  const newConfig = { ...(currentConfig || {}), accent_color: hexColor };
+  await updateStoreConfig(storeId, newConfig);
+  return newConfig;
 };
 
 // Atualização isolada de `cover_url` (Task 1, imagem de capa do cardápio,

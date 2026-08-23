@@ -11,8 +11,9 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
+import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -35,6 +36,14 @@ const StoreDashboardView = dynamic(
 );
 
 // --- COMPONENTS ---
+
+// Dourado padrão usado como fallback em ClientModule.tsx (WINE_GOLD, hex
+// local só naquele arquivo, "carta de vinhos") — replicado aqui só pra
+// inicializar o `<input type="color">`/preview do seletor de cor de destaque
+// (Task 6) quando a loja ainda não tem `config.accent_color` próprio. Mesmo
+// precedente de const de cor fixa por arquivo já usado no projeto
+// (IFOOD_RED/IFOOD_PURPLE em ClientModule.tsx).
+const WINE_GOLD_DEFAULT = '#D4AF5C';
 
 // Permissões da conta universal: era um objeto fixo com as 6 permissões
 // `true` (acesso total sempre) — motivo real de a aba Bar aparecer no
@@ -4124,6 +4133,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [newNoteSuggestion, setNewNoteSuggestion] = useState('');
     const [isSavingNoteSuggestions, setIsSavingNoteSuggestions] = useState(false);
 
+    // Cor de destaque por loja (Task 6, stores.config.accent_color).
+    // Rascunho local (accentColorDraft) segue o dedo no picker sem salvar a
+    // cada pixel; só persiste ao clicar "Salvar Cor", que passa pela trava
+    // de contraste em updateStoreAccentColor (lib/api.ts) — pode ser
+    // recusado.
+    const [accentColorDraft, setAccentColorDraft] = useState<string>(store.config?.accent_color || WINE_GOLD_DEFAULT);
+    const [accentColorError, setAccentColorError] = useState<string | null>(null);
+    const [isSavingAccentColor, setIsSavingAccentColor] = useState(false);
+
     // A `store` recebida via prop ja e a fonte da verdade (StoreModule mantem
     // `user.store` atualizado via `onStoreUpdate` a cada mudanca real de
     // config) — nao ha motivo pra rebuscar do banco aqui (achado de
@@ -4136,6 +4154,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
+        setAccentColorDraft(store.config?.accent_color || WINE_GOLD_DEFAULT);
+        setAccentColorError(null);
     }, [store]);
 
     const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4199,6 +4219,32 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             console.error("Error updating bestsellers config", e);
             setShowBestsellersEnabled(!newValue); // revert on error
             toast.error("Erro ao atualizar configuração de mais vendidos.");
+        }
+    };
+
+    // Cor de destaque (Task 6) — ao contrário dos toggles acima, NÃO é
+    // otimista: a trava de contraste em updateStoreAccentColor (lib/api.ts)
+    // pode recusar o salvamento, então só atualiza `currentStoreConfig`/
+    // `onStoreUpdate` depois de confirmado. `hexColor=null` (botão "Restaurar
+    // padrão") nunca é recusado — limpar a cor sempre volta pro WINE_GOLD
+    // padrão de ClientModule.tsx.
+    const handleSaveAccentColor = async (hexColor: string | null) => {
+        setAccentColorError(null);
+        setIsSavingAccentColor(true);
+        try {
+            const newConfig = await updateStoreAccentColor(store.id, currentStoreConfig, hexColor);
+            setCurrentStoreConfig(newConfig);
+            setAccentColorDraft(hexColor || WINE_GOLD_DEFAULT);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+            toast.success(hexColor ? 'Cor de destaque atualizada!' : 'Cor de destaque restaurada para o padrão.');
+        } catch (e: any) {
+            const message = e?.message || 'Erro ao atualizar a cor de destaque.';
+            setAccentColorError(message);
+            toast.error(message);
+        } finally {
+            setIsSavingAccentColor(false);
         }
     };
 
@@ -4329,6 +4375,49 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBestsellersEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
+                </div>
+
+                {/* Cor de destaque por loja (Task 6, stores.config.accent_color) —
+                    substitui o WINE_GOLD fixo de ClientModule.tsx no preço e na
+                    categoria ativa do cardápio do cliente. Preview usa a MESMA
+                    marcação (font-semibold text-sm num, "R$ 32,90") do preço real
+                    do carrinho em ClientModule.tsx, sobre o mesmo fundo escuro
+                    (MENU_DARK_BG_HEX) onde essa cor realmente aparece — não é uma
+                    segunda implementação de preview divergente. */}
+                <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                    <h4 className="font-bold text-[var(--text)]">Cor de destaque do cardápio</h4>
+                    <p className="text-sm text-[var(--text-muted)] mb-3">
+                        Cor usada no preço e na categoria ativa do cardápio do cliente. Sem cor própria definida, o
+                        cardápio usa o dourado padrão.
+                    </p>
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <input
+                            type="color"
+                            aria-label="Escolher cor de destaque"
+                            value={accentColorDraft}
+                            onChange={e => { setAccentColorDraft(e.target.value); setAccentColorError(null); }}
+                            className="w-12 h-12 rounded-lg border border-[var(--border)] cursor-pointer p-0.5 bg-[var(--surface)]"
+                        />
+                        <div className="px-4 py-3 rounded-lg border border-[var(--border)]" style={{ background: MENU_DARK_BG_HEX }}>
+                            <span className="text-[10px] uppercase tracking-wide text-white/40 block mb-1">Pré-visualização</span>
+                            <span className="font-semibold text-sm num" style={{ color: accentColorDraft }}>R$ 32,90</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button onClick={() => handleSaveAccentColor(accentColorDraft)} isLoading={isSavingAccentColor}>
+                                Salvar Cor
+                            </Button>
+                            {!!store.config?.accent_color && (
+                                <Button variant="outline" onClick={() => handleSaveAccentColor(null)} isLoading={isSavingAccentColor}>
+                                    Restaurar padrão
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                    {accentColorError && (
+                        <p className="text-xs text-[var(--err)] mt-2 flex items-center gap-1.5">
+                            <AlertCircle size={13} className="flex-shrink-0" /> {accentColorError}
+                        </p>
+                    )}
                 </div>
 
                 {/* Sugestoes de observacao rapida (migration 019) — chips de atalho

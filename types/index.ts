@@ -60,6 +60,13 @@ export interface Store {
     // direto, sempre por essas funções.
     modules?: Partial<StoreModules>;
     order_flow?: OrderFlow;
+    // Cor de destaque por loja (Task 6). Hex '#RRGGBB', opcional. Ausente/null
+    // = WINE_GOLD padrão em ClientModule.tsx, byte-idêntico ao comportamento
+    // anterior a esta feature. Validada contra um piso de contraste (WCAG
+    // 2.1, ver lib/colorContrast.ts) em `updateStoreAccentColor` (lib/api.ts)
+    // ANTES de persistir — nunca salva uma cor ilegível sobre o fundo escuro
+    // do cardápio.
+    accent_color?: string | null;
   };
 }
 
