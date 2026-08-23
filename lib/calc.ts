@@ -50,6 +50,29 @@ export function calculateChange(amountPaid: number, total: number): number {
   return Math.max(0, amountPaid - total);
 }
 
+// Fix round 2 (Group A2, módulo Caixa): troco de uma conta paga com
+// múltiplas formas (`payment_details.methods`). Antes duplicado
+// verbatim em StoreModule.tsx (handleFinishPayment) e EstacaoModule.tsx
+// (reconcileCaixa) — a mesma classe de drift já documentada pra
+// SERVICE_FEE_RATE antes de virar lib/calc.ts, só que aqui na trilha de
+// troco, onde divergência significa a tela do caixa e o papel impresso
+// discordando sobre quanto dinheiro devolver ao cliente.
+//
+// Regra (achado real testando conta dividida, ver comentário histórico
+// em StoreModule.tsx): troco é sobre o que o DINHEIRO precisava cobrir
+// (total menos o que os métodos não-dinheiro já pagaram), nunca sobre o
+// total cheio da conta — senão parte-cartão-parte-dinheiro sempre dava
+// troco zero.
+export function calculateChangeForMethods(
+  methods: { method: string; amount: number }[],
+  total: number,
+): number {
+  const cashPaid = methods.filter((m) => m.method === 'CASH').reduce((acc, m) => acc + m.amount, 0);
+  const nonCashPaid = methods.filter((m) => m.method !== 'CASH').reduce((acc, m) => acc + m.amount, 0);
+  const amountOwedInCash = Math.max(0, total - nonCashPaid);
+  return calculateChange(cashPaid, amountOwedInCash);
+}
+
 // Preço efetivo de um produto (migration 019): promo_price quando setado E
 // menor que o preço cheio, senão price. A guarda `< price` é rede de
 // segurança pro client — o CHECK do banco (promo_price < price) e o

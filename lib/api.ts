@@ -924,7 +924,15 @@ export const cancelPendingTableItems = async (tableId: string) => {
 
 export const closeTableSession = async (
   tableId: string,
-  paymentData?: { total: number; methods: { method: string; amount: number }[] },
+  // Fix round 2 (Group A3): `brand` faltava neste tipo declarado — o
+  // valor sempre chegou até o banco porque o argumento real passado por
+  // StoreModule.tsx (paymentMethods, ver seu próprio useState) já tem
+  // `brand?: string`, e TypeScript não aplica excess-property checking
+  // quando o valor vem de uma variável (só em objeto literal inline).
+  // Sem declarar aqui, um refactor futuro que trocasse o call site por
+  // um literal (ex.: `{ total, methods: [{method, amount}] }`) perderia
+  // a bandeira do cartão silenciosamente, sem nenhum erro de tipo.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
   try {

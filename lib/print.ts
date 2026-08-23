@@ -323,15 +323,23 @@ export function printBillReceipt(opts: {
             : 'Este estabelecimento não cobra taxa de serviço'
         }</td></tr>`
     : '';
-  // getPaymentMethodLabel/getCardBrandLabel só devolvem texto de um catálogo
-  // fechado (lib/labels.ts) — nunca texto livre do cliente/lojista — então,
-  // ao contrário do nome de produto/loja, não precisam de escapeHtml aqui
-  // (mesmo raciocínio já aplicado a `opts.kind` em printKitchenTicket).
+  // Fix round 2 (Group A1): getPaymentMethodLabel/getCardBrandLabel só
+  // devolvem texto de catálogo fechado quando o valor bate um dos
+  // LABELS conhecidos — mas ambas caem no fallback `LABELS[x] || x`
+  // quando não bate, devolvendo o valor CRU de volta. Isso deixa de ser
+  // seguro assim que o valor vem de `payment_details` jsonb gravado por
+  // `close_table_orders_secure`, que aceita jsonb arbitrário de qualquer
+  // um com a anon key (não só da sessão atual do lojista) — na estação
+  // (EstacaoModule.tsx) esse jsonb é lido de volta e impresso sem ter
+  // passado pela UI que restringe a um catálogo fixo. Mesma classe de
+  // XSS armazenado já corrigida em 2026-07-02 (ver cabeçalho do
+  // arquivo): escapar sempre, mesmo em valor "normalmente" de catálogo
+  // fechado.
   const paymentRows = opts.payment
     ? opts.payment.methods
         .map((m) => {
-          const brandSuffix = m.brand ? ` (${getCardBrandLabel(m.brand)})` : '';
-          return `<tr><td>${getPaymentMethodLabel(m.method)}${brandSuffix}</td><td class="right">R$ ${m.amount.toFixed(2)}</td></tr>`;
+          const brandSuffix = m.brand ? ` (${escapeHtml(getCardBrandLabel(m.brand))})` : '';
+          return `<tr><td>${escapeHtml(getPaymentMethodLabel(m.method))}${brandSuffix}</td><td class="right">R$ ${m.amount.toFixed(2)}</td></tr>`;
         })
         .join('')
     : '';

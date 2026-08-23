@@ -22,7 +22,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChange, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -1452,22 +1452,15 @@ NOTIFY pgrst, 'reload schema';`;
     // lançado excede o total, quanto de troco dar (achado de bug #4).
     const paymentTotalDue = selectedTable ? getTableSummary(selectedTable.id).total : 0;
     const totalPaidSoFar = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
-    const cashPaidSoFar = paymentMethods.filter(p => p.method === 'CASH').reduce((acc, p) => acc + p.amount, 0);
     const remainingToPay = Math.max(0, paymentTotalDue - totalPaidSoFar);
-    // Task 4 (módulo Caixa) — achado real testando ao vivo uma conta dividida
-    // (parte cartão, parte dinheiro): `calculateChange(cashPaidSoFar,
-    // paymentTotalDue)` comparava o dinheiro recebido contra o TOTAL CHEIO da
-    // conta, não contra o que ainda restava depois do que já foi pago em
-    // métodos não-dinheiro — então R$20 no cartão + R$15 em dinheiro numa
-    // conta de R$33 (só R$13 restando pro dinheiro cobrir) dava troco ZERO em
-    // vez de R$2. Só não aparecia antes porque com um único método (o único
-    // caso testado até aqui) `cashPaidSoFar === totalPaidSoFar`, e o bug fica
-    // invisível. Corrigido: troco é sobre o que o dinheiro precisava cobrir
-    // (total menos o que os outros métodos já pagaram), nunca sobre o total
-    // cheio da conta.
-    const nonCashPaidSoFar = totalPaidSoFar - cashPaidSoFar;
-    const amountOwedInCash = Math.max(0, paymentTotalDue - nonCashPaidSoFar);
-    const changeDue = calculateChange(cashPaidSoFar, amountOwedInCash);
+    // Fix round 2 (Group A2): extraído para lib/calc.ts
+    // (calculateChangeForMethods) — antes duplicado aqui e em
+    // EstacaoModule.tsx (reconcileCaixa), a fórmula do troco (achado real
+    // testando ao vivo uma conta dividida, parte cartão parte dinheiro:
+    // troco é sobre o que o dinheiro precisava cobrir, não sobre o total
+    // cheio da conta) já tinha exatamente o formato que deixou a fórmula
+    // de taxa de serviço duplicada em 7+ lugares antes de virar lib/calc.ts.
+    const changeDue = calculateChangeForMethods(paymentMethods, paymentTotalDue);
 
     const printTableBill = (tableId: string) => {
         const summary = getTableSummary(tableId);

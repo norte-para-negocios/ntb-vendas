@@ -32,7 +32,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { fetchStoreBySlug, fetchKitchenOrders, fetchSalesHistory, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus } from '@/lib/api';
 import { printKitchenTicket, printBillReceipt } from '@/lib/print';
 import { getOrderItemDisplayName } from '@/lib/labels';
-import { calculateChange } from '@/lib/calc';
+import { calculateChangeForMethods } from '@/lib/calc';
 import { Store, OrderItem, Order } from '@/types';
 
 // --- Configuração persistida no aparelho (localStorage) ---------------
@@ -425,14 +425,13 @@ export const EstacaoModule: React.FC = () => {
       const methods = paymentDetails?.methods && paymentDetails.methods.length > 0
         ? paymentDetails.methods
         : (group[0].payment_method ? [{ method: group[0].payment_method, amount: total }] : []);
-      // Mesma correção de StoreModule.tsx (handleFinishPayment): troco é
-      // sobre o que o dinheiro precisava cobrir (total menos o que outros
+      // Fix round 2 (Group A2): extraído para lib/calc.ts
+      // (calculateChangeForMethods) — mesma fórmula que estava duplicada
+      // verbatim em StoreModule.tsx (handleFinishPayment). Troco é sobre
+      // o que o dinheiro precisava cobrir (total menos o que outros
       // métodos já pagaram), nunca sobre o total cheio da conta — senão
       // parte-cartão-parte-dinheiro sempre dava troco zero.
-      const cashPaid = methods.filter((m) => m.method === 'CASH').reduce((acc, m) => acc + m.amount, 0);
-      const nonCashPaid = methods.filter((m) => m.method !== 'CASH').reduce((acc, m) => acc + m.amount, 0);
-      const amountOwedInCash = Math.max(0, total - nonCashPaid);
-      const changeDue = calculateChange(cashPaid, amountOwedInCash);
+      const changeDue = calculateChangeForMethods(methods, total);
       const description = `Mesa ${tableNumber} — R$ ${total.toFixed(2)}`;
 
       const doPrint = () => printBillReceipt({
