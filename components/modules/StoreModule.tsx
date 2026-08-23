@@ -1362,8 +1362,14 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const [areCardsCollapsed, setAreCardsCollapsed] = useState(false);
     const [pinBlockEnabled, setPinBlockEnabled] = useState(store.config?.require_pin_for_open || false);
 
-    const togglePin = (e: React.MouseEvent, tableId: string) => {
+    const togglePin = (e: React.MouseEvent, tableId: string, inJurisdiction: boolean = true) => {
         e.stopPropagation();
+        // Trava de jurisdicao (Task 3): `disabled` no <button> ja tira o
+        // elemento do tab order e bloqueia Enter/Space nativamente, mas o
+        // handler tambem no-opa por defesa em profundidade — nunca confiar
+        // só no atributo pra impedir a acao (ex.: gesto de ativacao de leitor
+        // de tela nao passa necessariamente por keydown/click do DOM).
+        if (!inJurisdiction) return;
         setVisiblePins(prev => {
             const next = new Set(prev);
             if (next.has(tableId)) next.delete(tableId);
@@ -2006,8 +2012,13 @@ NOTIFY pgrst, 'reload schema';`;
     // mesa sem cobrar nada e sem checar quem tem permissão. Confirmado sem
     // call site algum antes de remover.
 
-    const handleBlockToggle = async (e: React.MouseEvent, table: Table) => {
+    const handleBlockToggle = async (e: React.MouseEvent, table: Table, inJurisdiction: boolean = true) => {
         e.stopPropagation();
+        // Trava de jurisdicao (Task 3, mesma defesa em profundidade de
+        // togglePin acima): sem isso, um garcom conseguia bloquear de
+        // verdade uma mesa fora da sua area via teclado (Tab + Enter),
+        // apesar do card estar visualmente inerte.
+        if (!inJurisdiction) return;
         await toggleTableBlock(table.id, table.status);
     };
 
@@ -2231,8 +2242,9 @@ NOTIFY pgrst, 'reload schema';`;
                                                 {visiblePins.has(table.id) ? table.pin : '••••'}
                                             </span>
                                             <button
-                                                onClick={(e) => togglePin(e, table.id)}
-                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press"
+                                                onClick={(e) => togglePin(e, table.id, inJurisdiction)}
+                                                disabled={!inJurisdiction}
+                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
                                                 title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
                                             >
                                                 {visiblePins.has(table.id) ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -2240,12 +2252,12 @@ NOTIFY pgrst, 'reload schema';`;
                                         </div>
                                     </div>
                                 </div>
-                                <button 
+                                <button
                                     onClick={(e) => {
                                         if(!isBlocked && hasOrders) return; // Prevent blocking if has orders
-                                        handleBlockToggle(e, table);
+                                        handleBlockToggle(e, table, inJurisdiction);
                                     }}
-                                    disabled={!isBlocked && hasOrders}
+                                    disabled={(!isBlocked && hasOrders) || !inJurisdiction}
                                     className={`p-2 rounded-lg u-motion u-press z-10 ${
                                         isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
                                         (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
@@ -2328,7 +2340,8 @@ NOTIFY pgrst, 'reload schema';`;
                             {isWaiterRequested && (
                                 <div className="mt-3 pt-2 border-t border-[var(--border)] flex flex-col items-center">
                                     <Button
-                                        onClick={(e) => { e.stopPropagation(); handleDismissWaiter(table.id); }}
+                                        onClick={(e) => { e.stopPropagation(); if (!inJurisdiction) return; handleDismissWaiter(table.id); }}
+                                        disabled={!inJurisdiction}
                                         className="w-full h-8 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
                                     >
                                         <BellRing size={14} className="mr-1"/> ATENDER GARÇOM
