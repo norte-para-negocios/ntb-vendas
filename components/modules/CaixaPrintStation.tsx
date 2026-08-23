@@ -219,7 +219,18 @@ interface FailedEntry {
 // (nunca 'owner'/'universal') é o que realmente distingue "operador de
 // caixa de carne e osso, com a permissão marcada pelo Master Admin" de
 // "qualquer conta universal, nesta loja específica".
-function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
+// Exportada (Critical #2, revisão de branch 2026-08-23 — "Reimprimir pode
+// mentir sucesso num aparelho sem impressora"): `StoreModule.tsx` (histórico
+// "Pedidos do Dia") precisa do MESMO critério pra decidir se oferece o botão
+// manual "Reimprimir" — não um critério parecido, o mesmo, senão as duas
+// checagens divergem silenciosamente no futuro (ex.: alguém ajusta um dos
+// dois lados e esquece do outro). Não reusar a instância do HOOK
+// `useCaixaPrintStation` pra isso — chamá-lo de novo em `TablesView`
+// duplicaria a reconciliação em segundo plano inteira (Realtime, intervalo
+// de 10s, dedupe em memória), rodando duas cópias independentes do mesmo
+// mecanismo na mesma sessão. `isCaixaRole` sozinha é pura/sem estado, então
+// dá pra reusar só o critério sem reusar o efeito.
+export function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
   if (user.role === 'owner' || user.role === 'universal') return false;
   return user.permissions?.caixa === true;
 }

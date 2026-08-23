@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
-import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket } from '@/components/modules/CaixaPrintStation';
+import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -55,10 +55,18 @@ const universalPermissionsFor = (store: Store): StoreUserPermissions => {
         admin: modules.admin,
         // Módulo Caixa (Task 4): a conta universal já finaliza mesmo sem
         // isto (canFinalizeBill dá bypass explícito a role==='universal',
-        // igual sempre foi) — este campo só existe pra `StoreUserPermissions`
-        // ficar com um valor coerente com o resto do objeto, não porque
-        // algum código leia especificamente `permissions.caixa` de um
-        // usuário universal.
+        // igual sempre foi) — mas `permissions.caixa` NÃO é só um campo
+        // decorativo: `isCaixaRole` (CaixaPrintStation.tsx) e o gate do botão
+        // "Reimprimir" (StoreModule.tsx, `sentHistoryItems`/linha do
+        // histórico) leem `permissions.caixa` de verdade. A exclusão
+        // explícita de `role === 'owner' | 'universal'` nesses dois lugares
+        // é o que evita que este campo (que só espelha se a LOJA tem o
+        // módulo Caixa ligado, não se este usuário é operador de caixa)
+        // ligue o loop de auto-impressão ou o botão de reimpressão manual
+        // pra qualquer conta universal — a leitura acontece só pra decidir
+        // "roda o gatilho automático de impressão" / "mostra o botão
+        // manual", nunca pra acesso de aba nem pra finalizar conta (isso
+        // continua sendo o bypass explícito de `canFinalizeBill` acima).
         caixa: modules.caixa,
     };
 };
@@ -1308,6 +1316,21 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // nenhum store_user real hoje tem essa chave, então isto não muda nada
     // nas 7 lojas reais por padrão.
     const canFinalize = canFinalizeBill(loggedUser, store);
+    // Critical #2 (revisão de branch 2026-08-23 — "Reimprimir pode mentir
+    // sucesso num aparelho sem impressora"): gate pra OFERECER o botão manual
+    // "Reimprimir" em "Pedidos do Dia" abaixo, mesmo critério exato que
+    // decide se o loop automático de impressão roda neste aparelho
+    // (`isCaixaRole`, CaixaPrintStation.tsx — dono/universal excluídos pelo
+    // mesmo motivo já documentado lá: `permissions.caixa` sintético da conta
+    // universal só espelha se a LOJA tem o módulo ligado, não se este usuário
+    // é operador de caixa de verdade). Sem isso, um garçom (permissions.tables
+    // mas não caixa) abrindo o mesmo modal no próprio celular tocava
+    // "Reimprimir" e `window.print()` resolvia "com sucesso" sem nenhuma
+    // impressora de cozinha configurada ali — o toast mentia "Reimpresso com
+    // sucesso" e nada chegava na cozinha. Continuam vendo a lista e o status
+    // de impressão de cada linha (view-only, pedido original), só perdem a
+    // AÇÃO que pode mentir sucesso.
+    const canReprint = orderFlow === 'direct_print' && isCaixaRole(loggedUser);
     const watchedTables = useWatchedTables(storeId);
     const isFinishingRef = useRef(false);
     // Fix round 1 (Task 2 review, Minor #3): mesmo estilo de guarda que
@@ -1545,6 +1568,12 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // qualquer linha "sem registro") ganha aqui um jeito de recuperação com
     // toque humano — nunca fica só invisível na lista.
     const handleManualReprint = async (row: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string }) => {
+        // Guarda redundante ao gate visual (`canReprint` no botão acima) —
+        // Critical #2: a ação em si nunca deve rodar fora do aparelho de
+        // caixa de verdade, mesmo se algo chamar isto por outro caminho no
+        // futuro. `window.print()` "tem sucesso" mesmo sem impressora real
+        // configurada — não é aceitável depender só de esconder o botão.
+        if (!canReprint) return;
         if (reprintingIds.has(row.id)) return;
         setReprintingIds(prev => new Set(prev).add(row.id));
         try {
@@ -2883,7 +2912,13 @@ NOTIFY pgrst, 'reload schema';`;
                                         <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
                                             {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
                                         </Badge>
-                                        {!row.printed && (
+                                        {/* Critical #2: só oferece a ação em quem passa por `canReprint`
+                                            (aparelho de caixa de verdade, ver comentário acima) E cuja mesa/
+                                            comanda ainda está aberta — reimprimir ticket de cozinha pra uma
+                                            mesa já fechada (pagou e foi embora) produz comida que ninguém
+                                            pediu mais. Quem não bate os dois continua vendo o badge de status
+                                            normalmente (view-only), só não vê o botão. */}
+                                        {!row.printed && !row.closed && canReprint && (
                                             <Button
                                                 size="sm"
                                                 variant="secondary"
