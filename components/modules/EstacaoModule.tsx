@@ -585,15 +585,40 @@ export const EstacaoModule: React.FC = () => {
         //   (`!charged`) só pode significar que foi removida nesta mesa —
         //   sem isso, a estação diria "este estabelecimento não cobra taxa"
         //   pra uma loja que cobra, só não cobrou desta vez.
+        //
+        // Fix round 3 (Group B1): a discriminação acima presumia que
+        // `items` sempre cobre o mesmo conjunto de pedidos que gerou
+        // `total` — não cobre. fetchSalesHistory filtra por `created_at`
+        // (migration 021), não `updated_at`, então CAIXA_LOOKBACK_HOURS
+        // limita a CRIAÇÃO dos pedidos buscados, não o fechamento deles.
+        // Uma mesa com um pedido criado há 25h e outro criado há 1h, ambos
+        // fechados agora (mesmo `updated_at`), traz só o pedido recente pro
+        // grupo — `subtotal` reflete só os itens vistos, mas `total` (de
+        // `payment_details`, gravado no fechamento) cobre a conta inteira.
+        // A diferença vazava como uma linha "Taxa de Serviço (10%
+        // opcional)" fabricada, cobrindo itens que nunca apareceram no
+        // recibo — um documento de dinheiro afirmando algo falso pro
+        // cliente (itens somando um valor, "TOTAL" maior, e a diferença
+        // rotulada como taxa opcional que na verdade é pedido invisível).
+        // Agora só monta a discriminação quando ela de fato bate — 0% (sem
+        // taxa) OU exatamente a rate real da loja — e omite a seção inteira
+        // (não mostra nem subtotal) quando não bate, em vez de inventar uma
+        // linha. O TOTAL impresso continua sempre correto (vem direto de
+        // `payment_details`, nunca recalculado do zero).
         const serviceFeeRate = s.config?.service_fee_rate ?? SERVICE_FEE_RATE;
         const feeAmount = Math.max(0, total - subtotal);
         const feeCharged = feeAmount > 0.005;
-        const serviceFee: BillServiceFeeInfo = {
-          charged: feeCharged,
-          rate: serviceFeeRate,
-          amount: feeAmount,
-          removedForTable: !feeCharged && !!s.config?.charge_service_fee,
-        };
+        const reconciles =
+          Math.abs(total - subtotal) < 0.01 ||
+          Math.abs(total - (subtotal + subtotal * serviceFeeRate)) < 0.01;
+        const serviceFee: BillServiceFeeInfo | undefined = reconciles
+          ? {
+              charged: feeCharged,
+              rate: serviceFeeRate,
+              amount: feeAmount,
+              removedForTable: !feeCharged && !!s.config?.charge_service_fee,
+            }
+          : undefined;
 
         // Fix round 2 (Group B2): mesmo try/catch de reconcileKitchen — uma
         // rejeição não tratada de printBillReceipt abortaria o `for` no meio
