@@ -30,9 +30,10 @@ import { Button, Input, Card, Badge } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { fetchStoreBySlug, fetchKitchenOrders, fetchSalesHistory, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus } from '@/lib/api';
-import { printKitchenTicket, printBillReceipt } from '@/lib/print';
+import { printKitchenTicket, printBillReceipt, BillServiceFeeInfo } from '@/lib/print';
 import { getOrderItemDisplayName } from '@/lib/labels';
-import { calculateChangeForMethods } from '@/lib/calc';
+import { calculateChangeForMethods, SERVICE_FEE_RATE } from '@/lib/calc';
+import { resolvePrintTarget } from '@/lib/storeModules';
 import { Store, OrderItem, Order } from '@/types';
 
 // --- Configuração persistida no aparelho (localStorage) ---------------
@@ -252,6 +253,11 @@ export const EstacaoModule: React.FC = () => {
   const reconcileLockRef = useRef(false);
   const storeRef = useRef<Store | null>(null);
   const destinationRef = useRef<StationDestination>('cozinha');
+  // Fix round 2 (Group C2): espelho de `activatedAt` em ref pelo mesmo
+  // motivo dos de cima — `reconcileCaixa` roda em callback/timer, precisa
+  // do valor atual sem depender de re-render. Ver handleActivate/
+  // reconcileCaixa abaixo pro uso.
+  const activatedAtRef = useRef<string | null>(null);
 
   // --- Carrega config salva ao montar ---------------------------------
   useEffect(() => {
@@ -303,6 +309,7 @@ export const EstacaoModule: React.FC = () => {
         setEvents(loadEvents(s.id, config.destination));
         setActivated(false);
         setActivatedAt(null);
+        activatedAtRef.current = null;
       });
     };
     attempt();
@@ -440,10 +447,47 @@ export const EstacaoModule: React.FC = () => {
   // acima — `true` quando a própria RPC falhou, distinto de "OK, nada pra
   // imprimir".
   const reconcileCaixa = useCallback(async (s: Store, destination: StationDestination): Promise<boolean> => {
+    // Fix round 2 (Group C3): antes esta função tentava imprimir toda mesa
+    // fechada incondicionalmente — a única coisa que suprimia o comprovante
+    // no APARELHO DO CAIXA era `printTarget === 'device'` em
+    // StoreModule.tsx (handleFinishPayment), cujo propósito documentado
+    // (lib/storeModules.ts, resolvePrintTarget) sempre foi decidir ticket
+    // de cozinha/bar no fluxo direct_print. Uma loja deixada no padrão
+    // ('device', a maioria) que também tivesse um aparelho de estação
+    // configurado como 'caixa' imprimia a conta DUAS vezes: uma no caixa
+    // (device), outra aqui. Ruling: comprovante segue o MESMO
+    // `print_target` que já rege ticket — um alvo só por loja, os dois
+    // tipos de documento. `resolvePrintTarget(s) !== 'station'` = esta
+    // loja usa impressão no aparelho do caixa; a estação de caixa fica
+    // ociosa (sem sequer buscar histórico) até o Master Admin apontar
+    // `print_target: 'station'` pra essa loja.
+    if (resolvePrintTarget(s) !== 'station') return false;
     const sinceIso = new Date(Date.now() - CAIXA_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
     let fetchFailed = false;
     const orders = await fetchSalesHistory(s.id, sinceIso, undefined, () => { fetchFailed = true; });
-    const tableOrders = orders.filter((o) => o.order_type === 'table' && o.table_id && o.updated_at);
+    // Fix round 2 (Group C2): sem isto, um aparelho recém-ativado (ou com
+    // storage limpo/perfil de navegador diferente) tem `printedIdsRef`
+    // vazio e imprimiria de uma vez até 24h de comprovantes antigos — a
+    // janela de lookback existe pra cobrir reconexão depois de queda, não
+    // pra reimprimir o passado inteiro na primeira ativação. Cozinha/bar
+    // não têm esse risco (fetch_kitchen_orders_secure só devolve item
+    // ainda ABERTO, nunca histórico — ver docstring de reconcileKitchen),
+    // então o corte é só aqui.
+    //
+    // Escolha (das duas opções do brief): CORTE POR TIMESTAMP DE ATIVAÇÃO,
+    // não "semear" printedIdsRef em bloco no primeiro reconcile. Motivo:
+    // semear marcaria cada grupo pré-ativação como "impresso" sem nunca
+    // ter impresso nada — infla `printedIdsRef`/o teto de MAX_PRINTED_IDS
+    // com entradas que não representam impressão real, e complica o
+    // raciocínio sobre o que aquele Set significa. Comparar `updated_at`
+    // contra `activatedAtRef` é sem estado extra: um fechamento antes da
+    // ativação nunca entra no grupo a imprimir, ponto — não precisa
+    // "lembrar" de nada além do que já persiste hoje.
+    const activationCutoff = activatedAtRef.current;
+    const tableOrders = orders.filter((o) =>
+      o.order_type === 'table' && o.table_id && o.updated_at &&
+      (!activationCutoff || o.updated_at >= activationCutoff)
+    );
 
     const groups = new Map<string, Order[]>();
     for (const o of tableOrders) {
@@ -483,6 +527,35 @@ export const EstacaoModule: React.FC = () => {
       const changeDue = calculateChangeForMethods(methods, total);
       const description = `Mesa ${tableNumber} — R$ ${total.toFixed(2)}`;
 
+      // Fix round 2 (Group C1): antes este comprovante nunca passava
+      // `serviceFee`, e o template só mostra a linha de subtotal/taxa
+      // quando esse campo existe (ver lib/print.ts) — resultado real:
+      // itens somando R$30,00 seguidos de "TOTAL: R$ 33,00" sem nenhuma
+      // explicação pros R$3, enquanto o comprovante do PRÓPRIO caixa
+      // (StoreModule.tsx, handleFinishPayment) sempre imprime a
+      // discriminação completa pra mesma venda. Reconstituído aqui a
+      // partir só do que já temos (sem acesso ao estado local
+      // `removedServiceFees` de StoreModule, que nunca é persistido — ver
+      // "Remover Taxa" na lista de fora de escopo):
+      // - `feeAmount` é a diferença REAL entre total e subtotal já
+      //   gravados no pedido (nunca recalculado do zero pela rate — evita
+      //   discordar do valor que realmente foi cobrado).
+      // - `charged` é `feeAmount > 0`.
+      // - `removedForTable` é inferido: loja cobra por padrão
+      //   (`s.config?.charge_service_fee`) mas ESTA conta não teve taxa
+      //   (`!charged`) só pode significar que foi removida nesta mesa —
+      //   sem isso, a estação diria "este estabelecimento não cobra taxa"
+      //   pra uma loja que cobra, só não cobrou desta vez.
+      const serviceFeeRate = s.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+      const feeAmount = Math.max(0, total - subtotal);
+      const feeCharged = feeAmount > 0.005;
+      const serviceFee: BillServiceFeeInfo = {
+        charged: feeCharged,
+        rate: serviceFeeRate,
+        amount: feeAmount,
+        removedForTable: !feeCharged && !!s.config?.charge_service_fee,
+      };
+
       // Fix round 2 (Group B2): mesmo try/catch de reconcileKitchen — uma
       // rejeição não tratada de printBillReceipt abortaria o `for` no meio
       // do lote sem marcar o grupo corrente como falha.
@@ -494,6 +567,7 @@ export const EstacaoModule: React.FC = () => {
             label: `MESA ${tableNumber} - COMPROVANTE`,
             items: items.map((i) => ({ quantity: i.quantity, name: getOrderItemDisplayName(i), total: i.price_at_time * i.quantity })),
             subtotal,
+            serviceFee,
             total,
             payment: methods.length > 0 ? { methods, changeDue } : undefined,
           });
@@ -680,8 +754,15 @@ export const EstacaoModule: React.FC = () => {
   // impressão (é uma UI diferente de alert/confirm) nem head a head num
   // dispositivo real. Ver task-3-report.md pra o que foi de fato testado.
   const handleActivate = () => {
+    // Fix round 2 (Group C2): grava o ref ANTES de `setActivated(true)` —
+    // o efeito que assina/reconcilia depende de `activated`, e a ref
+    // (ao contrário do state) fica disponível de imediato, sem esperar
+    // o próximo render, garantindo que a primeira reconciliação (disparada
+    // dentro desse mesmo efeito) já enxergue o cutoff certo.
+    const now = new Date().toISOString();
+    activatedAtRef.current = now;
     setActivated(true);
-    setActivatedAt(new Date().toISOString());
+    setActivatedAt(now);
   };
 
   const handleTestPrint = async () => {
@@ -892,13 +973,29 @@ export const EstacaoModule: React.FC = () => {
           </Badge>
         </div>
 
+        {/* Fix round 2 (Group C3): a estação de caixa só imprime de fato
+            quando `print_target` da loja é 'station' (ver reconcileCaixa) —
+            este card deixa isso visível pro operador em vez de a estação
+            ficar silenciosamente ociosa sem explicação nenhuma. */}
         {destination === 'caixa' && (
-          <Card className="p-4 mb-6 bg-[var(--info)]/5 border-[var(--info)]/20">
-            <p className="text-sm text-[var(--text)]">
-              Esta estação imprime o comprovante automaticamente sempre que uma mesa é fechada pelo caixa
-              (Gestão de Mesas → Receber Pagamento). Nada pra fazer aqui além de manter a impressora ligada.
-            </p>
-          </Card>
+          resolvePrintTarget(store) === 'station' ? (
+            <Card className="p-4 mb-6 bg-[var(--info)]/5 border-[var(--info)]/20">
+              <p className="text-sm text-[var(--text)]">
+                Esta estação imprime o comprovante automaticamente sempre que uma mesa é fechada pelo caixa
+                (Gestão de Mesas → Receber Pagamento). Nada pra fazer aqui além de manter a impressora ligada.
+              </p>
+            </Card>
+          ) : (
+            <Card className="p-4 mb-6 border-[var(--warn)]/40 bg-[var(--warn)]/10">
+              <p className="text-sm text-[var(--text)]">
+                <strong>Esta estação está ociosa.</strong> A loja "{store.name}" está configurada pra imprimir
+                comprovante no próprio aparelho do caixa (destino de impressão "Aparelho"), não numa estação —
+                pra ativar a impressão automática aqui, mude o destino de impressão da loja pra "Estação" no
+                Painel Master. Enquanto isso, nada será impresso nesta tela pra evitar imprimir a mesma conta
+                duas vezes.
+              </p>
+            </Card>
+          )
         )}
 
         {failedList.length > 0 && (
