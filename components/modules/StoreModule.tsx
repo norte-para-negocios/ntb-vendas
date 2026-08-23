@@ -3080,23 +3080,39 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
         }
     };
 
-    const printCounterReceipt = (order: Order) => {
+    // Fix round 4 (Group C1): mesmo motivo de printTableBill/printSalesReport
+    // (fix round 3, Group C1/C2) — printBillReceipt() aqui não tinha
+    // await/catch. printHtmlDocument (lib/print.ts) resolve `new Promise((resolve)
+    // => {...})` com appendChild/doc.open()/doc.write() dentro do executor;
+    // um throw ali rejeita a promise em vez de resolver `false`, e sem
+    // await/catch isso vira unhandled rejection silenciosa em vez de um
+    // aviso visível pro operador — última instância desta classe neste
+    // branch (as outras três já foram fechadas).
+    const printCounterReceipt = async (order: Order) => {
         const items = order.order_items || [];
         if (items.length === 0) return;
         const total = items.reduce((a, b) => a + (b.quantity * b.price_at_time), 0);
 
-        printBillReceipt({
-            storeName: store.name,
-            cnpj: store.cnpj,
-            label: `BALCÃO - ${order.customer_name || 'Cliente'}`,
-            items: items.map(item => ({
-                quantity: item.quantity,
-                name: getOrderItemDisplayName(item),
-                total: item.price_at_time * item.quantity,
-            })),
-            subtotal: total,
-            total,
-        });
+        try {
+            const printed = await printBillReceipt({
+                storeName: store.name,
+                cnpj: store.cnpj,
+                label: `BALCÃO - ${order.customer_name || 'Cliente'}`,
+                items: items.map(item => ({
+                    quantity: item.quantity,
+                    name: getOrderItemDisplayName(item),
+                    total: item.price_at_time * item.quantity,
+                })),
+                subtotal: total,
+                total,
+            });
+            if (!printed) {
+                toast.error('O comprovante não imprimiu. Confira a impressora.');
+            }
+        } catch (e) {
+            console.error('printBillReceipt (comprovante de balcão) lançou:', e);
+            toast.error('O comprovante não imprimiu. Confira a impressora.');
+        }
     };
 
     return (
