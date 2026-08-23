@@ -1112,6 +1112,62 @@ export const openCashShift = async (
   return data as { success: boolean; id?: string; message?: string };
 };
 
+// Task 4 (frente-de-caixa): sangria/suprimento — `register_cash_movement_secure`
+// (migration 051) já revalida type/amount/turno aberto no servidor; este
+// wrapper só repassa e normaliza o formato de retorno.
+export const registerCashMovement = async (
+  shiftId: string,
+  type: 'sangria' | 'suprimento',
+  amount: number,
+  reason: string,
+): Promise<{ success: boolean; id?: string; message?: string }> => {
+  const { data, error } = await supabase.rpc('register_cash_movement_secure', {
+    p_shift_id: shiftId,
+    p_type: type,
+    p_amount: amount,
+    p_reason: reason,
+  });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; id?: string; message?: string };
+};
+
+// Task 4: resumo do turno pra tela de fechamento — total por forma de
+// pagamento, sangria/suprimento, esperado em dinheiro (fundo de troco +
+// vendas em dinheiro + suprimento - sangria) e, se já fechado,
+// contado/diferença persistidos. Ver `fetch_cash_shift_summary_secure`
+// (migration 051) pro formato exato.
+export interface CashShiftSummary {
+  shift: CashShift;
+  totals_by_method: Record<string, number>;
+  total_sangria: number;
+  total_suprimento: number;
+  expected_cash: number;
+  closing_counted_cash: number | null;
+  difference: number | null;
+}
+
+export const fetchCashShiftSummary = async (shiftId: string): Promise<CashShiftSummary | null> => {
+  const { data, error } = await supabase.rpc('fetch_cash_shift_summary_secure', { p_shift_id: shiftId });
+  if (error || !data) return null;
+  return data as CashShiftSummary;
+};
+
+// Task 4: fecha o turno de vez — `close_cash_shift_secure` grava
+// closing_counted_cash/closed_at/status e já devolve a diferença calculada
+// no servidor (mesma fórmula de `fetchCashShiftSummary`, sem round-trip
+// extra). Depois de `success:true`, a UI volta ao estado "sem turno aberto".
+export const closeCashShift = async (
+  shiftId: string,
+  closingCountedCash: number,
+): Promise<{ success: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string }> => {
+  const { data, error } = await supabase.rpc('close_cash_shift_secure', {
+    p_shift_id: shiftId,
+    p_closing_counted_cash: closingCountedCash,
+  });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+};
+
 export const toggleTableBlock = async (tableId: string, _currentStatus: TableStatus) => {
   const { error } = await supabase.rpc('toggle_table_block_secure', { p_table_id: tableId });
   if (error) throw error;

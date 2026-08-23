@@ -6,12 +6,12 @@ import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, CashShift } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -3656,10 +3656,10 @@ const CounterView: React.FC<{
 // os dados que a fila precisa (fetchTables/fetchActiveOrdersForTables/
 // fetchCounterOrders) — reaproveitados aqui, nenhuma query nova.
 //
-// Fora de escopo desta task (Task 4, não implementado aqui): o botão
-// "Fechar Caixa" existe e é clicável, mas só informa que o fechamento
-// completo (contagem, sangria/suprimento, diferença) chega na próxima
-// etapa — ver relatório da task pra detalhe.
+// Task 4 (frente-de-caixa): sangria/suprimento (register_cash_movement_secure)
+// e fechamento de turno com conferência (fetch_cash_shift_summary_secure +
+// close_cash_shift_secure) — completa o que a Task 3 tinha deixado como
+// placeholder.
 const CaixaView: React.FC<{
     store: Store;
     loggedUser: StoreUser;
@@ -3677,6 +3677,20 @@ const CaixaView: React.FC<{
     const [counterOrders, setCounterOrders] = useState<Order[]>([]);
     const [openingFloat, setOpeningFloat] = useState('');
     const [isOpeningShift, setIsOpeningShift] = useState(false);
+
+    // Task 4, Passo 1: sangria/suprimento — formulário simples num modal.
+    const [showMovementModal, setShowMovementModal] = useState(false);
+    const [movementType, setMovementType] = useState<'sangria' | 'suprimento'>('sangria');
+    const [movementAmount, setMovementAmount] = useState('');
+    const [movementReason, setMovementReason] = useState('');
+    const [isSubmittingMovement, setIsSubmittingMovement] = useState(false);
+
+    // Task 4, Passo 2: fechamento de turno com conferência.
+    const [showCloseModal, setShowCloseModal] = useState(false);
+    const [closeSummary, setCloseSummary] = useState<CashShiftSummary | null>(null);
+    const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+    const [closingCountedCash, setClosingCountedCash] = useState('');
+    const [isClosingShift, setIsClosingShift] = useState(false);
 
     // Relógio "agora" só pra recalcular o "há quanto tempo espera" da fila
     // periodicamente sem precisar de novo fetch — mesmo padrão do `now` em
@@ -3744,11 +3758,91 @@ const CaixaView: React.FC<{
         }
     };
 
-    const handleCloseShiftClick = () => {
-        // Task 4 (fora de escopo desta task): fechamento completo (contagem
-        // de gaveta, sangria/suprimento, diferença) ainda não existe — só o
-        // botão, conforme o brief da Task 3 ("pode só existir/navegar").
-        toast.info('Fechamento de caixa (contagem, sangria/suprimento) chega na próxima etapa.');
+    const handleOpenMovementModal = (type: 'sangria' | 'suprimento') => {
+        setMovementType(type);
+        setMovementAmount('');
+        setMovementReason('');
+        setShowMovementModal(true);
+    };
+
+    const handleSubmitMovement = async () => {
+        if (!shift) return;
+        const value = parseFloat(movementAmount.replace(',', '.'));
+        if (isNaN(value) || value <= 0) {
+            toast.error('Informe um valor maior que zero.');
+            return;
+        }
+        if (!movementReason.trim()) {
+            toast.error('Motivo é obrigatório.');
+            return;
+        }
+        setIsSubmittingMovement(true);
+        try {
+            const result = await registerCashMovement(shift.id, movementType, value, movementReason.trim());
+            if (result.success) {
+                toast.success(movementType === 'sangria' ? 'Sangria registrada.' : 'Suprimento registrado.');
+                setShowMovementModal(false);
+            } else {
+                toast.error(result.message || 'Não foi possível registrar a movimentação.');
+            }
+        } catch (e: any) {
+            toast.error('Erro ao registrar movimentação: ' + e.message);
+        } finally {
+            setIsSubmittingMovement(false);
+        }
+    };
+
+    // Abre a tela de fechamento já carregando o resumo real do turno
+    // (fetch_cash_shift_summary_secure) — a diferença em si é recalculada
+    // ao vivo no client (useMemo abaixo) conforme o operador digita o valor
+    // conferido, sem round-trip novo a cada tecla.
+    const handleCloseShiftClick = async () => {
+        if (!shift) return;
+        setShowCloseModal(true);
+        setClosingCountedCash('');
+        setIsLoadingSummary(true);
+        try {
+            const summary = await fetchCashShiftSummary(shift.id);
+            setCloseSummary(summary);
+            if (!summary) toast.error('Não foi possível carregar o resumo do turno.');
+        } finally {
+            setIsLoadingSummary(false);
+        }
+    };
+
+    const closingCountedValue = useMemo(() => {
+        const v = parseFloat(closingCountedCash.replace(',', '.'));
+        return isNaN(v) ? null : v;
+    }, [closingCountedCash]);
+
+    const liveDifference = useMemo(() => {
+        if (closingCountedValue === null || !closeSummary) return null;
+        return closingCountedValue - closeSummary.expected_cash;
+    }, [closingCountedValue, closeSummary]);
+
+    const handleConfirmCloseShift = async () => {
+        if (!shift || closingCountedValue === null || closingCountedValue < 0) {
+            toast.error('Informe o valor conferido na gaveta.');
+            return;
+        }
+        setIsClosingShift(true);
+        try {
+            const result = await closeCashShift(shift.id, closingCountedValue);
+            if (result.success) {
+                toast.success('Caixa fechado.');
+                setShowCloseModal(false);
+                setCloseSummary(null);
+                // Volta ao estado "sem turno aberto" (mesma tela da Task 3).
+                setShift(null);
+            } else {
+                toast.error(result.message || 'Não foi possível fechar o caixa.');
+                await loadShift();
+            }
+        } catch (e: any) {
+            toast.error('Erro ao fechar o caixa: ' + e.message);
+        } finally {
+            setIsClosingShift(false);
+        }
     };
 
     // Fila consolidada — mesas `waiting_bill` + pedidos de balcão aguardando
@@ -3880,9 +3974,17 @@ const CaixaView: React.FC<{
                         </p>
                     </div>
                 </div>
-                <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0">
-                    <Lock size={16} className="mr-2" /> Fechar Caixa
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                    <Button onClick={() => handleOpenMovementModal('sangria')} variant="outline" className="shrink-0">
+                        <TrendingDown size={16} className="mr-2" /> Sangria
+                    </Button>
+                    <Button onClick={() => handleOpenMovementModal('suprimento')} variant="outline" className="shrink-0">
+                        <TrendingUp size={16} className="mr-2" /> Suprimento
+                    </Button>
+                    <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0">
+                        <Lock size={16} className="mr-2" /> Fechar Caixa
+                    </Button>
+                </div>
             </Card>
 
             <div>
@@ -3930,6 +4032,170 @@ const CaixaView: React.FC<{
                     </div>
                 )}
             </div>
+
+            {/* Task 4, Passo 1: sangria/suprimento — formulário simples num modal. */}
+            <Modal
+                isOpen={showMovementModal}
+                onClose={() => setShowMovementModal(false)}
+                title={movementType === 'sangria' ? 'Registrar sangria' : 'Registrar suprimento'}
+            >
+                <div className="space-y-4">
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setMovementType('sangria')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-bold text-sm u-motion ${movementType === 'sangria' ? 'border-[var(--err)] bg-[var(--err)]/10 text-[var(--err)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                        >
+                            <TrendingDown size={16} /> Sangria
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMovementType('suprimento')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-bold text-sm u-motion ${movementType === 'suprimento' ? 'border-[var(--ok)] bg-[var(--ok)]/10 text-[var(--ok)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                        >
+                            <TrendingUp size={16} /> Suprimento
+                        </button>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                            Valor
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                            <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                autoFocus
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                                placeholder="0.00"
+                                value={movementAmount}
+                                onChange={e => setMovementAmount(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                            Motivo
+                        </label>
+                        <Input
+                            value={movementReason}
+                            onChange={e => setMovementReason(e.target.value)}
+                            placeholder={movementType === 'sangria' ? 'Ex.: depósito no banco' : 'Ex.: troco reforçado'}
+                        />
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                        <Button variant="outline" className="flex-1" onClick={() => setShowMovementModal(false)}>
+                            Cancelar
+                        </Button>
+                        <Button className="flex-1" isLoading={isSubmittingMovement} onClick={handleSubmitMovement}>
+                            Confirmar
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Task 4, Passo 2: fechamento de turno com conferência. */}
+            <Modal
+                isOpen={showCloseModal}
+                onClose={() => { if (!isClosingShift) setShowCloseModal(false); }}
+                title="Fechar Caixa"
+                size="md"
+            >
+                {isLoadingSummary ? (
+                    <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
+                        <RefreshCw size={24} className="animate-spin" />
+                    </div>
+                ) : !closeSummary ? (
+                    <div className="py-8 text-center text-sm text-[var(--text-muted)]">
+                        Não foi possível carregar o resumo do turno.
+                    </div>
+                ) : (
+                    <div className="space-y-5">
+                        <div className="space-y-1.5">
+                            <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                Total por forma de pagamento
+                            </h4>
+                            {Object.keys(closeSummary.totals_by_method).length === 0 ? (
+                                <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
+                            ) : (
+                                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                    {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
+                                        <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
+                                            <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
+                                            <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
+                                <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
+                            </div>
+                            <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
+                                <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                            <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
+                            <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                                Valor conferido na gaveta
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    autoFocus
+                                    className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                                    placeholder="0.00"
+                                    value={closingCountedCash}
+                                    onChange={e => setClosingCountedCash(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {liveDifference !== null && (
+                            <div className={`rounded-xl px-4 py-3 flex items-center justify-between border-2 ${
+                                Math.abs(liveDifference) < 0.005
+                                    ? 'border-[var(--ok)]/40 bg-[var(--ok)]/10'
+                                    : liveDifference > 0
+                                        ? 'border-[var(--info)]/40 bg-[var(--info)]/10'
+                                        : 'border-[var(--err)]/40 bg-[var(--err)]/10'
+                            }`}>
+                                <span className="text-sm font-bold text-[var(--text)]">
+                                    {Math.abs(liveDifference) < 0.005 ? 'Confere certinho' : liveDifference > 0 ? 'Sobra' : 'Falta'}
+                                </span>
+                                <span className="font-mono font-bold text-lg text-[var(--text)]">
+                                    {liveDifference > 0 ? '+' : ''}R$ {formatBRL(liveDifference)}
+                                </span>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                            <Button variant="outline" className="flex-1" disabled={isClosingShift} onClick={() => setShowCloseModal(false)}>
+                                Cancelar
+                            </Button>
+                            <Button className="flex-1" isLoading={isClosingShift} onClick={handleConfirmCloseShift}>
+                                <Lock size={16} className="mr-2" /> Confirmar Fechamento
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };
