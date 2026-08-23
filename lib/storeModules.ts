@@ -24,9 +24,9 @@ export type OrderFlow = 'kds' | 'direct_print';
 // romperia a garantia central deste plano ("loja sem config = comportamento
 // de hoje") pra qualquer waiter futuro cadastrado em qualquer uma das 7
 // lojas reais, mesmo sem o Master Admin jamais ter tocado nesta seção —
-// exatamente o mesmo cuidado já usado em `resolveOrderFlow`/
-// `resolvePrintTarget` abaixo (ausência de config = valor SEGURO, nunca o
-// novo). Ver canFinalizeBill mais abaixo pra como isto é consumido.
+// exatamente o mesmo cuidado já usado em `resolveOrderFlow` abaixo
+// (ausência de config = valor SEGURO, nunca o novo). Ver canFinalizeBill
+// mais abaixo pra como isto é consumido.
 export const ALL_ON: StoreModules = {
   tables: true, counter: true, kitchen_kds: true,
   bar_kds: true, caixa: false, menu: true, admin: true,
@@ -46,28 +46,25 @@ export const resolveStoreModules = (store?: { config?: any } | null): StoreModul
 export const resolveOrderFlow = (store?: { config?: any } | null): OrderFlow =>
   store?.config?.order_flow === 'direct_print' ? 'direct_print' : 'kds';
 
-// Destino da impressão do ticket de cozinha/bar quando `order_flow ===
-// 'direct_print'` (Task 2). Correção de design pedida antes da Task 3: a
-// Task 2 sempre imprimia no aparelho de quem lançou o pedido — funciona
-// quando o garçom carrega a impressora térmica junto (Bluetooth/USB no
-// tablet), mas quebra na loja alvo, onde o garçom anda com o celular e a
-// impressora fica fixa na cozinha (o aparelho dele não tem como imprimir
-// lá). A Estação de Impressão (Task 3, ainda não construída) resolve isso:
-// um aparelho fixo assina os pedidos novos via Realtime e imprime sozinho,
-// TODO pedido, de qualquer origem (garçom, QR do cliente, Balcão) — não só
-// os lançados por handleAddItem. Se os dois mecanismos dispararem juntos, o
-// mesmo pedido sai impresso duas vezes; este campo decide qual dos dois é
-// dono da impressão.
+// Removido (redesign 2026-08-23, "caixa como estação de impressão"): existia
+// um `print_target: 'device' | 'station'` aqui, decidindo entre imprimir no
+// aparelho de quem lança o pedido (garçom) ou numa "Estação de Impressão"
+// dedicada (`/estacao`, `EstacaoModule.tsx`) rodando num tablet fixo na
+// cozinha. O dono rejeitou esse desenho na prática: *"na cozinha não vai ter
+// um tablet, não vai ter um equipamento. O único equipamento vai ter no
+// caixa"*. A impressora da cozinha é de rede (IP próprio), configurada como
+// padrão no SISTEMA OPERACIONAL do aparelho do caixa (like instalar
+// qualquer impressora) — então `window.print()` já sai por ela sem nenhum
+// dispositivo/rota dedicados. A reconciliação que a Estação fazia (pedidos
+// sem "aparelho próprio" pra imprimir — autoatendimento do cliente via QR e
+// Balcão) foi portada pra dentro da própria sessão do Caixa
+// (`components/modules/CaixaPrintStation.tsx`), rodando em segundo plano
+// enquanto o caixa usa o painel normalmente. `/estacao` e `EstacaoModule.tsx`
+// foram apagados — nenhuma loja em produção usava `print_target: 'station'`
+// (a Sertão, única candidata, foi revertida pra 'device' antes desta sessão).
+// Ver `CaixaPrintStation.tsx` pro porquê de não precisar mais de um "alvo"
+// configurável: só existe um alvo agora, sempre.
 //
-// Ausência de config = 'device' — preserva EXATAMENTE o que a Task 2 já
-// entregou (imprime no aparelho de quem lançou) e mantém intacta a garantia
-// de "loja sem config = comportamento de hoje" (nenhuma das 7 lojas reais
-// tem isso configurado ainda).
-export type PrintTarget = 'device' | 'station';
-
-export const resolvePrintTarget = (store?: { config?: any } | null): PrintTarget =>
-  store?.config?.print_target === 'station' ? 'station' : 'device';
-
 // Mapa aba do painel do lojista -> chave do módulo correspondente em
 // StoreModules. 'kitchen'/'bar' são os nomes históricos de aba/permissão
 // (StoreUserPermissions), que mapeiam pros módulos mais específicos

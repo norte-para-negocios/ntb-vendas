@@ -4,7 +4,8 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, resolvePrintTarget, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
+import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -15,7 +16,6 @@ import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermiss
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
-import { alertError } from '@/components/AlertDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel } from '@/lib/labels';
@@ -55,10 +55,18 @@ const universalPermissionsFor = (store: Store): StoreUserPermissions => {
         admin: modules.admin,
         // Módulo Caixa (Task 4): a conta universal já finaliza mesmo sem
         // isto (canFinalizeBill dá bypass explícito a role==='universal',
-        // igual sempre foi) — este campo só existe pra `StoreUserPermissions`
-        // ficar com um valor coerente com o resto do objeto, não porque
-        // algum código leia especificamente `permissions.caixa` de um
-        // usuário universal.
+        // igual sempre foi) — mas `permissions.caixa` NÃO é só um campo
+        // decorativo: `isCaixaRole` (CaixaPrintStation.tsx) e o gate do botão
+        // "Reimprimir" (StoreModule.tsx, `sentHistoryItems`/linha do
+        // histórico) leem `permissions.caixa` de verdade. A exclusão
+        // explícita de `role === 'owner' | 'universal'` nesses dois lugares
+        // é o que evita que este campo (que só espelha se a LOJA tem o
+        // módulo Caixa ligado, não se este usuário é operador de caixa)
+        // ligue o loop de auto-impressão ou o botão de reimpressão manual
+        // pra qualquer conta universal — a leitura acontece só pra decidir
+        // "roda o gatilho automático de impressão" / "mostra o botão
+        // manual", nunca pra acesso de aba nem pra finalizar conta (isso
+        // continua sendo o bypass explícito de `canFinalizeBill` acima).
         caixa: modules.caixa,
     };
 };
@@ -414,6 +422,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const notifications = useStoreNotifications(user.store.id);
+  // Reconciliação de impressão do Caixa (redesign 2026-08-23) — montada
+  // aqui, não dentro de TablesView/CounterView, de propósito: StoreLayout é
+  // o único componente que sobrevive à troca de aba (Mesas↔Balcão), então é
+  // o único lugar onde "roda em segundo plano independente da aba" é
+  // literalmente verdade. `active` (dentro do hook) já é `false` pras 6
+  // lojas reais (sem `order_flow: 'direct_print'`) — nesse caso o hook não
+  // liga nenhum efeito, e o indicador abaixo não renderiza nada.
+  const caixaPrintStatus = useCaixaPrintStation(user.store, user);
 
   const allTabs = [
     { id: 'tables', icon: LayoutDashboard, label: 'Gestão de Mesas', permission: 'tables', count: notifications.tables },
@@ -455,6 +471,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              </div>
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
+          <CaixaPrintStationIndicator status={caixaPrintStatus} />
           <ThemeToggle />
       </header>
 
@@ -627,6 +644,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           <p className="text-[var(--text-muted)] text-sm mt-0.5">Gerencie seu estabelecimento</p>
         </div>
         <div className="flex items-center gap-3">
+           <CaixaPrintStationIndicator status={caixaPrintStatus} />
            <div className="h-8 w-8 rounded-[var(--r-sm)] bg-[var(--brand)] flex items-center justify-center text-white font-semibold text-[12px]">
               {storeName.slice(0,2).toUpperCase()}
            </div>
@@ -1290,12 +1308,6 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // nos ramos novos abaixo (impressão no clique de handleAddItem, gate de
     // fechamento sem exigir status, histórico de envios).
     const orderFlow = resolveOrderFlow(store);
-    // Fix round 1 (correção de design, plano 2026-08-22): quando a estação
-    // de impressão (Task 3, ainda não construída) é quem imprime esta loja,
-    // o aparelho do garçom não pode imprimir também — senão cada pedido sai
-    // duplicado. Ver lib/storeModules.ts (resolvePrintTarget). Ausência de
-    // config = 'device', preserva exatamente o que a Task 2 já entregou.
-    const printTarget = resolvePrintTarget(store);
     // Módulo Caixa (Task 4, 2026-08-22): quem pode finalizar (fechar +
     // receber pagamento) em vez de só pedir a conta. Ver
     // lib/storeModules.ts (canFinalizeBill) pro porquê de ser restritivo
@@ -1304,6 +1316,21 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // nenhum store_user real hoje tem essa chave, então isto não muda nada
     // nas 7 lojas reais por padrão.
     const canFinalize = canFinalizeBill(loggedUser, store);
+    // Critical #2 (revisão de branch 2026-08-23 — "Reimprimir pode mentir
+    // sucesso num aparelho sem impressora"): gate pra OFERECER o botão manual
+    // "Reimprimir" em "Pedidos do Dia" abaixo, mesmo critério exato que
+    // decide se o loop automático de impressão roda neste aparelho
+    // (`isCaixaRole`, CaixaPrintStation.tsx — dono/universal excluídos pelo
+    // mesmo motivo já documentado lá: `permissions.caixa` sintético da conta
+    // universal só espelha se a LOJA tem o módulo ligado, não se este usuário
+    // é operador de caixa de verdade). Sem isso, um garçom (permissions.tables
+    // mas não caixa) abrindo o mesmo modal no próprio celular tocava
+    // "Reimprimir" e `window.print()` resolvia "com sucesso" sem nenhuma
+    // impressora de cozinha configurada ali — o toast mentia "Reimpresso com
+    // sucesso" e nada chegava na cozinha. Continuam vendo a lista e o status
+    // de impressão de cada linha (view-only, pedido original), só perdem a
+    // AÇÃO que pode mentir sucesso.
+    const canReprint = orderFlow === 'direct_print' && isCaixaRole(loggedUser);
     const watchedTables = useWatchedTables(storeId);
     const isFinishingRef = useRef(false);
     // Fix round 1 (Task 2 review, Minor #3): mesmo estilo de guarda que
@@ -1314,6 +1341,13 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const isAddingItemRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+    // "Pedidos do Dia" (extensão do antigo "Pedidos Enviados", redesign
+    // 2026-08-23) — mesas JÁ FECHADAS hoje, buscadas à parte porque
+    // fetch_active_table_orders_secure exclui `status = 'delivered'` por
+    // design (é o mesmo filtro que faz o card de mesa sumir da lista quando
+    // a conta fecha). Ver sentHistoryItems abaixo pra como os dois se
+    // combinam.
+    const [closedTodayOrders, setClosedTodayOrders] = useState<Order[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [showFullBill, setShowFullBill] = useState(false);
     
@@ -1354,10 +1388,29 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     };
 
     // Task 2 (2026-08-22): "Histórico de Pedidos Enviados" — substituto do
-    // KDS pra lojas em direct_print. Só existe o estado do modal aqui
-    // porque a lista em si (sentHistoryItems abaixo) é derivada, não
-    // buscada à parte.
+    // KDS pra lojas em direct_print. `activeOrders` (mesas ainda abertas) é
+    // derivado sem busca própria; `closedTodayOrders` (mesas fechadas hoje)
+    // É buscado à parte, só quando este modal abre — ver efeito abaixo
+    // (Important #I3, revisão de código 2026-08-23).
     const [showSentHistory, setShowSentHistory] = useState(false);
+
+    // Important #I3: antes, `fetchSalesHistory` (RPC `limit 2000` com
+    // `order_items` aninhado) rodava dentro de `loadData` — chamada a cada
+    // ping Realtime de `order_change_pings`/`table_change_pings`, mesmo com
+    // o modal fechado. Movida pra cá: só busca quando o caixa realmente abre
+    // "Pedidos do Dia", uma vez por abertura (não fica reassinando Realtime
+    // pro histórico — é view-only, reabrir o modal já traz o estado atual).
+    useEffect(() => {
+        if (!showSentHistory || orderFlow !== 'direct_print' || !storeId) return;
+        let cancelled = false;
+        (async () => {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const closed = await fetchSalesHistory(storeId, startOfDay.toISOString());
+            if (!cancelled) setClosedTodayOrders(closed.filter(ord => ord.order_type === 'table'));
+        })();
+        return () => { cancelled = true; };
+    }, [showSentHistory, orderFlow, storeId]);
 
     // Task 4 (2026-08-22, módulo Caixa): `brand` é novo — opcional, só
     // preenchido quando currentPaymentMethod é CREDIT/DEBIT (ver seletor de
@@ -1438,47 +1491,118 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         return breakdown;
     }, [currentTableSummary]);
 
-    // Task 2 (2026-08-22) — "Histórico de Pedidos Enviados": substituto do
-    // KDS pra lojas em direct_print. Sem RPC/migration nova (restrição do
-    // plano): deriva de `activeOrders`, o MESMO dado que já alimenta os
-    // cards de mesa (fetch_active_table_orders_secure, Realtime já ligado
-    // via loadData/canal `tables_dashboard_*` logo abaixo) — não é uma
-    // fonte nova, só uma projeção plana dele. Alcance real, registrado
-    // aqui por transparência: só cobre mesas ainda ABERTAS, porque a RPC
-    // já exclui order.status IN ('delivered','canceled') por design (é o
-    // mesmo filtro que faz o card de mesa sumir da lista quando a conta
-    // fecha — não dá pra reaproveitar o dado sem herdar o filtro). Uma vez
-    // que a mesa fecha, o pedido sai daqui e passa a viver só no Histórico
-    // de Vendas (StoreAdminView, fetchSalesHistory) — que já existe e já é
-    // acessível ao lojista/caixa; não duplicado aqui de propósito.
+    // "Pedidos do Dia" (Task 2, 2026-08-22 — "Histórico de Pedidos Enviados"
+    // original, expandido no redesign de 2026-08-23 a pedido do dono: "o
+    // histórico desaparecia quando a mesa fechava, ele quer o dia inteiro,
+    // mesa fechada incluída, só visualização"). Sem RPC/migration nova:
+    // combina `activeOrders` (mesas ainda abertas, já assinado via Realtime
+    // pelo canal `tables_dashboard_*` acima) com `closedTodayOrders` (mesas
+    // fechadas HOJE, buscado à parte só quando o modal abre — ver efeito de
+    // `showSentHistory` acima, Important #I3 — `fetch_active_table_
+    // orders_secure` exclui `status='delivered'` por design, não dá pra
+    // reaproveitar sem herdar esse filtro). Só existe a visão, sem nenhum
+    // controle de confirmação de entrega — pedido explícito ("view only").
+    //
+    // `printed`: melhor esforço, não garantia — reflete o dedupe local da
+    // reconciliação do Caixa (`wasKitchenTicketPrinted`, CaixaPrintStation.tsx),
+    // que só sabe o que ESTE navegador confirmou ter impresso. Sem isso (ex.:
+    // outro aparelho imprimiu, ou o item ainda não foi reconciliado) o badge
+    // mostra "sem registro", nunca afirma "não imprimiu" (não dá pra provar
+    // um negativo sem estado no servidor, e não há migration nesta task pra
+    // isso).
+    //
+    // Redesign 2026-08-23 (revisão crítica, dois achados): (1) item de
+    // garçom NÃO é mais assumido como "sempre impresso" — `handleAddItem`
+    // parou de imprimir no próprio aparelho do garçom (achado "waiter-
+    // launched orders print nowhere real"), então ele passa pelo MESMO
+    // dedupe de QR/Balcão agora. (2) `printedRefreshTick` força este useMemo
+    // a recalcular depois de uma reimpressão manual (`handleManualReprint`
+    // abaixo) — `wasKitchenTicketPrinted` lê localStorage direto, que não é
+    // uma dependência que o React observa sozinho.
+    const [printedRefreshTick, setPrintedRefreshTick] = useState(0);
+    const [reprintingIds, setReprintingIds] = useState<Set<string>>(new Set());
     const sentHistoryItems = useMemo(() => {
         if (orderFlow !== 'direct_print') return [];
         const tableNumberById = new Map(tables.map(t => [t.id, t.number]));
         const rows: {
             id: string;
+            orderId: string;
             time: string;
             tableNumber: number | string;
             productName: string;
             quantity: number;
             destination: 'kitchen' | 'bar';
             addons?: string;
+            observation?: string;
+            closed: boolean;
+            printed: boolean;
         }[] = [];
-        activeOrders.forEach(order => {
+        const pushOrder = (order: Order, closed: boolean) => {
             (order.order_items || []).forEach(item => {
                 if (item.status === OrderStatus.CANCELED) return;
+                const destination: 'kitchen' | 'bar' = item.product?.destination === 'bar' ? 'bar' : 'kitchen';
                 rows.push({
                     id: item.id,
+                    orderId: item.order_id,
                     time: item.created_at,
-                    tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? '?',
+                    tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? order.tables?.number ?? '?',
                     productName: item.product?.name || 'Produto indisponível',
                     quantity: item.quantity,
-                    destination: item.product?.destination === 'bar' ? 'bar' : 'kitchen',
+                    destination,
                     addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
+                    observation: item.notes || undefined,
+                    closed,
+                    printed: wasKitchenTicketPrinted(storeId, destination, item.id),
                 });
             });
-        });
+        };
+        activeOrders.forEach(order => pushOrder(order, false));
+        closedTodayOrders.forEach(order => pushOrder(order, true));
         return rows.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-    }, [orderFlow, activeOrders, tables]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- printedRefreshTick é só um gatilho de recálculo (lê localStorage via wasKitchenTicketPrinted), não um valor usado no corpo.
+    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId, printedRefreshTick]);
+
+    // Reimpressão manual (Critical #1 — corte de ativação): item que a
+    // reconciliação automática do Caixa não pegou sozinha (o caso mais comum
+    // sendo criado antes do `activatedAt` desta sessão, mas serve pra
+    // qualquer linha "sem registro") ganha aqui um jeito de recuperação com
+    // toque humano — nunca fica só invisível na lista.
+    const handleManualReprint = async (row: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string }) => {
+        // Guarda redundante ao gate visual (`canReprint` no botão acima) —
+        // Critical #2: a ação em si nunca deve rodar fora do aparelho de
+        // caixa de verdade, mesmo se algo chamar isto por outro caminho no
+        // futuro. `window.print()` "tem sucesso" mesmo sem impressora real
+        // configurada — não é aceitável depender só de esconder o botão.
+        if (!canReprint) return;
+        if (reprintingIds.has(row.id)) return;
+        setReprintingIds(prev => new Set(prev).add(row.id));
+        try {
+            const ok = await printPendingKitchenTicket({
+                storeId,
+                storeName: store.name,
+                destination: row.destination,
+                itemId: row.id,
+                orderId: row.orderId,
+                tableNumber: row.tableNumber,
+                quantity: row.quantity,
+                productName: row.productName,
+                addons: row.addons,
+                observation: row.observation,
+            });
+            if (ok) {
+                toast.success('Reimpresso com sucesso.');
+                setPrintedRefreshTick(t => t + 1);
+            } else {
+                toast.error('A reimpressão falhou. Verifique a impressora.');
+            }
+        } finally {
+            setReprintingIds(prev => {
+                const copy = new Set(prev);
+                copy.delete(row.id);
+                return copy;
+            });
+        }
+    };
 
     const toggleSelection = (itemId: string, maxQty: number) => {
         setPaymentSelectedItems(prev => {
@@ -1552,6 +1676,15 @@ NOTIFY pgrst, 'reload schema';`;
         ]);
         setTables(t);
         setActiveOrders(o);
+
+        // "Pedidos do Dia" (mesas fechadas hoje) NÃO é mais buscado aqui —
+        // ver o efeito de `showSentHistory` abaixo (Important #I3, revisão
+        // de código 2026-08-23): `fetchSalesHistory` é uma RPC `limit 2000`
+        // com `order_items` aninhado, e `loadData` roda a cada ping Realtime
+        // de `order_change_pings`/`table_change_pings` — MUITO mais vezes
+        // por minuto do que alguém realmente abre o modal "Pedidos do Dia".
+        // Rodar essa RPC toda vez era trabalho pago pra uma tela que, na
+        // prática, fica fechada quase sempre.
 
         // Update selected table if open to reflect latest service_fee_removed state
         setSelectedTable(prev => {
@@ -1806,13 +1939,12 @@ NOTIFY pgrst, 'reload schema';`;
                 // finaliza mesa o dia inteiro exatamente como sempre fez —
                 // passariam a imprimir um papel novo do nada em toda mesa
                 // fechada, o que é mudar comportamento (a garantia central
-                // deste plano). `printTarget === 'station'` também não
-                // imprime aqui: é a Estação (Task 3, EstacaoModule.tsx) quem
-                // assume nesse caso, via o mesmo ping Realtime que já
-                // dispara em qualquer UPDATE de `orders` — nenhuma migration
-                // nova precisou disso (trigger já existe desde a 029).
+                // deste plano). Imprime sempre no aparelho de quem finalizou
+                // (redesign 2026-08-23: não existe mais um "alvo" separado —
+                // o único equipamento fixo é o do próprio caixa, ver
+                // lib/storeModules.ts).
                 const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-                if (isCaixaOperator && printTarget === 'device') {
+                if (isCaixaOperator) {
                     const printed = await printBillReceipt({
                         storeName: store.name,
                         cnpj: store.cnpj,
@@ -1931,66 +2063,37 @@ NOTIFY pgrst, 'reload schema';`;
         const finalNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
 
         try {
-            // Reuses createOrder logic which handles adding to existing orders
-            const result = await createOrder(selectedTable.id, storeId, [{
+            // Reuses createOrder logic which handles adding to existing orders.
+            // `orderId` do retorno não é mais usado aqui (era só pro print
+            // imediato removido abaixo) — a reconciliação do Caixa resolve o
+            // pedido/item sozinha via fetch_kitchen_orders_secure.
+            await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes, selectedOptions
             }], loggedUser.name, 'garcom');
 
             toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
 
-            // Task 2 (2026-08-22, plano perfis-de-loja-e-caixa): loja sem
-            // KDS — este clique EM "Lançar Pedido" já É o "enviar". Imprime
-            // o ticket na mesma resposta ao gesto, logo depois do único
-            // await desta função (createOrder, uma chamada RPC — não há
-            // nenhum await encadeado depois disso até aqui, então o
-            // contexto de gesto do clique ainda deve estar "sticky" o
-            // suficiente pra window.print() funcionar sem exigir um 2º
-            // clique; não verificado em todo navegador, ver relatório).
-            // Cozinha vs. bar decide pelo destino do PRODUTO
-            // (product.destination), mesmo default 'kitchen' já usado em
-            // fetchKitchenOrders/updateProduct (lib/api.ts:418) — cada
-            // clique já é um único item, então "um ticket por destino por
-            // envio" e "um ticket por item" (granularidade nativa de
-            // printKitchenTicket) coincidem aqui: nenhuma mudança em
-            // lib/print.ts foi necessária.
+            // Redesign 2026-08-23 (review crítico "waiter-launched orders
+            // print nowhere real, silently"): este componente já NÃO imprime
+            // mais no próprio aparelho de quem lançou o item. Confirmado
+            // direto com o dono: o celular do garçom não tem acesso à
+            // impressora de rede da cozinha — só o aparelho do Caixa tem.
+            // Antes deste fix, `window.print()` aqui "tinha sucesso" sempre
+            // que a chamada não lançava, mesmo sem NENHUMA impressora
+            // configurada no aparelho do garçom — o pedido nunca chegava na
+            // cozinha e nada avisava ninguém.
             //
-            // Fix round 1 (correção de design): `printTarget === 'device'`
-            // é o segundo portão — quando a loja usa uma Estação de
-            // Impressão (Task 3), este aparelho não imprime nada, senão o
-            // pedido sairia duplicado (uma vez aqui, outra na estação).
-            if (result.orderId && orderFlow === 'direct_print' && printTarget === 'device') {
-                // Fix round 1 (Task 2 review, Important #2): printKitchenTicket
-                // agora devolve Promise<boolean> — antes disso, uma falha
-                // silenciosa (iframe sem contentDocument/contentWindow) não
-                // tinha NENHUM jeito de chegar até aqui: o toast de sucesso
-                // já tinha aparecido, o pedido já estava salvo, e ninguém
-                // saberia que a comida nunca chegou na cozinha até o
-                // cliente reclamar. Nesta loja a impressão é o ÚNICO
-                // mecanismo de entrega do pedido (sem KDS, sem tela de
-                // acompanhamento) — por isso o aviso de falha usa
-                // alertError() (modal bloqueante, exige toque explícito),
-                // não toast.error() (some sozinho em alguns segundos).
-                const printed = await printKitchenTicket({
-                    kind: product.destination === 'bar' ? 'BAR' : 'COZINHA',
-                    storeName: store.name,
-                    orderType: 'MESA',
-                    identifier: `MESA ${selectedTable.number}`,
-                    client: loggedUser.name,
-                    quantity: qty,
-                    productName: product.name,
-                    addons: selectedOptions.map(o => o.name).join(', ') || undefined,
-                    observation: notes || undefined,
-                    orderIdShort: result.orderId.slice(0, 8),
-                });
-
-                if (!printed) {
-                    await alertError({
-                        title: 'A impressão falhou',
-                        message: `O pedido foi salvo, mas o ticket de ${qty}x ${product.name} (Mesa ${selectedTable.number}) NÃO imprimiu. Avise a cozinha manualmente sobre este item.`,
-                    });
-                }
-            }
-            // Optional: Close menu to go back to bill, or stay to add more
+            // O pedido continua sendo criado exatamente como antes
+            // (`createOrder(..., 'garcom')`, acima) — só o print imediato
+            // saiu daqui. Quem imprime agora é a reconciliação em segundo
+            // plano do Caixa (`useCaixaPrintStation`, CaixaPrintStation.tsx),
+            // rodando no ÚNICO aparelho que de fato tem a impressora — o
+            // mesmo mecanismo que já cobria autoatendimento (QR) e Balcão.
+            // Esse item continua marcado `added_by_role: 'garcom'`
+            // (migration 046), mas a reconciliação não filtra mais por esse
+            // valor (ver CaixaPrintStation.tsx) — ela agora trata QR, Balcão
+            // e garçom exatamente igual, todos sem impressora própria no
+            // momento da criação.
             // setShowMenuMode(false);
         } catch (e) {
             toast.error("Erro ao adicionar item.");
@@ -2046,7 +2149,7 @@ NOTIFY pgrst, 'reload schema';`;
                         className="flex items-center gap-2 text-sm"
                     >
                         <FileText size={18} />
-                        Pedidos Enviados
+                        Pedidos do Dia
                     </Button>
                 )}
             </div>
@@ -2776,33 +2879,56 @@ NOTIFY pgrst, 'reload schema';`;
                 </div>
             </Modal>
 
-            {/* Task 2 (2026-08-22) — "Histórico de Pedidos Enviados": lista
-                plana (hora, mesa, item, destino), sem status nem coluna de
-                fluxo nenhuma — só responde "o pedido já foi?" pra quem não
-                tem KDS. Ver sentHistoryItems acima pro alcance real (só
-                mesas ainda abertas). */}
-            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos Enviados" variant="sheet">
+            {/* "Pedidos do Dia" (redesign 2026-08-23, sucede "Histórico de
+                Pedidos Enviados" da Task 2): lista plana (hora, mesa, item,
+                se imprimiu), sem status/coluna de fluxo nem controle de
+                confirmação de entrega — só visualização, pedido explícito do
+                dono. Cobre o dia inteiro, mesas fechadas incluídas — ver
+                sentHistoryItems acima pro porquê de combinar duas fontes. */}
+            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos do Dia" variant="sheet">
                 <div className="space-y-3">
                     <p className="text-xs text-[var(--text-muted)]">
-                        Tudo que já foi lançado e impresso nas mesas abertas, do mais recente pro mais antigo. Some daqui quando a mesa fecha — depois disso, fica no Histórico de Vendas.
+                        Tudo que foi lançado hoje, mesas fechadas incluídas — do mais recente pro mais antigo. Só visualização, sem nenhuma ação aqui.
                     </p>
                     {sentHistoryItems.length === 0 ? (
-                        <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum pedido enviado ainda nas mesas abertas.</p>
+                        <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum pedido lançado ainda hoje.</p>
                     ) : (
                         <div className="space-y-2 max-h-[65vh] overflow-y-auto">
                             {sentHistoryItems.map(row => (
-                                <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
+                                <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] flex-wrap">
                                     <div className="min-w-0">
                                         <p className="text-sm font-bold text-[var(--text)] truncate">
                                             {row.quantity}x {row.productName}{row.addons ? ` (${row.addons})` : ''}
                                         </p>
                                         <p className="text-xs text-[var(--text-muted)]">
                                             Mesa {row.tableNumber} · {new Date(row.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                            {row.closed ? ' · mesa fechada' : ''}
                                         </p>
                                     </div>
-                                    <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
-                                        {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <Badge color={row.printed ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
+                                            {row.printed ? 'Impresso' : 'Sem registro'}
+                                        </Badge>
+                                        <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
+                                            {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
+                                        </Badge>
+                                        {/* Critical #2: só oferece a ação em quem passa por `canReprint`
+                                            (aparelho de caixa de verdade, ver comentário acima) E cuja mesa/
+                                            comanda ainda está aberta — reimprimir ticket de cozinha pra uma
+                                            mesa já fechada (pagou e foi embora) produz comida que ninguém
+                                            pediu mais. Quem não bate os dois continua vendo o badge de status
+                                            normalmente (view-only), só não vê o botão. */}
+                                        {!row.printed && !row.closed && canReprint && (
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                disabled={reprintingIds.has(row.id)}
+                                                onClick={() => handleManualReprint(row)}
+                                            >
+                                                <RotateCcw size={14} className="mr-1" /> Reimprimir
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -2841,7 +2967,6 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
     // confirm()/modal de NF-e de sempre.
     const caixaModuleOn = resolveStoreModules(store).caixa;
     const canFinalize = canFinalizeBill(loggedUser, store);
-    const printTarget = resolvePrintTarget(store);
     const isFinishingRef = useRef(false);
 
     // Captura de pagamento (Task 5) — só usada quando caixaModuleOn. Mesmo
@@ -3009,15 +3134,11 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
             // TablesView.handleFinishPayment): as 7 lojas reais (módulo
             // desligado) nunca chegam aqui, e dono/universal fechando pelo
             // bypass de canFinalizeBill não ganham um papel novo do nada.
-            // `printTarget === 'station'` também não imprime aqui — mesmo
-            // raciocínio da mesa (evita duplo-print); a Estação hoje só
-            // reconcilia pedidos de MESA (EstacaoModule.tsx,
-            // reconcileCaixa filtra order_type==='table'), então um balcão
-            // fechado numa loja em `printTarget: 'station'` não emite
-            // comprovante nenhum ainda — ver ressalva no relatório desta
-            // task, fora do escopo pedido (não é o gap que esta task fecha).
+            // Redesign 2026-08-23: sempre imprime no aparelho de quem
+            // fechou — não existe mais "Estação" separada pra evitar
+            // duplicar (ver lib/storeModules.ts).
             const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-            if (isCaixaOperator && printTarget === 'device') {
+            if (isCaixaOperator) {
                 const items = paymentOrder.order_items || [];
                 const printed = await printBillReceipt({
                     storeName: store.name,

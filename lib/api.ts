@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
-import { StoreModules, OrderFlow, PrintTarget, isDefaultStoreModules } from '@/lib/storeModules';
+import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -680,12 +680,14 @@ export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: 
 
 // Fix round 2 (Group B1): `onError` é opcional e aditivo — todo call site
 // existente (KdsView etc.) continua recebendo `[]` em silêncio, exatamente
-// como sempre foi. Só a Estação de Impressão passa este callback: é o único
-// consumidor que precisa DISTINGUIR "0 pedidos pendentes" de "a chamada
-// falhou" — sem isso, uma RPC persistentemente falhando fica indistinguível
-// de uma cozinha em dia (a estação continuava avançando `lastReconcileAt` e
-// mostrando o banner verde de conexão, que reflete só o websocket do
-// Realtime, um subsistema separado do REST/RPC que este fetch usa).
+// como sempre foi. Só a reconciliação de impressão do Caixa (ver
+// components/modules/CaixaPrintStation.tsx, sucessora da antiga Estação de
+// Impressão dedicada — removida no redesign de 2026-08-23) passa este
+// callback: é o único consumidor que precisa DISTINGUIR "0 pedidos
+// pendentes" de "a chamada falhou" — sem isso, uma RPC persistentemente
+// falhando fica indistinguível de uma cozinha em dia (o indicador continuava
+// mostrando "conectado", que reflete só o websocket do Realtime, um
+// subsistema separado do REST/RPC que este fetch usa).
 export const fetchKitchenOrders = async (
   storeId: string,
   destination: 'kitchen' | 'bar' = 'kitchen',
@@ -696,33 +698,37 @@ export const fetchKitchenOrders = async (
   return (data as any) || [];
 };
 
-// Task 3 (2026-08-22, Estação de Impressão) — mesmo canal/tabela de ping já
-// usado por KdsView/CounterView/TablesView (order_change_pings, filtrado por
-// store_id via migration 029 — ver comentário lá pro porquê de existir uma
-// tabela de ping sem dado sensível em vez de assinar orders/order_items
-// direto: RLS bloqueia SELECT nessas duas desde 022, e o Realtime só entrega
-// postgres_changes pra quem teria visibilidade via RLS). Extraído pra cá (em
-// vez de repetir supabase.channel(...) inline mais uma vez dentro do
-// componente da estação) só porque a estação também precisa reportar o
-// STATUS da conexão pra tela (Passo 3 do brief: "conectada ou não" tem que
-// ficar óbvio) — nenhum dos consumidores existentes (KdsView/CounterView/
-// TablesView) precisava disso, só chamavam .subscribe() sem callback.
+// Originalmente Task 3 (2026-08-22, Estação de Impressão dedicada) — mesmo
+// canal/tabela de ping já usado por KdsView/CounterView/TablesView
+// (order_change_pings, filtrado por store_id via migration 029 — ver
+// comentário lá pro porquê de existir uma tabela de ping sem dado sensível
+// em vez de assinar orders/order_items direto: RLS bloqueia SELECT nessas
+// duas desde 022, e o Realtime só entrega postgres_changes pra quem teria
+// visibilidade via RLS). Extraído pra cá (em vez de repetir
+// supabase.channel(...) inline mais uma vez) porque quem consome isto
+// também precisa reportar o STATUS da conexão pra tela ("conectada ou não"
+// tem que ficar óbvio) — os consumidores mais antigos (KdsView/CounterView/
+// TablesView) não precisavam disso, só chamavam .subscribe() sem callback.
+// Redesign 2026-08-23: a Estação dedicada (aparelho fixo, rota `/estacao`)
+// foi removida — hoje quem usa `onStatusChange` é a reconciliação de
+// impressão do Caixa (`components/modules/CaixaPrintStation.tsx`), rodando
+// em segundo plano dentro da sessão normal do caixa.
 //
 // IMPORTANTE: order_change_pings não tem destino (cozinha/bar/caixa) — o
 // filtro por destino é feito depois, no client, ao decidir o que imprimir
 // (fetchKitchenOrders(storeId, 'kitchen'|'bar') já filtra isso). Esta
 // assinatura é só "algo mudou nesta loja, hora X" — o mesmo ping que já
-// aciona loadOrders(true) no KdsView aciona a reconciliação da estação.
+// aciona loadOrders(true) no KdsView aciona a reconciliação do Caixa.
 //
 // `onStatusChange` reflete o status bruto do canal Supabase Realtime
 // ('SUBSCRIBED'|'CLOSED'|'CHANNEL_ERROR'|'TIMED_OUT'|...), simplificado em 3
 // estados: 'connecting' (estado inicial/reconectando), 'connected'
-// (SUBSCRIBED), 'disconnected' (qualquer falha). A estação NÃO confia só
-// nisso pra decidir se perdeu pedido — reconcilia contra o servidor
-// (fetchKitchenOrders) em intervalo fixo e em todo reconnect/foco de aba,
-// independente do que este status disser (ver EstacaoModule.tsx). O status
-// aqui é só pra exibir "conectada"/"sem conexão" na tela, não é a garantia
-// de entrega.
+// (SUBSCRIBED), 'disconnected' (qualquer falha). A reconciliação do Caixa
+// NÃO confia só nisso pra decidir se perdeu pedido — reconcilia contra o
+// servidor (fetchKitchenOrders) em intervalo fixo e em todo reconnect/foco
+// de aba, independente do que este status disser (ver
+// CaixaPrintStation.tsx). O status aqui é só pra exibir "conectado"/"sem
+// conexão" no indicador, não é a garantia de entrega.
 export type StoreOrdersConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
 export const subscribeToStoreOrderChanges = (
@@ -731,7 +737,7 @@ export const subscribeToStoreOrderChanges = (
   onStatusChange?: (status: StoreOrdersConnectionStatus) => void,
 ): (() => void) => {
   const channel = supabase
-    .channel(`estacao_${storeId}`)
+    .channel(`caixa_print_${storeId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, onChange)
     .subscribe((status) => {
       if (!onStatusChange) return;
@@ -1307,12 +1313,6 @@ export interface CreateStoreParams {
   // loja criada/editada sem tocar nesta seção nunca ganha essas chaves.
   modules?: StoreModules;
   orderFlow?: OrderFlow;
-  // Fix round 1 (correção de design, plano 2026-08-22): destino da impressão
-  // do ticket em `order_flow === 'direct_print'` — 'device' (default, mesmo
-  // comportamento que a Task 2 já entregou) ou 'station' (a Estação de
-  // Impressão da Task 3 é quem imprime; o aparelho do garçom não imprime
-  // nada, pra não sair duplicado). Ver lib/storeModules.ts (resolvePrintTarget).
-  printTarget?: PrintTarget;
 }
 
 // Perfil de módulos por loja (Task 1): decide se `params.modules`/
@@ -1334,11 +1334,12 @@ const applyModulesConfigFields = (config: Record<string, any>, params: CreateSto
   } else {
     delete next.order_flow;
   }
-  if (params.printTarget === 'station') {
-    next.print_target = 'station';
-  } else {
-    delete next.print_target;
-  }
+  // Removido (redesign 2026-08-23): `print_target` deixou de existir (ver
+  // lib/storeModules.ts) — apagado incondicionalmente daqui em diante pra
+  // limpar qualquer resíduo `'station'` que uma loja editada antes desta
+  // sessão possa ainda ter no `config` (nenhuma loja real tinha, mas o
+  // update é idempotente de qualquer forma).
+  delete next.print_target;
   return next;
 };
 
