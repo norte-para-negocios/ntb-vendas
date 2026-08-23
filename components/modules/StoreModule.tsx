@@ -1672,28 +1672,16 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
-    const handleCloseTable = async () => {
-        // Legacy close (without payment modal) - kept just in case, but UI now points to Payment
-        if (!selectedTable) return;
-        const result = await closeTableSession(selectedTable.id);
-        if (result.success) {
-            if (result.message && result.message.includes("Colunas ausentes")) {
-                setShowFixDbModal(true);
-            } else if (result.message) {
-                toast.info(result.message);
-            }
-            setRemovedServiceFees(prev => {
-                const next = new Set(prev);
-                next.delete(selectedTable.id);
-                return next;
-            });
-            setSelectedTable(null);
-            setShowFullBill(false);
-            loadData();
-        } else {
-            toast.error('Não foi possível fechar a mesa: ' + (result.message || 'Erro desconhecido'));
-        }
-    };
+    // Fix round 2 (Group D2): `handleCloseTable` removido — fechava a mesa
+    // SEM nenhuma forma de pagamento (`closeTableSession(selectedTable.id)`
+    // sem `paymentData`) e não era gateado por `canFinalizeBill`, ao
+    // contrário do fluxo real de pagamento (handleFinishPayment acima, que
+    // sempre monta `paymentMethods`/`changeDue` e respeita a permissão de
+    // Caixa quando o módulo está ligado). Comentário original já avisava
+    // "legacy... kept just in case", e nenhum JSX chamava esta função —
+    // uma linha de wiring futura a ligaria como um caminho de finalizar
+    // mesa sem cobrar nada e sem checar quem tem permissão. Confirmado sem
+    // call site algum antes de remover.
 
     const handleBlockToggle = async (e: React.MouseEvent, table: Table) => {
         e.stopPropagation();

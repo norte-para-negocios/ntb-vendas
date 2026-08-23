@@ -1270,12 +1270,23 @@ export const AdminModule: React.FC = () => {
                       <p className="text-xs text-[var(--text-muted)]">Desligue o que essa loja não usa — a aba some do painel do lojista por completo (sidebar e barra inferior), sem depender de usuário nenhum.</p>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {/* Fix round 2 (Group D1): "Caixa" saiu desta grade —
+                          era o 5º de 7 chips idênticos sob o texto acima
+                          ("desligue o que não usa... a aba some"), mas Caixa
+                          não tem aba nenhuma pra sumir, e ligá-lo (ao
+                          contrário de todos os outros 6) TIRA uma capacidade
+                          de quem não tiver a permissão, em vez de revelar uma
+                          tela nova. Um dono de loja via 6 chips verdes + 1
+                          cinza e lia "esta loja não tem caixa", quando o
+                          significado real é o oposto: "qualquer um com
+                          acesso a mesa fecha a conta". Ganhou card e frase
+                          próprios logo abaixo, escritos pro dono do
+                          restaurante, não pro desenvolvedor. */}
                       {([
                           { key: 'tables', label: 'Mesas', icon: LayoutDashboard, value: modTables, set: setModTables },
                           { key: 'counter', label: 'Balcão', icon: Coffee, value: modCounter, set: setModCounter },
                           { key: 'kitchen_kds', label: 'Cozinha (KDS)', icon: ChefHat, value: modKitchenKds, set: setModKitchenKds },
                           { key: 'bar_kds', label: 'Bar (KDS)', icon: Wine, value: modBarKds, set: setModBarKds },
-                          { key: 'caixa', label: 'Caixa', icon: Wallet, value: modCaixa, set: setModCaixa },
                           { key: 'menu', label: 'Cardápio', icon: UtensilsCrossed, value: modMenu, set: setModMenu },
                           { key: 'admin', label: 'Administração', icon: BarChart3, value: modAdmin, set: setModAdmin },
                       ] as const).map(({ key, label, icon: Icon, value, set }) => (
@@ -1327,8 +1338,17 @@ export const AdminModule: React.FC = () => {
                       só faz sentido perguntar isso quando o pedido de fato
                       imprime ao ser enviado (fluxo "Envia direto para
                       impressão"). Ausência de config = 'device', mesmo
-                      comportamento que a Task 2 já entregou. */}
-                  {orderFlow === 'direct_print' && (
+                      comportamento que a Task 2 já entregou.
+                      Fix round 2 (Group D1, ligado ao C3 de
+                      EstacaoModule.tsx): também mostra este seletor quando
+                      "Quem fecha a conta" está restrito a Caixa — desde a
+                      correção do achado C3, o MESMO `print_target` decide
+                      pra onde vai o comprovante de conta fechada, não só o
+                      ticket de cozinha/bar. Sem isto, uma loja em fluxo KDS
+                      (a maioria) que ligasse Caixa não teria NENHUM jeito de
+                      apontar uma estação de caixa pra 'station' — ficaria
+                      presa no padrão 'device' pra sempre, sem opção na UI. */}
+                  {(orderFlow === 'direct_print' || modCaixa) && (
                       <div className="pt-3 border-t border-[var(--border)] space-y-2">
                           <label className="text-xs font-semibold text-[var(--text)]">Onde imprime</label>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1353,11 +1373,44 @@ export const AdminModule: React.FC = () => {
                           </div>
                           <p className="text-[11px] text-[var(--text-muted)]">
                               {printTarget === 'station'
-                                  ? 'O aparelho de quem lançou o pedido não imprime nada — quem imprime é a estação fixa (ex.: na cozinha).'
-                                  : 'O pedido imprime no próprio aparelho de quem lançou (precisa de impressora ligada nele).'}
+                                  ? `O aparelho de quem lançou o pedido não imprime nada${modCaixa ? ', e o comprovante de conta fechada também não imprime no aparelho do caixa' : ''} — quem imprime é a estação fixa${modCaixa ? ' (cozinha e/ou caixa, conforme configurada)' : ' (ex.: na cozinha)'}.`
+                                  : `O pedido imprime no próprio aparelho de quem lançou${modCaixa ? ', e o comprovante de conta fechada imprime no aparelho do caixa' : ''} (precisa de impressora ligada nele).`}
                           </p>
                       </div>
                   )}
+              </div>
+
+              {/* Fix round 2 (Group D1): "Caixa" é o único switch deste
+                  grupo que RESTRINGE em vez de REVELAR — por isso ganhou
+                  card e frase próprios, em vez de dividir a grade "Módulos
+                  desta loja" acima (onde "desligado" sempre significou "a
+                  loja não tem essa tela", nunca "restringi quem pode usar
+                  uma tela que já existe"). Texto pensado pro dono/gerente
+                  do restaurante: fala de "quem fecha a conta", não de
+                  "módulo caixa" nem de "permissão". Ver canFinalizeBill em
+                  lib/storeModules.ts pro mecanismo (default off preserva o
+                  comportamento de hoje pras 7 lojas reais). */}
+              <div className="p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] space-y-3">
+                  <div>
+                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Wallet size={14}/> Quem fecha a conta</h4>
+                      <p className="text-xs text-[var(--text-muted)]">
+                          Hoje, qualquer pessoa da equipe com acesso a Mesas pode receber o pagamento e fechar a conta de um cliente.
+                          Ligue esta opção se você quiser que só quem tiver a permissão &ldquo;Caixa&rdquo; marcada (na aba Equipe) possa
+                          finalizar o pagamento — o resto da equipe continua vendo as mesas e podendo pedir a conta, só não consegue
+                          mais receber e encerrar sozinho.
+                      </p>
+                  </div>
+                  <button
+                      type="button"
+                      role="switch"
+                      aria-checked={modCaixa}
+                      aria-label="Restringir fechamento de conta a quem tem permissão de Caixa"
+                      onClick={() => setModCaixa(!modCaixa)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold u-motion u-press-sm transition-colors w-full sm:w-auto ${modCaixa ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                  >
+                      <Wallet size={14} className="shrink-0" />
+                      {modCaixa ? 'Restrito a quem tem permissão de Caixa' : 'Qualquer um com acesso a Mesas pode fechar a conta'}
+                  </button>
               </div>
 
               {/* Criar no NTB Estoque também — só em "Nova Loja" (loja já
