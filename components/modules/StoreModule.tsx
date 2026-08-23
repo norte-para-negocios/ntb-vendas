@@ -16,7 +16,6 @@ import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermiss
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
-import { alertError } from '@/components/AlertDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel } from '@/lib/labels';
@@ -2016,69 +2015,37 @@ NOTIFY pgrst, 'reload schema';`;
         const finalNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
 
         try {
-            // Reuses createOrder logic which handles adding to existing orders
-            const result = await createOrder(selectedTable.id, storeId, [{
+            // Reuses createOrder logic which handles adding to existing orders.
+            // `orderId` do retorno não é mais usado aqui (era só pro print
+            // imediato removido abaixo) — a reconciliação do Caixa resolve o
+            // pedido/item sozinha via fetch_kitchen_orders_secure.
+            await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes, selectedOptions
             }], loggedUser.name, 'garcom');
 
             toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
 
-            // Task 2 (2026-08-22, plano perfis-de-loja-e-caixa): loja sem
-            // KDS — este clique EM "Lançar Pedido" já É o "enviar". Imprime
-            // o ticket na mesma resposta ao gesto, logo depois do único
-            // await desta função (createOrder, uma chamada RPC — não há
-            // nenhum await encadeado depois disso até aqui, então o
-            // contexto de gesto do clique ainda deve estar "sticky" o
-            // suficiente pra window.print() funcionar sem exigir um 2º
-            // clique; não verificado em todo navegador, ver relatório).
-            // Cozinha vs. bar decide pelo destino do PRODUTO
-            // (product.destination), mesmo default 'kitchen' já usado em
-            // fetchKitchenOrders/updateProduct (lib/api.ts:418) — cada
-            // clique já é um único item, então "um ticket por destino por
-            // envio" e "um ticket por item" (granularidade nativa de
-            // printKitchenTicket) coincidem aqui: nenhuma mudança em
-            // lib/print.ts foi necessária.
+            // Redesign 2026-08-23 (review crítico "waiter-launched orders
+            // print nowhere real, silently"): este componente já NÃO imprime
+            // mais no próprio aparelho de quem lançou o item. Confirmado
+            // direto com o dono: o celular do garçom não tem acesso à
+            // impressora de rede da cozinha — só o aparelho do Caixa tem.
+            // Antes deste fix, `window.print()` aqui "tinha sucesso" sempre
+            // que a chamada não lançava, mesmo sem NENHUMA impressora
+            // configurada no aparelho do garçom — o pedido nunca chegava na
+            // cozinha e nada avisava ninguém.
             //
-            // Redesign 2026-08-23: este print é sempre incondicional em
-            // direct_print agora — não existe mais uma "Estação" separada
-            // que pudesse duplicar (ver lib/storeModules.ts). A reconciliação
-            // de impressão do Caixa (CaixaPrintStation.tsx, rodando na sessão
-            // do caixa) sabe ignorar este item de propósito: ele é gravado
-            // com `added_by_role: 'garcom'`, e ela só reconcilia itens que
-            // NÃO vieram do garçom (autoatendimento do cliente e Balcão).
-            if (result.orderId && orderFlow === 'direct_print') {
-                // Fix round 1 (Task 2 review, Important #2): printKitchenTicket
-                // agora devolve Promise<boolean> — antes disso, uma falha
-                // silenciosa (iframe sem contentDocument/contentWindow) não
-                // tinha NENHUM jeito de chegar até aqui: o toast de sucesso
-                // já tinha aparecido, o pedido já estava salvo, e ninguém
-                // saberia que a comida nunca chegou na cozinha até o
-                // cliente reclamar. Nesta loja a impressão é o ÚNICO
-                // mecanismo de entrega do pedido (sem KDS, sem tela de
-                // acompanhamento) — por isso o aviso de falha usa
-                // alertError() (modal bloqueante, exige toque explícito),
-                // não toast.error() (some sozinho em alguns segundos).
-                const printed = await printKitchenTicket({
-                    kind: product.destination === 'bar' ? 'BAR' : 'COZINHA',
-                    storeName: store.name,
-                    orderType: 'MESA',
-                    identifier: `MESA ${selectedTable.number}`,
-                    client: loggedUser.name,
-                    quantity: qty,
-                    productName: product.name,
-                    addons: selectedOptions.map(o => o.name).join(', ') || undefined,
-                    observation: notes || undefined,
-                    orderIdShort: result.orderId.slice(0, 8),
-                });
-
-                if (!printed) {
-                    await alertError({
-                        title: 'A impressão falhou',
-                        message: `O pedido foi salvo, mas o ticket de ${qty}x ${product.name} (Mesa ${selectedTable.number}) NÃO imprimiu. Avise a cozinha manualmente sobre este item.`,
-                    });
-                }
-            }
-            // Optional: Close menu to go back to bill, or stay to add more
+            // O pedido continua sendo criado exatamente como antes
+            // (`createOrder(..., 'garcom')`, acima) — só o print imediato
+            // saiu daqui. Quem imprime agora é a reconciliação em segundo
+            // plano do Caixa (`useCaixaPrintStation`, CaixaPrintStation.tsx),
+            // rodando no ÚNICO aparelho que de fato tem a impressora — o
+            // mesmo mecanismo que já cobria autoatendimento (QR) e Balcão.
+            // Esse item continua marcado `added_by_role: 'garcom'`
+            // (migration 046), mas a reconciliação não filtra mais por esse
+            // valor (ver CaixaPrintStation.tsx) — ela agora trata QR, Balcão
+            // e garçom exatamente igual, todos sem impressora própria no
+            // momento da criação.
             // setShowMenuMode(false);
         } catch (e) {
             toast.error("Erro ao adicionar item.");
