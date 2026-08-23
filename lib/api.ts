@@ -794,10 +794,53 @@ export const sendOrderToKitchen = async (orderId: string) => {
   if (error) throw error;
 };
 
+// Task 5 (2026-08-22, plano perfis-de-loja-e-caixa — fecha o gap do
+// Balcão): `paymentData` é novo e opcional — aditivo, todo call site
+// existente que só passava `destinatario` continua funcionando idêntico
+// (ver StoreModule.tsx `closeOrderNow`, que sempre manda `undefined`
+// explícito na posição de `paymentData` quando a loja não tem o módulo
+// Caixa ligado; a guarda `if (paymentData)` abaixo então nunca dispara pras
+// 7 lojas reais de hoje).
+//
+// Por que isto não é uma RPC nova (restrição explícita do plano — "no
+// migration, no column, no RPC"): `close_counter_order_secure` só grava
+// status; `close_table_orders_secure` grava payment_method/payment_details
+// mas filtra `where table_id = p_table_id`, e pedido de balcão nasce com
+// `table_id = null` (`create_order_secure`, `p_table_id: null` quando
+// `isCounter`) — `table_id = null` nunca bate em `p_table_id = null` no
+// SQL (NULL = NULL não é true), então não dá pra reaproveitar essa RPC
+// passando null. `orders` não tem SELECT/UPDATE público pra `anon` desde a
+// correção de segurança de 021/022 (ver AGENTS.md), e não existe nenhuma
+// outra RPC que escreva payment_method/payment_details por `order_id`. A
+// saída, sem tocar em schema/RPC, é o mesmo padrão já usado pra
+// certificado fiscal e Ordem de Produção: uma rota de servidor com a
+// service role key (`app/api/orders/pagamento-balcao`, ver lá o porquê
+// completo) escrevendo direto na tabela, ignorando RLS.
+//
+// Ordem importa: o pagamento é gravado ANTES do RPC que marca
+// 'delivered'. Se a gravação do pagamento falhar, o pedido continua aberto
+// (não vira "fechado sem registrar nada") — o operador tenta de novo. Se a
+// gravação funcionar mas o RPC de status falhar depois, o pedido fica com
+// pagamento já registrado mas ainda não 'delivered' — reabrir "Entregar"
+// de novo reenvia o mesmo paymentData (idempotente, sem risco de cobrança
+// duplicada) e tenta fechar de novo.
 export const closeCounterOrder = async (
   orderId: string,
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
+  if (paymentData) {
+    const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
+    const res = await fetch('/api/orders/pagamento-balcao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+    }
+  }
   const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
   if (error) throw error;
   triggerOrdemProducao({ orderId });

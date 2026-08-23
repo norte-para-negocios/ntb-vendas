@@ -1107,6 +1107,180 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     );
 };
 
+// Módulo Caixa (Task 5, 2026-08-22, plano perfis-de-loja-e-caixa — fecha o
+// gap do Balcão): núcleo de captura de pagamento extraído da aba
+// "Pagamento" do modal "Receber Pagamento" de TablesView (era JSX inline
+// ali, único consumidor) pra ser reaproveitado por CounterView também — o
+// brief da Task 5 é explícito: "Do not build a second payment mechanism;
+// if the table flow's components cannot be reused as they stand, say so".
+// Aqui deu pra reusar como está: botões de método, seletor de bandeira,
+// campo de valor, lista de pagamentos lançados, restante/troco e o botão
+// de finalizar — nenhum cálculo (troco, remaining) foi copiado pra dentro
+// deste componente, ele só recebe os valores já calculados via
+// lib/calc.ts (calculateChangeForMethods) pelo caller, exatamente como
+// TablesView já fazia.
+//
+// NÃO extraído (fica só em TablesView, de propósito): as abas "Divisão"/
+// "Por Cliente"/"Calculadora" do mesmo modal — são rateio por pessoa de
+// uma COMANDA DE MESA (múltiplos clientes na mesma conta); um pedido de
+// balcão é uma venda única, sem esse conceito, então forjar essas abas pro
+// balcão seria inventar produto novo, não reuso.
+//
+// `children` é renderizado entre a lista de pagamentos e o resumo/botão de
+// finalizar — é onde TablesView já colocava o bloco opcional de
+// destinatário da NF-e (Task 17); CounterView reaproveita a mesma posição
+// pro próprio bloco de destinatário.
+const PaymentCaptureFields: React.FC<{
+    total: number;
+    methods: { method: string; amount: number; brand?: string }[];
+    currentMethod: string;
+    onMethodChange: (m: string) => void;
+    currentBrand: string;
+    onBrandChange: (b: string) => void;
+    currentAmount: string;
+    onAmountChange: (a: string) => void;
+    onAddPayment: () => void;
+    onRemovePayment: (idx: number) => void;
+    remainingToPay: number;
+    changeDue: number;
+    onFinish: () => void;
+    finishDisabled: boolean;
+    finishLabel: string;
+    children?: React.ReactNode;
+}> = ({
+    total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
+    currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
+    changeDue, onFinish, finishDisabled, finishLabel, children,
+}) => (
+    <div className="space-y-6 pt-2">
+        <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total a Receber</p>
+            <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {total.toFixed(2)}</p>
+        </div>
+
+        {/* Payment Methods */}
+        <div className="grid grid-cols-3 gap-2">
+            {[
+                { id: 'CREDIT', label: 'Crédito', icon: CreditCard },
+                { id: 'DEBIT', label: 'Débito', icon: CreditCard },
+                { id: 'PIX', label: 'PIX', icon: QrCode },
+                { id: 'CASH', label: 'Dinheiro', icon: Banknote },
+                { id: 'COURTESY', label: 'Cortesia', icon: Gift },
+            ].map(m => (
+                <button
+                    key={m.id}
+                    onClick={() => onMethodChange(m.id)}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 u-motion u-press-sm ${
+                        currentMethod === m.id
+                        ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
+                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border)]'
+                    }`}
+                >
+                    <m.icon size={24} className="mb-1" />
+                    <span className="text-xs font-bold">{m.label}</span>
+                </button>
+            ))}
+        </div>
+
+        {/* Bandeira do cartão — só faz sentido pra CREDIT/DEBIT. Catálogo
+            fechado (lib/labels.ts CARD_BRAND_LABELS), nunca texto livre. */}
+        {(currentMethod === 'CREDIT' || currentMethod === 'DEBIT') && (
+            <div className="animate-fade-in">
+                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Bandeira (opcional)</p>
+                <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(CARD_BRAND_LABELS).map(([id, label]) => (
+                        <button
+                            key={id}
+                            onClick={() => onBrandChange(currentBrand === id ? '' : id)}
+                            className={`py-2 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
+                                currentBrand === id
+                                ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
+                                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
+                            }`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* Amount Input */}
+        <div className="flex gap-2">
+            <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                    placeholder="0.00"
+                    value={currentAmount}
+                    onChange={e => onAmountChange(e.target.value)}
+                />
+            </div>
+            <Button onClick={onAddPayment} className="px-6 bg-[var(--ink)] text-white">
+                <Plus size={20} />
+            </Button>
+        </div>
+
+        {/* Payment List */}
+        <div className="bg-[var(--surface-2)] rounded-xl p-3 border border-[var(--border)] min-h-[100px]">
+            {methods.length > 0 ? (
+                <ul className="space-y-2">
+                    {methods.map((p, idx) => (
+                        <li key={idx} className="flex justify-between items-center text-sm bg-[var(--surface)] p-2 rounded border border-[var(--border)] shadow-sm">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-[var(--text)]">
+                                    {getPaymentMethodLabel(p.method)}
+                                    {p.brand && <span className="font-normal text-[var(--text-muted)]"> · {getCardBrandLabel(p.brand)}</span>}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="font-mono font-bold">R$ {p.amount.toFixed(2)}</span>
+                                <button onClick={() => onRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-center text-[var(--text-muted)] text-xs py-8">Nenhum pagamento lançado</p>
+            )}
+        </div>
+
+        {children}
+
+        {/* Summary & Action */}
+        <div className="border-t border-[var(--border)] pt-4">
+            <div className="space-y-1 mb-4 px-2">
+                <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
+                    <span className="font-bold text-[var(--err)]">
+                        R$ {remainingToPay.toFixed(2)}
+                    </span>
+                </div>
+                {changeDue > 0 && (
+                    <div className="flex justify-between text-sm">
+                        <span className="text-[var(--text-muted)]">Troco:</span>
+                        <span className="font-bold text-[var(--ok)]">
+                            R$ {changeDue.toFixed(2)}
+                        </span>
+                    </div>
+                )}
+            </div>
+            <Button
+                onClick={onFinish}
+                className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20"
+                disabled={finishDisabled}
+            >
+                <CheckCircle size={20} className="mr-2"/> {finishLabel}
+            </Button>
+        </div>
+    </div>
+);
+
 const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
     const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
@@ -2359,107 +2533,23 @@ NOTIFY pgrst, 'reload schema';`;
 
                     <div className="max-h-[60vh] overflow-y-auto pr-1">
                         {paymentTab === 'payment' && (
-                            <div className="space-y-6 pt-2">
-                                <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
-                                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total a Receber</p>
-                                    <p className="text-4xl font-black text-[var(--text)] mt-1">
-                                        R$ {selectedTable ? getTableSummary(selectedTable.id).total.toFixed(2) : '0.00'}
-                                    </p>
-                                </div>
-
-                                {/* Payment Methods */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    {[
-                                        { id: 'CREDIT', label: 'Crédito', icon: CreditCard },
-                                        { id: 'DEBIT', label: 'Débito', icon: CreditCard },
-                                        { id: 'PIX', label: 'PIX', icon: QrCode },
-                                        { id: 'CASH', label: 'Dinheiro', icon: Banknote },
-                                        { id: 'COURTESY', label: 'Cortesia', icon: Gift },
-                                    ].map(m => (
-                                        <button
-                                            key={m.id}
-                                            onClick={() => setCurrentPaymentMethod(m.id)}
-                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 u-motion u-press-sm ${
-                                                currentPaymentMethod === m.id
-                                                ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
-                                                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border)]'
-                                            }`}
-                                        >
-                                            <m.icon size={24} className="mb-1" />
-                                            <span className="text-xs font-bold">{m.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Bandeira do cartão (Task 4, módulo Caixa) — só faz sentido pra
-                                    CREDIT/DEBIT. Catálogo fechado (lib/labels.ts CARD_BRAND_LABELS),
-                                    nunca texto livre — mesmo princípio de PRODUCT_TAGS. */}
-                                {(currentPaymentMethod === 'CREDIT' || currentPaymentMethod === 'DEBIT') && (
-                                    <div className="animate-fade-in">
-                                        <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Bandeira (opcional)</p>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {Object.entries(CARD_BRAND_LABELS).map(([id, label]) => (
-                                                <button
-                                                    key={id}
-                                                    onClick={() => setCurrentPaymentBrand(prev => prev === id ? '' : id)}
-                                                    className={`py-2 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
-                                                        currentPaymentBrand === id
-                                                        ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
-                                                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
-                                                    }`}
-                                                >
-                                                    {label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Amount Input */}
-                                <div className="flex gap-2">
-                                    <div className="flex-1 relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
-                                            placeholder="0.00"
-                                            value={currentPaymentAmount}
-                                            onChange={e => setCurrentPaymentAmount(e.target.value)}
-                                        />
-                                    </div>
-                                    <Button onClick={handleAddPayment} className="px-6 bg-[var(--ink)] text-white">
-                                        <Plus size={20} />
-                                    </Button>
-                                </div>
-
-                                {/* Payment List */}
-                                <div className="bg-[var(--surface-2)] rounded-xl p-3 border border-[var(--border)] min-h-[100px]">
-                                    {paymentMethods.length > 0 ? (
-                                        <ul className="space-y-2">
-                                            {paymentMethods.map((p, idx) => (
-                                                <li key={idx} className="flex justify-between items-center text-sm bg-[var(--surface)] p-2 rounded border border-[var(--border)] shadow-sm">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-[var(--text)]">
-                                                            {getPaymentMethodLabel(p.method)}
-                                                            {p.brand && <span className="font-normal text-[var(--text-muted)]"> · {getCardBrandLabel(p.brand)}</span>}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-mono font-bold">R$ {p.amount.toFixed(2)}</span>
-                                                        <button onClick={() => handleRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-center text-[var(--text-muted)] text-xs py-8">Nenhum pagamento lançado</p>
-                                    )}
-                                </div>
-
+                            <PaymentCaptureFields
+                                total={selectedTable ? getTableSummary(selectedTable.id).total : 0}
+                                methods={paymentMethods}
+                                currentMethod={currentPaymentMethod}
+                                onMethodChange={setCurrentPaymentMethod}
+                                currentBrand={currentPaymentBrand}
+                                onBrandChange={setCurrentPaymentBrand}
+                                currentAmount={currentPaymentAmount}
+                                onAmountChange={setCurrentPaymentAmount}
+                                onAddPayment={handleAddPayment}
+                                onRemovePayment={handleRemovePayment}
+                                remainingToPay={remainingToPay}
+                                changeDue={changeDue}
+                                onFinish={handleFinishPayment}
+                                finishDisabled={remainingToPay > 0.01}
+                                finishLabel="FINALIZAR MESA"
+                            >
                                 {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
                                     automaticamente; NFC-e não tem <dest>, não mostra nada aqui. */}
                                 {nfeModeloAtivo && (
@@ -2487,34 +2577,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         </p>
                                     </div>
                                 )}
-
-                                {/* Summary & Action */}
-                                <div className="border-t border-[var(--border)] pt-4">
-                                    <div className="space-y-1 mb-4 px-2">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
-                                            <span className="font-bold text-[var(--err)]">
-                                                R$ {remainingToPay.toFixed(2)}
-                                            </span>
-                                        </div>
-                                        {changeDue > 0 && (
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-[var(--text-muted)]">Troco:</span>
-                                                <span className="font-bold text-[var(--ok)]">
-                                                    R$ {changeDue.toFixed(2)}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <Button
-                                        onClick={handleFinishPayment}
-                                        className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20"
-                                        disabled={remainingToPay > 0.01}
-                                    >
-                                        <CheckCircle size={20} className="mr-2"/> FINALIZAR MESA
-                                    </Button>
-                                </div>
-                            </div>
+                            </PaymentCaptureFields>
                         )}
 
                         {paymentTab === 'split' && currentTableSummary && (
@@ -2752,7 +2815,7 @@ NOTIFY pgrst, 'reload schema';`;
 
 // --- SUB-MODULE: COUNTER (BALCÃO) ---
 
-const CounterView: React.FC<{ store: Store }> = ({ store }) => {
+const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
     const storeId = store.id;
     const [orders, setOrders] = useState<Order[]>([]);
 
@@ -2765,6 +2828,31 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
     const [destCpfCnpj, setDestCpfCnpj] = useState('');
     const [destNome, setDestNome] = useState('');
     const [isClosingOrder, setIsClosingOrder] = useState(false);
+
+    // Task 5 (2026-08-22, plano perfis-de-loja-e-caixa — fecha o gap do
+    // Balcão): mesmas duas checagens que TablesView já faz pra mesa,
+    // aplicadas ao balcão. `caixaModuleOn` decide se ENTREGAR passa a exigir
+    // pagamento capturado; `canFinalize` decide QUEM pode finalizar quando o
+    // módulo está ligado — a MESMA função (canFinalizeBill), não uma regra
+    // paralela ("one rule, both surfaces", brief da Task 5). Loja sem
+    // `config.modules` (as 7 lojas reais de hoje): `caixaModuleOn` é sempre
+    // `false` (ver lib/storeModules.ts, ALL_ON.caixa), então nada abaixo
+    // muda o comportamento de ninguém — handleClose cai direto no mesmo
+    // confirm()/modal de NF-e de sempre.
+    const caixaModuleOn = resolveStoreModules(store).caixa;
+    const canFinalize = canFinalizeBill(loggedUser, store);
+    const printTarget = resolvePrintTarget(store);
+    const isFinishingRef = useRef(false);
+
+    // Captura de pagamento (Task 5) — só usada quando caixaModuleOn. Mesmo
+    // shape de estado que TablesView usa pro pagamento de mesa
+    // (paymentMethods/currentPaymentAmount/currentPaymentMethod/
+    // currentPaymentBrand), reaproveitado via PaymentCaptureFields.
+    const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+    const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: number; brand?: string }[]>([]);
+    const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
+    const [currentPaymentMethod, setCurrentPaymentMethod] = useState('CREDIT');
+    const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
 
     const load = async () => {
         const data = await fetchCounterOrders(storeId);
@@ -2785,9 +2873,20 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
             .catch(() => setNfeModeloAtivo(false));
     }, [storeId]);
 
-    const closeOrderNow = async (orderId: string, destinatario?: { cpfCnpj: string; nome: string }) => {
+    const getOrderTotal = (order: Order) =>
+        (order.order_items || []).reduce((acc, item) => acc + item.quantity * item.price_at_time, 0);
+
+    // Task 5: `paymentData` é novo e opcional (ver lib/api.ts,
+    // closeCounterOrder) — todo call site que já existia antes desta task
+    // continua passando `undefined` explícito nessa posição, comportamento
+    // idêntico ao de sempre.
+    const closeOrderNow = async (
+        orderId: string,
+        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string }[] },
+        destinatario?: { cpfCnpj: string; nome: string },
+    ) => {
         try {
-            await closeCounterOrder(orderId, destinatario);
+            await closeCounterOrder(orderId, paymentData, destinatario);
         } catch (e: any) {
             if (e.message === "schema cache updated_at") {
                 toast.error("Para calcular o tempo médio, execute este script no SQL Editor do Supabase:\n\nALTER TABLE orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nNOTIFY pgrst, 'reload schema';", 10000);
@@ -2799,10 +2898,31 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
     };
 
     const handleClose = async (orderId: string) => {
-        // Loja em modelo NF-e: abre o modal de captura opcional do
-        // destinatário em vez do confirm() simples de sempre — deixar em
-        // branco continua fechando o pedido normalmente (nota cai
-        // 'pendente', não impede o fechamento).
+        // Módulo Caixa ligado (Task 5): ENTREGAR abre a captura de
+        // pagamento (mesmo modal/UI que TablesView usa pra mesa) em vez do
+        // confirm() simples de sempre — nunca os dois juntos.
+        if (caixaModuleOn) {
+            // Defesa em profundidade — o botão que chama isto já não
+            // renderiza pra quem não pode finalizar (ver JSX abaixo), mas
+            // travar aqui também garante que nenhum outro caminho futuro
+            // abra a captura de pagamento pra quem só pode VER o balcão.
+            if (!canFinalize) return;
+            const order = orders.find((o) => o.id === orderId) || null;
+            if (!order) return;
+            setPaymentOrder(order);
+            setPaymentMethods([]);
+            setCurrentPaymentAmount(getOrderTotal(order).toFixed(2));
+            setCurrentPaymentMethod('CREDIT');
+            setCurrentPaymentBrand('');
+            setDestCpfCnpj('');
+            setDestNome('');
+            return;
+        }
+        // Loja SEM o módulo Caixa — comportamento de hoje, intocado. Em
+        // modelo NF-e: abre o modal de captura opcional do destinatário em
+        // vez do confirm() simples de sempre — deixar em branco continua
+        // fechando o pedido normalmente (nota cai 'pendente', não impede o
+        // fechamento).
         if (nfeModeloAtivo) {
             const order = orders.find((o) => o.id === orderId) || null;
             setClosingOrder(order);
@@ -2824,12 +2944,104 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
         setIsClosingOrder(true);
         try {
             const destinatario = buildDestinatario(destCpfCnpj, destNome);
-            await closeOrderNow(closingOrder.id, destinatario);
+            await closeOrderNow(closingOrder.id, undefined, destinatario);
             setClosingOrder(null);
         } catch {
             // já reportado via toast em closeOrderNow
         } finally {
             setIsClosingOrder(false);
+        }
+    };
+
+    // A partir daqui, tudo é exclusivo do fluxo de captura de pagamento
+    // (Task 5, só existe quando caixaModuleOn) — mesmos cálculos que
+    // TablesView já faz pra mesa, nunca reescritos: lib/calc.ts
+    // (calculateChangeForMethods) é a única fonte do troco.
+    const paymentTotalDue = paymentOrder ? getOrderTotal(paymentOrder) : 0;
+    const totalPaidSoFar = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
+    const remainingToPay = Math.max(0, paymentTotalDue - totalPaidSoFar);
+    const changeDue = calculateChangeForMethods(paymentMethods, paymentTotalDue);
+
+    const handleAddPayment = () => {
+        const amount = parseFloat(currentPaymentAmount.replace(',', '.'));
+        if (isNaN(amount) || amount <= 0) return;
+
+        const isCard = currentPaymentMethod === 'CREDIT' || currentPaymentMethod === 'DEBIT';
+        setPaymentMethods(prev => [...prev, {
+            method: currentPaymentMethod,
+            amount,
+            ...(isCard && currentPaymentBrand ? { brand: currentPaymentBrand } : {}),
+        }]);
+        setCurrentPaymentBrand('');
+
+        const currentTotalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0) + amount;
+        const remaining = Math.max(0, paymentTotalDue - currentTotalPaid);
+        setCurrentPaymentAmount(remaining.toFixed(2));
+    };
+
+    const handleRemovePayment = (index: number) => {
+        setPaymentMethods(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleFinishCounterPayment = async () => {
+        if (!paymentOrder) return;
+        if (isFinishingRef.current) return;
+        isFinishingRef.current = true;
+
+        try {
+            const total = getOrderTotal(paymentOrder);
+            const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
+
+            // Mesma checagem em duas camadas que TablesView.handleFinishPayment
+            // já faz (botão desabilitado + reconferência no clique contra um
+            // total recém-calculado) — nunca fecha uma venda paga a menos.
+            if (totalPaid < total - 0.01) {
+                toast.error('O valor pago é menor que o total do pedido.');
+                return;
+            }
+
+            const paymentData = { total, methods: paymentMethods };
+            const destinatario = buildDestinatario(destCpfCnpj, destNome);
+            await closeOrderNow(paymentOrder.id, paymentData, destinatario);
+
+            // Comprovante com forma de pagamento — só quando quem fechou é
+            // de fato um CAIXA (mesma distinção de
+            // TablesView.handleFinishPayment): as 7 lojas reais (módulo
+            // desligado) nunca chegam aqui, e dono/universal fechando pelo
+            // bypass de canFinalizeBill não ganham um papel novo do nada.
+            // `printTarget === 'station'` também não imprime aqui — mesmo
+            // raciocínio da mesa (evita duplo-print); a Estação hoje só
+            // reconcilia pedidos de MESA (EstacaoModule.tsx,
+            // reconcileCaixa filtra order_type==='table'), então um balcão
+            // fechado numa loja em `printTarget: 'station'` não emite
+            // comprovante nenhum ainda — ver ressalva no relatório desta
+            // task, fora do escopo pedido (não é o gap que esta task fecha).
+            const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
+            if (isCaixaOperator && printTarget === 'device') {
+                const items = paymentOrder.order_items || [];
+                const printed = await printBillReceipt({
+                    storeName: store.name,
+                    cnpj: store.cnpj,
+                    label: `BALCÃO - ${paymentOrder.customer_name || 'Cliente'} - PAGO`,
+                    items: items.map(item => ({
+                        quantity: item.quantity,
+                        name: getOrderItemDisplayName(item),
+                        total: item.price_at_time * item.quantity,
+                    })),
+                    subtotal: total,
+                    total,
+                    payment: { methods: paymentMethods, changeDue },
+                });
+                if (!printed) {
+                    toast.error('O pedido foi fechado, mas o comprovante não imprimiu. Confira a impressora do caixa.');
+                }
+            }
+
+            setPaymentOrder(null);
+        } catch {
+            // já reportado via toast em closeOrderNow
+        } finally {
+            isFinishingRef.current = false;
         }
     };
 
@@ -2942,6 +3154,15 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
                                  <Button onClick={() => handleSendToKitchen(order.id)} variant="primary" className="h-10 text-sm shrink-0">
                                      <ChefHat size={16} className="mr-1"/> Enviar p/ Cozinha
                                  </Button>
+                             ) : caixaModuleOn && !canFinalize ? (
+                                 // Task 5 (módulo Caixa): sem o botão de finalizar — só quem tem a
+                                 // permissão 'caixa' fecha a venda quando o módulo está ligado. Não
+                                 // existe equivalente de "pedir a conta" pro balcão (o pedido já
+                                 // está no caixa, esperando ser recebido), então isto é só
+                                 // informativo, sem ação nenhuma.
+                                 <span className="h-10 px-3 flex items-center text-xs font-bold text-[var(--text-muted)] bg-[var(--surface-2)] rounded-[var(--r-md)] border border-[var(--border)] shrink-0">
+                                     Aguardando o caixa
+                                 </span>
                              ) : (
                                  <Button onClick={() => handleClose(order.id)} variant="primary" className="h-10 text-sm shrink-0">
                                      <CheckCircle size={16} className="mr-1"/> Entregar
@@ -2997,6 +3218,60 @@ const CounterView: React.FC<{ store: Store }> = ({ store }) => {
                         </Button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Módulo Caixa (Task 5, 2026-08-22): captura de pagamento do
+                balcão — só existe quando caixaModuleOn (handleClose decide
+                isso antes de abrir). Reaproveita EXATAMENTE o componente que
+                TablesView usa pra mesa (PaymentCaptureFields), nunca uma UI
+                paralela — "one payment mechanism", ver comentário do
+                componente. */}
+            <Modal isOpen={!!paymentOrder} onClose={() => setPaymentOrder(null)} title="Receber Pagamento" size="lg">
+                <PaymentCaptureFields
+                    total={paymentTotalDue}
+                    methods={paymentMethods}
+                    currentMethod={currentPaymentMethod}
+                    onMethodChange={setCurrentPaymentMethod}
+                    currentBrand={currentPaymentBrand}
+                    onBrandChange={setCurrentPaymentBrand}
+                    currentAmount={currentPaymentAmount}
+                    onAmountChange={setCurrentPaymentAmount}
+                    onAddPayment={handleAddPayment}
+                    onRemovePayment={handleRemovePayment}
+                    remainingToPay={remainingToPay}
+                    changeDue={changeDue}
+                    onFinish={handleFinishCounterPayment}
+                    finishDisabled={remainingToPay > 0.01}
+                    finishLabel="FINALIZAR VENDA"
+                >
+                    {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
+                        automaticamente; mesma posição/campos que TablesView usa. */}
+                    {nfeModeloAtivo && (
+                        <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
+                            <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                                Documento do destinatário (NF-e, opcional)
+                            </p>
+                            <input
+                                type="text"
+                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                placeholder="CPF ou CNPJ do cliente"
+                                value={destCpfCnpj}
+                                onChange={(e) => setDestCpfCnpj(e.target.value)}
+                            />
+                            <input
+                                type="text"
+                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                placeholder="Nome do cliente"
+                                value={destNome}
+                                onChange={(e) => setDestNome(e.target.value)}
+                            />
+                            <p className="text-xs text-[var(--text-muted)]">
+                                Deixe em branco pra fechar o pedido sem emitir a NF-e agora — dá pra preencher e
+                                reemitir depois na aba "Notas Fiscais".
+                            </p>
+                        </div>
+                    )}
+                </PaymentCaptureFields>
             </Modal>
         </div>
     );
@@ -6214,7 +6489,7 @@ export const StoreModule: React.FC = () => {
             user={user}
         >
             {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} loggedUser={user} />}
-            {tab === 'counter' && canAccess('counter') && <CounterView store={user.store} />}
+            {tab === 'counter' && canAccess('counter') && <CounterView store={user.store} loggedUser={user} />}
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}

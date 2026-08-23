@@ -132,21 +132,33 @@ export const computeAccessibleTabIds = (
 // 'tables' mesmo sem o checkbox "Gestão de Mesas" estar marcado — "Caixa tem
 // acesso à gestão de mesa igual ao garçom" (brief da Task 4) não deveria
 // depender do Master Admin lembrar de marcar as DUAS caixinhas ao criar um
-// caixa novo. Único caso especial; toda outra aba continua só no padrão
-// permissivo genérico (ausência de chave = true, pensado pras 6 permissões
-// que já existem em todo store_user real).
+// caixa novo.
+//
+// Task 5 (2026-08-22, fecha o gap do Balcão): mesmo raciocínio pra 'counter'
+// — um caixa que só fecha comanda de balcão (sem o checkbox "Balcão"
+// marcado à parte) não pode ficar sem enxergar a própria aba que ele é
+// responsável por fechar. "Um cashier que não consegue ver o Balcão não
+// pode ser responsável por ele" (brief da Task 5). Únicos dois casos
+// especiais; toda outra aba continua só no padrão permissivo genérico
+// (ausência de chave = true, pensado pras 6 permissões que já existem em
+// todo store_user real).
 export const hasTabPermission = (
   user: { role: string; permissions?: Record<string, any> },
   tabId: string
 ): boolean => {
   if (user.role === 'owner') return true;
-  if (tabId === 'tables' && user.permissions?.caixa === true) return true;
+  if ((tabId === 'tables' || tabId === 'counter') && user.permissions?.caixa === true) return true;
   return user.permissions?.[tabId] !== false;
 };
 
-// Quem pode FINALIZAR o pagamento de uma mesa (Task 4, módulo Caixa) — em
-// vez de só pedir a conta. O MÓDULO da loja é o interruptor mestre, não a
-// permissão do usuário isolada:
+// Quem pode FINALIZAR o pagamento de uma mesa OU de um pedido de balcão
+// (Task 4, módulo Caixa; extensão pro balcão na Task 5) — em vez de só pedir
+// a conta (mesa) ou deixar qualquer um com a aba Balcão fechar a venda sem
+// registrar nada (balcão). Já era genérica o bastante pra cobrir os dois
+// (não recebe "table" nem "order" — só `user`/`store`), então a Task 5
+// reaproveita esta MESMA função em CounterView em vez de escrever uma
+// segunda regra: "one rule, both surfaces" (brief da Task 5). O MÓDULO da
+// loja é o interruptor mestre, não a permissão do usuário isolada:
 //
 // - `modules.caixa === false` (o default — ver comentário de ALL_ON acima):
 //   comportamento de hoje pra QUALQUER usuário com acesso à mesa, dono ou
