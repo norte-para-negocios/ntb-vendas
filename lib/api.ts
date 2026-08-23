@@ -835,7 +835,13 @@ export const sendOrderToKitchen = async (orderId: string) => {
 // duplicada) e tenta fechar de novo.
 export const closeCounterOrder = async (
   orderId: string,
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
+  // Task 4 (2026-08-23, resolução backlog pendente): `emitir_nota` é novo e
+  // opcional — mesmo padrão aditivo do resto deste objeto. Vai direto pra
+  // dentro de `payment_details` (nenhuma coluna nova, ver AGENTS.md), lido
+  // por app/api/fiscal/emitir/route.ts ANTES de qualquer trabalho real de
+  // emissão. Ausente (todo call site de hoje, toda loja sem o toggle
+  // renderizado) = comportamento idêntico ao de sempre, emite normal.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
   if (paymentData) {
@@ -1004,7 +1010,8 @@ export const closeTableSession = async (
   // Sem declarar aqui, um refactor futuro que trocasse o call site por
   // um literal (ex.: `{ total, methods: [{method, amount}] }`) perderia
   // a bandeira do cartão silenciosamente, sem nenhum erro de tipo.
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
+  // Task 4: idem closeCounterOrder acima — `emitir_nota` é novo e opcional.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
   try {

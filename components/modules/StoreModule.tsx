@@ -1164,11 +1164,23 @@ const PaymentCaptureFields: React.FC<{
     onFinish: () => void;
     finishDisabled: boolean;
     finishLabel: string;
+    // Task 4 (2026-08-23, resolução backlog pendente): opt-out por venda,
+    // em cima do default por loja (`modelo_emissao_automatica`) que já
+    // existe. Só aparece quando o CALLER já confirmou que a loja tem
+    // emissão automática configurada (`showEmitirNotaToggle`) — loja sem
+    // isso continua sem ganhar nada de novo aqui. `emitirNota` sempre
+    // nasce `true` no caller (mesmo comportamento de hoje: toda venda
+    // emite); só um `false` explícito muda o resultado, ver o early-exit
+    // em app/api/fiscal/emitir/route.ts.
+    showEmitirNotaToggle?: boolean;
+    emitirNota?: boolean;
+    onEmitirNotaChange?: (value: boolean) => void;
     children?: React.ReactNode;
 }> = ({
     total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
     currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
-    changeDue, onFinish, finishDisabled, finishLabel, children,
+    changeDue, onFinish, finishDisabled, finishLabel,
+    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, children,
 }) => (
     <div className="space-y-6 pt-2">
         <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
@@ -1267,6 +1279,29 @@ const PaymentCaptureFields: React.FC<{
                 <p className="text-center text-[var(--text-muted)] text-xs py-8">Nenhum pagamento lançado</p>
             )}
         </div>
+
+        {/* Task 4 (2026-08-23): toggle "Emitir nota fiscal desta venda" —
+            rótulo neutro de propósito, nunca menciona imposto/carga
+            tributária (ver AGENTS.md/backlog item 13). Usos legítimos já
+            documentados: cortesia interna, loja sem módulo fiscal
+            contratado, emissão por outro sistema, contingência SEFAZ —
+            nenhum precisa de texto explicativo aqui, o toggle já é
+            autoexplicativo. */}
+        {showEmitirNotaToggle && (
+            <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
+                <span className="text-sm font-bold text-[var(--text)]">Emitir nota fiscal desta venda</span>
+                <button
+                    type="button"
+                    onClick={() => onEmitirNotaChange?.(!emitirNota)}
+                    role="switch"
+                    aria-checked={!!emitirNota}
+                    aria-label="Emitir nota fiscal desta venda"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${emitirNota ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emitirNota ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+        )}
 
         {children}
 
@@ -1442,6 +1477,16 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
     const [paymentDestCpfCnpj, setPaymentDestCpfCnpj] = useState('');
     const [paymentDestNome, setPaymentDestNome] = useState('');
+
+    // Task 4 (2026-08-23): idem, mas pra decidir se mostra o toggle
+    // "Emitir nota fiscal desta venda" — qualquer modelo configurado
+    // (nfce OU nfe), não só nfe como `nfeModeloAtivo` acima (aquele é
+    // específico do campo de destinatário, que só existe pra NF-e).
+    // `emitirNotaFiscal` nasce sempre `true` (default ligado — mesmo
+    // comportamento de hoje) e é resetado a cada abertura do modal de
+    // pagamento, nunca herda o valor da venda anterior.
+    const [emissaoFiscalConfigurada, setEmissaoFiscalConfigurada] = useState(false);
+    const [emitirNotaFiscal, setEmitirNotaFiscal] = useState(true);
 
     const currentTableSummary = useMemo(() => {
         if (!selectedTable) return null;
@@ -1716,8 +1761,18 @@ NOTIFY pgrst, 'reload schema';`;
     // normal da maioria das lojas, não um erro pra atrapalhar o fechamento.
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
-            .then((cfg) => setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe'))
-            .catch(() => setNfeModeloAtivo(false));
+            .then((cfg) => {
+                setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe');
+                // Task 4: qualquer modelo configurado (nfce OU nfe) já é
+                // "emissão automática ligada" pra fins do toggle de opt-out
+                // — loja sem NENHUMA config (cfg null) ou com
+                // 'nenhuma' explícito não ganha o toggle.
+                setEmissaoFiscalConfigurada(!!cfg && cfg.modelo_emissao_automatica !== 'nenhuma');
+            })
+            .catch(() => {
+                setNfeModeloAtivo(false);
+                setEmissaoFiscalConfigurada(false);
+            });
     }, [storeId]);
 
     // SYNC MODAL WITH REALTIME TABLE DATA
@@ -1856,6 +1911,9 @@ NOTIFY pgrst, 'reload schema';`;
         setPaymentSelectedItems({});
         setPaymentDestCpfCnpj('');
         setPaymentDestNome('');
+        // Task 4: sempre nasce ligado — default de hoje (emite normal),
+        // nunca herda o valor escolhido na venda anterior desta mesma mesa.
+        setEmitirNotaFiscal(true);
         setShowPaymentModal(true);
     };
 
@@ -1918,9 +1976,15 @@ NOTIFY pgrst, 'reload schema';`;
                 return;
             }
 
+            // Task 4: `emitir_nota` só entra no payload quando a loja tem
+            // emissão automática configurada — pra loja sem isso, o objeto
+            // fica idêntico ao de sempre (sem a chave), então
+            // payment_details.emitir_nota nunca existe pras 7 lojas reais
+            // de hoje. Ver early-exit em app/api/fiscal/emitir/route.ts.
             const paymentData = {
                 total: summary.total,
-                methods: paymentMethods
+                methods: paymentMethods,
+                ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
             };
 
             // Destinatário (Task 17) — opcional mesmo em modelo NF-e; deixado
@@ -2683,6 +2747,9 @@ NOTIFY pgrst, 'reload schema';`;
                                 onFinish={handleFinishPayment}
                                 finishDisabled={remainingToPay > 0.01}
                                 finishLabel="FINALIZAR MESA"
+                                showEmitirNotaToggle={emissaoFiscalConfigurada}
+                                emitirNota={emitirNotaFiscal}
+                                onEmitirNotaChange={setEmitirNotaFiscal}
                             >
                                 {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
                                     automaticamente; NFC-e não tem <dest>, não mostra nada aqui. */}
@@ -2981,6 +3048,11 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
     // usada pra decidir se mostra o modal de captura opcional de CPF/CNPJ
     // antes de fechar o pedido de balcão.
     const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
+    // Task 4 (2026-08-23): mesmo state espelhado de TablesView, ver
+    // comentário lá — qualquer modelo configurado (nfce OU nfe) já mostra
+    // o toggle "Emitir nota fiscal desta venda".
+    const [emissaoFiscalConfigurada, setEmissaoFiscalConfigurada] = useState(false);
+    const [emitirNotaFiscal, setEmitirNotaFiscal] = useState(true);
     const [closingOrder, setClosingOrder] = useState<Order | null>(null);
     const [destCpfCnpj, setDestCpfCnpj] = useState('');
     const [destNome, setDestNome] = useState('');
@@ -3025,8 +3097,14 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
 
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
-            .then((cfg) => setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe'))
-            .catch(() => setNfeModeloAtivo(false));
+            .then((cfg) => {
+                setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe');
+                setEmissaoFiscalConfigurada(!!cfg && cfg.modelo_emissao_automatica !== 'nenhuma');
+            })
+            .catch(() => {
+                setNfeModeloAtivo(false);
+                setEmissaoFiscalConfigurada(false);
+            });
     }, [storeId]);
 
     const getOrderTotal = (order: Order) =>
@@ -3038,7 +3116,7 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
     // idêntico ao de sempre.
     const closeOrderNow = async (
         orderId: string,
-        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string }[] },
+        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string }[]; emitir_nota?: boolean },
         destinatario?: { cpfCnpj: string; nome: string },
     ) => {
         try {
@@ -3072,6 +3150,8 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
             setCurrentPaymentBrand('');
             setDestCpfCnpj('');
             setDestNome('');
+            // Task 4: sempre nasce ligado, mesmo motivo de TablesView.
+            setEmitirNotaFiscal(true);
             return;
         }
         // Loja SEM o módulo Caixa — comportamento de hoje, intocado. Em
@@ -3156,7 +3236,13 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                 return;
             }
 
-            const paymentData = { total, methods: paymentMethods };
+            // Task 4: mesmo princípio de TablesView — a chave só entra no
+            // payload quando a loja tem emissão automática configurada.
+            const paymentData = {
+                total,
+                methods: paymentMethods,
+                ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
+            };
             const destinatario = buildDestinatario(destCpfCnpj, destNome);
             await closeOrderNow(paymentOrder.id, paymentData, destinatario);
 
@@ -3411,6 +3497,9 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                     onFinish={handleFinishCounterPayment}
                     finishDisabled={remainingToPay > 0.01}
                     finishLabel="FINALIZAR VENDA"
+                    showEmitirNotaToggle={emissaoFiscalConfigurada}
+                    emitirNota={emitirNotaFiscal}
+                    onEmitirNotaChange={setEmitirNotaFiscal}
                 >
                     {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
                         automaticamente; mesma posição/campos que TablesView usa. */}

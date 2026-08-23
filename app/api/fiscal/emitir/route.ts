@@ -93,12 +93,21 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // 1. Resolve store_id e os itens da venda.
   let storeId: string | null = null;
   let orderIds: string[] = [];
+  // Task 4 (2026-08-23, resolução backlog pendente): payment_details da
+  // order-âncora (a mesma usada como âncora de idempotência logo abaixo),
+  // buscado junto pra checar o opt-out por venda sem uma query extra.
+  let paymentDetailsAncora: Record<string, unknown> | null = null;
 
   if (body.orderId) {
-    const { data: order } = await admin.from('orders').select('id, store_id').eq('id', body.orderId).maybeSingle();
+    const { data: order } = await admin
+      .from('orders')
+      .select('id, store_id, payment_details')
+      .eq('id', body.orderId)
+      .maybeSingle();
     if (order) {
       storeId = order.store_id;
       orderIds = [order.id];
+      paymentDetailsAncora = order.payment_details as Record<string, unknown> | null;
     }
   } else if (body.tableId) {
     // Mesma janela de 5 min de app/api/integracao/ordem-producao/route.ts —
@@ -112,7 +121,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     // reconhecerem como a mesma venda).
     const { data: orders } = await admin
       .from('orders')
-      .select('id, store_id')
+      .select('id, store_id, payment_details')
       .eq('table_id', body.tableId)
       .eq('status', 'delivered')
       .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
@@ -120,11 +129,33 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     if (orders?.length) {
       storeId = orders[0].store_id;
       orderIds = orders.map((o) => o.id);
+      // close_table_orders_secure grava o MESMO payment_details em todas as
+      // orders da mesa fechada junto (ver migration 021) — a âncora
+      // (orders[0], mesmo critério de sempre) já basta, não precisa reler
+      // as outras.
+      paymentDetailsAncora = orders[0].payment_details as Record<string, unknown> | null;
     }
   }
 
   if (!storeId || !orderIds.length) {
     return NextResponse.json({ skipped: true, reason: 'Pedido(s) não encontrado(s)' });
+  }
+
+  // Task 4 (2026-08-23, resolução backlog pendente): opt-out por venda,
+  // sobre o default por loja (`modelo_emissao_automatica`, checado mais
+  // abaixo). Checado ANTES de qualquer coisa — antes até da guarda de
+  // idempotência e da leitura de config fiscal da loja — porque um `false`
+  // aqui não é falha nem precisa consultar mais nada pra decidir sair.
+  // Não é erro: um lojista optando por não emitir por um motivo legítimo
+  // (cortesia interna, loja sem módulo fiscal contratado emitindo por
+  // fora, contingência SEFAZ) é um resultado normal, do mesmo jeito que os
+  // outros early-exits `skipped: true` deste arquivo — NUNCA grava linha
+  // em fiscal_notas. Ausência da chave (toda venda fechada antes desta
+  // task, e toda venda de loja sem o toggle renderizado) é diferente de
+  // `false` explícito: só `=== false` sai; ausente/`true`/qualquer outro
+  // valor segue o fluxo normal de sempre.
+  if (paymentDetailsAncora?.emitir_nota === false) {
+    return NextResponse.json({ skipped: true, reason: 'Emissão desativada para esta venda' });
   }
 
   // 1.5. Guarda de idempotência — nada nesta rota impede que o mesmo
