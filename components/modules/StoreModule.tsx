@@ -6363,9 +6363,48 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     // — NF-e e NFC-e vinham sempre juntas na mesma lista, sem jeito de olhar
     // só um tipo. Mesmo padrão do filtro de ambiente acima.
     const [tipoFilter, setTipoFilter] = useState<'todos' | '55' | '65'>('todos');
+    // Filtro de período pro "Exportar período" (Task 5, 2026-08-23) — reaproveita
+    // o mesmo padrão de Data Inicial/Data Final já usado no Histórico de Vendas
+    // (StoreAdminView acima), <Input type="date"> simples. Não filtra a tabela
+    // em si (isso já é feito pelos filtros de ambiente/tipo acima) — só delimita
+    // o intervalo mandado pra rota de exportação.
+    const [exportStartDate, setExportStartDate] = useState('');
+    const [exportEndDate, setExportEndDate] = useState('');
+    const [isExporting, setIsExporting] = useState(false);
     const filteredNotas = notas
         .filter(n => ambienteFilter === 'todos' || n.ambiente === ambienteFilter)
         .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter);
+
+    // Baixa o ZIP (XMLs + CSV) do período via app/api/fiscal/exportar — a
+    // rota resolve as notas server-side só por storeId+intervalo (nunca por
+    // uma lista de ids que este componente mandasse), então não precisa (e
+    // não deve) mandar `filteredNotas`/ids nenhum aqui, só o intervalo.
+    const handleExportPeriodo = async () => {
+        setIsExporting(true);
+        try {
+            const params = new URLSearchParams({ storeId });
+            if (exportStartDate) params.set('startDate', exportStartDate);
+            if (exportEndDate) params.set('endDate', exportEndDate);
+            const res = await fetch(`/api/fiscal/exportar?${params.toString()}`);
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.message || 'Falha ao exportar notas fiscais.');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `notas-fiscais${exportStartDate ? `_${exportStartDate}` : ''}${exportEndDate ? `_a_${exportEndDate}` : ''}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            toast.error(e.message || 'Erro ao exportar notas fiscais.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const load = async () => {
         setIsLoading(true);
@@ -6483,33 +6522,51 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     return (
         <div className="space-y-6">
             <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
-                <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex justify-between items-center">
-                    <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
-                    <div className="flex items-center gap-2">
-                        <select
-                            className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-                            value={tipoFilter}
-                            onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
-                        >
-                            <option value="todos">NF-e e NFC-e</option>
-                            <option value="55">Só NF-e</option>
-                            <option value="65">Só NFC-e</option>
-                        </select>
-                        <select
-                            className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-                            value={ambienteFilter}
-                            onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
-                        >
-                            <option value="todos">Todos os ambientes</option>
-                            <option value="homologacao">Só Homologação</option>
-                            <option value="producao">Só Produção</option>
-                        </select>
-                        <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
-                            <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-3">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                        <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <select
+                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                                value={tipoFilter}
+                                onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
+                            >
+                                <option value="todos">NF-e e NFC-e</option>
+                                <option value="55">Só NF-e</option>
+                                <option value="65">Só NFC-e</option>
+                            </select>
+                            <select
+                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                                value={ambienteFilter}
+                                onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
+                            >
+                                <option value="todos">Todos os ambientes</option>
+                                <option value="homologacao">Só Homologação</option>
+                                <option value="producao">Só Produção</option>
+                            </select>
+                            <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
+                                <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                            </Button>
+                            <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
+                                {filteredNotas.length} {filteredNotas.length === 1 ? 'nota' : 'notas'}
+                            </Badge>
+                        </div>
+                    </div>
+                    {/* Filtro de período + exportação em lote (Task 5, 2026-08-23) — a
+                        rota app/api/fiscal/exportar resolve as notas server-side só por
+                        storeId + este intervalo, nunca por uma lista mandada daqui. */}
+                    <div className="flex items-end gap-2 flex-wrap">
+                        <div>
+                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Inicial</label>
+                            <Input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Final</label>
+                            <Input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <Button variant="secondary" className="h-8 px-3 text-xs" onClick={handleExportPeriodo} isLoading={isExporting}>
+                            <Download size={14} className="mr-1.5" /> Exportar período
                         </Button>
-                        <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
-                            {filteredNotas.length} {filteredNotas.length === 1 ? 'nota' : 'notas'}
-                        </Badge>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
