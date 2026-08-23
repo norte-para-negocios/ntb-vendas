@@ -1098,15 +1098,25 @@ export const fetchOpenCashShift = async (storeId: string): Promise<CashShift | n
 // tanto no caminho feliz quanto sob concorrência real (unique_violation do
 // índice parcial), então este wrapper não precisa de try/catch pra esse
 // caso, só pra falha de rede/RPC em si.
+// operatorUserId é null pra conta universal (Critical #2 da revisão final,
+// ver supabase/migrations/052_frente_de_caixa_criticos.sql): universal_users
+// não tem linha em store_users, a FK de cash_shifts.operator_user_id
+// estourava (23503) sempre que ela tentava abrir turno — agora a coluna
+// aceita null e a function trata foreign_key_violation com mensagem legível
+// em vez de deixar o erro cru do Postgres subir. `notes` é usado nesse caso
+// pra guardar uma identificação legível do operador universal (a tabela já
+// existia, sem uso até então).
 export const openCashShift = async (
   storeId: string,
-  operatorUserId: string,
+  operatorUserId: string | null,
   openingFloat: number,
+  notes?: string,
 ): Promise<{ success: boolean; id?: string; message?: string }> => {
   const { data, error } = await supabase.rpc('open_cash_shift_secure', {
     p_store_id: storeId,
     p_operator_user_id: operatorUserId,
     p_opening_float: openingFloat,
+    p_notes: notes ?? null,
   });
   if (error) return { success: false, message: error.message };
   return data as { success: boolean; id?: string; message?: string };

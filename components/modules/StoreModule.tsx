@@ -3739,7 +3739,17 @@ const CaixaView: React.FC<{
         }
         setIsOpeningShift(true);
         try {
-            const result = await openCashShift(storeId, loggedUser.id, value);
+            // Critical #2 da revisão final (ver supabase/migrations/052_frente_de_caixa_criticos.sql):
+            // conta universal não tem linha em store_users, então loggedUser.id
+            // não é um id válido pra cash_shifts.operator_user_id — manda null
+            // e guarda a identificação legível em notes.
+            const isUniversal = loggedUser.role === 'universal';
+            const result = await openCashShift(
+                storeId,
+                isUniversal ? null : loggedUser.id,
+                value,
+                isUniversal ? `Aberto pela conta universal: ${loggedUser.name} (${loggedUser.email})` : undefined,
+            );
             if (result.success) {
                 toast.success('Caixa aberto.');
                 setOpeningFloat('');
