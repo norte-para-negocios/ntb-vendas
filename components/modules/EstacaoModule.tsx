@@ -549,10 +549,29 @@ export const EstacaoModule: React.FC = () => {
         const subtotal = items.reduce((acc, i) => acc + i.price_at_time * i.quantity, 0);
         const tableNumber = group[0].tables?.number ?? '?';
         const paymentDetails = group[0].payment_details as { total?: number; methods?: { method: string; amount: number; brand?: string | null }[] } | null | undefined;
+        // `total` ausente (null/undefined) sempre significou "usa o
+        // subtotal" — comportamento original, preservado. Um `total`
+        // PRESENTE mas não-numérico (string, objeto...) não é ausência, é
+        // dado corrompido — nesse caso não inventa um substituto (subtotal
+        // pode estar bem longe do que foi cobrado de verdade): lança, o que
+        // o catch do grupo (abaixo) converte em "este grupo falhou", sem
+        // nunca imprimir um total que ninguém pode garantir que é o real.
         const rawTotal = paymentDetails?.total;
-        const total = typeof rawTotal === 'number' && Number.isFinite(rawTotal)
-          ? rawTotal
-          : (Number.isFinite(Number(rawTotal)) ? Number(rawTotal) : subtotal);
+        let total: number;
+        if (rawTotal === null || rawTotal === undefined) {
+          total = subtotal;
+        } else if (typeof rawTotal === 'number' && Number.isFinite(rawTotal)) {
+          total = rawTotal;
+        } else {
+          throw new Error(`payment_details.total inválido (não numérico): ${JSON.stringify(rawTotal)}`);
+        }
+        // `methods` não-array (string, objeto...) já não pode ser
+        // confiável como lista de formas de pagamento — mas, ao contrário
+        // de `total`, existe uma reconstrução segura disponível: a coluna
+        // `payment_method` (enum validado, não jsonb arbitrário) já é o
+        // fallback usado quando `methods` está simplesmente ausente; usar o
+        // mesmo fallback aqui não inventa nenhum valor novo, só ignora o
+        // jsonb malformado em favor de um campo confiável do mesmo pedido.
         const rawMethods = paymentDetails?.methods;
         const methods = Array.isArray(rawMethods) && rawMethods.length > 0
           ? rawMethods
