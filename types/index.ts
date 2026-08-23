@@ -1,3 +1,5 @@
+import { StoreModules, OrderFlow } from '@/lib/storeModules';
+
 export enum UserRole {
   ADMIN = 'admin',
   OWNER = 'owner',
@@ -50,6 +52,14 @@ export interface Store {
     // no cardapio do cliente. undefined/false = nenhum badge aparece
     // (comportamento atual, sem mudanca).
     show_bestsellers?: boolean;
+    // Perfil de módulos por loja (Task 1, plano 2026-08-22). undefined =
+    // todos os módulos ligados e fluxo 'kds' — comportamento atual de todas
+    // as 6 lojas reais, nenhuma delas tem essa chave. Ver
+    // lib/storeModules.ts (resolveStoreModules/resolveOrderFlow) pra
+    // resolução com esse default; nunca ler config.modules/order_flow
+    // direto, sempre por essas funções.
+    modules?: Partial<StoreModules>;
+    order_flow?: OrderFlow;
   };
 }
 
@@ -60,6 +70,16 @@ export interface StoreUserPermissions {
   bar: boolean;
   menu: boolean;
   admin: boolean;
+  // Módulo Caixa (Task 4, plano 2026-08-22-perfis-de-loja-e-caixa). Ao
+  // contrário das 6 permissões acima (que já existem em todo store_user real
+  // hoje, com valor explícito true/false gravado no banco), esta é NOVA —
+  // nenhum store_user das 7 lojas reais tem esta chave. Por isso o código
+  // que lê `permissions.caixa` (lib/storeModules.ts, canFinalizeBill) usa
+  // comparação estrita (`=== true`), nunca o padrão permissivo
+  // (`!== false`) usado pras outras 6: ausência aqui PRECISA significar
+  // "não é caixa", senão qualquer garçom já cadastrado ganharia poder de
+  // finalizar pagamento sem ninguém ter concedido isso.
+  caixa?: boolean;
 }
 
 export interface StoreUser {

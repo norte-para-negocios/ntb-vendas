@@ -3,6 +3,7 @@ import './globals.css';
 import { AppProvider } from '@/context/AppContext';
 import { ToastViewport } from '@/components/Toast';
 import { ConfirmDialogRoot } from '@/components/ConfirmDialog';
+import { AlertDialogRoot } from '@/components/AlertDialog';
 import { THEME_INIT_SCRIPT } from '@/components/ThemeToggle';
 
 export const metadata: Metadata = {
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AppProvider>{children}</AppProvider>
         <ToastViewport />
         <ConfirmDialogRoot />
+        <AlertDialogRoot />
       </body>
     </html>
   );

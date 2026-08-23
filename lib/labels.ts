@@ -6,6 +6,13 @@ export const ROLE_LABELS: Record<string, string> = {
     attendant: 'Atendente',
     kitchen: 'Cozinha',
     bar: 'Bar',
+    // Módulo Caixa (Task 4, plano 2026-08-22-perfis-de-loja-e-caixa) — papel
+    // novo, além da permissão `caixa` em si (StoreUserPermissions). Um
+    // usuário pode ter role='cashier' com a permissão 'caixa' marcada, ou
+    // (menos comum) qualquer outro role com a permissão marcada à parte —
+    // o role aqui é só rótulo/organização, quem decide poder de finalizar é
+    // sempre a permissão (ver lib/storeModules.ts, canFinalizeBill).
+    cashier: 'Caixa',
 };
 
 export const getRoleLabel = (role: string): string => ROLE_LABELS[role] || role;
@@ -31,6 +38,23 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 export const getPaymentMethodLabel = (method?: string | null): string =>
     method ? (PAYMENT_METHOD_LABELS[method] || method) : 'Não especificado';
+
+// Bandeiras de cartão (Task 4, módulo Caixa) — catálogo fechado, mesmo
+// princípio de PRODUCT_TAGS abaixo: evita texto livre no comprovante
+// impresso (que já é obrigado a escapar campo livre, ver lib/print.ts) e
+// mantém consistência visual no modal de pagamento e no relatório de vendas.
+// Só se aplica a CREDIT/DEBIT — PIX/CASH/COURTESY nunca têm bandeira.
+export const CARD_BRAND_LABELS: Record<string, string> = {
+    visa: 'Visa',
+    mastercard: 'Mastercard',
+    elo: 'Elo',
+    amex: 'Amex',
+    hipercard: 'Hipercard',
+    outro: 'Outra',
+};
+
+export const getCardBrandLabel = (brand?: string | null): string =>
+    brand ? (CARD_BRAND_LABELS[brand] || brand) : '';
 
 // Catalogo fixo de etiquetas/badges de produto (migration 019). Armazenado
 // como products.tags (text[]) com essas chaves; a UI (lojista e cliente) so'

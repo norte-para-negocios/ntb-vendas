@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
+import { StoreModules, OrderFlow, PrintTarget, isDefaultStoreModules } from '@/lib/storeModules';
 
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
@@ -677,10 +678,68 @@ export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: 
   return { total: Number((data as any).total) || 0, items: (data as any).items || [] };
 };
 
-export const fetchKitchenOrders = async (storeId: string, destination: 'kitchen' | 'bar' = 'kitchen'): Promise<OrderItem[]> => {
+// Fix round 2 (Group B1): `onError` é opcional e aditivo — todo call site
+// existente (KdsView etc.) continua recebendo `[]` em silêncio, exatamente
+// como sempre foi. Só a Estação de Impressão passa este callback: é o único
+// consumidor que precisa DISTINGUIR "0 pedidos pendentes" de "a chamada
+// falhou" — sem isso, uma RPC persistentemente falhando fica indistinguível
+// de uma cozinha em dia (a estação continuava avançando `lastReconcileAt` e
+// mostrando o banner verde de conexão, que reflete só o websocket do
+// Realtime, um subsistema separado do REST/RPC que este fetch usa).
+export const fetchKitchenOrders = async (
+  storeId: string,
+  destination: 'kitchen' | 'bar' = 'kitchen',
+  onError?: (error: unknown) => void,
+): Promise<OrderItem[]> => {
   const { data, error } = await supabase.rpc('fetch_kitchen_orders_secure', { p_store_id: storeId, p_destination: destination });
-  if (error) { console.error('Kitchen fetch error:', error); return []; }
+  if (error) { console.error('Kitchen fetch error:', error); onError?.(error); return []; }
   return (data as any) || [];
+};
+
+// Task 3 (2026-08-22, Estação de Impressão) — mesmo canal/tabela de ping já
+// usado por KdsView/CounterView/TablesView (order_change_pings, filtrado por
+// store_id via migration 029 — ver comentário lá pro porquê de existir uma
+// tabela de ping sem dado sensível em vez de assinar orders/order_items
+// direto: RLS bloqueia SELECT nessas duas desde 022, e o Realtime só entrega
+// postgres_changes pra quem teria visibilidade via RLS). Extraído pra cá (em
+// vez de repetir supabase.channel(...) inline mais uma vez dentro do
+// componente da estação) só porque a estação também precisa reportar o
+// STATUS da conexão pra tela (Passo 3 do brief: "conectada ou não" tem que
+// ficar óbvio) — nenhum dos consumidores existentes (KdsView/CounterView/
+// TablesView) precisava disso, só chamavam .subscribe() sem callback.
+//
+// IMPORTANTE: order_change_pings não tem destino (cozinha/bar/caixa) — o
+// filtro por destino é feito depois, no client, ao decidir o que imprimir
+// (fetchKitchenOrders(storeId, 'kitchen'|'bar') já filtra isso). Esta
+// assinatura é só "algo mudou nesta loja, hora X" — o mesmo ping que já
+// aciona loadOrders(true) no KdsView aciona a reconciliação da estação.
+//
+// `onStatusChange` reflete o status bruto do canal Supabase Realtime
+// ('SUBSCRIBED'|'CLOSED'|'CHANNEL_ERROR'|'TIMED_OUT'|...), simplificado em 3
+// estados: 'connecting' (estado inicial/reconectando), 'connected'
+// (SUBSCRIBED), 'disconnected' (qualquer falha). A estação NÃO confia só
+// nisso pra decidir se perdeu pedido — reconcilia contra o servidor
+// (fetchKitchenOrders) em intervalo fixo e em todo reconnect/foco de aba,
+// independente do que este status disser (ver EstacaoModule.tsx). O status
+// aqui é só pra exibir "conectada"/"sem conexão" na tela, não é a garantia
+// de entrega.
+export type StoreOrdersConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
+export const subscribeToStoreOrderChanges = (
+  storeId: string,
+  onChange: () => void,
+  onStatusChange?: (status: StoreOrdersConnectionStatus) => void,
+): (() => void) => {
+  const channel = supabase
+    .channel(`estacao_${storeId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, onChange)
+    .subscribe((status) => {
+      if (!onStatusChange) return;
+      if (status === 'SUBSCRIBED') onStatusChange('connected');
+      else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onStatusChange('disconnected');
+      else onStatusChange('connecting');
+    });
+  return () => { supabase.removeChannel(channel); };
 };
 
 export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
@@ -689,13 +748,21 @@ export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
   return (data as any) || [];
 };
 
-export const fetchSalesHistory = async (storeId: string, startDate?: string, endDate?: string): Promise<Order[]> => {
+// Fix round 2 (Group B1): mesmo princípio do `onError` opcional em
+// fetchKitchenOrders acima — a Estação de Impressão (destino 'caixa') é o
+// único consumidor que precisa saber se a RPC falhou, não só receber `[]`.
+export const fetchSalesHistory = async (
+  storeId: string,
+  startDate?: string,
+  endDate?: string,
+  onError?: (error: unknown) => void,
+): Promise<Order[]> => {
   const { data, error } = await supabase.rpc('fetch_sales_history_secure', {
     p_store_id: storeId,
     p_start_date: startDate || null,
     p_end_date: endDate || null,
   });
-  if (error) { console.error('Fetch Sales History Error', error); return []; }
+  if (error) { console.error('Fetch Sales History Error', error); onError?.(error); return []; }
   return (data as any) || [];
 };
 
@@ -727,10 +794,53 @@ export const sendOrderToKitchen = async (orderId: string) => {
   if (error) throw error;
 };
 
+// Task 5 (2026-08-22, plano perfis-de-loja-e-caixa — fecha o gap do
+// Balcão): `paymentData` é novo e opcional — aditivo, todo call site
+// existente que só passava `destinatario` continua funcionando idêntico
+// (ver StoreModule.tsx `closeOrderNow`, que sempre manda `undefined`
+// explícito na posição de `paymentData` quando a loja não tem o módulo
+// Caixa ligado; a guarda `if (paymentData)` abaixo então nunca dispara pras
+// 7 lojas reais de hoje).
+//
+// Por que isto não é uma RPC nova (restrição explícita do plano — "no
+// migration, no column, no RPC"): `close_counter_order_secure` só grava
+// status; `close_table_orders_secure` grava payment_method/payment_details
+// mas filtra `where table_id = p_table_id`, e pedido de balcão nasce com
+// `table_id = null` (`create_order_secure`, `p_table_id: null` quando
+// `isCounter`) — `table_id = null` nunca bate em `p_table_id = null` no
+// SQL (NULL = NULL não é true), então não dá pra reaproveitar essa RPC
+// passando null. `orders` não tem SELECT/UPDATE público pra `anon` desde a
+// correção de segurança de 021/022 (ver AGENTS.md), e não existe nenhuma
+// outra RPC que escreva payment_method/payment_details por `order_id`. A
+// saída, sem tocar em schema/RPC, é o mesmo padrão já usado pra
+// certificado fiscal e Ordem de Produção: uma rota de servidor com a
+// service role key (`app/api/orders/pagamento-balcao`, ver lá o porquê
+// completo) escrevendo direto na tabela, ignorando RLS.
+//
+// Ordem importa: o pagamento é gravado ANTES do RPC que marca
+// 'delivered'. Se a gravação do pagamento falhar, o pedido continua aberto
+// (não vira "fechado sem registrar nada") — o operador tenta de novo. Se a
+// gravação funcionar mas o RPC de status falhar depois, o pedido fica com
+// pagamento já registrado mas ainda não 'delivered' — reabrir "Entregar"
+// de novo reenvia o mesmo paymentData (idempotente, sem risco de cobrança
+// duplicada) e tenta fechar de novo.
 export const closeCounterOrder = async (
   orderId: string,
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
+  if (paymentData) {
+    const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
+    const res = await fetch('/api/orders/pagamento-balcao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+    }
+  }
   const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
   if (error) throw error;
   triggerOrdemProducao({ orderId });
@@ -877,7 +987,15 @@ export const cancelPendingTableItems = async (tableId: string) => {
 
 export const closeTableSession = async (
   tableId: string,
-  paymentData?: { total: number; methods: { method: string; amount: number }[] },
+  // Fix round 2 (Group A3): `brand` faltava neste tipo declarado — o
+  // valor sempre chegou até o banco porque o argumento real passado por
+  // StoreModule.tsx (paymentMethods, ver seu próprio useState) já tem
+  // `brand?: string`, e TypeScript não aplica excess-property checking
+  // quando o valor vem de uma variável (só em objeto literal inline).
+  // Sem declarar aqui, um refactor futuro que trocasse o call site por
+  // um literal (ex.: `{ total, methods: [{method, amount}] }`) perderia
+  // a bandeira do cartão silenciosamente, sem nenhum erro de tipo.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
   try {
@@ -1181,7 +1299,48 @@ export interface CreateStoreParams {
   logoUrl?: string | null;
   coverUrl?: string | null;
   serviceFeeRate: number;
+  // Perfil de módulos por loja (Task 1, plano 2026-08-22). Sempre o perfil
+  // completo escolhido no formulário (AdminModule.tsx) — createStore/
+  // updateStore são quem decide se isso vira `config.modules`/
+  // `config.order_flow` de verdade (só quando difere do default "tudo
+  // ligado + kds", ver isDefaultStoreModules em lib/storeModules.ts). Uma
+  // loja criada/editada sem tocar nesta seção nunca ganha essas chaves.
+  modules?: StoreModules;
+  orderFlow?: OrderFlow;
+  // Fix round 1 (correção de design, plano 2026-08-22): destino da impressão
+  // do ticket em `order_flow === 'direct_print'` — 'device' (default, mesmo
+  // comportamento que a Task 2 já entregou) ou 'station' (a Estação de
+  // Impressão da Task 3 é quem imprime; o aparelho do garçom não imprime
+  // nada, pra não sair duplicado). Ver lib/storeModules.ts (resolvePrintTarget).
+  printTarget?: PrintTarget;
 }
+
+// Perfil de módulos por loja (Task 1): decide se `params.modules`/
+// `params.orderFlow`/`params.printTarget` viram `config.modules`/
+// `config.order_flow`/`config.print_target` de verdade. Nunca grava o
+// default explícito (tudo ligado + 'kds' + 'device') — ausência de chave já
+// significa isso (ver lib/storeModules.ts) — e remove a chave de um config
+// existente se o admin editar uma loja de volta pro default (senão
+// "desfazer" a customização no formulário nunca desfaria no banco).
+const applyModulesConfigFields = (config: Record<string, any>, params: CreateStoreParams): Record<string, any> => {
+  const next = { ...config };
+  if (params.modules && !isDefaultStoreModules(params.modules)) {
+    next.modules = params.modules;
+  } else {
+    delete next.modules;
+  }
+  if (params.orderFlow === 'direct_print') {
+    next.order_flow = 'direct_print';
+  } else {
+    delete next.order_flow;
+  }
+  if (params.printTarget === 'station') {
+    next.print_target = 'station';
+  } else {
+    delete next.print_target;
+  }
+  return next;
+};
 
 export const createStore = async (params: CreateStoreParams): Promise<{ success: boolean; message?: string; storeId?: string }> => {
   try {
@@ -1191,7 +1350,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
         cover_url: params.coverUrl || null,
-        config: { use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate },
+        config: applyModulesConfigFields({ use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate }, params),
       })
       .select()
       .single();
@@ -1252,9 +1411,10 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
 export const updateStore = async (id: string, params: CreateStoreParams): Promise<{ success: boolean; message?: string }> => {
   try {
-    // Busca o config atual pra só sobrescrever service_fee_rate, sem apagar
-    // outras flags (use_pin, allow_client_open, require_pin_for_open,
-    // charge_service_fee) que o lojista já pode ter configurado.
+    // Busca o config atual pra só sobrescrever service_fee_rate (e o perfil
+    // de módulos, ver applyModulesConfigFields), sem apagar outras flags
+    // (use_pin, allow_client_open, require_pin_for_open, charge_service_fee)
+    // que o lojista já pode ter configurado.
     const { data: current } = await supabase.from('stores').select('config').eq('id', id).single();
     const { error } = await supabase
       .from('stores')
@@ -1262,7 +1422,7 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
         cover_url: params.coverUrl,
-        config: { ...(current?.config || {}), service_fee_rate: params.serviceFeeRate },
+        config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate }, params),
       })
       .eq('id', id);
 
