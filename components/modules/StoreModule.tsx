@@ -11,7 +11,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -1985,15 +1985,35 @@ NOTIFY pgrst, 'reload schema';`;
                 return;
             }
 
+            // Task 2 (2026-08-23, plano frente-de-caixa) — "sem caixa
+            // aberto, não recebe pagamento": só entra em jogo quando a loja
+            // tem o módulo caixa ligado (o `if` inteiro nunca executa pras
+            // 7 lojas reais de hoje, que resolvem `caixa: false`). Regra do
+            // banco é um único turno aberto POR LOJA (não por operador —
+            // ver migration 051), então basta checar se existe algum;
+            // quem abriu não precisa ser quem está finalizando agora.
+            let cashShiftId: string | undefined;
+            if (resolveStoreModules(store).caixa) {
+                const openShift = await fetchOpenCashShift(store.id);
+                if (!openShift) {
+                    toast.error('Nenhum turno de caixa aberto. Abra o caixa antes de receber pagamentos.');
+                    return;
+                }
+                cashShiftId = openShift.id;
+            }
+
             // Task 4: `emitir_nota` só entra no payload quando a loja tem
             // emissão automática configurada — pra loja sem isso, o objeto
             // fica idêntico ao de sempre (sem a chave), então
             // payment_details.emitir_nota nunca existe pras 7 lojas reais
             // de hoje. Ver early-exit em app/api/fiscal/emitir/route.ts.
+            // Task 2: `cash_shift_id` idem — só presente quando o módulo
+            // caixa está ligado (ver bloco acima).
             const paymentData = {
                 total: summary.total,
                 methods: paymentMethods,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
+                ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
 
             // Destinatário (Task 17) — opcional mesmo em modelo NF-e; deixado
@@ -3245,12 +3265,26 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                 return;
             }
 
+            // Task 2 (frente-de-caixa) — mesma trava de TablesView.handleFinishPayment,
+            // ver comentário lá pro porquê completo.
+            let cashShiftId: string | undefined;
+            if (resolveStoreModules(store).caixa) {
+                const openShift = await fetchOpenCashShift(store.id);
+                if (!openShift) {
+                    toast.error('Nenhum turno de caixa aberto. Abra o caixa antes de receber pagamentos.');
+                    return;
+                }
+                cashShiftId = openShift.id;
+            }
+
             // Task 4: mesmo princípio de TablesView — a chave só entra no
             // payload quando a loja tem emissão automática configurada.
+            // Task 2: `cash_shift_id` idem — ver bloco acima.
             const paymentData = {
                 total,
                 methods: paymentMethods,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
+                ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
             const destinatario = buildDestinatario(destCpfCnpj, destNome);
             await closeOrderNow(paymentOrder.id, paymentData, destinatario);

@@ -862,7 +862,12 @@ export const closeCounterOrder = async (
   // por app/api/fiscal/emitir/route.ts ANTES de qualquer trabalho real de
   // emissão. Ausente (todo call site de hoje, toda loja sem o toggle
   // renderizado) = comportamento idêntico ao de sempre, emite normal.
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean },
+  // Task 2 (2026-08-23, plano frente-de-caixa): `cash_shift_id` idem —
+  // opcional, só presente quando a loja tem o módulo caixa ligado (ver
+  // StoreModule.tsx, handleFinishCounterPayment). Usado por
+  // _cash_shift_expected_cash/fetch_cash_shift_summary_secure (migration
+  // 051) pra somar o dinheiro entrado num turno.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
   if (paymentData) {
@@ -1032,7 +1037,8 @@ export const closeTableSession = async (
   // um literal (ex.: `{ total, methods: [{method, amount}] }`) perderia
   // a bandeira do cartão silenciosamente, sem nenhum erro de tipo.
   // Task 4: idem closeCounterOrder acima — `emitir_nota` é novo e opcional.
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean },
+  // Task 2 (frente-de-caixa): idem `cash_shift_id`, ver closeCounterOrder.
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
   try {
@@ -1057,6 +1063,32 @@ export const closeTableSession = async (
   } catch (e: any) {
     return { success: false, message: e.message || 'Erro desconhecido.' };
   }
+};
+
+// Frente de Caixa (Task 2, plano 2026-08-23-frente-de-caixa; RPC criada na
+// Task 1, migration 051). Regra do banco é "um turno aberto por vez, por
+// loja" (índice parcial único em cash_shifts) — por isso a RPC só pede
+// store_id, não operador: só pode existir um turno pra achar. Devolve
+// `null` quando não há nenhum turno aberto (estado normal enquanto ninguém
+// abriu o caixa ainda). Usado por handleFinishPayment (mesa) e
+// handleFinishCounterPayment (balcão) em StoreModule.tsx pra bloquear
+// pagamento sem caixa aberto quando `resolveStoreModules(store).caixa`.
+export interface CashShift {
+  id: string;
+  store_id: string;
+  operator_user_id: string;
+  opened_at: string;
+  closed_at: string | null;
+  opening_float: number;
+  closing_counted_cash: number | null;
+  status: 'open' | 'closed';
+  notes: string | null;
+}
+
+export const fetchOpenCashShift = async (storeId: string): Promise<CashShift | null> => {
+  const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId });
+  if (error || !data) return null;
+  return data as CashShift;
 };
 
 export const toggleTableBlock = async (tableId: string, _currentStatus: TableStatus) => {
