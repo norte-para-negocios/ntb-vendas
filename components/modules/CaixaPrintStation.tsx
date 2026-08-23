@@ -57,7 +57,18 @@
 // auto-impresso aqui (pode já ter sido impresso por outra sessão), mas
 // continua listado em "Pedidos do Dia" (`TablesView.sentHistoryItems`,
 // StoreModule.tsx) com um botão manual "Reimprimir" — nunca fica invisível,
-// só para de ser reimpresso às cegas.
+// só para de ser reimpresso às cegas. Esse botão manual, por sua vez, só é
+// oferecido no aparelho de caixa de verdade (Critical #2 da revisão de
+// branch 2026-08-23, ver `isCaixaRole`/`canReprint` em StoreModule.tsx) —
+// nunca a um garçom, que não teria como saber se `window.print()` "com
+// sucesso" imprimiu algo real. **Correção de relógio (mesma revisão,
+// Critical #2 — "activation cutoff trusts the device's clock, not the
+// server's")**: `activatedAt` nascia de `new Date()`, o relógio do
+// APARELHO, mas é comparado contra `created_at`, que vem do relógio do
+// SERVIDOR (Postgres) — um aparelho com o relógio adiantado excluía pedidos
+// legítimos do auto-print sem avisar ninguém. Ver ACTIVATION_SAFETY_MARGIN_MS
+// abaixo pro fix e o porquê da escolha (margem fixa, não "maior created_at
+// devolvido pelo servidor").
 //
 // O QUE NÃO FOI PORTADO (decisão consciente, não esquecimento): o station
 // original também reconciliava PEDIDOS FECHADOS (comprovante de conta paga,
@@ -105,6 +116,39 @@ const MAX_AUTO_RETRIES = 3;
 // passageiro de rede não precisa virar alarme, mas falhas seguidas do
 // backstop de 10s já somam tempo suficiente pra não ser ruído.
 const RECONCILE_FAILURE_ALERT_THRESHOLD = 2;
+// Corte de ativação (Critical #2, revisão de branch 2026-08-23 — "activation
+// cutoff trusts the device's clock, not the server's"): `activatedAtRef`
+// nasce de `new Date()` (relógio do APARELHO do caixa), mas é comparado
+// contra `it.created_at`, que vem do Postgres (relógio do SERVIDOR). Um
+// tablet barato ou celular com hora errada adiantado alguns minutos em
+// relação ao banco faz TODO pedido criado nesse intervalo, no exato momento
+// em que a sessão nova monta, ser silenciosamente excluído do auto-print —
+// sem alarme nenhum (o indicador só acende por falha de fetch/conexão/
+// impressão, e "pulei um item por corte" parece idêntico a "fila vazia").
+// Corrigido subtraindo uma margem de segurança fixa do instante do
+// aparelho antes de usá-lo como corte, em vez de confiar cegamente no
+// relógio local. Descarta a alternativa "usar o maior created_at devolvido
+// pelo servidor na primeira reconciliação como corte": ela tem um problema
+// de ovo-e-galinha real aqui — a primeira reconciliação desta sessão
+// PRECISA de algum corte pra decidir o que imprimir automaticamente antes
+// mesmo dela existir um `created_at` de referência (sessão nova sem pedido
+// nenhum na fila, por exemplo), então sempre sobra ou (a) não imprimir nada
+// no primeiro fetch até ter uma referência — reabre exatamente o "backlog
+// spew" que o corte existe pra evitar — ou (b) usar `Date.now()` mesmo,
+// mantendo o bug original. A margem fixa evita esse impasse e o efeito
+// colateral (imprimir de novo um item que talvez outra sessão já tenha
+// impresso nesses minutos) é o erro aceitável: um ticket duplicado é
+// recuperável (jogar fora), um pedido nunca impresso não é.
+const ACTIVATION_SAFETY_MARGIN_MS = 5 * 60 * 1000;
+
+// Ver ACTIVATION_SAFETY_MARGIN_MS acima pro porquê: `activatedAtRef` nunca
+// deve ser o instante cru do aparelho (relógio local != relógio do
+// servidor, que é quem gera `created_at`) — sempre alguns minutos ANTES
+// dele, pra absorver adiantamento de relógio sem reabrir o "backlog spew"
+// que o corte de ativação existe pra evitar.
+function activationCutoffNow(): string {
+  return new Date(Date.now() - ACTIVATION_SAFETY_MARGIN_MS).toISOString();
+}
 
 function printedIdsKey(storeId: string, destination: Destination) {
   return `${STORAGE_PREFIX}_impressos_${storeId}_${destination}`;
@@ -247,6 +291,21 @@ async function reconcileDestination(
   let fetchFailed = false;
   const items = await fetchKitchenOrders(storeId, destination, () => { fetchFailed = true; });
   const printedIds = printedIdsRef.current[destination];
+  // Achado da revisão de branch 2026-08-23 (disclosed, não Critical, mas
+  // acknowledged de propósito — "same-browser double-tab printing"):
+  // `printedIdsRef` era carregado do localStorage só UMA vez, no mount
+  // (efeito de `store?.id` acima). Duas abas do MESMO navegador no MESMO
+  // aparelho de caixa (uma aba duplicada por acidente) cada uma mantinha o
+  // próprio Set em memória, nunca via o que a outra aba já tinha marcado —
+  // e cada uma reconciliava/imprimia o MESMO pedido a cada passada, pro
+  // resto do turno inteiro (não uma corrida rara de um item só: durável,
+  // todo item, enquanto as duas abas ficarem abertas). Corrigido relendo o
+  // localStorage aqui, a cada reconciliação (a cada 10s de backstop e a
+  // cada evento Realtime — já rodava com essa frequência de qualquer
+  // forma), e mesclando no Set em memória ANTES de decidir o que imprimir:
+  // um id que a aba irmã já persistiu aparece aqui na próxima passada, sem
+  // esperar reload/F5.
+  loadPrintedIds(storeId, destination).forEach((id) => printedIds.add(id));
   const activatedAtMs = new Date(activatedAt).getTime();
   // Corte de ativação (Critical #1, ver cabeçalho do arquivo): item criado
   // ANTES do mount desta sessão não é auto-impresso aqui — pode já ter sido
@@ -340,13 +399,14 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
   const reconcileLockRef = useRef(false);
   const reconcileFailStreakRef = useRef(0);
   const storeRef = useRef<Store | null>(null);
-  // Corte de ativação desta sessão (Critical #1) — hora do mount, recarregada
-  // junto com o dedupe sempre que a loja muda (mesmo efeito abaixo). Um
-  // `Date.now()` de fallback nunca deveria ser lido de verdade (o efeito
-  // abaixo roda antes do primeiro `reconcile()` sempre que `store` já existe
-  // no mount), mas existe pra nunca deixar a comparação de corte comparar
-  // contra `null`/`NaN` num cenário inesperado.
-  const activatedAtRef = useRef<string>(new Date().toISOString());
+  // Corte de ativação desta sessão (Critical #1, corrigido pro Critical #2 —
+  // ver ACTIVATION_SAFETY_MARGIN_MS acima) — hora do mount MENOS a margem de
+  // segurança, recarregada junto com o dedupe sempre que a loja muda (mesmo
+  // efeito abaixo). Um `Date.now()` de fallback nunca deveria ser lido de
+  // verdade (o efeito abaixo roda antes do primeiro `reconcile()` sempre que
+  // `store` já existe no mount), mas existe pra nunca deixar a comparação de
+  // corte comparar contra `null`/`NaN` num cenário inesperado.
+  const activatedAtRef = useRef<string>(activationCutoffNow());
 
   // Recarrega o dedupe (localStorage) sempre que a loja muda — cobre tanto
   // "loja resolveu depois do login" quanto "conta universal trocou de loja".
@@ -360,7 +420,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       kitchen: loadPrintedIds(store.id, 'kitchen'),
       bar: loadPrintedIds(store.id, 'bar'),
     };
-    activatedAtRef.current = new Date().toISOString();
+    activatedAtRef.current = activationCutoffNow();
     failedRef.current = new Map();
     setFailedItemsState(new Map());
   }, [store?.id]);
