@@ -1095,7 +1095,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
             </div>
 
             <div className="flex-1 overflow-y-auto py-2">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {filteredProducts.map(product => (
                     <Card key={product.id} onClick={() => setSelectedProduct(product)} className="flex flex-col gap-2 p-2 cursor-pointer hover:border-[var(--brand)] transition-colors">
                         {product.image_url ? (
@@ -2599,7 +2599,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <h3 className="font-bold text-[var(--text)] flex items-center gap-2"><UtensilsCrossed size={18}/> Cardápio</h3>
                                 <Button variant="ghost" size="sm" onClick={() => setShowMenuMode(false)} className="underline">Voltar</Button>
                             </div>
-                            <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] h-[400px]">
+                            <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] h-[70vh]">
                                 <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
                             </div>
                         </div>
