@@ -207,7 +207,20 @@ interface FailedEntry {
 // o app normalmente (inclusive "Pedidos do Dia", que não depende desta
 // função) e podem imprimir manualmente lá se precisar, mas não rodam a
 // reconciliação em segundo plano sozinhos só por terem aberto a tela.
+//
+// Achado ao vivo (mesma revisão, verificação com chrome-devtools): checar só
+// `permissions?.caixa === true` NÃO bastava. `universalPermissionsFor`
+// (StoreModule.tsx) monta o objeto `permissions` sintético de uma conta
+// universal com `caixa: modules.caixa` — ou seja, espelha se a LOJA tem o
+// módulo Caixa ligado, não se ESTE usuário é operador de caixa. Numa loja
+// com `modules.caixa: true` (ex.: a Sertão), isso fazia TODA conta
+// universal logar já com `permissions.caixa === true`, reabrindo
+// exatamente o buraco que este fix existe pra fechar. `role` explícito
+// (nunca 'owner'/'universal') é o que realmente distingue "operador de
+// caixa de carne e osso, com a permissão marcada pelo Master Admin" de
+// "qualquer conta universal, nesta loja específica".
 function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
+  if (user.role === 'owner' || user.role === 'universal') return false;
   return user.permissions?.caixa === true;
 }
 
