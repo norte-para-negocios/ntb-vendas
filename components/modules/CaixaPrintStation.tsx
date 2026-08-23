@@ -14,14 +14,23 @@
 //
 // O QUE ESTE ARQUIVO FAZ: roda em segundo plano, dentro da sessão normal do
 // caixa (montado em `StoreLayout`, sobrevive à troca de aba Mesas↔Balcão),
-// pra cobrir os 2 caminhos que HOJE não têm "aparelho próprio" pra imprimir
-// no momento em que o pedido é criado — o autoatendimento do cliente via QR
-// e o Balcão. O caminho do garçom lançando manualmente (`TablesView.
-// handleAddItem`, Task 2) já imprime na hora, na mesma sessão que criou o
-// pedido, e CONTINUA assim, sem mudança nenhuma — não duplicado aqui porque
-// esses itens são gravados com `added_by_role: 'garcom'`
-// (`order_items.added_by_role`, migration 046) e a reconciliação abaixo
-// ignora esse valor de propósito (ver `reconcileDestination`).
+// pra cobrir TODOS os caminhos que não têm "aparelho próprio" pra imprimir
+// no momento em que o pedido é criado — autoatendimento do cliente via QR,
+// Balcão, e (desde a revisão crítica de 2026-08-23, ver abaixo) também o
+// garçom.
+//
+// Revisão crítica 2026-08-23 ("waiter-launched orders print nowhere real,
+// silently"): até aqui, o pedido lançado pelo garçom (`TablesView.
+// handleAddItem`) tentava imprimir na hora, no PRÓPRIO aparelho do garçom —
+// e essa reconciliação ignorava esses itens de propósito (`added_by_role
+// !== 'garcom'`), assumindo que já tinham sido tratados. Confirmado direto
+// com o dono: o celular do garçom NÃO tem acesso à impressora de rede da
+// cozinha — só o aparelho do Caixa tem. `window.print()` "tinha sucesso" no
+// aparelho do garçom mesmo sem nenhuma impressora configurada ali, e o
+// pedido nunca chegava na cozinha, sem avisar ninguém. Correção, nos dois
+// lados: `handleAddItem` parou de tentar imprimir (o pedido continua criado
+// exatamente como antes), e o filtro `added_by_role !== 'garcom'` abaixo foi
+// removido — item de garçom agora recebe o MESMO tratamento de QR/Balcão.
 //
 // GARANTIA CENTRAL (herdada do EstacaoModule.tsx original, ver git log
 // daquele arquivo pro histórico completo de revisão): uma cozinha nunca pode
@@ -31,6 +40,24 @@
 // impressão —, distinção entre "fila genuinamente vazia" e "a própria
 // chamada ao servidor falhou") é uma resposta direta a uma forma real de
 // isso acontecer, já encontrada e corrigida no station original.
+//
+// CORTE DE ATIVAÇÃO (`activatedAt`, adicionado na revisão crítica de
+// 2026-08-23 — "missing activation cutoff makes backlog-spew deterministic"):
+// `fetch_kitchen_orders_secure` devolve TODO item não-`delivered`/`canceled`
+// da loja, sem nenhum corte de tempo (migration 021) — numa loja
+// `direct_print`, nada além de FECHAR A MESA avança esse status, então numa
+// sessão de caixa nova (outro celular, aba anônima, localStorage limpo, o
+// dono ou a conta universal abrindo o painel pra checar algo) o único freio
+// contra reimprimir tudo de novo é o dedupe local (`printedIds`), que é
+// vazio nessa sessão. Sem corte, a PRIMEIRA reconciliação dessa sessão nova
+// reimprimiria cada item ainda aberto do turno inteiro — não é uma corrida
+// rara, é determinístico. `activatedAt` (hora do mount desta sessão,
+// recarregado junto com `printedIds` sempre que a loja muda) resolve isso
+// sem imprimir menos: item criado ANTES da ativação desta sessão não é
+// auto-impresso aqui (pode já ter sido impresso por outra sessão), mas
+// continua listado em "Pedidos do Dia" (`TablesView.sentHistoryItems`,
+// StoreModule.tsx) com um botão manual "Reimprimir" — nunca fica invisível,
+// só para de ser reimpresso às cegas.
 //
 // O QUE NÃO FOI PORTADO (decisão consciente, não esquecimento): o station
 // original também reconciliava PEDIDOS FECHADOS (comprovante de conta paga,
@@ -113,6 +140,47 @@ export function wasKitchenTicketPrinted(storeId: string, destination: 'kitchen' 
   return loadPrintedIds(storeId, destination).has(itemId);
 }
 
+// Reimpressão manual de um item específico, usada por "Pedidos do Dia"
+// (TablesView, StoreModule.tsx) pra dar um jeito de recuperar, com um toque
+// humano, qualquer item que a reconciliação automática não imprimiu sozinha
+// — o caso mais comum sendo item criado ANTES do corte de ativação desta
+// sessão (`activatedAt`, ver cabeçalho do arquivo), mas serve pra qualquer
+// item marcado "sem registro" na lista, seja qual for o motivo. Faz as duas
+// coisas que a reconciliação automática faz por item: imprime E, se der
+// certo, marca no MESMO dedupe local (`printedIds`) que a reconciliação usa
+// — assim um reimpresso manualmente não volta a ser candidato automático na
+// próxima passada.
+export async function printPendingKitchenTicket(params: {
+  storeId: string;
+  storeName: string;
+  destination: 'kitchen' | 'bar';
+  itemId: string;
+  orderId: string;
+  tableNumber: number | string;
+  quantity: number;
+  productName: string;
+  addons?: string;
+  observation?: string;
+}): Promise<boolean> {
+  const ok = await printKitchenTicket({
+    kind: params.destination === 'bar' ? 'BAR' : 'COZINHA',
+    storeName: params.storeName,
+    orderType: 'MESA',
+    identifier: `MESA ${params.tableNumber}`,
+    quantity: params.quantity,
+    productName: params.productName,
+    addons: params.addons,
+    observation: params.observation,
+    orderIdShort: params.orderId.slice(0, 8),
+  });
+  if (ok) {
+    const ids = loadPrintedIds(params.storeId, params.destination);
+    ids.add(params.itemId);
+    savePrintedIds(params.storeId, params.destination, ids);
+  }
+  return ok;
+}
+
 function ticketDescription(item: OrderItem): string {
   const orderType = item.order?.order_type;
   const tableNumber = item.order?.tables?.number;
@@ -127,21 +195,27 @@ interface FailedEntry {
   retry: () => Promise<boolean>;
 }
 
-// `caixa-permission`: dono/universal sempre contam (mesmo bypass já usado em
-// canFinalizeBill, lib/storeModules.ts) — quem realmente decide se este
-// mecanismo roda numa loja SEM módulo Caixa configurado (as 7 lojas reais de
-// hoje) é `resolveOrderFlow(store) === 'direct_print'`, que nenhuma delas
-// tem. Um garçom comum (sem a permissão `caixa`) NUNCA ativa isto, mesmo
-// numa loja em direct_print — só o(s) operador(es) de caixa (ou dono/
-// universal testando) rodam a reconciliação em segundo plano.
+// Revisão crítica 2026-08-23 (Important #I1 — "restrict the auto-print loop
+// itself to caixa === true"): ANTES, dono/universal sempre contavam aqui
+// (mesmo bypass usado em canFinalizeBill, lib/storeModules.ts) — quem
+// decidia se o mecanismo rodava era só `resolveOrderFlow(store) ===
+// 'direct_print'`. Problema real: dono/universal abrindo o painel do Caixa
+// só pra checar algo, num aparelho qualquer (sem impressora de cozinha
+// nenhuma configurada nele), disparava `window.print()` sozinho, sem gesto
+// nenhum pedindo isso. Corrigido: só quem tem a permissão `caixa` marcada de
+// verdade dispara o LOOP de auto-impressão — dono/universal continuam vendo
+// o app normalmente (inclusive "Pedidos do Dia", que não depende desta
+// função) e podem imprimir manualmente lá se precisar, mas não rodam a
+// reconciliação em segundo plano sozinhos só por terem aberto a tela.
 function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
-  return user.role === 'owner' || user.role === 'universal' || user.permissions?.caixa === true;
+  return user.permissions?.caixa === true;
 }
 
 async function reconcileDestination(
   storeId: string,
   destination: Destination,
   storeName: string,
+  activatedAt: string,
   printedIdsRef: React.MutableRefObject<Record<Destination, Set<string>>>,
   failedRef: React.MutableRefObject<Map<string, FailedEntry>>,
   setFailedItems: (m: Map<string, FailedEntry>) => void,
@@ -149,12 +223,17 @@ async function reconcileDestination(
   let fetchFailed = false;
   const items = await fetchKitchenOrders(storeId, destination, () => { fetchFailed = true; });
   const printedIds = printedIdsRef.current[destination];
-  // `added_by_role !== 'garcom'` é o que impede duplicar o ticket que
-  // TablesView.handleAddItem já imprimiu na hora, na sessão de quem lançou
-  // (garçom OU o próprio caixa lançando manualmente) — ver cabeçalho do
-  // arquivo. Cobre exatamente o que sobra: autoatendimento do cliente (QR,
-  // `added_by_role: 'cliente'`, default) e Balcão (mesma origem/valor).
-  const toPrint = items.filter((it) => !printedIds.has(it.id) && it.added_by_role !== 'garcom');
+  const activatedAtMs = new Date(activatedAt).getTime();
+  // Corte de ativação (Critical #1, ver cabeçalho do arquivo): item criado
+  // ANTES do mount desta sessão não é auto-impresso aqui — pode já ter sido
+  // tratado por outra sessão, e reimprimir às cegas é exatamente o "backlog
+  // spew" do achado. Continua elegível pra reimpressão MANUAL via "Pedidos
+  // do Dia" (`printPendingKitchenTicket`) — nunca fica invisível, só para de
+  // ser reimpresso sem gesto humano nenhum. Item de garçom entra no MESMO
+  // caminho que QR/Balcão agora (ver cabeçalho do arquivo, revisão crítica
+  // "waiter-launched orders print nowhere real") — não há mais filtro por
+  // `added_by_role`.
+  const toPrint = items.filter((it) => !printedIds.has(it.id) && new Date(it.created_at).getTime() >= activatedAtMs);
 
   for (const item of toPrint) {
     const key = `${destination}:${item.id}`;
@@ -237,9 +316,19 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
   const reconcileLockRef = useRef(false);
   const reconcileFailStreakRef = useRef(0);
   const storeRef = useRef<Store | null>(null);
+  // Corte de ativação desta sessão (Critical #1) — hora do mount, recarregada
+  // junto com o dedupe sempre que a loja muda (mesmo efeito abaixo). Um
+  // `Date.now()` de fallback nunca deveria ser lido de verdade (o efeito
+  // abaixo roda antes do primeiro `reconcile()` sempre que `store` já existe
+  // no mount), mas existe pra nunca deixar a comparação de corte comparar
+  // contra `null`/`NaN` num cenário inesperado.
+  const activatedAtRef = useRef<string>(new Date().toISOString());
 
   // Recarrega o dedupe (localStorage) sempre que a loja muda — cobre tanto
   // "loja resolveu depois do login" quanto "conta universal trocou de loja".
+  // Também redefine `activatedAtRef`: trocar de loja (conta universal) é,
+  // pra efeito do corte de ativação, uma sessão nova nesta loja — mesmo
+  // motivo de `printedIds` recarregar do zero aqui.
   useEffect(() => {
     storeRef.current = store;
     if (!store) return;
@@ -247,6 +336,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       kitchen: loadPrintedIds(store.id, 'kitchen'),
       bar: loadPrintedIds(store.id, 'bar'),
     };
+    activatedAtRef.current = new Date().toISOString();
     failedRef.current = new Map();
     setFailedItemsState(new Map());
   }, [store?.id]);
@@ -259,7 +349,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     try {
       for (const destination of ['kitchen', 'bar'] as const) {
         // eslint-disable-next-line no-await-in-loop -- sequencial de propósito, mesmo motivo do print sequencial dentro de reconcileDestination.
-        const failed = await reconcileDestination(s.id, destination, s.name, printedIdsRef, failedRef, setFailedItemsState);
+        const failed = await reconcileDestination(s.id, destination, s.name, activatedAtRef.current, printedIdsRef, failedRef, setFailedItemsState);
         if (failed) fetchFailed = true;
       }
     } catch (e) {
@@ -398,7 +488,7 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
       <Modal isOpen={showDetails} onClose={() => setShowDetails(false)} title="Impressão automática (Caixa)" variant="sheet">
         <div className="space-y-3">
           <p className="text-xs text-[var(--text-muted)]">
-            Imprime sozinha, em segundo plano, o pedido do próprio cliente (QR) e do Balcão — o que o garçom lança manualmente já imprime na hora, sem passar por aqui.
+            Imprime sozinha, em segundo plano, o pedido do próprio cliente (QR), do Balcão e do garçom — nenhum aparelho além deste tem a impressora da cozinha configurada.
           </p>
 
           <div className="flex items-center gap-2 text-sm">

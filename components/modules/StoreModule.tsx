@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
-import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted } from '@/components/modules/CaixaPrintStation';
+import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -1461,54 +1461,100 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // reaproveitar sem herdar esse filtro). Só existe a visão, sem nenhum
     // controle de confirmação de entrega — pedido explícito ("view only").
     //
-    // `printed`: melhor esforço, não garantia. Item `added_by_role==='garcom'`
-    // sempre imprime na hora do próprio clique (Task 2, handleAddItem) — se
-    // a impressão tivesse falhado, o garçom já viu um alertError() bloqueante
-    // na hora, então aqui é seguro assumir "impresso". Item de origem
-    // cliente (QR/Balcão) reflete o dedupe local da reconciliação do Caixa
-    // (`wasKitchenTicketPrinted`, CaixaPrintStation.tsx) — que só sabe o que
-    // ESTE navegador confirmou ter impresso; sem isso (ex.: outro aparelho
-    // imprimiu, ou o item ainda não foi reconciliado) o badge mostra "sem
-    // registro", nunca afirma "não imprimiu" (não dá pra provar um negativo
-    // sem estado no servidor, e não há migration nesta task pra isso).
+    // `printed`: melhor esforço, não garantia — reflete o dedupe local da
+    // reconciliação do Caixa (`wasKitchenTicketPrinted`, CaixaPrintStation.tsx),
+    // que só sabe o que ESTE navegador confirmou ter impresso. Sem isso (ex.:
+    // outro aparelho imprimiu, ou o item ainda não foi reconciliado) o badge
+    // mostra "sem registro", nunca afirma "não imprimiu" (não dá pra provar
+    // um negativo sem estado no servidor, e não há migration nesta task pra
+    // isso).
+    //
+    // Redesign 2026-08-23 (revisão crítica, dois achados): (1) item de
+    // garçom NÃO é mais assumido como "sempre impresso" — `handleAddItem`
+    // parou de imprimir no próprio aparelho do garçom (achado "waiter-
+    // launched orders print nowhere real"), então ele passa pelo MESMO
+    // dedupe de QR/Balcão agora. (2) `printedRefreshTick` força este useMemo
+    // a recalcular depois de uma reimpressão manual (`handleManualReprint`
+    // abaixo) — `wasKitchenTicketPrinted` lê localStorage direto, que não é
+    // uma dependência que o React observa sozinho.
+    const [printedRefreshTick, setPrintedRefreshTick] = useState(0);
+    const [reprintingIds, setReprintingIds] = useState<Set<string>>(new Set());
     const sentHistoryItems = useMemo(() => {
         if (orderFlow !== 'direct_print') return [];
         const tableNumberById = new Map(tables.map(t => [t.id, t.number]));
         const rows: {
             id: string;
+            orderId: string;
             time: string;
             tableNumber: number | string;
             productName: string;
             quantity: number;
             destination: 'kitchen' | 'bar';
             addons?: string;
+            observation?: string;
             closed: boolean;
-            printed: 'sim' | 'nao_verificavel';
+            printed: boolean;
         }[] = [];
         const pushOrder = (order: Order, closed: boolean) => {
             (order.order_items || []).forEach(item => {
                 if (item.status === OrderStatus.CANCELED) return;
                 const destination: 'kitchen' | 'bar' = item.product?.destination === 'bar' ? 'bar' : 'kitchen';
-                const printed = item.added_by_role === 'garcom' || wasKitchenTicketPrinted(storeId, destination, item.id)
-                    ? 'sim' as const
-                    : 'nao_verificavel' as const;
                 rows.push({
                     id: item.id,
+                    orderId: item.order_id,
                     time: item.created_at,
                     tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? order.tables?.number ?? '?',
                     productName: item.product?.name || 'Produto indisponível',
                     quantity: item.quantity,
                     destination,
                     addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
+                    observation: item.notes || undefined,
                     closed,
-                    printed,
+                    printed: wasKitchenTicketPrinted(storeId, destination, item.id),
                 });
             });
         };
         activeOrders.forEach(order => pushOrder(order, false));
         closedTodayOrders.forEach(order => pushOrder(order, true));
         return rows.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- printedRefreshTick é só um gatilho de recálculo (lê localStorage via wasKitchenTicketPrinted), não um valor usado no corpo.
+    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId, printedRefreshTick]);
+
+    // Reimpressão manual (Critical #1 — corte de ativação): item que a
+    // reconciliação automática do Caixa não pegou sozinha (o caso mais comum
+    // sendo criado antes do `activatedAt` desta sessão, mas serve pra
+    // qualquer linha "sem registro") ganha aqui um jeito de recuperação com
+    // toque humano — nunca fica só invisível na lista.
+    const handleManualReprint = async (row: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string }) => {
+        if (reprintingIds.has(row.id)) return;
+        setReprintingIds(prev => new Set(prev).add(row.id));
+        try {
+            const ok = await printPendingKitchenTicket({
+                storeId,
+                storeName: store.name,
+                destination: row.destination,
+                itemId: row.id,
+                orderId: row.orderId,
+                tableNumber: row.tableNumber,
+                quantity: row.quantity,
+                productName: row.productName,
+                addons: row.addons,
+                observation: row.observation,
+            });
+            if (ok) {
+                toast.success('Reimpresso com sucesso.');
+                setPrintedRefreshTick(t => t + 1);
+            } else {
+                toast.error('A reimpressão falhou. Verifique a impressora.');
+            }
+        } finally {
+            setReprintingIds(prev => {
+                const copy = new Set(prev);
+                copy.delete(row.id);
+                return copy;
+            });
+        }
+    };
 
     const toggleSelection = (itemId: string, maxQty: number) => {
         setPaymentSelectedItems(prev => {
@@ -2834,7 +2880,7 @@ NOTIFY pgrst, 'reload schema';`;
                     ) : (
                         <div className="space-y-2 max-h-[65vh] overflow-y-auto">
                             {sentHistoryItems.map(row => (
-                                <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
+                                <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] flex-wrap">
                                     <div className="min-w-0">
                                         <p className="text-sm font-bold text-[var(--text)] truncate">
                                             {row.quantity}x {row.productName}{row.addons ? ` (${row.addons})` : ''}
@@ -2845,12 +2891,22 @@ NOTIFY pgrst, 'reload schema';`;
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
-                                        <Badge color={row.printed === 'sim' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
-                                            {row.printed === 'sim' ? 'Impresso' : 'Sem registro'}
+                                        <Badge color={row.printed ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
+                                            {row.printed ? 'Impresso' : 'Sem registro'}
                                         </Badge>
                                         <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
                                             {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
                                         </Badge>
+                                        {!row.printed && (
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                disabled={reprintingIds.has(row.id)}
+                                                onClick={() => handleManualReprint(row)}
+                                            >
+                                                <RotateCcw size={14} className="mr-1" /> Reimprimir
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
