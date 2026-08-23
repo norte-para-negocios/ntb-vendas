@@ -1462,34 +1462,51 @@ NOTIFY pgrst, 'reload schema';`;
     // de taxa de serviço duplicada em 7+ lugares antes de virar lib/calc.ts.
     const changeDue = calculateChangeForMethods(paymentMethods, paymentTotalDue);
 
-    const printTableBill = (tableId: string) => {
+    // Fix round 3 (Group C1): antes esta função não fazia `await` nem
+    // tratava o retorno de printBillReceipt() — printHtmlDocument
+    // (lib/print.ts) devolve `new Promise((resolve) => {...})` com
+    // appendChild/doc.open()/doc.write() dentro do executor, então um throw
+    // ali REJEITA a promise em vez de resolver `false`. Sem await/catch,
+    // isso vira uma unhandled promise rejection silenciosa em vez de um
+    // aviso visível pro operador — reabrindo uma fresta da mesma classe de
+    // "impressão falha sem ninguém saber" que o resto deste branch fechou
+    // (ver toast.error nos outros call sites de printBillReceipt).
+    const printTableBill = async (tableId: string) => {
         const summary = getTableSummary(tableId);
         const table = tables.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
 
-        printBillReceipt({
-            storeName: store.name,
-            cnpj: store.cnpj,
-            label: `MESA ${table.number}`,
-            items: summary.allItems.map(item => ({
-                quantity: item.quantity,
-                name: getOrderItemDisplayName(item),
-                total: item.price_at_time * item.quantity,
-            })),
-            subtotal: summary.subtotal,
-            // Task 3: sempre manda o objeto (nunca `undefined`) pra
-            // printBillReceipt sempre enunciar o estado da taxa nesta
-            // comanda — cobrando, removida desta mesa, ou loja sem taxa.
-            // Ausente só faz sentido pro comprovante de balcão
-            // (printCounterReceipt), que estruturalmente nunca tem taxa.
-            serviceFee: {
-                charged: summary.isServiceFeeEnabled,
-                rate: serviceFeeRate,
-                amount: summary.serviceFee,
-                removedForTable: summary.isServiceFeeRemovedForTable,
-            },
-            total: summary.total,
-        });
+        try {
+            const printed = await printBillReceipt({
+                storeName: store.name,
+                cnpj: store.cnpj,
+                label: `MESA ${table.number}`,
+                items: summary.allItems.map(item => ({
+                    quantity: item.quantity,
+                    name: getOrderItemDisplayName(item),
+                    total: item.price_at_time * item.quantity,
+                })),
+                subtotal: summary.subtotal,
+                // Task 3: sempre manda o objeto (nunca `undefined`) pra
+                // printBillReceipt sempre enunciar o estado da taxa nesta
+                // comanda — cobrando, removida desta mesa, ou loja sem taxa.
+                // Ausente só faz sentido pro comprovante de balcão
+                // (printCounterReceipt), que estruturalmente nunca tem taxa.
+                serviceFee: {
+                    charged: summary.isServiceFeeEnabled,
+                    rate: serviceFeeRate,
+                    amount: summary.serviceFee,
+                    removedForTable: summary.isServiceFeeRemovedForTable,
+                },
+                total: summary.total,
+            });
+            if (!printed) {
+                toast.error('A conferência da conta não imprimiu. Confira a impressora.');
+            }
+        } catch (e) {
+            console.error('printBillReceipt (conferência de conta) lançou:', e);
+            toast.error('A conferência da conta não imprimiu. Confira a impressora.');
+        }
     };
 
     const handleMoveTable = async () => {
@@ -4456,7 +4473,40 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             setName(user.name);
             setEmail(user.email);
             setRole(user.role);
-            setPermissions({ ...DEFAULT_TEAM_PERMISSIONS, ...(user.permissions || {}) });
+            // Fix round 3 (Group C2): antes disto, chaves ausentes em
+            // user.permissions herdavam DEFAULT_TEAM_PERMISSIONS — pensado
+            // pro formulário de usuário NOVO (tables=true, resto=false) —,
+            // mas em runtime (lib/storeModules.ts, hasTabPermission)
+            // ausência de chave sempre significou PERMITIDO (`!== false`),
+            // nunca negado. Um store_user real com uma das 6 permissões
+            // históricas ausente (nunca gravada explicitamente) mostrava o
+            // checkbox DESMARCADO mesmo tendo acesso de verdade hoje — e
+            // "Salvar" sem tocar em nada gravava `false` explícito,
+            // revogando silenciosamente um acesso que o admin nem sabia
+            // estar mexendo.
+            //
+            // Corrigido aqui (na seed do formulário), não no momento de
+            // salvar: o checkbox passa a refletir o acesso EFETIVO atual,
+            // com a MESMA regra que hasTabPermission usa pra decidir se o
+            // usuário acessa a aba — ausência vira `true` explícito
+            // (preserva o acesso que já existia), e só um clique
+            // deliberado no checkbox muda o que será salvo. Isso faz "o
+            // que o admin vê é o que é salvo" valer nas duas direções: o
+            // checkbox mostra o acesso real de hoje, e salvar sem tocar
+            // não muda nada. `caixa` é o oposto por natureza (nunca existiu
+            // em store_user real antes desta feature, ausência SEMPRE
+            // significou negado — ver StoreUserPermissions em
+            // types/index.ts) — mantido `=== true`, igual a
+            // hasTabPermission/canFinalizeBill.
+            setPermissions({
+                tables: user.permissions?.tables !== false,
+                counter: user.permissions?.counter !== false,
+                kitchen: user.permissions?.kitchen !== false,
+                bar: user.permissions?.bar !== false,
+                menu: user.permissions?.menu !== false,
+                admin: user.permissions?.admin !== false,
+                caixa: user.permissions?.caixa === true,
+            });
             setPassword(''); // Don't show password
         } else {
             setEditingUser(null);
@@ -5005,20 +5055,32 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     const buildItemsSummary = (order: Order) =>
         order.order_items?.map(item => `${item.quantity}x ${getOrderItemDisplayName(item)}`).join(', ') || '';
 
-    const handlePrintReport = () => {
-        printSalesReport({
-            storeName: store.name,
-            periodLabel,
-            rows: filteredAndSortedSales.map(order => ({
-                date: `${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-                type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
-                customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
-                items: order.order_items?.length || 0,
-                itemsSummary: buildItemsSummary(order),
-                total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
-            })),
-            totalRevenue,
-        });
+    // Fix round 3 (Group C1): mesmo motivo de printTableBill acima — sem
+    // await/catch, um throw dentro do executor de printHtmlDocument
+    // (lib/print.ts) vira unhandled promise rejection em vez de aviso
+    // visível pro lojista.
+    const handlePrintReport = async () => {
+        try {
+            const printed = await printSalesReport({
+                storeName: store.name,
+                periodLabel,
+                rows: filteredAndSortedSales.map(order => ({
+                    date: `${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+                    type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
+                    customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
+                    items: order.order_items?.length || 0,
+                    itemsSummary: buildItemsSummary(order),
+                    total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
+                })),
+                totalRevenue,
+            });
+            if (!printed) {
+                toast.error('O relatório não imprimiu. Confira a impressora.');
+            }
+        } catch (e) {
+            console.error('printSalesReport lançou:', e);
+            toast.error('O relatório não imprimiu. Confira a impressora.');
+        }
     };
 
     const handleExportCsv = () => {
