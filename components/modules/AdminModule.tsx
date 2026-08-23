@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { ALL_ON, resolveStoreModules, resolveOrderFlow, resolvePrintTarget, isDefaultStoreModules, StoreModules, OrderFlow, PrintTarget } from '@/lib/storeModules';
+import { ALL_ON, resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, StoreModules, OrderFlow } from '@/lib/storeModules';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -203,12 +203,6 @@ export const AdminModule: React.FC = () => {
   const [modMenu, setModMenu] = useState(ALL_ON.menu);
   const [modAdmin, setModAdmin] = useState(ALL_ON.admin);
   const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
-  // Fix round 1 (correção de design, plano 2026-08-22) — onde o ticket
-  // imprime quando orderFlow === 'direct_print'. Ver lib/storeModules.ts
-  // (resolvePrintTarget) e o comentário de applyModulesConfigFields em
-  // lib/api.ts. Loja nova nasce em 'device' (mesmo comportamento que a
-  // Task 2 já entregou), igual ao resto deste perfil.
-  const [printTarget, setPrintTarget] = useState<PrintTarget>('device');
 
   // Logo Upload State
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -366,7 +360,6 @@ export const AdminModule: React.FC = () => {
       setModMenu(ALL_ON.menu);
       setModAdmin(ALL_ON.admin);
       setOrderFlow('kds');
-      setPrintTarget('device');
       setLogoFile(null);
       setLogoPreview(null);
       setCoverFile(null);
@@ -466,7 +459,6 @@ export const AdminModule: React.FC = () => {
       setModMenu(storeModules.menu);
       setModAdmin(storeModules.admin);
       setOrderFlow(resolveOrderFlow(store));
-      setPrintTarget(resolvePrintTarget(store));
 
       setLogoPreview(store.logo_url);
       setLogoFile(null);
@@ -771,7 +763,6 @@ export const AdminModule: React.FC = () => {
               // config idêntico ao de antes desta feature.
               modules,
               orderFlow,
-              printTarget,
           };
 
           let result;
@@ -1334,49 +1325,17 @@ export const AdminModule: React.FC = () => {
                       </p>
                   </div>
 
-                  {/* Fix round 1 (correção de design, plano 2026-08-22) —
-                      só faz sentido perguntar isso quando o pedido de fato
-                      imprime ao ser enviado (fluxo "Envia direto para
-                      impressão"). Ausência de config = 'device', mesmo
-                      comportamento que a Task 2 já entregou.
-                      Fix round 2 (Group D1, ligado ao C3 de
-                      EstacaoModule.tsx): também mostra este seletor quando
-                      "Quem fecha a conta" está restrito a Caixa — desde a
-                      correção do achado C3, o MESMO `print_target` decide
-                      pra onde vai o comprovante de conta fechada, não só o
-                      ticket de cozinha/bar. Sem isto, uma loja em fluxo KDS
-                      (a maioria) que ligasse Caixa não teria NENHUM jeito de
-                      apontar uma estação de caixa pra 'station' — ficaria
-                      presa no padrão 'device' pra sempre, sem opção na UI. */}
-                  {(orderFlow === 'direct_print' || modCaixa) && (
-                      <div className="pt-3 border-t border-[var(--border)] space-y-2">
-                          <label className="text-xs font-semibold text-[var(--text)]">Onde imprime</label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <button
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={printTarget === 'device'}
-                                  onClick={() => setPrintTarget('device')}
-                                  className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${printTarget === 'device' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                              >
-                                  Neste aparelho
-                              </button>
-                              <button
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={printTarget === 'station'}
-                                  onClick={() => setPrintTarget('station')}
-                                  className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${printTarget === 'station' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                              >
-                                  Numa estação de impressão
-                              </button>
-                          </div>
-                          <p className="text-[11px] text-[var(--text-muted)]">
-                              {printTarget === 'station'
-                                  ? `O aparelho de quem lançou o pedido não imprime nada${modCaixa ? ', e o comprovante de conta fechada também não imprime no aparelho do caixa' : ''} — quem imprime é a estação fixa${modCaixa ? ' (cozinha e/ou caixa, conforme configurada)' : ' (ex.: na cozinha)'}.`
-                                  : `O pedido imprime no próprio aparelho de quem lançou${modCaixa ? ', e o comprovante de conta fechada imprime no aparelho do caixa' : ''} (precisa de impressora ligada nele).`}
-                          </p>
-                      </div>
+                  {/* Removido (redesign 2026-08-23): existia um seletor "Onde
+                      imprime" (neste aparelho / numa estação de impressão) —
+                      o único equipamento fixo da operação passou a ser o do
+                      caixa (impressora de rede da cozinha configurada como
+                      padrão no sistema operacional daquele aparelho), então
+                      não há mais "alvo" pra escolher. Ver lib/storeModules.ts
+                      pro histórico completo da decisão. */}
+                  {orderFlow === 'direct_print' && (
+                      <p className="text-[11px] text-[var(--text-muted)] pt-3 border-t border-[var(--border)]">
+                          O pedido imprime no aparelho do Caixa: os itens lançados pelo garçom imprimem na hora; pedidos do próprio cliente (QR) e do Balcão imprimem sozinhos, em segundo plano, enquanto o Caixa está com o painel aberto.
+                      </p>
                   )}
               </div>
 
