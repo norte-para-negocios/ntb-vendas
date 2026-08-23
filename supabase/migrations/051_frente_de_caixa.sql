@@ -95,7 +95,8 @@ grant execute on function public.open_cash_shift_secure(uuid, uuid, numeric) to 
 
 -- ─── helper interno: dinheiro esperado de um turno ─────────────────────────
 -- Reutilizado por close_cash_shift_secure e fetch_cash_shift_summary_secure
--- (mesma query exata nos dois, vale factorar). Formula: soma de
+-- (mesma query exata nos dois, vale factorar). Formula: fundo de troco
+-- (opening_float, dinheiro fisico ja no caixa na abertura) MAIS soma de
 -- orders.payment_details.methods onde method='CASH' e cash_shift_id bate
 -- (payment_details já vinha de closeCounterOrder/closeTableSession, ver
 -- lib/api.ts — {total, methods:[{method,amount,brand?}], emitir_nota?};
@@ -104,18 +105,47 @@ grant execute on function public.open_cash_shift_secure(uuid, uuid, numeric) to 
 -- payment_details só é gravado no fechamento (close_table_orders_secure/
 -- rota de balcão), então qualquer order com esse campo preenchido já
 -- representa dinheiro que realmente entrou no caixa.
+--
+-- Revisão pos-review (mesma migration, corrigida antes de Task 2/3/4
+-- construirem em cima): 3 achados reais.
+-- (1) Critical: opening_float nunca era somado — turno com fundo de troco
+--     R$100 fechava reportando R$100 "de sobra" mesmo com a gaveta batendo
+--     certo. Corrigido lendo cash_shifts.opening_float (a function antes
+--     nem tocava essa tabela).
+-- (2) Important: `(payment_details->>'cash_shift_id')::uuid = p_shift_id`
+--     era um cast usado como filtro de scan — um unico pedido em QUALQUER
+--     loja da plataforma com valor nao-uuid nesse campo derrubava
+--     close_cash_shift_secure inteiro com exception crua (sem handler).
+--     Corrigido comparando como texto (`... = p_shift_id::text`): valor
+--     mal formado so' deixa de bater, nunca lanca excecao.
+-- (3) Important: sem filtro de loja, a query varria orders da plataforma
+--     inteira a cada fechamento/consulta de resumo — inofensivo a ~28
+--     linhas hoje, degrada linear com o volume total pra sempre depois.
+--     Corrigido restringindo ao store_id do proprio turno antes do
+--     match por texto.
 create function public._cash_shift_expected_cash(p_shift_id uuid) returns numeric
 language sql stable security definer set search_path = public as $$
   select
-    coalesce((
+    coalesce((select opening_float from cash_shifts where id = p_shift_id), 0)
+    + coalesce((
       select sum((m->>'amount')::numeric)
       from orders o, jsonb_array_elements(o.payment_details->'methods') m
-      where (o.payment_details->>'cash_shift_id')::uuid = p_shift_id
+      where o.store_id = (select store_id from cash_shifts where id = p_shift_id)
+        and o.payment_details->>'cash_shift_id' = p_shift_id::text
         and m->>'method' = 'CASH'
     ), 0)
     - coalesce((select sum(amount) from cash_movements where shift_id = p_shift_id and type = 'sangria'), 0)
     + coalesce((select sum(amount) from cash_movements where shift_id = p_shift_id and type = 'suprimento'), 0);
 $$;
+-- Helper interno, nao pensado pra ser chamado direto por anon via
+-- PostgREST — so' as duas RPCs reais abaixo o usam. Sem grant explicito
+-- pra anon/authenticated, o default do Postgres e' PUBLIC EXECUTE, entao
+-- revoga aqui. Seguro: as duas RPCs sao security definer, rodam como
+-- supabase_admin (dono desta function tambem), e o dono sempre tem
+-- EXECUTE implicito independente de grant/revoke em PUBLIC — a cadeia
+-- close_cash_shift_secure/fetch_cash_shift_summary_secure -> helper
+-- continua funcionando igual depois deste revoke (verificado ao vivo).
+revoke execute on function public._cash_shift_expected_cash(uuid) from public;
 
 -- ─── close_cash_shift_secure ────────────────────────────────────────────────
 -- Recusa (jsonb, nao exception) se o turno ja esta fechado. Calcula o
@@ -238,7 +268,8 @@ begin
   from (
     select m->>'method' as method, sum((m->>'amount')::numeric) as total
     from orders o, jsonb_array_elements(o.payment_details->'methods') m
-    where (o.payment_details->>'cash_shift_id')::uuid = p_shift_id
+    where o.store_id = v_shift.store_id
+      and o.payment_details->>'cash_shift_id' = p_shift_id::text
     group by m->>'method'
   ) t;
 
