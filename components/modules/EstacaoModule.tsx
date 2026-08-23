@@ -484,9 +484,21 @@ export const EstacaoModule: React.FC = () => {
     // ativação nunca entra no grupo a imprimir, ponto — não precisa
     // "lembrar" de nada além do que já persiste hoje.
     const activationCutoff = activatedAtRef.current;
+    // Fix round 3 (Group A2): compara instantes parseados, não strings.
+    // row_to_json (fetch_sales_history_secure) renderiza timestamptz no
+    // TimeZone da SESSÃO do Postgres, com dígitos de fração e formato de
+    // offset variáveis; toISOString() do JS sempre emite 3 dígitos fixos e
+    // "Z". Com o banco em UTC as duas strings comparam na ordem certa só
+    // por coincidência de formato — se o TimeZone da sessão do Postgres
+    // mudar (postgresql.conf, ou um `SET timezone` por role, no servidor
+    // self-hosted), um fechamento carimbado "...T11:05:00-03:00" compara
+    // como lexicalmente MENOR que "...T14:00:00.000Z", suprimindo todo
+    // recibo genuíno por até 3h depois de cada ativação, com o banner
+    // ainda em CONECTADA.
+    const cutoffMs = activationCutoff ? new Date(activationCutoff).getTime() : null;
     const tableOrders = orders.filter((o) =>
       o.order_type === 'table' && o.table_id && o.updated_at &&
-      (!activationCutoff || o.updated_at >= activationCutoff)
+      (cutoffMs === null || new Date(o.updated_at).getTime() >= cutoffMs)
     );
 
     const groups = new Map<string, Order[]>();
@@ -511,87 +523,122 @@ export const EstacaoModule: React.FC = () => {
         continue;
       }
 
-      const subtotal = items.reduce((acc, i) => acc + i.price_at_time * i.quantity, 0);
-      const tableNumber = group[0].tables?.number ?? '?';
-      const paymentDetails = group[0].payment_details as { total?: number; methods?: { method: string; amount: number; brand?: string | null }[] } | null | undefined;
-      const total = paymentDetails?.total ?? subtotal;
-      const methods = paymentDetails?.methods && paymentDetails.methods.length > 0
-        ? paymentDetails.methods
-        : (group[0].payment_method ? [{ method: group[0].payment_method, amount: total }] : []);
-      // Fix round 2 (Group A2): extraído para lib/calc.ts
-      // (calculateChangeForMethods) — mesma fórmula que estava duplicada
-      // verbatim em StoreModule.tsx (handleFinishPayment). Troco é sobre
-      // o que o dinheiro precisava cobrir (total menos o que outros
-      // métodos já pagaram), nunca sobre o total cheio da conta — senão
-      // parte-cartão-parte-dinheiro sempre dava troco zero.
-      const changeDue = calculateChangeForMethods(methods, total);
-      const description = `Mesa ${tableNumber} — R$ ${total.toFixed(2)}`;
+      // Fix round 3 (Group A1): reconcile() (o chamador) tinha try/finally
+      // sem catch, e duas expressões abaixo rodavam SEM proteção nenhuma:
+      // calculateChangeForMethods (`.filter` sobre `methods`) e
+      // `total.toFixed(2)` (na descrição). close_table_orders_secure
+      // (migration 021) aceita jsonb arbitrário de qualquer um com a anon
+      // key pública — `payment_details.methods` pode não ser array,
+      // `.total` pode não ser number. Se qualquer um lançasse, o throw
+      // escapava este `for` inteiro (abortando os grupos restantes do
+      // lote, não só este) e propagava até reconcile(), que não tinha
+      // catch: setLastReconcileAt/a sinalização de falha nunca rodavam, o
+      // banner ficava travado no último estado bom (CONECTADA, que reflete
+      // só o websocket — subsistema separado), e cada tick de 10s seguinte
+      // batia no mesmo dado e lançava de novo — a estação parava de
+      // imprimir QUALQUER pedido, pra sempre, sem nada na tela avisando.
+      // Duas camadas de correção: coerção defensiva ANTES de qualquer
+      // aritmética/formatação tocar `total`/`methods` (evita o throw na
+      // origem, degrada pra "este grupo falhou"), e o try/catch em volta
+      // do corpo inteiro do grupo (rede de segurança pra qualquer outra
+      // forma de dado malformado não prevista — degrada pro mesmo lugar
+      // sem abortar os grupos seguintes). reconcile() também ganhou um
+      // catch próprio (ver função abaixo) como última rede, caso algo
+      // escape daqui mesmo assim.
+      try {
+        const subtotal = items.reduce((acc, i) => acc + i.price_at_time * i.quantity, 0);
+        const tableNumber = group[0].tables?.number ?? '?';
+        const paymentDetails = group[0].payment_details as { total?: number; methods?: { method: string; amount: number; brand?: string | null }[] } | null | undefined;
+        const rawTotal = paymentDetails?.total;
+        const total = typeof rawTotal === 'number' && Number.isFinite(rawTotal)
+          ? rawTotal
+          : (Number.isFinite(Number(rawTotal)) ? Number(rawTotal) : subtotal);
+        const rawMethods = paymentDetails?.methods;
+        const methods = Array.isArray(rawMethods) && rawMethods.length > 0
+          ? rawMethods
+          : (group[0].payment_method ? [{ method: group[0].payment_method, amount: total }] : []);
+        // Fix round 2 (Group A2): extraído para lib/calc.ts
+        // (calculateChangeForMethods) — mesma fórmula que estava duplicada
+        // verbatim em StoreModule.tsx (handleFinishPayment). Troco é sobre
+        // o que o dinheiro precisava cobrir (total menos o que outros
+        // métodos já pagaram), nunca sobre o total cheio da conta — senão
+        // parte-cartão-parte-dinheiro sempre dava troco zero.
+        const changeDue = calculateChangeForMethods(methods, total);
+        const description = `Mesa ${tableNumber} — R$ ${total.toFixed(2)}`;
 
-      // Fix round 2 (Group C1): antes este comprovante nunca passava
-      // `serviceFee`, e o template só mostra a linha de subtotal/taxa
-      // quando esse campo existe (ver lib/print.ts) — resultado real:
-      // itens somando R$30,00 seguidos de "TOTAL: R$ 33,00" sem nenhuma
-      // explicação pros R$3, enquanto o comprovante do PRÓPRIO caixa
-      // (StoreModule.tsx, handleFinishPayment) sempre imprime a
-      // discriminação completa pra mesma venda. Reconstituído aqui a
-      // partir só do que já temos (sem acesso ao estado local
-      // `removedServiceFees` de StoreModule, que nunca é persistido — ver
-      // "Remover Taxa" na lista de fora de escopo):
-      // - `feeAmount` é a diferença REAL entre total e subtotal já
-      //   gravados no pedido (nunca recalculado do zero pela rate — evita
-      //   discordar do valor que realmente foi cobrado).
-      // - `charged` é `feeAmount > 0`.
-      // - `removedForTable` é inferido: loja cobra por padrão
-      //   (`s.config?.charge_service_fee`) mas ESTA conta não teve taxa
-      //   (`!charged`) só pode significar que foi removida nesta mesa —
-      //   sem isso, a estação diria "este estabelecimento não cobra taxa"
-      //   pra uma loja que cobra, só não cobrou desta vez.
-      const serviceFeeRate = s.config?.service_fee_rate ?? SERVICE_FEE_RATE;
-      const feeAmount = Math.max(0, total - subtotal);
-      const feeCharged = feeAmount > 0.005;
-      const serviceFee: BillServiceFeeInfo = {
-        charged: feeCharged,
-        rate: serviceFeeRate,
-        amount: feeAmount,
-        removedForTable: !feeCharged && !!s.config?.charge_service_fee,
-      };
+        // Fix round 2 (Group C1): antes este comprovante nunca passava
+        // `serviceFee`, e o template só mostra a linha de subtotal/taxa
+        // quando esse campo existe (ver lib/print.ts) — resultado real:
+        // itens somando R$30,00 seguidos de "TOTAL: R$ 33,00" sem nenhuma
+        // explicação pros R$3, enquanto o comprovante do PRÓPRIO caixa
+        // (StoreModule.tsx, handleFinishPayment) sempre imprime a
+        // discriminação completa pra mesma venda. Reconstituído aqui a
+        // partir só do que já temos (sem acesso ao estado local
+        // `removedServiceFees` de StoreModule, que nunca é persistido — ver
+        // "Remover Taxa" na lista de fora de escopo):
+        // - `feeAmount` é a diferença REAL entre total e subtotal já
+        //   gravados no pedido (nunca recalculado do zero pela rate — evita
+        //   discordar do valor que realmente foi cobrado).
+        // - `charged` é `feeAmount > 0`.
+        // - `removedForTable` é inferido: loja cobra por padrão
+        //   (`s.config?.charge_service_fee`) mas ESTA conta não teve taxa
+        //   (`!charged`) só pode significar que foi removida nesta mesa —
+        //   sem isso, a estação diria "este estabelecimento não cobra taxa"
+        //   pra uma loja que cobra, só não cobrou desta vez.
+        const serviceFeeRate = s.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+        const feeAmount = Math.max(0, total - subtotal);
+        const feeCharged = feeAmount > 0.005;
+        const serviceFee: BillServiceFeeInfo = {
+          charged: feeCharged,
+          rate: serviceFeeRate,
+          amount: feeAmount,
+          removedForTable: !feeCharged && !!s.config?.charge_service_fee,
+        };
 
-      // Fix round 2 (Group B2): mesmo try/catch de reconcileKitchen — uma
-      // rejeição não tratada de printBillReceipt abortaria o `for` no meio
-      // do lote sem marcar o grupo corrente como falha.
-      const doPrint = async () => {
-        try {
-          return await printBillReceipt({
-            storeName: s.name,
-            cnpj: s.cnpj,
-            label: `MESA ${tableNumber} - COMPROVANTE`,
-            items: items.map((i) => ({ quantity: i.quantity, name: getOrderItemDisplayName(i), total: i.price_at_time * i.quantity })),
-            subtotal,
-            serviceFee,
-            total,
-            payment: methods.length > 0 ? { methods, changeDue } : undefined,
-          });
-        } catch (e) {
-          console.error('printBillReceipt lançou (tratado como falha):', e);
-          return false;
-        }
-      };
-      // eslint-disable-next-line no-await-in-loop -- mesmo motivo do reconcileKitchen: impressão sequencial, nunca dois print() simultâneos.
-      const ok = await doPrint();
+        // Fix round 2 (Group B2): mesmo try/catch de reconcileKitchen — uma
+        // rejeição não tratada de printBillReceipt abortaria o `for` no meio
+        // do lote sem marcar o grupo corrente como falha.
+        const doPrint = async () => {
+          try {
+            return await printBillReceipt({
+              storeName: s.name,
+              cnpj: s.cnpj,
+              label: `MESA ${tableNumber} - COMPROVANTE`,
+              items: items.map((i) => ({ quantity: i.quantity, name: getOrderItemDisplayName(i), total: i.price_at_time * i.quantity })),
+              subtotal,
+              serviceFee,
+              total,
+              payment: methods.length > 0 ? { methods, changeDue } : undefined,
+            });
+          } catch (e) {
+            console.error('printBillReceipt lançou (tratado como falha):', e);
+            return false;
+          }
+        };
+        // eslint-disable-next-line no-await-in-loop -- mesmo motivo do reconcileKitchen: impressão sequencial, nunca dois print() simultâneos.
+        const ok = await doPrint();
 
-      if (ok) {
-        printedIdsRef.current.add(key);
-        savePrintedIds(s.id, destination, printedIdsRef.current);
-        if (failedRef.current.has(key)) {
-          failedRef.current.delete(key);
+        if (ok) {
+          printedIdsRef.current.add(key);
+          savePrintedIds(s.id, destination, printedIdsRef.current);
+          if (failedRef.current.has(key)) {
+            failedRef.current.delete(key);
+            setFailedItems(new Map(failedRef.current));
+          }
+          pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: true });
+        } else {
+          const attempts = (fail?.attempts || 0) + 1;
+          failedRef.current.set(key, { description, attempts, retry: doPrint });
           setFailedItems(new Map(failedRef.current));
+          pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: false });
         }
-        pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: true });
-      } else {
+      } catch (e) {
+        console.error('reconcileCaixa: grupo com dado malformado, tratado como falha (não abortou o lote):', e);
+        const fallbackDescription = `Mesa ${group[0].tables?.number ?? '?'} — dados de pagamento inválidos`;
         const attempts = (fail?.attempts || 0) + 1;
-        failedRef.current.set(key, { description, attempts, retry: doPrint });
+        failedRef.current.set(key, { description: fallbackDescription, attempts, retry: async () => false });
         setFailedItems(new Map(failedRef.current));
-        pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: false });
+        pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description: fallbackDescription, success: false });
       }
     }
     return fetchFailed;
@@ -609,14 +656,38 @@ export const EstacaoModule: React.FC = () => {
     const destination = destinationRef.current;
     if (!s || reconcileLockRef.current) return;
     reconcileLockRef.current = true;
+    let fetchFailed = false;
     try {
       const productDestination = productDestinationFor(destination);
-      let fetchFailed = false;
       if (productDestination) {
         fetchFailed = await reconcileKitchen(s, destination, productDestination);
       } else if (destination === 'caixa') {
         fetchFailed = await reconcileCaixa(s, destination);
       }
+    } catch (e) {
+      // Fix round 3 (Group A1): antes desta correção não havia NENHUM catch
+      // aqui — só try/finally. reconcileKitchen/reconcileCaixa protegem seus
+      // próprios laços de impressão item a item, mas um throw que escapasse
+      // os dois mesmo assim (a origem real era `payment_details` malformado
+      // dentro de reconcileCaixa, agora coberto por coerção defensiva + seu
+      // próprio try/catch — ver função acima) abortava esta função INTEIRA
+      // antes de `setLastReconcileAt`/a sinalização de falha rodarem, abaixo.
+      // Resultado real: o banner ficava travado no último estado bom
+      // (CONECTADA, que reflete só o websocket, um subsistema separado), e
+      // cada tick de 10s seguinte tentava reconciliar de novo, batia no
+      // mesmo dado, e lançava de novo — a estação parava de imprimir
+      // QUALQUER pedido, pra sempre, sem nada na tela avisando. Tratado
+      // aqui como falha de reconciliação, mesmo sinal que já existe pra RPC
+      // falhando — o banner vermelho (RECONCILE_FAILURE_ALERT_THRESHOLD)
+      // alcança este caminho também, e o lock/estado sempre reflete algo
+      // (nunca fica "congelado" no meio de uma tentativa).
+      console.error('reconcile() lançou (tratado como falha de reconciliação):', e);
+      fetchFailed = true;
+    } finally {
+      // Movido pra dentro do finally (Fix round 3, Group A1): antes rodava
+      // só no caminho feliz do try, então um throw pulava isto por completo.
+      // Agora roda sempre — sucesso, falha sinalizada pela função chamada,
+      // ou exceção pega no catch acima.
       setLastReconcileAt(new Date().toISOString());
       // Fix round 2 (Group B1): a reconciliação em si é a garantia real
       // (ver cabeçalho do arquivo) — não o canal Realtime, que só dispara
@@ -628,7 +699,6 @@ export const EstacaoModule: React.FC = () => {
       setLastReconcileFailed(fetchFailed);
       reconcileFailStreakRef.current = fetchFailed ? reconcileFailStreakRef.current + 1 : 0;
       setPersistentReconcileFailure(reconcileFailStreakRef.current >= RECONCILE_FAILURE_ALERT_THRESHOLD);
-    } finally {
       reconcileLockRef.current = false;
     }
   }, [reconcileKitchen, reconcileCaixa]);
