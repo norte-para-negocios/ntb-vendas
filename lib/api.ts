@@ -1091,6 +1091,27 @@ export const fetchOpenCashShift = async (storeId: string): Promise<CashShift | n
   return data as CashShift;
 };
 
+// Task 3 (frente-de-caixa): abre um turno novo — chamado pela aba "Caixa"
+// (StoreModule.tsx, CaixaView) quando `fetchOpenCashShift` devolve `null`.
+// `open_cash_shift_secure` (migration 051) já recusa com
+// `{success:false}` (não exception) se já existe turno aberto pra loja —
+// tanto no caminho feliz quanto sob concorrência real (unique_violation do
+// índice parcial), então este wrapper não precisa de try/catch pra esse
+// caso, só pra falha de rede/RPC em si.
+export const openCashShift = async (
+  storeId: string,
+  operatorUserId: string,
+  openingFloat: number,
+): Promise<{ success: boolean; id?: string; message?: string }> => {
+  const { data, error } = await supabase.rpc('open_cash_shift_secure', {
+    p_store_id: storeId,
+    p_operator_user_id: operatorUserId,
+    p_opening_float: openingFloat,
+  });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; id?: string; message?: string };
+};
+
 export const toggleTableBlock = async (tableId: string, _currentStatus: TableStatus) => {
   const { error } = await supabase.rpc('toggle_table_block_secure', { p_table_id: tableId });
   if (error) throw error;

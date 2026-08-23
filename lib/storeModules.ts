@@ -71,7 +71,13 @@ export const resolveOrderFlow = (store?: { config?: any } | null): OrderFlow =>
 // kitchen_kds/bar_kds (ver Passo 2 do brief da Task 1). Compartilhado entre
 // StoreModule (canAccess, tab ativa) e StoreLayout (sidebar/bottom nav) pra
 // não duplicar a regra em dois lugares.
+// 'caixa' (Task 3, 2026-08-23, plano frente-de-caixa): a aba nova do módulo
+// Caixa (fila consolidada de recebíveis) usa a MESMA chave de módulo
+// `caixa` que já gate-ava 'tables'/'counter' pra quem tem a permissão
+// `caixa` (ver `hasTabPermission` abaixo) — não é módulo novo, só mais uma
+// superfície gateada pelo mesmo `resolveStoreModules(store).caixa`.
 export const TAB_MODULE_KEY: Record<string, keyof StoreModules> = {
+  caixa: 'caixa',
   tables: 'tables',
   counter: 'counter',
   kitchen: 'kitchen_kds',
@@ -82,7 +88,14 @@ export const TAB_MODULE_KEY: Record<string, keyof StoreModules> = {
 
 // Mesma cascata usada em pickInitialStoreTab/canAccess/visibleTabs — extraída
 // pra não duplicar a ordem em 3 lugares (era só um array solto repetido).
-export const TAB_IDS = ['tables', 'counter', 'kitchen', 'bar', 'menu', 'admin'] as const;
+// 'caixa' vem PRIMEIRO (Task 3): "é o primeiro lugar que o operador vê ao
+// entrar" (brief) — pickInitialStoreTab escolhe o primeiro item acessível
+// desta lista, então um usuário com permissão `caixa` numa loja com o
+// módulo ligado agora pousa direto na fila de recebíveis/tela de abrir
+// caixa, em vez de Mesas. Inofensivo pras 7 lojas reais de hoje: nenhuma
+// tem o módulo `caixa` ligado, então 'caixa' nunca é acessível pra elas e
+// a ordem efetiva continua idêntica (cai direto em 'tables').
+export const TAB_IDS = ['caixa', 'tables', 'counter', 'kitchen', 'bar', 'menu', 'admin'] as const;
 
 // Fix round 1 (Task 1 review, Important #1) — "self-inflicted lockout":
 // `pickInitialStoreTab` caía no literal `'admin'` quando `.find(isAccessible)`
@@ -165,6 +178,19 @@ export const hasTabPermission = (
   ) {
     return true;
   }
+  // Task 3 (frente-de-caixa): a aba 'caixa' em si usa comparação ESTRITA
+  // (`=== true`), ao contrário do padrão permissivo (`!== false`) usado
+  // pelas 6 permissões antigas na linha de baixo. Motivo: `permissions.caixa`
+  // é um campo NOVO, ausente em todo store_user real hoje (mesmo raciocínio
+  // já documentado no tipo `StoreUserPermissions.caixa` e em
+  // `canFinalizeBill` acima) — se caísse no fallback permissivo, QUALQUER
+  // usuário sem essa chave explicitamente `false` (ou seja, todo mundo)
+  // ganharia a aba assim que o Master Admin ligasse o módulo `caixa` da
+  // loja, contrariando o brief ("permissão caixa do usuário logado é
+  // true"). O gate de MÓDULO (`resolveStoreModules(store).caixa`) já é
+  // checado à parte por quem chama esta função via TAB_MODULE_KEY
+  // (computeAccessibleTabIds) — aqui só a permissão do usuário.
+  if (tabId === 'caixa') return user.permissions?.caixa === true;
   return user.permissions?.[tabId] !== false;
 };
 

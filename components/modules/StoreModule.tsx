@@ -11,7 +11,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, CashShift } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -441,6 +441,9 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const caixaPrintStatus = useCaixaPrintStation(user.store, user);
 
   const allTabs = [
+    // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,
+    // mesmo raciocínio do TAB_IDS em lib/storeModules.ts.
+    { id: 'caixa', icon: Wallet, label: 'Caixa', permission: 'caixa' },
     { id: 'tables', icon: LayoutDashboard, label: 'Gestão de Mesas', permission: 'tables', count: notifications.tables },
     { id: 'counter', icon: Coffee, label: 'Balcão', permission: 'counter' },
     { id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen },
@@ -461,7 +464,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const hasPermission = (tabId: string) => hasTabPermission(user, tabId, user.store);
   const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
   const visibleTabs = allTabs.filter(tab => accessibleTabIds.has(tab.id));
-  const bottomNavTabs = visibleTabs.filter(item => ['tables', 'counter', 'kitchen', 'bar'].includes(item.id));
+  const bottomNavTabs = visibleTabs.filter(item => ['caixa', 'tables', 'counter', 'kitchen', 'bar'].includes(item.id));
 
   return (
     <div className={`min-h-screen bg-[var(--bg)] pb-20 md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
@@ -635,7 +638,8 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                   )}
               </div>
               <span className="truncate max-w-[56px] text-center">
-                  {item.id === 'tables' ? 'Mesas' :
+                  {item.id === 'caixa' ? 'Caixa' :
+                   item.id === 'tables' ? 'Mesas' :
                    item.id === 'kitchen' ? 'Cozinha' :
                    item.id === 'bar' ? 'Bar' :
                    item.label.split(' ')[0]}
@@ -1343,7 +1347,19 @@ const PaymentCaptureFields: React.FC<{
     </div>
 );
 
-const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
+const TablesView: React.FC<{
+    store: Store;
+    loggedUser: StoreUser;
+    // Task 3 (frente-de-caixa): CaixaView (aba "Caixa") navega até aqui pra
+    // abrir o modal "Receber Pagamento" já existente de uma mesa da fila
+    // consolidada, em vez de duplicar o fluxo de pagamento — ver
+    // handleOpenPayment abaixo e o efeito que consome estas duas props.
+    // Ambas opcionais: todo outro caller de TablesView (StoreModule.tsx,
+    // tab==='tables' normal) não passa nenhuma das duas, comportamento
+    // idêntico ao de sempre.
+    autoOpenTableId?: string;
+    onAutoOpenTableHandled?: () => void;
+}> = ({ store, loggedUser, autoOpenTableId, onAutoOpenTableHandled }) => {
     const storeId = store.id;
     const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
     // Task 2 (2026-08-22, plano perfis-de-loja-e-caixa): loja sem `config`
@@ -1903,14 +1919,22 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
-    const handleOpenPayment = () => {
-        if (!selectedTable) return;
+    const handleOpenPayment = (tableOverride?: Table) => {
+        // Task 3 (frente-de-caixa): `tableOverride` é novo — usado pelo
+        // efeito de auto-abertura (autoOpenTableId, abaixo) pra abrir o
+        // modal de pagamento de uma mesa que ainda não é `selectedTable`
+        // (o operador chegou aqui direto da fila do Caixa, não clicou no
+        // card da mesa). Sem argumento, comportamento idêntico a sempre:
+        // opera sobre `selectedTable`.
+        const table = tableOverride || selectedTable;
+        if (!table) return;
         // Task 4 (módulo Caixa): defesa em profundidade — o botão que chama
         // isto já não renderiza pra quem não pode finalizar (ver JSX
         // abaixo), mas travar aqui também garante que nenhum outro caminho
         // futuro abra o modal de pagamento pra quem só pode pedir a conta.
         if (!canFinalize) return;
-        const summary = getTableSummary(selectedTable.id);
+        const summary = getTableSummary(table.id);
+        setSelectedTable(table);
         setPaymentMethods([]);
         setCurrentPaymentAmount(summary.total.toFixed(2));
         setCurrentPaymentMethod('CREDIT');
@@ -1925,6 +1949,22 @@ NOTIFY pgrst, 'reload schema';`;
         setEmitirNotaFiscal(true);
         setShowPaymentModal(true);
     };
+
+    // Task 3 (frente-de-caixa): consome autoOpenTableId — assim que a lista
+    // de mesas estiver carregada (tables.length > 0), acha a mesa pedida
+    // pela fila do Caixa e abre o MESMO modal "Receber Pagamento" que o
+    // clique manual no card da mesa já abre (handleOpenPayment acima).
+    // Sempre avisa o caller (onAutoOpenTableHandled) depois de tentar, ache
+    // ou não a mesa — evita ficar "preso" pedindo pra sempre uma mesa que já
+    // foi paga/fechada por outra pessoa entre o toque na fila e o load
+    // desta view.
+    useEffect(() => {
+        if (!autoOpenTableId || tables.length === 0) return;
+        const table = tables.find(t => t.id === autoOpenTableId);
+        if (table) handleOpenPayment(table);
+        onAutoOpenTableHandled?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoOpenTableId, tables]);
 
     const handleAddPayment = () => {
         const amount = parseFloat(currentPaymentAmount.replace(',', '.'));
@@ -2511,7 +2551,7 @@ NOTIFY pgrst, 'reload schema';`;
                                              que o cliente já tem no cardápio (requestTableBill), só que
                                              disparada pelo garçom. */}
                                          {canFinalize ? (
-                                             <Button onClick={handleOpenPayment} variant="danger" className="w-full text-sm shadow-[var(--ok)]/20 shadow-lg bg-[var(--ok)] hover:bg-[var(--ok)]/90 border-none">
+                                             <Button onClick={() => handleOpenPayment()} variant="danger" className="w-full text-sm shadow-[var(--ok)]/20 shadow-lg bg-[var(--ok)] hover:bg-[var(--ok)]/90 border-none">
                                                 <Wallet size={18} className="mr-2"/> RECEBER & FINALIZAR
                                              </Button>
                                          ) : selectedTable?.status === 'waiting_bill' ? (
@@ -2680,7 +2720,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </Button>
                             </div>
                             {canFinalize ? (
-                                <Button onClick={handleOpenPayment} className="w-full text-sm font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20 h-12">
+                                <Button onClick={() => handleOpenPayment()} className="w-full text-sm font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20 h-12">
                                     <Wallet size={18} className="mr-2"/> RECEBER PAGAMENTO
                                 </Button>
                             ) : selectedTable?.status === 'waiting_bill' ? (
@@ -3068,7 +3108,16 @@ NOTIFY pgrst, 'reload schema';`;
 
 // --- SUB-MODULE: COUNTER (BALCÃO) ---
 
-const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, loggedUser }) => {
+const CounterView: React.FC<{
+    store: Store;
+    loggedUser: StoreUser;
+    // Task 3 (frente-de-caixa): mesmo mecanismo de TablesView.autoOpenTableId
+    // — CaixaView navega até aqui pra abrir a captura de pagamento
+    // (handleClose já abre `paymentOrder` quando caixaModuleOn) de um pedido
+    // de balcão da fila consolidada.
+    autoOpenOrderId?: string;
+    onAutoOpenOrderHandled?: () => void;
+}> = ({ store, loggedUser, autoOpenOrderId, onAutoOpenOrderHandled }) => {
     const storeId = store.id;
     const [orders, setOrders] = useState<Order[]>([]);
 
@@ -3203,6 +3252,19 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
             }
         }
     };
+
+    // Task 3 (frente-de-caixa): consome autoOpenOrderId — mesmo padrão do
+    // efeito equivalente em TablesView (autoOpenTableId). Assim que `orders`
+    // estiver carregado, acha o pedido pedido pela fila do Caixa e chama
+    // handleClose, que já sabe abrir a captura de pagamento quando
+    // caixaModuleOn (o único caso em que CaixaView navega pra cá).
+    useEffect(() => {
+        if (!autoOpenOrderId || orders.length === 0) return;
+        const order = orders.find(o => o.id === autoOpenOrderId);
+        if (order) handleClose(order.id);
+        onAutoOpenOrderHandled?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoOpenOrderId, orders]);
 
     const handleConfirmCloseWithDestinatario = async () => {
         if (!closingOrder) return;
@@ -3573,6 +3635,301 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                     )}
                 </PaymentCaptureFields>
             </Modal>
+        </div>
+    );
+};
+
+// --- SUB-MODULE: CAIXA (Task 3, 2026-08-23, plano frente-de-caixa) ---
+//
+// Aba nova pro operador de caixa: se não há turno aberto, mostra a ação de
+// abrir caixa (fundo de troco) em destaque, sem mais nada — é o "primeiro
+// lugar que o operador vê ao entrar" (brief). Com turno aberto, mostra a
+// fila consolidada de recebíveis (mesas `waiting_bill` + pedidos de balcão
+// aguardando pagamento, mais antigo primeiro) e um resumo pequeno do turno.
+//
+// Reuso, não duplicação (requisito central do brief): tocar num item da
+// fila NÃO abre um modal de pagamento próprio — navega até TablesView ou
+// CounterView (via onOpenTablePayment/onOpenCounterPayment, providos pelo
+// StoreModule) e deixa a view original abrir o MESMO modal "Receber
+// Pagamento" que já usa há tempos (ver TablesView.autoOpenTableId/
+// CounterView.autoOpenOrderId acima). As duas views já buscam exatamente
+// os dados que a fila precisa (fetchTables/fetchActiveOrdersForTables/
+// fetchCounterOrders) — reaproveitados aqui, nenhuma query nova.
+//
+// Fora de escopo desta task (Task 4, não implementado aqui): o botão
+// "Fechar Caixa" existe e é clicável, mas só informa que o fechamento
+// completo (contagem, sangria/suprimento, diferença) chega na próxima
+// etapa — ver relatório da task pra detalhe.
+const CaixaView: React.FC<{
+    store: Store;
+    loggedUser: StoreUser;
+    onOpenTablePayment: (tableId: string) => void;
+    onOpenCounterPayment: (orderId: string) => void;
+}> = ({ store, loggedUser, onOpenTablePayment, onOpenCounterPayment }) => {
+    const storeId = store.id;
+    const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+
+    // undefined = ainda não sabemos (loading inicial); null = sem turno
+    // aberto; objeto = turno aberto.
+    const [shift, setShift] = useState<CashShift | null | undefined>(undefined);
+    const [tables, setTables] = useState<Table[]>([]);
+    const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+    const [counterOrders, setCounterOrders] = useState<Order[]>([]);
+    const [openingFloat, setOpeningFloat] = useState('');
+    const [isOpeningShift, setIsOpeningShift] = useState(false);
+
+    // Relógio "agora" só pra recalcular o "há quanto tempo espera" da fila
+    // periodicamente sem precisar de novo fetch — mesmo padrão do `now` em
+    // KdsView (indicador de atraso).
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const tick = setInterval(() => setNow(Date.now()), 30000);
+        return () => clearInterval(tick);
+    }, []);
+
+    const loadShift = async () => {
+        const s = await fetchOpenCashShift(storeId);
+        setShift(s);
+    };
+
+    const loadQueue = async () => {
+        const [t, o, c] = await Promise.all([
+            fetchTables(storeId),
+            fetchActiveOrdersForTables(storeId),
+            fetchCounterOrders(storeId),
+        ]);
+        setTables(t);
+        setActiveOrders(o);
+        setCounterOrders(c);
+    };
+
+    useEffect(() => {
+        loadShift();
+        loadQueue();
+        // Mesmos dois canais de ping que TablesView/CounterView já assinam
+        // (nenhuma tabela/canal novo) — qualquer mudança em mesa ou pedido
+        // desta loja atualiza a fila e o estado do turno (ex.: outro
+        // operador abriu/fechou o caixa em outro aparelho).
+        const channel = supabase.channel(`caixa_queue_${storeId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => { loadQueue(); loadShift(); })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => { loadQueue(); loadShift(); })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [storeId]);
+
+    const handleOpenShift = async () => {
+        const value = parseFloat(openingFloat.replace(',', '.'));
+        if (isNaN(value) || value < 0) {
+            toast.error('Informe um fundo de troco válido.');
+            return;
+        }
+        setIsOpeningShift(true);
+        try {
+            const result = await openCashShift(storeId, loggedUser.id, value);
+            if (result.success) {
+                toast.success('Caixa aberto.');
+                setOpeningFloat('');
+                await loadShift();
+            } else {
+                // open_cash_shift_secure recusa (não exception) quando já
+                // existe turno aberto — mensagem pronta do servidor, ex.
+                // outro aparelho abriu entre o load desta tela e o clique.
+                toast.error(result.message || 'Não foi possível abrir o caixa.');
+                await loadShift();
+            }
+        } catch (e: any) {
+            toast.error('Erro ao abrir o caixa: ' + e.message);
+        } finally {
+            setIsOpeningShift(false);
+        }
+    };
+
+    const handleCloseShiftClick = () => {
+        // Task 4 (fora de escopo desta task): fechamento completo (contagem
+        // de gaveta, sangria/suprimento, diferença) ainda não existe — só o
+        // botão, conforme o brief da Task 3 ("pode só existir/navegar").
+        toast.info('Fechamento de caixa (contagem, sangria/suprimento) chega na próxima etapa.');
+    };
+
+    // Fila consolidada — mesas `waiting_bill` + pedidos de balcão aguardando
+    // pagamento (mesmo critério que CounterView já usa pra oferecer o botão
+    // "Entregar"/"Aguardando o caixa": qualquer pedido de balcão que não
+    // esteja mais PENDING já pode ser recebido). Ordenada por tempo de
+    // espera, mais antigo primeiro.
+    const queueItems = useMemo(() => {
+        const tableItems = tables
+            .filter(t => t.status === TableStatus.WAITING_BILL)
+            .map(t => {
+                const tableOrders = activeOrders.filter(o => o.table_id === t.id);
+                const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
+                const subtotal = items.reduce((s, i) => s + i.price_at_time * i.quantity, 0);
+                const total = calculateOrderTotal(subtotal, !!store.config?.charge_service_fee, serviceFeeRate, t.service_fee_removed);
+                // Sem coluna dedicada de "pediu a conta às..." (fora de
+                // escopo desta task — ver relatório): usa o pedido mais
+                // recente lançado na mesa como proxy de última atividade,
+                // a melhor aproximação disponível sem query/schema novos.
+                const waitingSince = tableOrders.reduce((latest, o) => {
+                    const ts = new Date(o.created_at).getTime();
+                    return ts > latest ? ts : latest;
+                }, 0) || now;
+                return {
+                    key: `table-${t.id}`,
+                    kind: 'table' as const,
+                    id: t.id,
+                    label: `Mesa ${t.number}`,
+                    sublabel: t.current_host_name || undefined,
+                    total,
+                    waitingSince,
+                };
+            });
+
+        const counterItems = counterOrders
+            .filter(o => o.status !== OrderStatus.PENDING)
+            .map(o => {
+                const total = (o.order_items || [])
+                    .filter(i => i.status !== 'canceled')
+                    .reduce((s, i) => s + i.price_at_time * i.quantity, 0);
+                return {
+                    key: `counter-${o.id}`,
+                    kind: 'counter' as const,
+                    id: o.id,
+                    label: `Balcão · ${o.customer_name || 'Cliente'}`,
+                    sublabel: `#${o.id.slice(0, 4)}`,
+                    total,
+                    waitingSince: new Date(o.created_at).getTime(),
+                };
+            });
+
+        return [...tableItems, ...counterItems].sort((a, b) => a.waitingSince - b.waitingSince);
+    }, [tables, activeOrders, counterOrders, store, serviceFeeRate]);
+
+    const formatWaitingLabel = (waitingSince: number): string => {
+        const minutes = Math.max(0, Math.round((now - waitingSince) / 60000));
+        if (minutes < 1) return 'agora mesmo';
+        if (minutes < 60) return `há ${minutes} min`;
+        const hours = Math.floor(minutes / 60);
+        const rest = minutes % 60;
+        return `há ${hours}h${rest > 0 ? ` ${rest}min` : ''}`;
+    };
+
+    // Loading inicial do turno — evita piscar a tela de "abrir caixa" por um
+    // frame antes de saber se já existe um turno aberto.
+    if (shift === undefined) {
+        return (
+            <div className="flex items-center justify-center py-32 text-[var(--text-muted)]">
+                <RefreshCw size={28} className="animate-spin" />
+            </div>
+        );
+    }
+
+    // Sem turno aberto — Passo 2 do brief: destaque total, é o primeiro
+    // lugar que o operador vê ao entrar.
+    if (!shift) {
+        return (
+            <div className="max-w-md mx-auto py-8">
+                <Card className="p-6 text-center border-2 border-[var(--warn)]/30 bg-[var(--warn)]/5">
+                    <Wallet size={40} className="mx-auto mb-3 text-[var(--warn)]" />
+                    <h3 className="text-lg font-bold text-[var(--text)] mb-1">Nenhum turno de caixa aberto</h3>
+                    <p className="text-sm text-[var(--text-muted)] mb-6">
+                        Abra o caixa informando o fundo de troco (dinheiro físico já na gaveta) pra começar a
+                        receber pagamentos.
+                    </p>
+                    <div className="text-left space-y-3">
+                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            Fundo de troco
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                                placeholder="0.00"
+                                value={openingFloat}
+                                onChange={e => setOpeningFloat(e.target.value)}
+                            />
+                        </div>
+                        <Button
+                            onClick={handleOpenShift}
+                            isLoading={isOpeningShift}
+                            className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white"
+                        >
+                            <Unlock size={20} className="mr-2" /> Abrir Caixa
+                        </Button>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    // Turno aberto — Passo 1: fila consolidada; resumo + Fechar Caixa.
+    return (
+        <div className="space-y-6">
+            <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-[var(--ok)]/10 flex items-center justify-center text-[var(--ok)] shrink-0">
+                        <Wallet size={20} />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-[var(--text)]">
+                            Caixa aberto desde {new Date(shift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                            Fundo de troco: R$ {formatBRL(shift.opening_float)}
+                        </p>
+                    </div>
+                </div>
+                <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0">
+                    <Lock size={16} className="mr-2" /> Fechar Caixa
+                </Button>
+            </Card>
+
+            <div>
+                <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">
+                    Aguardando pagamento {queueItems.length > 0 && `(${queueItems.length})`}
+                </h3>
+                {queueItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
+                        <CheckCircle className="mb-3 h-14 w-14 opacity-20" />
+                        <p className="text-base font-medium">Nenhum recebível pendente</p>
+                        <p className="text-xs">Mesas que pedirem a conta e vendas de balcão aparecem aqui.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        <AnimatePresence>
+                        {queueItems.map(item => (
+                            <motion.button
+                                key={item.key}
+                                layout
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                transition={SPRING_TAP}
+                                onClick={() => item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id)}
+                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] hover:border-[var(--brand)] u-motion u-press-sm text-left"
+                            >
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="h-9 w-9 rounded-full bg-[var(--warn)]/10 flex items-center justify-center text-[var(--warn)] shrink-0">
+                                        {item.kind === 'table' ? <LayoutDashboard size={16} /> : <Coffee size={16} />}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-[var(--text)] truncate">{item.label}</p>
+                                        <p className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                                            <Clock size={11} /> {item.sublabel ? `${item.sublabel} · ` : ''}Aguardando {formatWaitingLabel(item.waitingSince)}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(item.total)}</span>
+                                    <ArrowRight size={16} className="text-[var(--text-muted)]" />
+                                </div>
+                            </motion.button>
+                        ))}
+                        </AnimatePresence>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
@@ -6856,6 +7213,14 @@ const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
 export const StoreModule: React.FC = () => {
     const [user, setUser] = useState<(StoreUser & { store: Store }) | null>(null);
     const [tab, setTab] = useState('tables');
+    // Task 3 (frente-de-caixa): "ponte" entre a aba Caixa (CaixaView, fila
+    // consolidada) e TablesView/CounterView — tocar num item da fila troca
+    // de aba E passa o id pra view de destino abrir sozinha o modal
+    // "Receber Pagamento" que ela já tem (autoOpenTableId/autoOpenOrderId).
+    // Vive aqui (não dentro de CaixaView) porque é o único componente que
+    // sobrevive à troca de aba.
+    const [caixaFocusTableId, setCaixaFocusTableId] = useState<string | undefined>();
+    const [caixaFocusOrderId, setCaixaFocusOrderId] = useState<string | undefined>();
     // true enquanto tenta restaurar a sessão salva no localStorage — evita
     // piscar a tela de login por um frame antes de saber se há sessão válida.
     const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -6985,6 +7350,7 @@ export const StoreModule: React.FC = () => {
         <MotionConfig reducedMotion="user">
         <StoreLayout
             title={
+                tab === 'caixa' ? 'Caixa' :
                 tab === 'tables' ? 'Mesas & Comandas' :
                 tab === 'counter' ? 'Pedidos Balcão' :
                 tab === 'kitchen' ? 'Monitor de Cozinha (KDS)' :
@@ -6999,8 +7365,30 @@ export const StoreModule: React.FC = () => {
             onSwitchStore={handleSwitchStore}
             user={user}
         >
-            {tab === 'tables' && canAccess('tables') && <TablesView store={user.store} loggedUser={user} />}
-            {tab === 'counter' && canAccess('counter') && <CounterView store={user.store} loggedUser={user} />}
+            {tab === 'caixa' && canAccess('caixa') && (
+                <CaixaView
+                    store={user.store}
+                    loggedUser={user}
+                    onOpenTablePayment={(tableId) => { setCaixaFocusTableId(tableId); setTab('tables'); }}
+                    onOpenCounterPayment={(orderId) => { setCaixaFocusOrderId(orderId); setTab('counter'); }}
+                />
+            )}
+            {tab === 'tables' && canAccess('tables') && (
+                <TablesView
+                    store={user.store}
+                    loggedUser={user}
+                    autoOpenTableId={caixaFocusTableId}
+                    onAutoOpenTableHandled={() => setCaixaFocusTableId(undefined)}
+                />
+            )}
+            {tab === 'counter' && canAccess('counter') && (
+                <CounterView
+                    store={user.store}
+                    loggedUser={user}
+                    autoOpenOrderId={caixaFocusOrderId}
+                    onAutoOpenOrderHandled={() => setCaixaFocusOrderId(undefined)}
+                />
+            )}
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
