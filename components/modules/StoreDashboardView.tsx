@@ -10,6 +10,7 @@ import {
 import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
+import { formatBRL } from '@/lib/calc';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -276,14 +277,14 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                                 leitura de relance) + variação vs. o período anterior
                                 equivalente logo abaixo — antes eram 4 linhas de texto
                                 de mesmo peso, difícil comparar os 3 blocos num olhar. */}
-                            <p className="text-2xl font-black num" style={{ color: accent }}>R$ {stats.total.toFixed(2)}</p>
+                            <p className="text-2xl font-black num" style={{ color: accent }}>R$ {formatBRL(stats.total)}</p>
                             <div className="min-h-[18px] mb-3">
                                 <ChangeBadge value={percentChange(stats.total, prev.total)} label={prevLabel} />
                             </div>
                             <div className="space-y-2 border-t border-[var(--border)] pt-2.5">
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket Médio</span>
-                                    <span className="font-medium text-[var(--text)] num">R$ {stats.ticket.toFixed(2)}</span>
+                                    <span className="font-medium text-[var(--text)] num">R$ {formatBRL(stats.ticket)}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>
@@ -329,8 +330,8 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={20} className="text-[var(--brand)]" /> Faturamento</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                            <StatCard title="Total no Período" value={`R$ ${periodStats.total.toFixed(2)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
-                            <StatCard title="Ticket Médio" value={`R$ ${periodStats.ticket.toFixed(2)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
+                            <StatCard title="Total no Período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
+                            <StatCard title="Ticket Médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className={`${cardCls} lg:col-span-2`}>
@@ -341,7 +342,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                                             <XAxis dataKey="date" tick={{fontSize: 12}} />
                                             <YAxis tick={{fontSize: 12}} tickFormatter={(v) => `R$${v}`} />
-                                            <RechartsTooltip formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Total']} />
+                                            <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} />
                                             <Line type="monotone" dataKey="total" stroke="#484DB5" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
                                         </LineChart>
                                     </ResponsiveContainer>
@@ -440,7 +441,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Coffee size={20} className="text-[var(--warn)]" /> Balcão</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard title="Faturamento Balcão" value={`R$ ${counterStats.total.toFixed(2)}`} icon={Receipt} accentColor="var(--warn)" />
+                            <StatCard title="Faturamento Balcão" value={`R$ ${formatBRL(counterStats.total)}`} icon={Receipt} accentColor="var(--warn)" />
                             <StatCard title="Número de Pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
                         </div>
                     </div>

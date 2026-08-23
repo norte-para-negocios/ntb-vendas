@@ -22,7 +22,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -976,11 +976,11 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                             const hasActivePromo = effectivePrice < product.price;
                             return hasActivePromo ? (
                                 <span className="flex items-baseline gap-1.5 mt-1">
-                                    <span className="text-xs text-[var(--text-muted)] line-through">R$ {product.price.toFixed(2)}</span>
-                                    <span className="text-[var(--brand)] font-bold">R$ {effectivePrice.toFixed(2)}</span>
+                                    <span className="text-xs text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
+                                    <span className="text-[var(--brand)] font-bold">R$ {formatBRL(effectivePrice)}</span>
                                 </span>
                             ) : (
-                                <span className="text-[var(--brand)] font-bold mt-1 block">R$ {product.price.toFixed(2)}</span>
+                                <span className="text-[var(--brand)] font-bold mt-1 block">R$ {formatBRL(product.price)}</span>
                             );
                         })()}
                     </div>
@@ -1013,7 +1013,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                                     />
                                     {opt.name}
                                 </span>
-                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-xs font-semibold">+R$ {opt.price_delta.toFixed(2)}</span>}
+                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-xs font-semibold">+R$ {formatBRL(opt.price_delta)}</span>}
                             </label>
                         ))}
                     </div>
@@ -1027,7 +1027,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                 />
 
                 <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                    Lançar Pedido • R$ {(unitPrice * qty).toFixed(2)}
+                    Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
                 </Button>
                 {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
             </div>
@@ -1099,11 +1099,11 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                 const hasActivePromo = effectivePrice < product.price;
                                 return hasActivePromo ? (
                                     <span className="flex items-baseline gap-1">
-                                        <span className="text-[10px] text-[var(--text-muted)] line-through">R$ {product.price.toFixed(2)}</span>
-                                        <span className="text-[var(--brand)] font-bold text-xs">R$ {effectivePrice.toFixed(2)}</span>
+                                        <span className="text-[10px] text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
+                                        <span className="text-[var(--brand)] font-bold text-xs">R$ {formatBRL(effectivePrice)}</span>
                                     </span>
                                 ) : (
-                                    <span className="text-[var(--brand)] font-bold text-xs">R$ {product.price.toFixed(2)}</span>
+                                    <span className="text-[var(--brand)] font-bold text-xs">R$ {formatBRL(product.price)}</span>
                                 );
                             })()}
                         </div>
@@ -1173,7 +1173,7 @@ const PaymentCaptureFields: React.FC<{
     <div className="space-y-6 pt-2">
         <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
             <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total a Receber</p>
-            <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {total.toFixed(2)}</p>
+            <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {formatBRL(total)}</p>
         </div>
 
         {/* Payment Methods */}
@@ -1255,7 +1255,7 @@ const PaymentCaptureFields: React.FC<{
                                 </span>
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="font-mono font-bold">R$ {p.amount.toFixed(2)}</span>
+                                <span className="font-mono font-bold">R$ {formatBRL(p.amount)}</span>
                                 <button onClick={() => onRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
                                     <Trash2 size={16} />
                                 </button>
@@ -1276,14 +1276,14 @@ const PaymentCaptureFields: React.FC<{
                 <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
                     <span className="font-bold text-[var(--err)]">
-                        R$ {remainingToPay.toFixed(2)}
+                        R$ {formatBRL(remainingToPay)}
                     </span>
                 </div>
                 {changeDue > 0 && (
                     <div className="flex justify-between text-sm">
                         <span className="text-[var(--text-muted)]">Troco:</span>
                         <span className="font-bold text-[var(--ok)]">
-                            R$ {changeDue.toFixed(2)}
+                            R$ {formatBRL(changeDue)}
                         </span>
                     </div>
                 )}
@@ -2273,7 +2273,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Últimos Pedidos</span>
                                             <div className="text-right leading-none">
                                                 <span className="block text-[10px] text-[var(--text-muted)]">Total</span>
-                                                <span className="font-bold text-[var(--brand)] num">R$ {summary.total.toFixed(2)}</span>
+                                                <span className="font-bold text-[var(--brand)] num">R$ {formatBRL(summary.total)}</span>
                                             </div>
                                         </div>
 
@@ -2373,7 +2373,7 @@ NOTIFY pgrst, 'reload schema';`;
                                              <div className="text-center leading-tight">
                                                  <span className="block font-bold text-sm">Ver Comanda</span>
                                                  <span className="text-xs font-normal">
-                                                     R$ {selectedTable ? getTableSummary(selectedTable.id).total.toFixed(2) : '0.00'}
+                                                     R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
                                                  </span>
                                              </div>
                                          </Button>
@@ -2480,11 +2480,11 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 {item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
                                                                  item.status === 'preparing' ? <span className="text-[var(--info)] flex items-center gap-1"><ChefHat size={10}/> Preparando</span> :
                                                                  <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>}
-                                                                <span>• R$ {item.price_at_time.toFixed(2)} un.</span>
+                                                                <span>• R$ {formatBRL(item.price_at_time)} un.</span>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="font-medium text-[var(--text)]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
@@ -2508,7 +2508,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                             <div className="text-xs text-[var(--text-muted)] mt-1">Opcional</div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="font-medium text-[var(--text)]">R$ {summary.serviceFee.toFixed(2)}</span>
+                                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(summary.serviceFee)}</span>
                                                             <button
                                                                 onClick={() => {
                                                                     setRemovedServiceFees(prev => {
@@ -2541,7 +2541,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="bg-[var(--surface-2)] p-4 border-t border-[var(--border)] flex justify-between items-center">
                                     <span className="font-bold text-lg text-[var(--text)]">Total Final</span>
                                     <span className="font-black text-2xl text-[var(--brand)]">
-                                        R$ {selectedTable ? getTableSummary(selectedTable.id).total.toFixed(2) : '0.00'}
+                                        R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
                                     </span>
                                 </div>
                             </div>
@@ -2687,10 +2687,10 @@ NOTIFY pgrst, 'reload schema';`;
                             <div className="space-y-6 pt-2 animate-fade-in">
                                 <div className="bg-[var(--brand)]/5 p-4 rounded-xl border border-[var(--brand)]/10 text-center">
                                     <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
-                                    <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {currentTableSummary.total.toFixed(2)}</p>
+                                    <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {formatBRL(currentTableSummary.total)}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
                                         {currentTableSummary.isServiceFeeEnabled
-                                            ? `Inclui R$ ${currentTableSummary.serviceFee.toFixed(2)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            ? `Inclui R$ ${formatBRL(currentTableSummary.serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : currentTableSummary.isServiceFeeRemovedForTable
                                                 ? 'Taxa de serviço opcional removida nesta mesa'
                                                 : 'Esta loja não cobra taxa de serviço'}
@@ -2706,7 +2706,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                                 <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
                                     <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
-                                    <p className="text-2xl font-bold text-[var(--text)]">R$ {(currentTableSummary.total / paymentPeople).toFixed(2)}</p>
+                                    <p className="text-2xl font-bold text-[var(--text)]">R$ {formatBRL(currentTableSummary.total / paymentPeople)}</p>
                                     <Button 
                                         className="mt-4" 
                                         variant="secondary"
@@ -2736,7 +2736,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <div key={name} className="border border-[var(--border)] rounded-xl overflow-hidden">
                                         <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
                                             <span className="font-bold text-[var(--text)] flex items-center gap-2"><User size={14}/> {name}</span>
-                                            <span className="font-bold text-[var(--brand)]">R$ {data.total.toFixed(2)}</span>
+                                            <span className="font-bold text-[var(--brand)]">R$ {formatBRL(data.total)}</span>
                                         </div>
                                         <div className="p-2 space-y-1">
                                             {data.items.map((it: any) => (
@@ -2791,7 +2791,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
                                                         {getOrderItemDisplayName(item)}
                                                     </span>
-                                                    <span className="text-sm font-medium">R$ {item.price_at_time.toFixed(2)}</span>
+                                                    <span className="text-sm font-medium">R$ {formatBRL(item.price_at_time)}</span>
                                                 </div>
 
                                                 {isSelected && item.quantity > 1 && (
@@ -2814,11 +2814,11 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="mt-4 p-4 bg-[var(--ink)] text-white rounded-xl">
                                     <div className="flex justify-between items-center">
                                         <span className="font-bold">Total Selecionado</span>
-                                        <span className="font-black text-xl">R$ {calculatorTotal.toFixed(2)}</span>
+                                        <span className="font-black text-xl">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
                                     <div className="text-xs text-white/50 mt-1 text-right">
                                         {currentTableSummary.isServiceFeeEnabled
-                                            ? `Inclui R$ ${calculatorServiceFee.toFixed(2)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
+                                            ? `Inclui R$ ${formatBRL(calculatorServiceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : currentTableSummary.isServiceFeeRemovedForTable
                                                 ? 'Taxa de serviço opcional removida nesta mesa'
                                                 : 'Esta loja não cobra taxa de serviço'}
@@ -3278,7 +3278,7 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
                          <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
                              <div>
                                  <p className="text-xs text-[var(--text-muted)] font-bold uppercase">Total</p>
-                                 <p className="text-xl font-black text-[var(--text)] num">R$ {total.toFixed(2)}</p>
+                                 <p className="text-xl font-black text-[var(--text)] num">R$ {formatBRL(total)}</p>
                              </div>
                              <button
                                  onClick={() => printCounterReceipt(order)}
@@ -4455,11 +4455,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                                     const hasActivePromo = effectivePrice < prod.price;
                                                                                     return hasActivePromo ? (
                                                                                         <span className="flex flex-col items-end leading-tight flex-shrink-0">
-                                                                                            <span className="text-[11px] text-[var(--text-muted)] line-through">R$ {prod.price.toFixed(2)}</span>
-                                                                                            <span className="font-bold text-[var(--brand)]">R$ {effectivePrice.toFixed(2)}</span>
+                                                                                            <span className="text-[11px] text-[var(--text-muted)] line-through">R$ {formatBRL(prod.price)}</span>
+                                                                                            <span className="font-bold text-[var(--brand)]">R$ {formatBRL(effectivePrice)}</span>
                                                                                         </span>
                                                                                     ) : (
-                                                                                        <span className="font-bold text-[var(--brand)] flex-shrink-0">R$ {prod.price.toFixed(2)}</span>
+                                                                                        <span className="font-bold text-[var(--brand)] flex-shrink-0">R$ {formatBRL(prod.price)}</span>
                                                                                     );
                                                                                 })()}
                                                                             </div>
@@ -4820,11 +4820,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         />
                                         <div>
                                             <p className="text-sm font-medium text-[var(--text)]">{p.name}</p>
-                                            <p className="text-xs text-[var(--text-muted)]">R$ {p.price.toFixed(2)}{p.omie_codigo ? ` · Omie ${p.omie_codigo}` : ''}</p>
+                                            <p className="text-xs text-[var(--text-muted)]">R$ {formatBRL(p.price)}{p.omie_codigo ? ` · Omie ${p.omie_codigo}` : ''}</p>
                                         </div>
                                     </div>
                                     {groupBaseId !== p.id && (
-                                        <span className="text-xs font-bold text-[var(--brand)] flex-shrink-0">+ R$ {delta.toFixed(2)}</span>
+                                        <span className="text-xs font-bold text-[var(--brand)] flex-shrink-0">+ R$ {formatBRL(delta)}</span>
                                     )}
                                 </label>
                             );
@@ -5807,7 +5807,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Faturamento Total</p>
-                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">R$ {totalRevenue.toFixed(2)}</h3>
+                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">R$ {formatBRL(totalRevenue)}</h3>
                                 </div>
                                 <div className="p-3 bg-[var(--brand)]/10 rounded-full text-[var(--brand)]">
                                     <Receipt size={24} />
@@ -5830,7 +5830,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                 <div>
                                     <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Ticket Médio</p>
                                     <h3 className="text-3xl font-black text-[var(--text)] mt-1">
-                                        R$ {filteredAndSortedSales.length > 0 ? (totalRevenue / filteredAndSortedSales.length).toFixed(2) : '0.00'}
+                                        R$ {filteredAndSortedSales.length > 0 ? formatBRL(totalRevenue / filteredAndSortedSales.length) : '0,00'}
                                     </h3>
                                 </div>
                                 <div className="p-3 bg-[var(--info)]/10 rounded-full text-[var(--info)]">
@@ -5998,7 +5998,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-bold text-[var(--text)]">
-                                                        R$ {orderTotal.toFixed(2)}
+                                                        R$ {formatBRL(orderTotal)}
                                                     </td>
                                                 </tr>
                                             );
@@ -6060,7 +6060,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                             <span className="font-medium text-[var(--text-muted)]">{item.quantity}x</span>
                                             <span className="text-[var(--text)]">{getOrderItemDisplayName(item)}</span>
                                         </div>
-                                        <span className="text-[var(--text-muted)]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                        <span className="text-[var(--text-muted)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -6076,14 +6076,14 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                                 {getPaymentMethodLabel(m.method)}
                                                 {m.brand && ` · ${getCardBrandLabel(m.brand)}`}
                                             </span>
-                                            <span className="font-medium text-[var(--text)]">R$ {m.amount.toFixed(2)}</span>
+                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(m.amount)}</span>
                                         </div>
                                     ))
                                 ) : (
                                     <div className="flex justify-between">
                                         <span className="text-[var(--text-muted)]">{getPaymentMethodLabel(selectedOrderDetails.payment_method)}</span>
                                         <span className="font-medium text-[var(--text)]">
-                                            R$ {(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0).toFixed(2)}
+                                            R$ {formatBRL(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0)}
                                         </span>
                                     </div>
                                 )}
@@ -6093,7 +6093,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                         <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
                             <span className="font-bold text-lg text-[var(--text)]">Total Pago</span>
                             <span className="font-black text-2xl text-[var(--brand)]">
-                                R$ {(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0).toFixed(2)}
+                                R$ {formatBRL(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0)}
                             </span>
                         </div>
                     </div>
@@ -6357,7 +6357,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             {new Date(nota.created_at).toLocaleDateString()} <span className="text-xs text-[var(--text-muted)]/70 ml-1">{new Date(nota.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </td>
                                         <td className="px-4 py-3 text-right font-bold text-[var(--text)] whitespace-nowrap">
-                                            R$ {(nota.valor_total ?? 0).toFixed(2)}
+                                            R$ {formatBRL(nota.valor_total ?? 0)}
                                         </td>
                                         <td className="px-4 py-3 text-[var(--text-muted)]">
                                             {nota.modelo === '55' ? 'NF-e' : 'NFC-e'}

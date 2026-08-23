@@ -7,7 +7,7 @@
 // só formatação de string. Task 3 (2026-08-22): evita reimplementar
 // `(rate * 100).toFixed(0) + '%'` inline, que já tinha desalinhado deste arquivo com
 // lib/calc.ts uma vez.
-import { formatServiceFeeRate } from './calc';
+import { formatServiceFeeRate, formatBRL } from './calc';
 // Task 4 (2026-08-22, módulo Caixa): rótulo de forma de pagamento/bandeira
 // no comprovante impresso vem sempre daqui — nunca escrito inline aqui
 // (regra do projeto, já foi bug real 3x). Sem dependência de volta pra
@@ -316,7 +316,7 @@ export function printBillReceipt(opts: {
 }): Promise<boolean> {
   const feeRow = opts.serviceFee
     ? opts.serviceFee.charged
-      ? `<tr><td>Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)} opcional)</td><td class="right">R$ ${opts.serviceFee.amount.toFixed(2)}</td></tr>`
+      ? `<tr><td>Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)} opcional)</td><td class="right">R$ ${formatBRL(opts.serviceFee.amount)}</td></tr>`
       : `<tr><td colspan="2" style="font-style:italic;">${
           opts.serviceFee.removedForTable
             ? 'Taxa de serviço opcional removida nesta mesa'
@@ -339,13 +339,13 @@ export function printBillReceipt(opts: {
     ? opts.payment.methods
         .map((m) => {
           const brandSuffix = m.brand ? ` (${escapeHtml(getCardBrandLabel(m.brand))})` : '';
-          return `<tr><td>${escapeHtml(getPaymentMethodLabel(m.method))}${brandSuffix}</td><td class="right">R$ ${m.amount.toFixed(2)}</td></tr>`;
+          return `<tr><td>${escapeHtml(getPaymentMethodLabel(m.method))}${brandSuffix}</td><td class="right">R$ ${formatBRL(m.amount)}</td></tr>`;
         })
         .join('')
     : '';
   const changeRow =
     opts.payment && opts.payment.changeDue > 0
-      ? `<tr><td>Troco</td><td class="right">R$ ${opts.payment.changeDue.toFixed(2)}</td></tr>`
+      ? `<tr><td>Troco</td><td class="right">R$ ${formatBRL(opts.payment.changeDue)}</td></tr>`
       : '';
   const paymentSection = opts.payment
     ? `<table class="summary-table" style="margin-top:6px;border-top:1px dashed #000;padding-top:4px;">
@@ -372,7 +372,7 @@ export function printBillReceipt(opts: {
           <tr>
             <td>${i.quantity}x</td>
             <td style="padding-right:4px;">${escapeHtml(i.name)}</td>
-            <td class="right">${i.total.toFixed(2)}</td>
+            <td class="right">${formatBRL(i.total)}</td>
           </tr>`
           )
           .join('')}
@@ -381,12 +381,12 @@ export function printBillReceipt(opts: {
     ${
       opts.serviceFee
         ? `<table class="summary-table">
-            <tr><td>Subtotal</td><td class="right">R$ ${opts.subtotal.toFixed(2)}</td></tr>
+            <tr><td>Subtotal</td><td class="right">R$ ${formatBRL(opts.subtotal)}</td></tr>
             ${feeRow}
           </table>`
         : ''
     }
-    <div class="total">TOTAL: R$ ${opts.total.toFixed(2)}</div>
+    <div class="total">TOTAL: R$ ${formatBRL(opts.total)}</div>
     ${paymentSection}
     <div class="footer">Obrigado pela preferência!</div>
   `;
@@ -444,14 +444,14 @@ export function printSalesReport(opts: {
             <td>${escapeHtml(r.type)}</td>
             <td>${escapeHtml(r.customer)}</td>
             <td class="right">${r.items}</td>
-            <td class="right">R$ ${r.total.toFixed(2)}</td>
+            <td class="right">R$ ${formatBRL(r.total)}</td>
           </tr>
           ${r.itemsSummary ? `<tr class="items-summary-row"><td colspan="5">${escapeHtml(r.itemsSummary)}</td></tr>` : ''}`
           )
           .join('')}
       </tbody>
       <tfoot>
-        <tr><td colspan="4">Total do período</td><td class="right">R$ ${opts.totalRevenue.toFixed(2)}</td></tr>
+        <tr><td colspan="4">Total do período</td><td class="right">R$ ${formatBRL(opts.totalRevenue)}</td></tr>
       </tfoot>
     </table>
   `;
