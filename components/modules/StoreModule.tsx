@@ -4,7 +4,8 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, resolvePrintTarget, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
+import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -414,6 +415,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const notifications = useStoreNotifications(user.store.id);
+  // Reconciliação de impressão do Caixa (redesign 2026-08-23) — montada
+  // aqui, não dentro de TablesView/CounterView, de propósito: StoreLayout é
+  // o único componente que sobrevive à troca de aba (Mesas↔Balcão), então é
+  // o único lugar onde "roda em segundo plano independente da aba" é
+  // literalmente verdade. `active` (dentro do hook) já é `false` pras 6
+  // lojas reais (sem `order_flow: 'direct_print'`) — nesse caso o hook não
+  // liga nenhum efeito, e o indicador abaixo não renderiza nada.
+  const caixaPrintStatus = useCaixaPrintStation(user.store, user);
 
   const allTabs = [
     { id: 'tables', icon: LayoutDashboard, label: 'Gestão de Mesas', permission: 'tables', count: notifications.tables },
@@ -455,6 +464,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              </div>
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
+          <CaixaPrintStationIndicator status={caixaPrintStatus} />
           <ThemeToggle />
       </header>
 
@@ -627,6 +637,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           <p className="text-[var(--text-muted)] text-sm mt-0.5">Gerencie seu estabelecimento</p>
         </div>
         <div className="flex items-center gap-3">
+           <CaixaPrintStationIndicator status={caixaPrintStatus} />
            <div className="h-8 w-8 rounded-[var(--r-sm)] bg-[var(--brand)] flex items-center justify-center text-white font-semibold text-[12px]">
               {storeName.slice(0,2).toUpperCase()}
            </div>
@@ -1290,12 +1301,6 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // nos ramos novos abaixo (impressão no clique de handleAddItem, gate de
     // fechamento sem exigir status, histórico de envios).
     const orderFlow = resolveOrderFlow(store);
-    // Fix round 1 (correção de design, plano 2026-08-22): quando a estação
-    // de impressão (Task 3, ainda não construída) é quem imprime esta loja,
-    // o aparelho do garçom não pode imprimir também — senão cada pedido sai
-    // duplicado. Ver lib/storeModules.ts (resolvePrintTarget). Ausência de
-    // config = 'device', preserva exatamente o que a Task 2 já entregou.
-    const printTarget = resolvePrintTarget(store);
     // Módulo Caixa (Task 4, 2026-08-22): quem pode finalizar (fechar +
     // receber pagamento) em vez de só pedir a conta. Ver
     // lib/storeModules.ts (canFinalizeBill) pro porquê de ser restritivo
@@ -1314,6 +1319,13 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     const isAddingItemRef = useRef(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+    // "Pedidos do Dia" (extensão do antigo "Pedidos Enviados", redesign
+    // 2026-08-23) — mesas JÁ FECHADAS hoje, buscadas à parte porque
+    // fetch_active_table_orders_secure exclui `status = 'delivered'` por
+    // design (é o mesmo filtro que faz o card de mesa sumir da lista quando
+    // a conta fecha). Ver sentHistoryItems abaixo pra como os dois se
+    // combinam.
+    const [closedTodayOrders, setClosedTodayOrders] = useState<Order[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [showFullBill, setShowFullBill] = useState(false);
     
@@ -1438,19 +1450,27 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
         return breakdown;
     }, [currentTableSummary]);
 
-    // Task 2 (2026-08-22) — "Histórico de Pedidos Enviados": substituto do
-    // KDS pra lojas em direct_print. Sem RPC/migration nova (restrição do
-    // plano): deriva de `activeOrders`, o MESMO dado que já alimenta os
-    // cards de mesa (fetch_active_table_orders_secure, Realtime já ligado
-    // via loadData/canal `tables_dashboard_*` logo abaixo) — não é uma
-    // fonte nova, só uma projeção plana dele. Alcance real, registrado
-    // aqui por transparência: só cobre mesas ainda ABERTAS, porque a RPC
-    // já exclui order.status IN ('delivered','canceled') por design (é o
-    // mesmo filtro que faz o card de mesa sumir da lista quando a conta
-    // fecha — não dá pra reaproveitar o dado sem herdar o filtro). Uma vez
-    // que a mesa fecha, o pedido sai daqui e passa a viver só no Histórico
-    // de Vendas (StoreAdminView, fetchSalesHistory) — que já existe e já é
-    // acessível ao lojista/caixa; não duplicado aqui de propósito.
+    // "Pedidos do Dia" (Task 2, 2026-08-22 — "Histórico de Pedidos Enviados"
+    // original, expandido no redesign de 2026-08-23 a pedido do dono: "o
+    // histórico desaparecia quando a mesa fechava, ele quer o dia inteiro,
+    // mesa fechada incluída, só visualização"). Sem RPC/migration nova:
+    // combina `activeOrders` (mesas ainda abertas, já assinado via Realtime
+    // pelo canal `tables_dashboard_*` acima) com `closedTodayOrders` (mesas
+    // fechadas HOJE, buscado à parte em loadData — `fetch_active_table_
+    // orders_secure` exclui `status='delivered'` por design, não dá pra
+    // reaproveitar sem herdar esse filtro). Só existe a visão, sem nenhum
+    // controle de confirmação de entrega — pedido explícito ("view only").
+    //
+    // `printed`: melhor esforço, não garantia. Item `added_by_role==='garcom'`
+    // sempre imprime na hora do próprio clique (Task 2, handleAddItem) — se
+    // a impressão tivesse falhado, o garçom já viu um alertError() bloqueante
+    // na hora, então aqui é seguro assumir "impresso". Item de origem
+    // cliente (QR/Balcão) reflete o dedupe local da reconciliação do Caixa
+    // (`wasKitchenTicketPrinted`, CaixaPrintStation.tsx) — que só sabe o que
+    // ESTE navegador confirmou ter impresso; sem isso (ex.: outro aparelho
+    // imprimiu, ou o item ainda não foi reconciliado) o badge mostra "sem
+    // registro", nunca afirma "não imprimiu" (não dá pra provar um negativo
+    // sem estado no servidor, e não há migration nesta task pra isso).
     const sentHistoryItems = useMemo(() => {
         if (orderFlow !== 'direct_print') return [];
         const tableNumberById = new Map(tables.map(t => [t.id, t.number]));
@@ -1462,23 +1482,33 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
             quantity: number;
             destination: 'kitchen' | 'bar';
             addons?: string;
+            closed: boolean;
+            printed: 'sim' | 'nao_verificavel';
         }[] = [];
-        activeOrders.forEach(order => {
+        const pushOrder = (order: Order, closed: boolean) => {
             (order.order_items || []).forEach(item => {
                 if (item.status === OrderStatus.CANCELED) return;
+                const destination: 'kitchen' | 'bar' = item.product?.destination === 'bar' ? 'bar' : 'kitchen';
+                const printed = item.added_by_role === 'garcom' || wasKitchenTicketPrinted(storeId, destination, item.id)
+                    ? 'sim' as const
+                    : 'nao_verificavel' as const;
                 rows.push({
                     id: item.id,
                     time: item.created_at,
-                    tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? '?',
+                    tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? order.tables?.number ?? '?',
                     productName: item.product?.name || 'Produto indisponível',
                     quantity: item.quantity,
-                    destination: item.product?.destination === 'bar' ? 'bar' : 'kitchen',
+                    destination,
                     addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
+                    closed,
+                    printed,
                 });
             });
-        });
+        };
+        activeOrders.forEach(order => pushOrder(order, false));
+        closedTodayOrders.forEach(order => pushOrder(order, true));
         return rows.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-    }, [orderFlow, activeOrders, tables]);
+    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId]);
 
     const toggleSelection = (itemId: string, maxQty: number) => {
         setPaymentSelectedItems(prev => {
@@ -1552,6 +1582,16 @@ NOTIFY pgrst, 'reload schema';`;
         ]);
         setTables(t);
         setActiveOrders(o);
+
+        // "Pedidos do Dia" — só busca pra lojas em direct_print (mesmo
+        // gate de sentHistoryItems abaixo); nas 6 lojas reais com KDS isto
+        // nunca dispara, sem RPC extra nenhuma pra elas.
+        if (orderFlow === 'direct_print') {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const closed = await fetchSalesHistory(storeId, startOfDay.toISOString());
+            setClosedTodayOrders(closed.filter(ord => ord.order_type === 'table'));
+        }
 
         // Update selected table if open to reflect latest service_fee_removed state
         setSelectedTable(prev => {
@@ -1806,13 +1846,12 @@ NOTIFY pgrst, 'reload schema';`;
                 // finaliza mesa o dia inteiro exatamente como sempre fez —
                 // passariam a imprimir um papel novo do nada em toda mesa
                 // fechada, o que é mudar comportamento (a garantia central
-                // deste plano). `printTarget === 'station'` também não
-                // imprime aqui: é a Estação (Task 3, EstacaoModule.tsx) quem
-                // assume nesse caso, via o mesmo ping Realtime que já
-                // dispara em qualquer UPDATE de `orders` — nenhuma migration
-                // nova precisou disso (trigger já existe desde a 029).
+                // deste plano). Imprime sempre no aparelho de quem finalizou
+                // (redesign 2026-08-23: não existe mais um "alvo" separado —
+                // o único equipamento fixo é o do próprio caixa, ver
+                // lib/storeModules.ts).
                 const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-                if (isCaixaOperator && printTarget === 'device') {
+                if (isCaixaOperator) {
                     const printed = await printBillReceipt({
                         storeName: store.name,
                         cnpj: store.cnpj,
@@ -1954,11 +1993,14 @@ NOTIFY pgrst, 'reload schema';`;
             // printKitchenTicket) coincidem aqui: nenhuma mudança em
             // lib/print.ts foi necessária.
             //
-            // Fix round 1 (correção de design): `printTarget === 'device'`
-            // é o segundo portão — quando a loja usa uma Estação de
-            // Impressão (Task 3), este aparelho não imprime nada, senão o
-            // pedido sairia duplicado (uma vez aqui, outra na estação).
-            if (result.orderId && orderFlow === 'direct_print' && printTarget === 'device') {
+            // Redesign 2026-08-23: este print é sempre incondicional em
+            // direct_print agora — não existe mais uma "Estação" separada
+            // que pudesse duplicar (ver lib/storeModules.ts). A reconciliação
+            // de impressão do Caixa (CaixaPrintStation.tsx, rodando na sessão
+            // do caixa) sabe ignorar este item de propósito: ele é gravado
+            // com `added_by_role: 'garcom'`, e ela só reconcilia itens que
+            // NÃO vieram do garçom (autoatendimento do cliente e Balcão).
+            if (result.orderId && orderFlow === 'direct_print') {
                 // Fix round 1 (Task 2 review, Important #2): printKitchenTicket
                 // agora devolve Promise<boolean> — antes disso, uma falha
                 // silenciosa (iframe sem contentDocument/contentWindow) não
@@ -2046,7 +2088,7 @@ NOTIFY pgrst, 'reload schema';`;
                         className="flex items-center gap-2 text-sm"
                     >
                         <FileText size={18} />
-                        Pedidos Enviados
+                        Pedidos do Dia
                     </Button>
                 )}
             </div>
@@ -2776,18 +2818,19 @@ NOTIFY pgrst, 'reload schema';`;
                 </div>
             </Modal>
 
-            {/* Task 2 (2026-08-22) — "Histórico de Pedidos Enviados": lista
-                plana (hora, mesa, item, destino), sem status nem coluna de
-                fluxo nenhuma — só responde "o pedido já foi?" pra quem não
-                tem KDS. Ver sentHistoryItems acima pro alcance real (só
-                mesas ainda abertas). */}
-            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos Enviados" variant="sheet">
+            {/* "Pedidos do Dia" (redesign 2026-08-23, sucede "Histórico de
+                Pedidos Enviados" da Task 2): lista plana (hora, mesa, item,
+                se imprimiu), sem status/coluna de fluxo nem controle de
+                confirmação de entrega — só visualização, pedido explícito do
+                dono. Cobre o dia inteiro, mesas fechadas incluídas — ver
+                sentHistoryItems acima pro porquê de combinar duas fontes. */}
+            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos do Dia" variant="sheet">
                 <div className="space-y-3">
                     <p className="text-xs text-[var(--text-muted)]">
-                        Tudo que já foi lançado e impresso nas mesas abertas, do mais recente pro mais antigo. Some daqui quando a mesa fecha — depois disso, fica no Histórico de Vendas.
+                        Tudo que foi lançado hoje, mesas fechadas incluídas — do mais recente pro mais antigo. Só visualização, sem nenhuma ação aqui.
                     </p>
                     {sentHistoryItems.length === 0 ? (
-                        <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum pedido enviado ainda nas mesas abertas.</p>
+                        <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum pedido lançado ainda hoje.</p>
                     ) : (
                         <div className="space-y-2 max-h-[65vh] overflow-y-auto">
                             {sentHistoryItems.map(row => (
@@ -2798,11 +2841,17 @@ NOTIFY pgrst, 'reload schema';`;
                                         </p>
                                         <p className="text-xs text-[var(--text-muted)]">
                                             Mesa {row.tableNumber} · {new Date(row.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                            {row.closed ? ' · mesa fechada' : ''}
                                         </p>
                                     </div>
-                                    <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
-                                        {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <Badge color={row.printed === 'sim' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
+                                            {row.printed === 'sim' ? 'Impresso' : 'Sem registro'}
+                                        </Badge>
+                                        <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
+                                            {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
+                                        </Badge>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -2841,7 +2890,6 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
     // confirm()/modal de NF-e de sempre.
     const caixaModuleOn = resolveStoreModules(store).caixa;
     const canFinalize = canFinalizeBill(loggedUser, store);
-    const printTarget = resolvePrintTarget(store);
     const isFinishingRef = useRef(false);
 
     // Captura de pagamento (Task 5) — só usada quando caixaModuleOn. Mesmo
@@ -3009,15 +3057,11 @@ const CounterView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store,
             // TablesView.handleFinishPayment): as 7 lojas reais (módulo
             // desligado) nunca chegam aqui, e dono/universal fechando pelo
             // bypass de canFinalizeBill não ganham um papel novo do nada.
-            // `printTarget === 'station'` também não imprime aqui — mesmo
-            // raciocínio da mesa (evita duplo-print); a Estação hoje só
-            // reconcilia pedidos de MESA (EstacaoModule.tsx,
-            // reconcileCaixa filtra order_type==='table'), então um balcão
-            // fechado numa loja em `printTarget: 'station'` não emite
-            // comprovante nenhum ainda — ver ressalva no relatório desta
-            // task, fora do escopo pedido (não é o gap que esta task fecha).
+            // Redesign 2026-08-23: sempre imprime no aparelho de quem
+            // fechou — não existe mais "Estação" separada pra evitar
+            // duplicar (ver lib/storeModules.ts).
             const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-            if (isCaixaOperator && printTarget === 'device') {
+            if (isCaixaOperator) {
                 const items = paymentOrder.order_items || [];
                 const printed = await printBillReceipt({
                     storeName: store.name,
