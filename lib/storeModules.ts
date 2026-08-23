@@ -24,9 +24,9 @@ export type OrderFlow = 'kds' | 'direct_print';
 // romperia a garantia central deste plano ("loja sem config = comportamento
 // de hoje") pra qualquer waiter futuro cadastrado em qualquer uma das 7
 // lojas reais, mesmo sem o Master Admin jamais ter tocado nesta seção —
-// exatamente o mesmo cuidado já usado em `resolveOrderFlow`/
-// `resolvePrintTarget` abaixo (ausência de config = valor SEGURO, nunca o
-// novo). Ver canFinalizeBill mais abaixo pra como isto é consumido.
+// exatamente o mesmo cuidado já usado em `resolveOrderFlow` abaixo
+// (ausência de config = valor SEGURO, nunca o novo). Ver canFinalizeBill
+// mais abaixo pra como isto é consumido.
 export const ALL_ON: StoreModules = {
   tables: true, counter: true, kitchen_kds: true,
   bar_kds: true, caixa: false, menu: true, admin: true,

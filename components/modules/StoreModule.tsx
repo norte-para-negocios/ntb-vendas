@@ -1365,10 +1365,29 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     };
 
     // Task 2 (2026-08-22): "Histórico de Pedidos Enviados" — substituto do
-    // KDS pra lojas em direct_print. Só existe o estado do modal aqui
-    // porque a lista em si (sentHistoryItems abaixo) é derivada, não
-    // buscada à parte.
+    // KDS pra lojas em direct_print. `activeOrders` (mesas ainda abertas) é
+    // derivado sem busca própria; `closedTodayOrders` (mesas fechadas hoje)
+    // É buscado à parte, só quando este modal abre — ver efeito abaixo
+    // (Important #I3, revisão de código 2026-08-23).
     const [showSentHistory, setShowSentHistory] = useState(false);
+
+    // Important #I3: antes, `fetchSalesHistory` (RPC `limit 2000` com
+    // `order_items` aninhado) rodava dentro de `loadData` — chamada a cada
+    // ping Realtime de `order_change_pings`/`table_change_pings`, mesmo com
+    // o modal fechado. Movida pra cá: só busca quando o caixa realmente abre
+    // "Pedidos do Dia", uma vez por abertura (não fica reassinando Realtime
+    // pro histórico — é view-only, reabrir o modal já traz o estado atual).
+    useEffect(() => {
+        if (!showSentHistory || orderFlow !== 'direct_print' || !storeId) return;
+        let cancelled = false;
+        (async () => {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const closed = await fetchSalesHistory(storeId, startOfDay.toISOString());
+            if (!cancelled) setClosedTodayOrders(closed.filter(ord => ord.order_type === 'table'));
+        })();
+        return () => { cancelled = true; };
+    }, [showSentHistory, orderFlow, storeId]);
 
     // Task 4 (2026-08-22, módulo Caixa): `brand` é novo — opcional, só
     // preenchido quando currentPaymentMethod é CREDIT/DEBIT (ver seletor de
@@ -1455,7 +1474,8 @@ const TablesView: React.FC<{ store: Store; loggedUser: StoreUser }> = ({ store, 
     // mesa fechada incluída, só visualização"). Sem RPC/migration nova:
     // combina `activeOrders` (mesas ainda abertas, já assinado via Realtime
     // pelo canal `tables_dashboard_*` acima) com `closedTodayOrders` (mesas
-    // fechadas HOJE, buscado à parte em loadData — `fetch_active_table_
+    // fechadas HOJE, buscado à parte só quando o modal abre — ver efeito de
+    // `showSentHistory` acima, Important #I3 — `fetch_active_table_
     // orders_secure` exclui `status='delivered'` por design, não dá pra
     // reaproveitar sem herdar esse filtro). Só existe a visão, sem nenhum
     // controle de confirmação de entrega — pedido explícito ("view only").
@@ -1628,15 +1648,14 @@ NOTIFY pgrst, 'reload schema';`;
         setTables(t);
         setActiveOrders(o);
 
-        // "Pedidos do Dia" — só busca pra lojas em direct_print (mesmo
-        // gate de sentHistoryItems abaixo); nas 6 lojas reais com KDS isto
-        // nunca dispara, sem RPC extra nenhuma pra elas.
-        if (orderFlow === 'direct_print') {
-            const startOfDay = new Date();
-            startOfDay.setHours(0, 0, 0, 0);
-            const closed = await fetchSalesHistory(storeId, startOfDay.toISOString());
-            setClosedTodayOrders(closed.filter(ord => ord.order_type === 'table'));
-        }
+        // "Pedidos do Dia" (mesas fechadas hoje) NÃO é mais buscado aqui —
+        // ver o efeito de `showSentHistory` abaixo (Important #I3, revisão
+        // de código 2026-08-23): `fetchSalesHistory` é uma RPC `limit 2000`
+        // com `order_items` aninhado, e `loadData` roda a cada ping Realtime
+        // de `order_change_pings`/`table_change_pings` — MUITO mais vezes
+        // por minuto do que alguém realmente abre o modal "Pedidos do Dia".
+        // Rodar essa RPC toda vez era trabalho pago pra uma tela que, na
+        // prática, fica fechada quase sempre.
 
         // Update selected table if open to reflect latest service_fee_removed state
         setSelectedTable(prev => {

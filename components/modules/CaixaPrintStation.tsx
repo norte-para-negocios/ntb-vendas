@@ -452,17 +452,37 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
 // está fazendo outro trabalho ao mesmo tempo (mesas, comandas, pagamento),
 // então isto é só um badge pequeno e persistente, que abre um painel de
 // detalhes (Modal, não tela cheia) só quando clicado.
+// M2 (revisão de código 2026-08-23): `connectionStatus` começa em
+// 'connecting' a cada mount (StoreLayout monta este hook uma vez por
+// sessão/F5) — sem grace period, `isAlarmed` incluía esse estado transitório
+// dentro de `!isConnected`, deixando o badge vermelho por um instante em
+// TODO carregamento, mesmo quando a conexão real vai fechar normal em
+// seguida (falso alarme cosmético). `CONNECTING_GRACE_MS` só perdoa
+// especificamente "ainda conectando" — falha real de reconciliação
+// (`hasFailures`/`persistentReconcileFailure`) ou ficar `disconnected`/
+// offline de verdade continuam acendendo o alarme na hora, sem carência
+// nenhuma.
+const CONNECTING_GRACE_MS = 4000;
+
 export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationState; className?: string }> = ({ status, className }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const [withinConnectingGrace, setWithinConnectingGrace] = useState(true);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setWithinConnectingGrace(false), CONNECTING_GRACE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   if (!status.active) return null;
 
   const isConnected = status.connectionStatus === 'connected' && status.online;
+  const isStillConnecting = status.connectionStatus === 'connecting' && status.online;
   const hasFailures = status.failedItems.length > 0;
   // Falha na própria consulta ao servidor (distinto de "0 pedidos
   // pendentes") também acende o indicador, mesmo sem nenhum item na lista
   // de falhas — é exatamente o caso que o `onError` de fetchKitchenOrders
   // existe pra não deixar passar em silêncio.
-  const isAlarmed = hasFailures || status.persistentReconcileFailure || !isConnected;
+  const isAlarmed = hasFailures || status.persistentReconcileFailure || (!isConnected && !(isStillConnecting && withinConnectingGrace));
 
   return (
     <>
