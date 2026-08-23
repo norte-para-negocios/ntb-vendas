@@ -678,9 +678,21 @@ export const fetchTableOrderSummary = async (tableId: string): Promise<{ total: 
   return { total: Number((data as any).total) || 0, items: (data as any).items || [] };
 };
 
-export const fetchKitchenOrders = async (storeId: string, destination: 'kitchen' | 'bar' = 'kitchen'): Promise<OrderItem[]> => {
+// Fix round 2 (Group B1): `onError` é opcional e aditivo — todo call site
+// existente (KdsView etc.) continua recebendo `[]` em silêncio, exatamente
+// como sempre foi. Só a Estação de Impressão passa este callback: é o único
+// consumidor que precisa DISTINGUIR "0 pedidos pendentes" de "a chamada
+// falhou" — sem isso, uma RPC persistentemente falhando fica indistinguível
+// de uma cozinha em dia (a estação continuava avançando `lastReconcileAt` e
+// mostrando o banner verde de conexão, que reflete só o websocket do
+// Realtime, um subsistema separado do REST/RPC que este fetch usa).
+export const fetchKitchenOrders = async (
+  storeId: string,
+  destination: 'kitchen' | 'bar' = 'kitchen',
+  onError?: (error: unknown) => void,
+): Promise<OrderItem[]> => {
   const { data, error } = await supabase.rpc('fetch_kitchen_orders_secure', { p_store_id: storeId, p_destination: destination });
-  if (error) { console.error('Kitchen fetch error:', error); return []; }
+  if (error) { console.error('Kitchen fetch error:', error); onError?.(error); return []; }
   return (data as any) || [];
 };
 
@@ -736,13 +748,21 @@ export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
   return (data as any) || [];
 };
 
-export const fetchSalesHistory = async (storeId: string, startDate?: string, endDate?: string): Promise<Order[]> => {
+// Fix round 2 (Group B1): mesmo princípio do `onError` opcional em
+// fetchKitchenOrders acima — a Estação de Impressão (destino 'caixa') é o
+// único consumidor que precisa saber se a RPC falhou, não só receber `[]`.
+export const fetchSalesHistory = async (
+  storeId: string,
+  startDate?: string,
+  endDate?: string,
+  onError?: (error: unknown) => void,
+): Promise<Order[]> => {
   const { data, error } = await supabase.rpc('fetch_sales_history_secure', {
     p_store_id: storeId,
     p_start_date: startDate || null,
     p_end_date: endDate || null,
   });
-  if (error) { console.error('Fetch Sales History Error', error); return []; }
+  if (error) { console.error('Fetch Sales History Error', error); onError?.(error); return []; }
   return (data as any) || [];
 };
 

@@ -59,6 +59,14 @@ const MAX_EVENTS = 30;
 // "Reimprimir", que também garante o pedido não fica esquecido: aparece
 // destacado na tela até alguém agir.
 const MAX_AUTO_RETRIES = 3;
+// Fix round 2 (Group B1): número de reconciliações CONSECUTIVAS cuja
+// própria chamada ao servidor (fetchKitchenOrders/fetchSalesHistory)
+// falhou antes de tratar isso como falha PERSISTENTE (banner vermelho de
+// mesma proeminência que o de conexão). Um único erro passageiro de rede
+// não precisa virar alarme — mas 2 falhas seguidas do backstop de 10s (ver
+// intervalId abaixo) já são ~20s sem conseguir nem SABER se há pedido
+// pendente, tempo suficiente pra não ser ruído.
+const RECONCILE_FAILURE_ALERT_THRESHOLD = 2;
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -219,6 +227,18 @@ export const EstacaoModule: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<StoreOrdersConnectionStatus>('connecting');
   const [online, setOnline] = useState(true);
   const [lastReconcileAt, setLastReconcileAt] = useState<string | null>(null);
+  // Fix round 2 (Group B1): saúde da reconciliação em si (a chamada
+  // fetch_kitchen_orders_secure/fetch_sales_history_secure), separada do
+  // status do canal Realtime acima — os dois são subsistemas diferentes do
+  // Supabase, e um pode estar saudável enquanto o outro falha (websocket
+  // conectado, RPC persistentemente derrubando). `lastReconcileFailed`
+  // reflete só a ÚLTIMA tentativa (distingue "0 pedidos" de "a chamada
+  // falhou" na linha de status); `persistentReconcileFailure` só vira
+  // `true` depois de RECONCILE_FAILURE_ALERT_THRESHOLD falhas seguidas —
+  // é o gatilho do banner vermelho de mesma proeminência do de conexão.
+  const [lastReconcileFailed, setLastReconcileFailed] = useState(false);
+  const [persistentReconcileFailure, setPersistentReconcileFailure] = useState(false);
+  const reconcileFailStreakRef = useRef(0);
 
   const [events, setEvents] = useState<PrintEvent[]>([]);
   const [failedItems, setFailedItems] = useState<Map<string, FailedEntry>>(new Map());
@@ -321,8 +341,14 @@ export const EstacaoModule: React.FC = () => {
   // em 4 gatilhos independentes: ao ativar, a cada ping Realtime, num
   // intervalo fixo (backstop caso o ping se perca), e quando a aba volta a
   // ficar visível/online (aparelho que hibernou ou perdeu rede).
-  const reconcileKitchen = useCallback(async (s: Store, destination: StationDestination, productDestination: 'kitchen' | 'bar') => {
-    const items = await fetchKitchenOrders(s.id, productDestination);
+  // Fix round 2 (Group B1): devolve `true` quando a própria chamada ao
+  // servidor falhou (RPC com erro) — distinto de "chamada OK, 0 itens
+  // pendentes". `reconcile()` usa isso pra alimentar o banner de saúde da
+  // reconciliação, sem misturar com o resultado por-item de impressão
+  // (que continua em `failedItems`/banner de impressão já existente).
+  const reconcileKitchen = useCallback(async (s: Store, destination: StationDestination, productDestination: 'kitchen' | 'bar'): Promise<boolean> => {
+    let fetchFailed = false;
+    const items = await fetchKitchenOrders(s.id, productDestination, () => { fetchFailed = true; });
     // Mais antigo primeiro — mesma ordem que fetch_kitchen_orders_secure
     // já devolve (order by oi.created_at), preservada aqui de propósito:
     // se vários pedidos novos chegaram durante uma queda, eles saem na
@@ -335,17 +361,35 @@ export const EstacaoModule: React.FC = () => {
       const orderType = item.order?.order_type;
       const tableNumber = item.order?.tables?.number;
       const description = ticketDescription(item);
-      const doPrint = () => printKitchenTicket({
-        kind,
-        storeName: s.name,
-        orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
-        identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
-        quantity: item.quantity,
-        productName: item.product?.name || 'Produto indisponível',
-        addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
-        observation: item.notes || undefined,
-        orderIdShort: item.order_id.slice(0, 8),
-      });
+      const doPrint = async () => {
+        // Fix round 2 (Group B2): a lógica de falha abaixo (marcar
+        // `failedRef`, deixar o item visível pro operador reimprimir)
+        // assume que `doPrint()` sempre RESOLVE, nunca REJEITA — mas
+        // nada em printKitchenTicket é garantido nesse sentido (é
+        // Promise<boolean>, não um contrato blindado contra throw). Se
+        // isso um dia deixar de valer, uma rejeição não tratada aqui
+        // interromperia o `for` inteiro no meio do lote, sem marcar o
+        // item corrente (nem os seguintes) como falha — desligando em
+        // silêncio o próprio mecanismo que existe pra tornar falha de
+        // impressão visível. try/catch trata rejeição exatamente como
+        // `ok=false`.
+        try {
+          return await printKitchenTicket({
+            kind,
+            storeName: s.name,
+            orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
+            identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
+            quantity: item.quantity,
+            productName: item.product?.name || 'Produto indisponível',
+            addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
+            observation: item.notes || undefined,
+            orderIdShort: item.order_id.slice(0, 8),
+          });
+        } catch (e) {
+          console.error('printKitchenTicket lançou (tratado como falha):', e);
+          return false;
+        }
+      };
       // eslint-disable-next-line no-await-in-loop -- impressão precisa ser sequencial: dois print() quase simultâneos (dois pedidos chegando juntos) empilhariam diálogos nativos no mesmo instante.
       const ok = await doPrint();
 
@@ -364,6 +408,7 @@ export const EstacaoModule: React.FC = () => {
         pushEvent(s.id, destination, { itemId: item.id, time: new Date().toISOString(), description, success: false });
       }
     }
+    return fetchFailed;
   }, [pushEvent]);
 
   // Módulo Caixa (Task 4, 2026-08-22) — o "gancho" que o EstacaoModule já
@@ -391,9 +436,13 @@ export const EstacaoModule: React.FC = () => {
   // de "evento de fechamento" — `table_id + updated_at` é o substituto sem
   // schema novo.
   const CAIXA_LOOKBACK_HOURS = 24;
-  const reconcileCaixa = useCallback(async (s: Store, destination: StationDestination) => {
+  // Fix round 2 (Group B1): mesmo contrato de retorno de reconcileKitchen
+  // acima — `true` quando a própria RPC falhou, distinto de "OK, nada pra
+  // imprimir".
+  const reconcileCaixa = useCallback(async (s: Store, destination: StationDestination): Promise<boolean> => {
     const sinceIso = new Date(Date.now() - CAIXA_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
-    const orders = await fetchSalesHistory(s.id, sinceIso);
+    let fetchFailed = false;
+    const orders = await fetchSalesHistory(s.id, sinceIso, undefined, () => { fetchFailed = true; });
     const tableOrders = orders.filter((o) => o.order_type === 'table' && o.table_id && o.updated_at);
 
     const groups = new Map<string, Order[]>();
@@ -434,15 +483,25 @@ export const EstacaoModule: React.FC = () => {
       const changeDue = calculateChangeForMethods(methods, total);
       const description = `Mesa ${tableNumber} — R$ ${total.toFixed(2)}`;
 
-      const doPrint = () => printBillReceipt({
-        storeName: s.name,
-        cnpj: s.cnpj,
-        label: `MESA ${tableNumber} - COMPROVANTE`,
-        items: items.map((i) => ({ quantity: i.quantity, name: getOrderItemDisplayName(i), total: i.price_at_time * i.quantity })),
-        subtotal,
-        total,
-        payment: methods.length > 0 ? { methods, changeDue } : undefined,
-      });
+      // Fix round 2 (Group B2): mesmo try/catch de reconcileKitchen — uma
+      // rejeição não tratada de printBillReceipt abortaria o `for` no meio
+      // do lote sem marcar o grupo corrente como falha.
+      const doPrint = async () => {
+        try {
+          return await printBillReceipt({
+            storeName: s.name,
+            cnpj: s.cnpj,
+            label: `MESA ${tableNumber} - COMPROVANTE`,
+            items: items.map((i) => ({ quantity: i.quantity, name: getOrderItemDisplayName(i), total: i.price_at_time * i.quantity })),
+            subtotal,
+            total,
+            payment: methods.length > 0 ? { methods, changeDue } : undefined,
+          });
+        } catch (e) {
+          console.error('printBillReceipt lançou (tratado como falha):', e);
+          return false;
+        }
+      };
       // eslint-disable-next-line no-await-in-loop -- mesmo motivo do reconcileKitchen: impressão sequencial, nunca dois print() simultâneos.
       const ok = await doPrint();
 
@@ -461,6 +520,7 @@ export const EstacaoModule: React.FC = () => {
         pushEvent(s.id, destination, { itemId: key, time: new Date().toISOString(), description, success: false });
       }
     }
+    return fetchFailed;
   }, [pushEvent]);
 
   // --- Reconciliação: busca o estado real do servidor e imprime o que
@@ -477,12 +537,23 @@ export const EstacaoModule: React.FC = () => {
     reconcileLockRef.current = true;
     try {
       const productDestination = productDestinationFor(destination);
+      let fetchFailed = false;
       if (productDestination) {
-        await reconcileKitchen(s, destination, productDestination);
+        fetchFailed = await reconcileKitchen(s, destination, productDestination);
       } else if (destination === 'caixa') {
-        await reconcileCaixa(s, destination);
+        fetchFailed = await reconcileCaixa(s, destination);
       }
       setLastReconcileAt(new Date().toISOString());
+      // Fix round 2 (Group B1): a reconciliação em si é a garantia real
+      // (ver cabeçalho do arquivo) — não o canal Realtime, que só dispara
+      // ela mais rápido. `lastReconcileFailed` reflete a tentativa mais
+      // recente (distingue "0 pedidos pendentes" de "não consegui nem
+      // perguntar ao servidor"); `persistentReconcileFailure` só liga após
+      // falhas seguidas, pra virar o banner vermelho de mesma proeminência
+      // do banner de conexão, sem alarme falso num único blip de rede.
+      setLastReconcileFailed(fetchFailed);
+      reconcileFailStreakRef.current = fetchFailed ? reconcileFailStreakRef.current + 1 : 0;
+      setPersistentReconcileFailure(reconcileFailStreakRef.current >= RECONCILE_FAILURE_ALERT_THRESHOLD);
     } finally {
       reconcileLockRef.current = false;
     }
@@ -500,7 +571,19 @@ export const EstacaoModule: React.FC = () => {
     const destination = destinationRef.current;
     const entry = failedRef.current.get(key);
     if (!s || !entry) return;
-    const ok = await entry.retry();
+    // Fix round 2 (Group B2): `entry.retry` já é `doPrint`, que agora tem
+    // seu próprio try/catch nas duas origens (reconcileKitchen/
+    // reconcileCaixa) — este try/catch aqui é redundante NA PRÁTICA, mas
+    // deliberado: é o ponto de entrada do único caminho de impressão
+    // acionado por toque humano direto (não por loop automático), e o
+    // brief pede explicitamente proteção aqui também, não só nos loops.
+    let ok = false;
+    try {
+      ok = await entry.retry();
+    } catch (e) {
+      console.error('Reimpressão manual lançou (tratado como falha):', e);
+      ok = false;
+    }
     if (ok) {
       printedIdsRef.current.add(key);
       savePrintedIds(s.id, destination, printedIdsRef.current);
@@ -718,6 +801,10 @@ export const EstacaoModule: React.FC = () => {
 
   const destination = config.destination;
   const DestIcon = DESTINATION_ICON[destination];
+  // Fix round 2 (Group B1): `isConnected` continua refletindo só o canal
+  // Realtime (usado no badge pequeno "Reconectando" abaixo) — não muda de
+  // nome nem de escopo pra não confundir com a saúde da reconciliação, que
+  // é o sinal novo abaixo.
   const isConnected = connectionStatus === 'connected' && online;
   const failedList = Array.from(failedItems.entries());
   const lastEvent = events[0] || null;
@@ -765,6 +852,27 @@ export const EstacaoModule: React.FC = () => {
           {isConnected ? 'CONECTADA' : 'SEM CONEXÃO — PEDIDOS PODEM NÃO ESTAR CHEGANDO'}
         </span>
       </div>
+
+      {/* Fix round 2 (Group B1): banner SEPARADO, mesma proeminência do de
+          conexão acima (mesma altura, mesmo peso de texto, cor de fundo
+          cheia) — porque é um sinal de subsistema diferente. O banner
+          acima só reflete o canal Realtime; este reflete se a estação
+          CONSEGUE de fato perguntar ao servidor o que está pendente
+          (fetch_kitchen_orders_secure/fetch_sales_history_secure). Websocket
+          conectado + RPC persistentemente falhando é um estado real e
+          distinto (dois subsistemas separados do Supabase) — sem este
+          banner, esse cenário mostrava CONECTADA em verde enquanto nada
+          era impresso, exatamente o desastre que esta tela existe pra
+          evitar. Só aparece depois de RECONCILE_FAILURE_ALERT_THRESHOLD
+          falhas seguidas, pra não virar alarme falso num blip de rede. */}
+      {persistentReconcileFailure && (
+        <div className="w-full py-4 px-6 flex items-center justify-center gap-3 text-white bg-[var(--err)] animate-pulse">
+          <XCircle size={26} />
+          <span className="text-xl md:text-2xl font-extrabold tracking-wide text-center">
+            FALHA AO BUSCAR PEDIDOS NO SERVIDOR — AVISE O SUPORTE
+          </span>
+        </div>
+      )}
 
       <div className="max-w-3xl w-full mx-auto p-6 flex-1">
         <div className="flex items-center justify-between gap-3 mb-6">
@@ -842,8 +950,15 @@ export const EstacaoModule: React.FC = () => {
         )}
 
         <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
-          <span className="flex items-center gap-1.5">
-            <Clock size={13} /> Última verificação: {lastReconcileAt ? formatTime(lastReconcileAt) : 'aguardando...'}
+          {/* Fix round 2 (Group B1): distingue "0 pedidos pendentes" (ícone
+              de relógio neutro, texto muted) de "a última tentativa falhou
+              em CONSULTAR o servidor" (ícone vermelho, texto vermelho) —
+              antes os dois casos produziam o mesmo texto neutro
+              "Última verificação: HH:MM:SS", indistinguíveis. */}
+          <span className={`flex items-center gap-1.5 ${lastReconcileFailed ? 'text-[var(--err)] font-semibold' : ''}`}>
+            {lastReconcileFailed ? <XCircle size={13} /> : <Clock size={13} />}
+            Última verificação: {lastReconcileAt ? formatTime(lastReconcileAt) : 'aguardando...'}
+            {lastReconcileFailed && ' — falhou ao consultar o servidor'}
           </span>
           <div className="flex items-center gap-4">
             <button onClick={handleTestPrint} className="underline flex items-center gap-1">
