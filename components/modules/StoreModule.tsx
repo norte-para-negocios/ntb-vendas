@@ -433,7 +433,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // garante que 'admin' nunca fica fora do alcance de todo mundo ao mesmo
   // tempo (ver comentário lá pro porquê).
   const storeModules = resolveStoreModules(user.store);
-  const hasPermission = (tabId: string) => hasTabPermission(user, tabId);
+  const hasPermission = (tabId: string) => hasTabPermission(user, tabId, user.store);
   const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
   const visibleTabs = allTabs.filter(tab => accessibleTabIds.has(tab.id));
   const bottomNavTabs = visibleTabs.filter(item => ['tables', 'counter', 'kitchen', 'bar'].includes(item.id));
@@ -6337,7 +6337,7 @@ const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
 // achar a primeira que está nesse conjunto.
 const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
     const modules = resolveStoreModules(u.store);
-    const hasPermission = (tabId: string) => hasTabPermission(u, tabId);
+    const hasPermission = (tabId: string) => hasTabPermission(u, tabId, u.store);
     const accessible = computeAccessibleTabIds(modules, hasPermission);
     return TAB_IDS.find((t) => accessible.has(t)) ?? 'admin';
 };
@@ -6463,7 +6463,7 @@ export const StoreModule: React.FC = () => {
     // ela garante que 'admin' nunca fica fora de alcance de todo mundo ao
     // mesmo tempo (ver lib/storeModules.ts).
     const storeModules = resolveStoreModules(user.store);
-    const hasPermission = (t: string) => hasTabPermission(user, t);
+    const hasPermission = (t: string) => hasTabPermission(user, t, user.store);
     const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
     const canAccess = (t: string) => accessibleTabIds.has(t);
 

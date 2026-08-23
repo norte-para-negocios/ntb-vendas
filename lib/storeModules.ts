@@ -142,12 +142,32 @@ export const computeAccessibleTabIds = (
 // especiais; toda outra aba continua só no padrão permissivo genérico
 // (ausência de chave = true, pensado pras 6 permissões que já existem em
 // todo store_user real).
+//
+// Fix round 4 (Group B1): o override acima checava só `permissions.caixa`,
+// nunca `resolveStoreModules(store).caixa` — igual ao módulo em si estar
+// DESLIGADO, um usuário com a permissão `caixa` marcada em QUALQUER uma das
+// 6 lojas reais (nenhuma tem módulo Caixa) já ganharia a aba Balcão, mesmo
+// a loja não tendo esse módulo. Inofensivo hoje (confirmado em produção,
+// 2026-08-22: só existe UMA conta com `caixa: true`, na loja que abre em
+// 01/09 — que vai ter o módulo ligado), mas era "uma caixinha marcada" de
+// distância de ficar ativo de verdade numa das 6 lojas KDS, contrariando a
+// garantia central deste plano ("loja sem módulo = sem mudança nenhuma").
+// `store` é opcional (não `undefined`, ausência de argumento) só pra não
+// quebrar nenhuma chamada existente por engano — todo call site real de
+// hoje já tem a loja à mão (`user.store`/`u.store`) e deve sempre passá-la.
 export const hasTabPermission = (
   user: { role: string; permissions?: Record<string, any> },
-  tabId: string
+  tabId: string,
+  store?: { config?: any } | null
 ): boolean => {
   if (user.role === 'owner') return true;
-  if ((tabId === 'tables' || tabId === 'counter') && user.permissions?.caixa === true) return true;
+  if (
+    (tabId === 'tables' || tabId === 'counter') &&
+    user.permissions?.caixa === true &&
+    resolveStoreModules(store).caixa
+  ) {
+    return true;
+  }
   return user.permissions?.[tabId] !== false;
 };
 
