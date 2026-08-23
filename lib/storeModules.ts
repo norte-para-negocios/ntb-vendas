@@ -201,6 +201,31 @@ export const canFinalizeBill = (
   return user.permissions?.caixa === true;
 };
 
+// Jurisdicao de mesas por garcom (Task 3, 2026-08-23, migration 049 —
+// resolucao-backlog-pendente). Mesmo formato de canFinalizeBill acima:
+// restritivo só quando explicitamente configurado, nunca por default.
+//
+// Duas decisões de desenho já fechadas antes desta função existir (não
+// re-derivar): (1) mesa fora da jurisdição continua VISÍVEL — quem chama
+// isso decide o visual (opacidade/bloqueio), esta função só diz se a mesa
+// é operável por este usuário; (2) mesa sem NENHUM garçom com jurisdição
+// atribuída (o estado de toda mesa de toda loja real hoje) fica acessível
+// pra todos — jurisdição é opt-in, nunca um buraco que orfanata mesa.
+//
+// `owner`/`universal` NUNCA são restringidos por jurisdição, mesmo padrão
+// já usado em canFinalizeBill (dono/conta universal enxergam e agem em
+// tudo, sempre) — jurisdição é um conceito de garçom/caixa em campo, não
+// de quem administra a loja inteira.
+export const isTableInJurisdiction = (
+  user: { role: string; assigned_table_ids?: string[] | null },
+  tableId: string
+): boolean => {
+  if (user.role === 'owner' || user.role === 'universal') return true;
+  const ids = user.assigned_table_ids;
+  if (!ids || ids.length === 0) return true;
+  return ids.includes(tableId);
+};
+
 // true quando o perfil bate exatamente com o default "tudo ligado". Usado
 // pelo Master Admin (AdminModule.tsx) pra decidir se grava `config.modules`/
 // `config.order_flow` ou deixa as chaves ausentes — nunca grava o default

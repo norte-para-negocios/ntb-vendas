@@ -90,6 +90,13 @@ export interface StoreUser {
   role: string;
   must_change_password: boolean;
   permissions: StoreUserPermissions;
+  // Jurisdicao de mesas por garcom (Task 3, migration 049). null/undefined
+  // ou array vazio = sem restricao (todas as mesas, comportamento de hoje
+  // de TODO store_user real). So' faz sentido pra role 'waiter'/'cashier'
+  // na UI de atribuicao, mas o enforcement (lib/storeModules.ts,
+  // isTableInJurisdiction) e' generico por role owner/universal, nao por
+  // este campo estar presente ou nao.
+  assigned_table_ids?: string[] | null;
 }
 
 export interface Table {

@@ -27,6 +27,10 @@ export const TABLE_STATUS_LABELS: Record<string, string> = {
 
 export const getTableStatusLabel = (status: string): string => TABLE_STATUS_LABELS[status] || status;
 
+// Jurisdicao de mesas por garcom (Task 3, migration 049) — texto do badge
+// mostrado numa mesa fora da area atribuida ao usuario logado (TablesView).
+export const TABLE_OUT_OF_JURISDICTION_LABEL = 'Fora da sua área';
+
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
     CREDIT: 'Crédito',
     DEBIT: 'Débito',

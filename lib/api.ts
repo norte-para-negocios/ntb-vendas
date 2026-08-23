@@ -122,7 +122,9 @@ export const fetchStoreTeamMembers = async (storeId: string): Promise<StoreUser[
   return data || [];
 };
 
-export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any }) => {
+// assignedTableIds (Task 3, migration 049): null/undefined = sem restrição
+// (todas as mesas) — mesmo default de todo store_user existente.
+export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any; assignedTableIds?: string[] | null }) => {
   const { data, error } = await supabase.rpc('create_store_team_member_secure', {
     p_store_id: storeId,
     p_name: userData.name,
@@ -130,13 +132,14 @@ export const createStoreTeamMember = async (storeId: string, userData: { name: s
     p_password: userData.password || '123456',
     p_role: userData.role,
     p_permissions: userData.permissions,
+    p_assigned_table_ids: userData.assignedTableIds ?? null,
   });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Erro ao criar usuário.');
   return data;
 };
 
-export const updateStoreTeamMember = async (userId: string, userData: { name?: string; email?: string; role?: string; permissions?: any; password?: string }) => {
+export const updateStoreTeamMember = async (userId: string, userData: { name?: string; email?: string; role?: string; permissions?: any; password?: string; assigned_table_ids?: string[] | null }) => {
   const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: userData });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Erro ao atualizar usuário.');

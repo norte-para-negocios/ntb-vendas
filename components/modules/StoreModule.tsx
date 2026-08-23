@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -18,7 +18,7 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -2162,6 +2162,15 @@ NOTIFY pgrst, 'reload schema';`;
                     const isOccupied = table.status === 'occupied' || table.status === 'waiting_bill';
                     const isWaiterRequested = table.waiter_requested;
                     const hasOrders = summary.count > 0;
+                    // Jurisdicao de mesas por garcom (Task 3, migration 049).
+                    // Mesa fora da jurisdicao continua renderizada normalmente
+                    // (numero/status/PIN) mas inteiramente nao-interativa —
+                    // `pointer-events-none` bloqueia tanto abrir o card quanto
+                    // os botoes internos (bloquear, ver PIN, atender garcom)
+                    // numa unica trava, sem precisar desabilitar cada acao
+                    // isoladamente. owner/universal nunca sao restringidos
+                    // (ver isTableInJurisdiction).
+                    const inJurisdiction = isTableInJurisdiction(loggedUser, table.id);
 
                     return (
                         <motion.div
@@ -2173,8 +2182,8 @@ NOTIFY pgrst, 'reload schema';`;
                             transition={SPRING_TAP}
                         >
                         <Card
-                            hoverable
-                            onClick={() => { if(!isBlocked) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
+                            hoverable={inJurisdiction}
+                            onClick={() => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
                             className={`relative flex flex-col justify-between p-4 transition-[height,background-color,border-color,box-shadow] duration-300 border-2 group ${
                                 areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
                             } ${
@@ -2183,9 +2192,18 @@ NOTIFY pgrst, 'reload schema';`;
                                 isWaiterRequested ? 'border-[var(--err)]/50 bg-[var(--err)]/5 shadow-xl animate-pulse' :
                                 isOccupied ? 'bg-[var(--info)]/5 border-[var(--info)]/25 shadow-lg' :
                                 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30 hover:shadow-lg'
-                            }`}
+                            } ${!inJurisdiction ? 'opacity-50 pointer-events-none grayscale' : ''}`}
                             style={stagger(Math.min(tableIdx, 10) * 30)}
                         >
+                            {/* Jurisdicao: mesa fora da area do usuario logado */}
+                            {!inJurisdiction && (
+                                <div className="absolute top-2 left-2 z-20">
+                                    <span className="px-1.5 py-0.5 bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold rounded border border-[var(--border)] uppercase tracking-wider">
+                                        {TABLE_OUT_OF_JURISDICTION_LABEL}
+                                    </span>
+                                </div>
+                            )}
+
                             {/* Waiter Alert Overlay */}
                             {isWaiterRequested && (
                                 <div className="absolute -top-3 -right-3 z-20">
@@ -4871,6 +4889,15 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('waiter');
     const [permissions, setPermissions] = useState({ ...DEFAULT_TEAM_PERMISSIONS });
+    // Jurisdicao de mesas por garcom (Task 3, migration 049). `restrictTables
+    // = false` grava `null` (sem restricao, "Todas as mesas") — o mesmo
+    // valor que TODO store_user real ja tem hoje. So' faz sentido pra
+    // role 'waiter'/'cashier' (seção abaixo escondida pros outros papéis),
+    // mas o state existe sempre pra não perder seleção ao trocar de role
+    // no mesmo formulário.
+    const [restrictTables, setRestrictTables] = useState(false);
+    const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+    const [storeTables, setStoreTables] = useState<Table[]>([]);
 
     const loadUsers = async () => {
         const data = await fetchStoreTeamMembers(storeId);
@@ -4878,6 +4905,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     };
 
     useEffect(() => { loadUsers(); }, [storeId]);
+    useEffect(() => { fetchTables(storeId).then(setStoreTables); }, [storeId]);
 
     const openModal = (user?: StoreUser) => {
         if (user) {
@@ -4920,6 +4948,9 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 caixa: user.permissions?.caixa === true,
             });
             setPassword(''); // Don't show password
+            const assignedIds = user.assigned_table_ids;
+            setRestrictTables(!!(assignedIds && assignedIds.length > 0));
+            setSelectedTableIds(assignedIds || []);
         } else {
             setEditingUser(null);
             setName('');
@@ -4927,20 +4958,32 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             setPassword('');
             setRole('waiter');
             setPermissions({ ...DEFAULT_TEAM_PERMISSIONS });
+            setRestrictTables(false);
+            setSelectedTableIds([]);
         }
         setIsModalOpen(true);
+    };
+
+    const toggleTableSelection = (tableId: string) => {
+        setSelectedTableIds(prev => prev.includes(tableId) ? prev.filter(id => id !== tableId) : [...prev, tableId]);
     };
 
     const handleSave = async () => {
         if (!name || !email || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
         setIsLoading(true);
         try {
-            const userData = { name, email, role, permissions, ...(password ? { password } : {}) };
+            // Jurisdicao de mesas (Task 3): restrictTables=false ou lista
+            // vazia sempre grava null ("Todas as mesas") — nunca um array
+            // vazio, que a function `update_store_user_secure` já trata como
+            // sinônimo de null, mas fica explícito aqui pra não depender
+            // disso silenciosamente.
+            const assignedTableIds = restrictTables && selectedTableIds.length > 0 ? selectedTableIds : null;
+            const userData = { name, email, role, permissions, assigned_table_ids: assignedTableIds, ...(password ? { password } : {}) };
 
             if (editingUser) {
                 await updateStoreTeamMember(editingUser.id, userData);
             } else {
-                await createStoreTeamMember(storeId, userData);
+                await createStoreTeamMember(storeId, { ...userData, assignedTableIds });
             }
             setIsModalOpen(false);
             loadUsers();
@@ -5055,6 +5098,55 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </p>
                         </div>
                     </div>
+
+                    {/* Jurisdicao de mesas por garcom (Task 3, migration 049) —
+                        só faz sentido pra quem de fato opera mesa em campo.
+                        Reaproveita o MESMO padrão visual do bloco de
+                        Permissões acima (checkbox list em card cinza), como
+                        pedido no brief: nenhum componente novo. */}
+                    {(role === 'waiter' || role === 'cashier') && (
+                        <div className="bg-[var(--surface-2)] p-3 rounded-lg border border-[var(--border)]">
+                            <label className="text-sm font-bold text-[var(--text)] mb-2 block">Jurisdição de Mesas</label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer mb-2">
+                                <input
+                                    type="checkbox"
+                                    checked={!restrictTables}
+                                    onChange={() => setRestrictTables(prev => !prev)}
+                                    className="rounded text-[var(--brand)] focus:ring-[var(--brand)]"
+                                />
+                                Todas as mesas (sem restrição)
+                            </label>
+                            {restrictTables && (
+                                <div className="space-y-2 border-t border-[var(--border)] pt-2 mt-1">
+                                    <p className="text-[11px] text-[var(--text-muted)]">
+                                        Escolha as mesas que este usuário pode operar. Mesas fora da
+                                        seleção continuam visíveis pra ele, só ficam bloqueadas.
+                                    </p>
+                                    {storeTables.length === 0 ? (
+                                        <p className="text-xs text-[var(--text-muted)] italic">Nenhuma mesa cadastrada nesta loja.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                            {storeTables.sort((a, b) => a.number - b.number).map(t => (
+                                                <label key={t.id} className={`flex items-center justify-center gap-1 text-sm rounded-lg border px-2 py-1.5 cursor-pointer u-motion ${
+                                                    selectedTableIds.includes(t.id)
+                                                        ? 'bg-[var(--brand)]/10 border-[var(--brand)] text-[var(--brand)] font-bold'
+                                                        : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
+                                                }`}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedTableIds.includes(t.id)}
+                                                        onChange={() => toggleTableSelection(t.id)}
+                                                        className="sr-only"
+                                                    />
+                                                    {t.number}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <Button className="w-full mt-2" onClick={handleSave} isLoading={isLoading}>Salvar Usuário</Button>
                 </div>
