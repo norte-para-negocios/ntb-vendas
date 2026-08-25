@@ -7,7 +7,7 @@ import { ALL_ON, resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, S
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { toast } from '@/components/Toast';
@@ -203,6 +203,22 @@ export const AdminModule: React.FC = () => {
   const [modMenu, setModMenu] = useState(ALL_ON.menu);
   const [modAdmin, setModAdmin] = useState(ALL_ON.admin);
   const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
+  // Subprojeto 4 (2026-08-25) — checklist de onboarding pra loja em
+  // direct_print: `null` = ainda não checou (loja nova, editingId ainda
+  // não existe) ou não se aplica; número = quantos membros da equipe já
+  // têm a permissão "Caixa" marcada. Sem esse número, ninguém roda o loop
+  // de impressão automática nem finaliza pagamento nessa loja — é o
+  // requisito mais fácil de esquecer, então ganha checagem de verdade em
+  // vez de só um texto genérico.
+  const [caixaTeamCount, setCaixaTeamCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (orderFlow !== 'direct_print' || !editingId) { setCaixaTeamCount(null); return; }
+    let cancelled = false;
+    fetchStoreTeamMembers(editingId).then(members => {
+      if (!cancelled) setCaixaTeamCount(members.filter(m => m.permissions?.caixa === true).length);
+    });
+    return () => { cancelled = true; };
+  }, [orderFlow, editingId]);
 
   // Logo Upload State
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -1333,9 +1349,45 @@ export const AdminModule: React.FC = () => {
                       não há mais "alvo" pra escolher. Ver lib/storeModules.ts
                       pro histórico completo da decisão. */}
                   {orderFlow === 'direct_print' && (
-                      <p className="text-[11px] text-[var(--text-muted)] pt-3 border-t border-[var(--border)]">
-                          O pedido imprime no aparelho do Caixa: os itens lançados pelo garçom imprimem na hora; pedidos do próprio cliente (QR) e do Balcão imprimem sozinhos, em segundo plano, enquanto o Caixa está com o painel aberto.
-                      </p>
+                      <>
+                          <p className="text-[11px] text-[var(--text-muted)] pt-3 border-t border-[var(--border)]">
+                              O pedido imprime no aparelho do Caixa: os itens lançados pelo garçom imprimem na hora; pedidos do próprio cliente (QR) e do Balcão imprimem sozinhos, em segundo plano, enquanto o Caixa está com o painel aberto.
+                          </p>
+                          {/* Subprojeto 4 (2026-08-25) — checklist antes de abrir a loja de
+                              verdade nesse modo. Não bloqueia salvar (uma loja legitimamente
+                              pode estar sendo configurada antes da equipe existir), só avisa. */}
+                          <div className="rounded-xl border border-[var(--warn)]/30 bg-[var(--warn)]/5 p-3 space-y-2">
+                              <p className="text-xs font-bold text-[var(--text)]">Antes de abrir esta loja:</p>
+                              <div className="flex items-start gap-2 text-xs">
+                                  {modCaixa ? <CheckCircle size={14} className="text-[var(--ok)] shrink-0 mt-0.5" /> : <AlertCircle size={14} className="text-[var(--warn)] shrink-0 mt-0.5" />}
+                                  <span className={modCaixa ? 'text-[var(--text)]' : 'text-[var(--warn)] font-semibold'}>
+                                      {modCaixa ? 'Módulo Caixa ligado (abaixo).' : 'Ligue o módulo Caixa abaixo — é onde o turno, sangria/suprimento e a fila de recebíveis vivem.'}
+                                  </span>
+                              </div>
+                              <div className="flex items-start gap-2 text-xs">
+                                  {caixaTeamCount === null ? (
+                                      <RefreshCw size={14} className="text-[var(--text-muted)] shrink-0 mt-0.5 animate-spin" />
+                                  ) : caixaTeamCount > 0 ? (
+                                      <CheckCircle size={14} className="text-[var(--ok)] shrink-0 mt-0.5" />
+                                  ) : (
+                                      <AlertCircle size={14} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                                  )}
+                                  <span className={caixaTeamCount !== null && caixaTeamCount === 0 ? 'text-[var(--warn)] font-semibold' : 'text-[var(--text)]'}>
+                                      {caixaTeamCount === null
+                                          ? (editingId ? 'Checando equipe...' : 'Salve a loja primeiro pra poder cadastrar a equipe com a permissão Caixa.')
+                                          : caixaTeamCount > 0
+                                              ? `${caixaTeamCount} usuário(s) da equipe com a permissão "Caixa" marcada.`
+                                              : 'Nenhum usuário com a permissão "Caixa" ainda — cadastre em Equipe, senão ninguém finaliza pagamento nem imprime.'}
+                                  </span>
+                              </div>
+                              <div className="flex items-start gap-2 text-xs">
+                                  <AlertCircle size={14} className="text-[var(--text-muted)] shrink-0 mt-0.5" />
+                                  <span className="text-[var(--text)]">
+                                      No primeiro dia, logue no aparelho do Caixa e use &ldquo;Testar Impressão&rdquo; (aba Caixa) — confirme que sai sozinho, sem pedir clique.
+                                  </span>
+                              </div>
+                          </div>
+                      </>
                   )}
               </div>
 
