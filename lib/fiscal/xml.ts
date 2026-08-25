@@ -43,6 +43,27 @@ export interface DadosEmitenteNota {
 export interface PagamentoNota {
   method: string; // 'CASH' | 'CREDIT' | 'DEBIT' | 'PIX' | 'COURTESY' — ver lib/labels.ts
   amount: number;
+  brand?: string; // 'visa'|'mastercard'|'elo'|'amex'|'hipercard'|'outro' — ver CARD_BRAND_LABELS em lib/labels.ts
+}
+
+// cStat=391 "Rejeicao: Nao informados os dados do cartao de credito/debito"
+// (achado real em produção, 2026-08-25): a SEFAZ exige o grupo <card> em
+// TODO detPag com tPag 03 (crédito) ou 04 (débito) — não basta informar
+// vPag. tpIntegra=2 ("não integrado", pagamento processado fora da
+// integração do PDV com a maquininha — é o caso real deste app, que não
+// integra com adquirente nenhuma) dispensa CNPJ da credenciadora e código
+// de autorização, que este app nunca captura. tBand é opcional pelo schema
+// mesmo com tpIntegra=2, mas mandamos sempre que der pra mapear a bandeira
+// (ou "99" Outros como fallback) — mais completo, sem custo de rejeição.
+function mapBandeiraParaTBand(brand?: string): string {
+  switch (brand) {
+    case 'visa': return '01';
+    case 'mastercard': return '02';
+    case 'amex': return '03';
+    case 'elo': return '06';
+    case 'hipercard': return '07';
+    default: return '99';
+  }
 }
 
 export interface MontarXmlParams {
@@ -275,7 +296,11 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
             ? Number((vProdTotal + vOutro - acumulado).toFixed(2))
             : Number(p.amount.toFixed(2));
           acumulado += vPagItem;
-          return `<detPag><indPag>0</indPag><tPag>${mapMetodoParaTPag(p.method)}</tPag><vPag>${vPagItem.toFixed(2)}</vPag></detPag>`;
+          const tPag = mapMetodoParaTPag(p.method);
+          const cardXml = tPag === '03' || tPag === '04'
+            ? `<card><tpIntegra>2</tpIntegra><tBand>${mapBandeiraParaTBand(p.brand)}</tBand></card>`
+            : '';
+          return `<detPag><indPag>0</indPag><tPag>${tPag}</tPag><vPag>${vPagItem.toFixed(2)}</vPag>${cardXml}</detPag>`;
         })
         .join('');
       pagXml = `<pag>${detPags}</pag>`;
