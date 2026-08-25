@@ -97,6 +97,38 @@ export function calculateCartTotal(cart: { product: { price: number; promo_price
   return cart.reduce((acc, item) => acc + calculateCartItemUnitPrice(item) * item.quantity, 0);
 }
 
+// Achado real (usuário, 2026-08-25): "Faturamento Total", o Histórico de
+// Vendas inteiro (lista, filtro por valor, ordenação, relatório impresso,
+// CSV) e o gráfico de vendas por dia do dashboard estavam TODOS recalculando
+// o total de cada venda a partir de `order_items` (price_at_time*quantity)
+// ou de `orders.total` — os DOIS são sempre só o valor de PRODUTO, nunca
+// incluem a taxa de serviço (create_order_secure/close_table_orders_secure
+// nunca escrevem a taxa em nenhum dos dois). Toda venda com taxa de serviço
+// cobrada aparecia sistematicamente a menor em QUALQUER lugar que mostrasse
+// "quanto essa venda valeu" — não um bug isolado, era o padrão usado em
+// pelo menos 9 call sites diferentes.
+//
+// `payment_details.total` é o valor real, gravado no fechamento (mesa ou
+// balcão) já com a taxa de serviço somada — é a mesma fonte que "Detalhes
+// da Venda" (StoreModule.tsx) já usa desde a correção anterior. Esta
+// function centraliza a mesma regra pra todo o resto: usa
+// `payment_details.total` quando existe (toda venda fechada desde a Task 2
+// do plano Frente de Caixa / desde `closeTableSession`/`closeCounterOrder`
+// gravarem payment_details), cai pro subtotal de itens só pra vendas
+// antigas o bastante pra não ter isso gravado — nunca `orders.total`, que
+// tem exatamente o mesmo problema que `payment_details.total` resolve.
+export function getOrderDisplayTotal(order: {
+  payment_details?: { total?: number } | null;
+  order_items?: { price_at_time: number; quantity: number; status?: string }[];
+}): number {
+  if (order.payment_details && typeof order.payment_details.total === 'number') {
+    return order.payment_details.total;
+  }
+  return (order.order_items || [])
+    .filter(i => i.status !== 'canceled')
+    .reduce((sum, i) => sum + i.price_at_time * i.quantity, 0);
+}
+
 // Formatação BRL (vírgula decimal) pra valores em real — antes disso todo
 // preço no cardápio do cliente usava `toFixed(2)` puro, que só produz ponto
 // ("44.90" em vez de "44,90"). Só o número: o prefixo "R$ " já existe nos

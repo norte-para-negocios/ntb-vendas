@@ -10,7 +10,7 @@ import {
 import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
-import { formatBRL } from '@/lib/calc';
+import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -36,8 +36,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
     const calcStats = (orders: Order[]) => {
         // Acumula em centavos inteiros para evitar erro de arredondamento de ponto flutuante somando muitos pedidos.
         const totalCents = orders.reduce((sum, o) => {
-            const orderTotal = o.total || o.order_items?.reduce((s, i) => s + (i.price_at_time * i.quantity), 0) || 0;
-            return sum + Math.round(orderTotal * 100);
+            return sum + Math.round(getOrderDisplayTotal(o) * 100);
         }, 0);
         const total = totalCents / 100;
         const count = orders.length;
@@ -145,7 +144,7 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
         periodSales.forEach(o => {
             const d = new Date(o.created_at);
             const key = format(d, 'yyyy-MM-dd');
-            const total = o.total || o.order_items?.reduce((s, i) => s + (i.price_at_time * i.quantity), 0) || 0;
+            const total = getOrderDisplayTotal(o);
             const existing = map.get(key);
             map.set(key, { label: format(d, 'dd/MM'), total: (existing?.total || 0) + total });
         });

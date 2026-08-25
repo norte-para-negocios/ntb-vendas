@@ -23,7 +23,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -6675,16 +6675,10 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
             result = result.filter(order => (order.order_items?.length || 0) <= parseInt(filterMaxItems));
         }
         if (filterMinTotal) {
-            result = result.filter(order => {
-                const total = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
-                return total >= parseFloat(filterMinTotal);
-            });
+            result = result.filter(order => getOrderDisplayTotal(order) >= parseFloat(filterMinTotal));
         }
         if (filterMaxTotal) {
-            result = result.filter(order => {
-                const total = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
-                return total <= parseFloat(filterMaxTotal);
-            });
+            result = result.filter(order => getOrderDisplayTotal(order) <= parseFloat(filterMaxTotal));
         }
 
         // Apply sorting
@@ -6704,8 +6698,8 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 valA = a.order_items?.length || 0;
                 valB = b.order_items?.length || 0;
             } else if (sortColumn === 'total') {
-                valA = a.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
-                valB = b.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+                valA = getOrderDisplayTotal(a);
+                valB = getOrderDisplayTotal(b);
             }
 
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
@@ -6716,10 +6710,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
         return result;
     }, [sales, filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, sortColumn, sortDirection]);
 
-    const totalRevenue = filteredAndSortedSales.reduce((acc, order) => {
-        const orderTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
-        return acc + orderTotal;
-    }, 0);
+    const totalRevenue = filteredAndSortedSales.reduce((acc, order) => acc + getOrderDisplayTotal(order), 0);
 
     // Volta pra primeira página sempre que filtro ou ordenação mudam, senão o usuário
     // pode ficar preso numa página que não existe mais no novo resultado filtrado.
@@ -6758,7 +6749,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                     customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
                     items: order.order_items?.length || 0,
                     itemsSummary: buildItemsSummary(order),
-                    total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
+                    total: getOrderDisplayTotal(order),
                 })),
                 totalRevenue,
             });
@@ -6779,7 +6770,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
                 items: order.order_items?.length || 0,
                 itemsSummary: buildItemsSummary(order),
-                total: order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0,
+                total: getOrderDisplayTotal(order),
             })),
             `vendas-${store.name.toLowerCase().replace(/\s+/g, '-')}.csv`
         );
@@ -7238,7 +7229,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                         </tr>
                                     ) : (
                                         pagedSales.map((order, orderIdx) => {
-                                            const orderTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+                                            const orderTotal = getOrderDisplayTotal(order);
                                             return (
                                                 <tr
                                                     key={order.id}

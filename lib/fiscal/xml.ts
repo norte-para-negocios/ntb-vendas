@@ -186,23 +186,9 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
   const infNFeId = `NFe${chave}`;
 
   let vProdTotal = 0;
-  const detXml = itens
-    .map((item, i) => {
-      const vProd = Number((item.qCom * item.vUnCom).toFixed(2));
-      vProdTotal += vProd;
-      const xProd = montarXProd(item.xProd, tpAmb === 2 && i === 0 && modelo === '65');
-      return (
-        `<det nItem="${i + 1}"><prod><cProd>${escapeXml(item.cProd)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xProd}</xProd>` +
-        `<NCM>${item.ncm}</NCM><CFOP>${item.cfop ?? '5102'}</CFOP><uCom>UN</uCom>` +
-        `<qCom>${item.qCom.toFixed(4)}</qCom><vUnCom>${item.vUnCom.toFixed(10)}</vUnCom>` +
-        `<vProd>${vProd.toFixed(2)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>UN</uTrib>` +
-        `<qTrib>${item.qCom.toFixed(4)}</qTrib><vUnTrib>${item.vUnCom.toFixed(10)}</vUnTrib><indTot>1</indTot></prod>` +
-        `<imposto><ICMS><ICMSSN102><orig>0</orig><CSOSN>${emitente.cstCsosnPadrao}</CSOSN></ICMSSN102></ICMS>` +
-        `<PIS><PISNT><CST>${emitente.cstPisPadrao}</CST></PISNT></PIS>` +
-        `<COFINS><COFINSNT><CST>${emitente.cstCofinsPadrao}</CST></COFINSNT></COFINS></imposto></det>`
-      );
-    })
-    .join('');
+  for (const item of itens) {
+    vProdTotal += Number((item.qCom * item.vUnCom).toFixed(2));
+  }
 
   const destXml = destinatario
     ? (() => {
@@ -301,6 +287,36 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     pagXml = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vProdTotal.toFixed(2)}</vPag></detPag></pag>`;
   }
   const vNF = (vProdTotal + vOutro).toFixed(2);
+
+  // cStat=604 "Total do vOutro difere do somatorio dos itens" (achado real em
+  // produção, loja "O Sertão Vai Virar Mar", 2026-08-25): a SEFAZ exige que a
+  // soma do `vOutro` de cada `det/prod` bata com o `vOutro` do total
+  // (`ICMSTot`) — não basta declarar só o total. `vOutro` calculado acima é
+  // distribuído proporcionalmente ao `vProd` de cada item; o último item
+  // absorve o resto do arredondamento, mesmo princípio já usado em `detPag`.
+  let vOutroAcumulado = 0;
+  const detXml = itens
+    .map((item, i) => {
+      const vProd = Number((item.qCom * item.vUnCom).toFixed(2));
+      const vOutroItem = i === itens.length - 1
+        ? Number((vOutro - vOutroAcumulado).toFixed(2))
+        : Number((vOutro * (vProdTotal > 0 ? vProd / vProdTotal : 0)).toFixed(2));
+      vOutroAcumulado += vOutroItem;
+      const xProd = montarXProd(item.xProd, tpAmb === 2 && i === 0 && modelo === '65');
+      return (
+        `<det nItem="${i + 1}"><prod><cProd>${escapeXml(item.cProd)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xProd}</xProd>` +
+        `<NCM>${item.ncm}</NCM><CFOP>${item.cfop ?? '5102'}</CFOP><uCom>UN</uCom>` +
+        `<qCom>${item.qCom.toFixed(4)}</qCom><vUnCom>${item.vUnCom.toFixed(10)}</vUnCom>` +
+        `<vProd>${vProd.toFixed(2)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>UN</uTrib>` +
+        `<qTrib>${item.qCom.toFixed(4)}</qTrib><vUnTrib>${item.vUnCom.toFixed(10)}</vUnTrib>` +
+        (vOutroItem > 0 ? `<vOutro>${vOutroItem.toFixed(2)}</vOutro>` : '') +
+        `<indTot>1</indTot></prod>` +
+        `<imposto><ICMS><ICMSSN102><orig>0</orig><CSOSN>${emitente.cstCsosnPadrao}</CSOSN></ICMSSN102></ICMS>` +
+        `<PIS><PISNT><CST>${emitente.cstPisPadrao}</CST></PISNT></PIS>` +
+        `<COFINS><COFINSNT><CST>${emitente.cstCofinsPadrao}</CST></COFINSNT></COFINS></imposto></det>`
+      );
+    })
+    .join('');
 
   const nfeXml =
     `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="${infNFeId}" versao="4.00">` +
