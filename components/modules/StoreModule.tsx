@@ -1377,6 +1377,12 @@ const TablesView: React.FC<{
     // nenhum store_user real hoje tem essa chave, então isto não muda nada
     // nas 7 lojas reais por padrão.
     const canFinalize = canFinalizeBill(loggedUser, store);
+    // Subprojeto 3 (2026-08-25) — "trocar responsável" rápido: mesmo padrão
+    // de acesso já usado pra decidir quem vê a aba Administração (onde a
+    // edição completa de jurisdição já vivia, dentro de Gestão de
+    // Usuários) — não inventa uma regra nova de permissão só pra esta ação
+    // menor.
+    const canReassignJurisdiction = loggedUser.role === 'owner' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'admin', store);
     // Critical #2 (revisão de branch 2026-08-23 — "Reimprimir pode mentir
     // sucesso num aparelho sem impressora"): gate pra OFERECER o botão manual
     // "Reimprimir" em "Pedidos do Dia" abaixo, mesmo critério exato que
@@ -1460,6 +1466,54 @@ const TablesView: React.FC<{
     // É buscado à parte, só quando este modal abre — ver efeito abaixo
     // (Important #I3, revisão de código 2026-08-23).
     const [showSentHistory, setShowSentHistory] = useState(false);
+    // Subprojeto 3 (2026-08-25) — "Meus pedidos do dia": um garçom numa loja
+    // com vários lançando na mesma "Pedidos do Dia" tinha que caçar os
+    // próprios itens numa lista misturada de todo mundo. Default ligado só
+    // pra quem é `waiter` de verdade (não `owner`/`universal`/`cashier`,
+    // que fazem sentido ver tudo por padrão) — reaproveita `added_by_name`
+    // (migration 053) já gravado por item, sem query nova.
+    const [showOnlyMine, setShowOnlyMine] = useState(loggedUser.role === 'waiter');
+
+    // Subprojeto 3 (2026-08-25) — reatribuir a mesa selecionada pra outro
+    // garçom sem precisar abrir Gestão de Usuários. Só afeta quem JÁ tem
+    // alguma restrição configurada (assigned_table_ids não vazio) — um
+    // garçom sem restrição ("todas as mesas") já vê esta mesa por padrão, e
+    // restringi-lo aqui seria um efeito colateral inesperado de uma ação
+    // pensada pra ser rápida, não pra configurar jurisdição do zero (isso
+    // continua em Gestão de Usuários, de propósito).
+    const [showReassignModal, setShowReassignModal] = useState(false);
+    const [reassignTeam, setReassignTeam] = useState<StoreUser[]>([]);
+    const [isLoadingReassignTeam, setIsLoadingReassignTeam] = useState(false);
+    const [savingReassignIds, setSavingReassignIds] = useState<Set<string>>(new Set());
+
+    const handleOpenReassign = async () => {
+        setShowReassignModal(true);
+        setIsLoadingReassignTeam(true);
+        try {
+            const members = await fetchStoreTeamMembers(storeId);
+            setReassignTeam(members.filter(m => m.role !== 'owner' && m.role !== 'universal' && m.permissions?.tables !== false));
+        } finally {
+            setIsLoadingReassignTeam(false);
+        }
+    };
+
+    const handleToggleReassign = async (member: StoreUser) => {
+        if (!selectedTable) return;
+        const current = member.assigned_table_ids || [];
+        const next = current.includes(selectedTable.id)
+            ? current.filter(id => id !== selectedTable.id)
+            : [...current, selectedTable.id];
+        setSavingReassignIds(prev => new Set(prev).add(member.id));
+        try {
+            await updateStoreTeamMember(member.id, { assigned_table_ids: next });
+            setReassignTeam(prev => prev.map(m => m.id === member.id ? { ...m, assigned_table_ids: next } : m));
+            toast.success(`Mesa ${next.includes(selectedTable.id) ? 'atribuída a' : 'removida de'} ${member.name}.`);
+        } catch (e: any) {
+            toast.error('Erro ao atualizar: ' + e.message);
+        } finally {
+            setSavingReassignIds(prev => { const copy = new Set(prev); copy.delete(member.id); return copy; });
+        }
+    };
 
     // Important #I3: antes, `fetchSalesHistory` (RPC `limit 2000` com
     // `order_items` aninhado) rodava dentro de `loadData` — chamada a cada
@@ -1613,6 +1667,7 @@ const TablesView: React.FC<{
             observation?: string;
             closed: boolean;
             printed: boolean;
+            addedByName?: string | null;
         }[] = [];
         const pushOrder = (order: Order, closed: boolean) => {
             (order.order_items || []).forEach(item => {
@@ -1630,6 +1685,7 @@ const TablesView: React.FC<{
                     observation: item.notes || undefined,
                     closed,
                     printed: wasKitchenTicketPrinted(storeId, destination, item.id),
+                    addedByName: item.added_by_role === 'garcom' ? item.added_by_name : null,
                 });
             });
         };
@@ -2564,6 +2620,11 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <Receipt size={18} className="mr-2"/> PEDIR CONTA
                                              </Button>
                                          )}
+                                         {canReassignJurisdiction && (
+                                             <Button onClick={handleOpenReassign} variant="outline" className="w-full text-sm mt-2">
+                                                <Users size={16} className="mr-2"/> Trocar Responsável
+                                             </Button>
+                                         )}
                                      </div>
                                  </div>
                              )}
@@ -3060,11 +3121,36 @@ NOTIFY pgrst, 'reload schema';`;
                     <p className="text-xs text-[var(--text-muted)]">
                         Tudo que foi lançado hoje, mesas fechadas incluídas — do mais recente pro mais antigo. Só visualização, sem nenhuma ação aqui.
                     </p>
-                    {sentHistoryItems.length === 0 ? (
-                        <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum pedido lançado ainda hoje.</p>
-                    ) : (
+                    <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
+                        <button
+                            type="button"
+                            onClick={() => setShowOnlyMine(true)}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm ${showOnlyMine ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}
+                        >
+                            Meus pedidos
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowOnlyMine(false)}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm ${!showOnlyMine ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}
+                        >
+                            Todos
+                        </button>
+                    </div>
+                    {(() => {
+                        const filteredHistory = showOnlyMine
+                            ? sentHistoryItems.filter(row => row.addedByName === loggedUser.name)
+                            : sentHistoryItems;
+                        if (filteredHistory.length === 0) {
+                            return (
+                                <p className="text-sm text-[var(--text-muted)] text-center py-8">
+                                    {showOnlyMine ? 'Você ainda não lançou nenhum pedido hoje.' : 'Nenhum pedido lançado ainda hoje.'}
+                                </p>
+                            );
+                        }
+                        return (
                         <div className="space-y-2 max-h-[65vh] overflow-y-auto">
-                            {sentHistoryItems.map(row => (
+                            {filteredHistory.map(row => (
                                 <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] flex-wrap">
                                     <div className="min-w-0">
                                         <p className="text-sm font-bold text-[var(--text)] truncate">
@@ -3101,6 +3187,48 @@ NOTIFY pgrst, 'reload schema';`;
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                        );
+                    })()}
+                </div>
+            </Modal>
+
+            {/* Subprojeto 3 (2026-08-25): trocar responsável pela mesa selecionada
+                sem sair de Mesas nem abrir Gestão de Usuários. */}
+            <Modal isOpen={showReassignModal} onClose={() => setShowReassignModal(false)} title={`Responsável — Mesa ${selectedTable?.number ?? ''}`}>
+                <div className="space-y-3">
+                    <p className="text-xs text-[var(--text-muted)]">
+                        Só mostra quem já tem jurisdição de mesas restrita configurada. Garçom sem restrição ("todas as mesas") já vê esta mesa por padrão.
+                    </p>
+                    {isLoadingReassignTeam ? (
+                        <div className="flex items-center justify-center py-10 text-[var(--text-muted)]">
+                            <RefreshCw size={22} className="animate-spin" />
+                        </div>
+                    ) : reassignTeam.filter(m => m.assigned_table_ids && m.assigned_table_ids.length > 0).length === 0 ? (
+                        <p className="text-sm text-[var(--text-muted)] text-center py-8">
+                            Nenhum garçom com jurisdição restrita configurada ainda — configure em Administração → Usuários.
+                        </p>
+                    ) : (
+                        <div className="space-y-2">
+                            {reassignTeam.filter(m => m.assigned_table_ids && m.assigned_table_ids.length > 0).map(member => {
+                                const hasTable = !!selectedTable && (member.assigned_table_ids || []).includes(selectedTable.id);
+                                const isSaving = savingReassignIds.has(member.id);
+                                return (
+                                    <label key={member.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] cursor-pointer">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-[var(--text)] truncate">{member.name}</p>
+                                            <p className="text-xs text-[var(--text-muted)]">{(member.assigned_table_ids || []).length} mesa(s) atribuída(s)</p>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={hasTable}
+                                            disabled={isSaving}
+                                            onChange={() => handleToggleReassign(member)}
+                                            className="w-5 h-5 accent-[var(--brand)] shrink-0"
+                                        />
+                                    </label>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
