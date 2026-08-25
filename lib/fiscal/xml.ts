@@ -253,40 +253,42 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
   // pra quem não é obrigado (confirmar caso a caso — ver cStat=486 no histórico).
   const autXmlXml = emitente.autXmlCnpj ? `<autXML><CNPJ>${emitente.autXmlCnpj}</CNPJ></autXML>` : '';
 
-  const vNF = vProdTotal.toFixed(2);
-
   // Achado real (WhatsApp do Ramon, 2026-08-24, venda real de teste na Mesa
-  // 6): `<pag>` sempre saía "Dinheiro" hardcoded, mesmo pago em crédito. A
-  // taxa de serviço (10%) fica de fora de propósito nesta correção — vNF
-  // continua sendo só o valor de produto (vProdTotal), igual sempre foi;
-  // decidir se/como a taxa de serviço entra no documento fiscal é uma
-  // questão de classificação tributária real, não um bug de código, e fica
-  // pra decisão explícita com o contador da loja (mesmo padrão já usado
-  // pra NCM/CST neste projeto). O que ESTA correção resolve: `tPag` reflete
-  // a forma de pagamento real, e `vPag` soma exatamente `vNF` (nunca o
-  // total com taxa embutida), distribuído proporcionalmente entre os
-  // métodos reais usados — evita criar uma divergência nova entre `vNF` e
-  // a soma de `vPag`, que a SEFAZ rejeitaria.
+  // 6): `<pag>` sempre saía "Dinheiro" hardcoded, e a taxa de serviço (10%)
+  // nunca entrava no documento fiscal de jeito nenhum. Confirmado com o
+  // Ramon que ela DEVE entrar. Caminho usado: `vOutro` ("Outras Despesas
+  // Acessórias" — grupo padrão do schema da NFe/NFC-e, já existia zerado
+  // aqui) — é o campo correto pra um valor cobrado do cliente que não é
+  // mercadoria (não tem ICMS/CFOP de produto próprio, é taxa de serviço pro
+  // estabelecimento/equipe), diferente de inflar `vProd`/`det` como se fosse
+  // mais um item vendido. `vOutro` é derivado do que os métodos de
+  // pagamento realmente somam MENOS o valor de produto (nunca um campo novo
+  // pra manter em sincronia à parte) — se um dia a regra de taxa de serviço
+  // mudar (loja não cobra, cliente removeu, % diferente), este cálculo
+  // segue automaticamente, sem precisar mexer aqui.
   let pagXml: string;
+  let vOutro = 0;
   if (pagamentos && pagamentos.length > 0) {
     const pagosReais = pagamentos.filter((p) => p.method !== 'COURTESY' && p.amount > 0);
     if (pagosReais.length === 0) {
-      // Venda inteira em cortesia — sem pagamento real algum.
-      pagXml = `<pag><detPag><indPag>0</indPag><tPag>90</tPag><vPag>${vNF}</vPag></detPag></pag>`;
+      // Venda inteira em cortesia — sem pagamento real algum, sem taxa.
+      pagXml = `<pag><detPag><indPag>0</indPag><tPag>90</tPag><vPag>${vProdTotal.toFixed(2)}</vPag></detPag></pag>`;
     } else {
       const totalReal = pagosReais.reduce((sum, p) => sum + p.amount, 0);
+      vOutro = Math.max(0, Number((totalReal - vProdTotal).toFixed(2)));
+      // vPag de cada método é o valor real pago por ele (já inclui a fatia
+      // da taxa de serviço proporcional a esse método) — soma exata de
+      // `pagamentos`, sem precisar reescalar nada, porque agora `vNF`
+      // (abaixo) também inclui a mesma taxa via `vOutro`.
       let acumulado = 0;
       const detPags = pagosReais
         .map((p, idx) => {
-          let vPagItem: number;
-          if (idx === pagosReais.length - 1) {
-            // Último método absorve o resto — garante que a soma bate
-            // exatamente com vNF, sem sobra/falta de arredondamento.
-            vPagItem = Number((vProdTotal - acumulado).toFixed(2));
-          } else {
-            vPagItem = Number(((p.amount / totalReal) * vProdTotal).toFixed(2));
-            acumulado += vPagItem;
-          }
+          // Último método absorve o resto (arredondamento) — garante que a
+          // soma bate exatamente com vNF, sem sobra/falta de centavos.
+          const vPagItem = idx === pagosReais.length - 1
+            ? Number((vProdTotal + vOutro - acumulado).toFixed(2))
+            : Number(p.amount.toFixed(2));
+          acumulado += vPagItem;
           return `<detPag><indPag>0</indPag><tPag>${mapMetodoParaTPag(p.method)}</tPag><vPag>${vPagItem.toFixed(2)}</vPag></detPag>`;
         })
         .join('');
@@ -294,9 +296,11 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     }
   } else {
     // Fallback: sem payment_details detalhado (venda antiga, ou chamador
-    // que ainda não passa `pagamentos`) — mesmo comportamento de sempre.
-    pagXml = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vNF}</vPag></detPag></pag>`;
+    // que ainda não passa `pagamentos`) — mesmo comportamento de sempre,
+    // sem taxa de serviço (não há como saber quanto foi cobrado).
+    pagXml = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vProdTotal.toFixed(2)}</vPag></detPag></pag>`;
   }
+  const vNF = (vProdTotal + vOutro).toFixed(2);
 
   const nfeXml =
     `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="${infNFeId}" versao="4.00">` +
@@ -316,9 +320,9 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     autXmlXml +
     detXml +
     `<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP>` +
-    `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${vNF}</vProd>` +
+    `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${vProdTotal.toFixed(2)}</vProd>` +
     `<vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI>` +
-    `<vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro>` +
+    `<vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>${vOutro.toFixed(2)}</vOutro>` +
     `<vNF>${vNF}</vNF></ICMSTot></total><transp><modFrete>9</modFrete></transp>` +
     pagXml +
     // Grupo opcional pelo schema, mas exigido na prática por `nfe-danfe-pdf`
