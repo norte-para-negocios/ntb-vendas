@@ -91,6 +91,7 @@ import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus } from '@/lib/api';
 import { printKitchenTicket } from '@/lib/print';
+import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
 import { Store, OrderItem, StoreUser } from '@/types';
 
@@ -493,6 +494,23 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     };
   }, []);
 
+  // Alerta sonoro de falha (achado real, 2026-08-25): um badge vermelho
+  // discreto no header não é visto a tempo numa cozinha barulhenta — toca só
+  // na TRANSIÇÃO pra um estado de alarme (nunca a cada render/tick com o
+  // alarme já ligado, senão viraria ruído constante). `wasAlarmedRef` guarda
+  // o último estado conhecido; começa `false` (nunca alarma no primeiro
+  // mount só porque `active` acabou de virar true).
+  const wasAlarmedRef = useRef(false);
+  useEffect(() => {
+    if (!active) return;
+    const isAlarmed = failedItemsState.size > 0 || persistentReconcileFailure || !online;
+    if (isAlarmed && !wasAlarmedRef.current) {
+      playPrintFailureAlert();
+      vibrateAlert([200, 100, 200, 100, 200]);
+    }
+    wasAlarmedRef.current = isAlarmed;
+  }, [active, failedItemsState, persistentReconcileFailure, online]);
+
   const retryItem = useCallback(async (key: string) => {
     const entry = failedRef.current.get(key);
     if (!entry) return;
@@ -548,9 +566,62 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
 // nenhuma.
 const CONNECTING_GRACE_MS = 4000;
 
-export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationState; className?: string }> = ({ status, className }) => {
+// --- Banner de modo offline ---------------------------------------------
+//
+// Achado real (2026-08-25): a detecção de offline (`status.online`) já
+// existia, mas só aparecia como um badge pequeno no header — fácil de não
+// notar no meio do corre. Diferente do `CaixaPrintStationIndicator`
+// (montado duas vezes, mobile+desktop, ver comentário lá), este banner só
+// pode ter UM mount point: `useEffect`/render duplicado tudo bem pro
+// indicador pequeno, mas uma faixa fixa de tela cheia duplicada empilharia
+// duas faixas idênticas. Montado uma vez só, em `StoreLayout`.
+//
+// Só acende pra offline de verdade (`!status.online`, evento nativo do
+// navegador) — não pra "reconciliando por backstop" (`connectionStatus`
+// != 'connected' mas ainda online), que já tem o próprio indicador
+// discreto e se resolve sozinho na maioria das vezes sem precisar de
+// alarme de tela cheia.
+export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStationState }> = ({ status }) => {
+  if (!status.active || status.online) return null;
+  return (
+    <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--err)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+      <WifiOff size={14} className="shrink-0" />
+      Sem conexão com a internet — anote os pedidos no papel até reconectar. A impressão automática está pausada.
+    </div>
+  );
+};
+
+export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationState; className?: string; storeName?: string }> = ({ status, className, storeName }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [withinConnectingGrace, setWithinConnectingGrace] = useState(true);
+  const [testingPrint, setTestingPrint] = useState(false);
+
+  // "Testar Impressão" (achado real, 2026-08-25): sem isso, ninguém descobre
+  // se o Chrome deste aparelho está em modo silencioso (kiosk-printing) até
+  // um pedido de verdade travar num diálogo nativo do SO esperando alguém
+  // clicar — o que quebra a promessa central deste mecanismo inteiro
+  // ("imprime sozinha, em segundo plano"). Ticket de teste real, mesmo
+  // `printKitchenTicket` do loop automático — não um mock — pra realmente
+  // provar o caminho fim a fim.
+  const handleTestPrint = async () => {
+    setTestingPrint(true);
+    try {
+      const ok = await printKitchenTicket({
+        kind: 'COZINHA',
+        storeName: storeName || 'Loja',
+        orderType: 'MESA',
+        identifier: 'TESTE DE IMPRESSÃO',
+        quantity: 1,
+        productName: 'Ticket de teste — pode descartar',
+        observation: 'Se isso imprimiu sem pedir nenhum clique, a impressão silenciosa está configurada corretamente.',
+        orderIdShort: 'TESTE',
+      });
+      if (ok) toast.success('Ticket de teste enviado. Confira se saiu na impressora sem pedir nenhum clique.');
+      else toast.error('Falha ao enviar o ticket de teste.');
+    } finally {
+      setTestingPrint(false);
+    }
+  };
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setWithinConnectingGrace(false), CONNECTING_GRACE_MS);
@@ -593,6 +664,13 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
         <div className="space-y-3">
           <p className="text-xs text-[var(--text-muted)]">
             Imprime sozinha, em segundo plano, o pedido do próprio cliente (QR), do Balcão e do garçom — nenhum aparelho além deste tem a impressora da cozinha configurada.
+          </p>
+
+          <Button size="sm" variant="secondary" className="w-full" onClick={handleTestPrint} isLoading={testingPrint}>
+            Testar Impressão
+          </Button>
+          <p className="text-[11px] text-[var(--text-muted)] -mt-1">
+            Se pedir pra você clicar em "Imprimir" ou escolher impressora, este aparelho não está configurado pra imprimir sozinho — avise o suporte antes de abrir a loja.
           </p>
 
           <div className="flex items-center gap-2 text-sm">

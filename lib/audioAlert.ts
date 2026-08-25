@@ -68,6 +68,24 @@ export function playNewOrderAlert() {
   }
 }
 
+// Alerta de FALHA na impressão automática do Caixa (achado real, 2026-08-25
+// — numa cozinha barulhenta, um badge vermelho discreto na tela não é visto
+// a tempo). Timbre grave, dissonante e repetido 3x — deliberadamente
+// diferente de playNewOrderAlert (2 tons iguais, "chegou algo bom") pra soar
+// como alarme, não como notificação normal.
+export function playPrintFailureAlert() {
+  try {
+    const audioCtx = getContext();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    tone(audioCtx, 220, 0, 0.18);
+    tone(audioCtx, 196, 0.22, 0.18);
+    tone(audioCtx, 220, 0.44, 0.18);
+  } catch {
+    // autoplay bloqueado ou API indisponível
+  }
+}
+
 export function vibrateAlert(pattern: number[]) {
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
     try { navigator.vibrate(pattern); } catch {}

@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
-import { useCaixaPrintStation, CaixaPrintStationIndicator, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
+import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -468,6 +468,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
   return (
     <div className={`min-h-screen bg-[var(--bg)] pb-20 md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
+      <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
 
       {/* Mobile Header */}
       <header className="md:hidden bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 sticky top-0 z-30 flex items-center gap-3" style={{boxShadow:'var(--shadow-sm)'}}>
@@ -483,7 +484,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              </div>
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
-          <CaixaPrintStationIndicator status={caixaPrintStatus} />
+          <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
           <ThemeToggle />
       </header>
 
@@ -657,7 +658,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           <p className="text-[var(--text-muted)] text-sm mt-0.5">Gerencie seu estabelecimento</p>
         </div>
         <div className="flex items-center gap-3">
-           <CaixaPrintStationIndicator status={caixaPrintStatus} />
+           <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
            <div className="h-8 w-8 rounded-[var(--r-sm)] bg-[var(--brand)] flex items-center justify-center text-white font-semibold text-[12px]">
               {storeName.slice(0,2).toUpperCase()}
            </div>
