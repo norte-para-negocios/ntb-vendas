@@ -1,0 +1,22 @@
+diff --git a/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js b/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js
+index 0b4a615..1aa50f8 100644
+--- a/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js
++++ b/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js
+@@ -322,7 +322,7 @@ async function pdfNFCe(nf, pathLogo) {
+     });
+     (0, normal_1.normal)({
+         doc,
+-        value: 'Adicional/Frete/Seguro',
++        value: 'Adicional/Frete/Seguro/Taxa',
+         x: margemPadrao,
+         y: doc.y,
+         largura: larguraPagina,
+@@ -336,7 +336,7 @@ async function pdfNFCe(nf, pathLogo) {
+     doc.y -= 7;
+     (0, normal_1.normal)({
+         doc,
+-        value: (0, utils_1.formatNumber)(total.ICMSTot.vFrete, 2),
++        value: (0, utils_1.formatNumber)(Number(total.ICMSTot.vFrete || 0) + Number(total.ICMSTot.vOutro || 0), 2),
+         x: 0,
+         y: doc.y,
+         largura: larguraPagina - margemPadrao,

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -35,6 +36,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "patch-package": "^8.0.1",
     "pg": "^8.22.0",
     "tailwindcss": "^4",
     "typescript": "^5"
