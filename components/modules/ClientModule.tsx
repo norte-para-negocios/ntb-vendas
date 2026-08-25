@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallba
 import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, cancelPendingTableItems, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
@@ -19,6 +19,7 @@ import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, c
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
+import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
 
 // --- COMPONENTS ---
 
@@ -201,7 +202,28 @@ function getItemStatusBadge(status: OrderStatus) {
 // Linha do tempo (Enviado→Aceito→Preparando→Pronto) + lista de itens com
 // status individual. Usado pelo OrderTracker (Balcão) e pelo OrderStatusModal
 // (Mesa) — a MESMA visualização nos dois lugares, só muda a moldura em volta.
-function OrderProgressView({ status, items }: { status: OrderStatus; items: OrderItem[] }) {
+//
+// `orderFlow` (achado real, pedido explícito do Ramon, loja Sertão): em
+// lojas `direct_print` não existe KDS nenhum — nada além de FECHAR A MESA
+// avança o status de um item (ver CaixaPrintStation.tsx), então esta linha
+// do tempo ficava travada pra sempre em "Enviado"/"Aceito", parecendo que o
+// pedido nunca é preparado, quando na verdade só não existe rastreamento
+// nessas lojas. Com `orderFlow === 'direct_print'`, mostra uma confirmação
+// simples em vez da linha do tempo/status por item — que nunca seriam
+// verdadeiros ali.
+function OrderProgressView({ status, items, orderFlow = 'kds' }: { status: OrderStatus; items: OrderItem[]; orderFlow?: OrderFlow }) {
+    if (orderFlow === 'direct_print') {
+        return (
+            <div className="w-full max-w-md mx-auto text-center py-6">
+                <div className="bg-[var(--ok)]/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-[var(--ok)]">
+                    <CheckCircle size={28} />
+                </div>
+                <h3 className="font-bold text-lg text-[var(--text)] mb-1">Pedido enviado!</h3>
+                <p className="text-sm text-[var(--text-muted)]">Seu pedido já foi encaminhado pra cozinha.</p>
+            </div>
+        );
+    }
+
     const currentStepIndex = ORDER_STEPS.findIndex(s => s.status === status) !== -1
         ? ORDER_STEPS.findIndex(s => s.status === status)
         : (status === OrderStatus.DELIVERED ? 4 : 0);
@@ -329,6 +351,8 @@ function useMesaOrders(storeId: string | undefined, orderIds: string[]) {
 }
 
 const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: () => void }> = ({ orderId, onReset, onLogout }) => {
+    const { currentStore } = useApp();
+    const orderFlow = resolveOrderFlow(currentStore);
     const [order, setOrder] = useState<Order | null>(null);
     const [items, setItems] = useState<OrderItem[]>([]);
     const [secondsToRedirect, setSecondsToRedirect] = useState(5);
@@ -538,7 +562,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                      </div>
                 ) : (
                     <>
-                        <OrderProgressView status={derivedStatus} items={items} />
+                        <OrderProgressView status={derivedStatus} items={items} orderFlow={orderFlow} />
 
                         <div className="p-2 text-center text-xs text-[var(--text-muted)]">
                              Aguarde chamar seu nome ou número no painel.
@@ -593,7 +617,7 @@ function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: (
 // acompanhamento acessível a qualquer momento sem sair do cardápio. Mostra a
 // rodada ativa (reaproveitando OrderProgressView, igual ao Balcão) + histórico
 // das rodadas já entregues nesta visita.
-function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClose: () => void; orders: MesaOrderState[] }) {
+function OrderStatusModal({ isOpen, onClose, orders, orderFlow = 'kds' }: { isOpen: boolean; onClose: () => void; orders: MesaOrderState[]; orderFlow?: OrderFlow }) {
     const active = [...orders].reverse().find(o => o.status !== OrderStatus.DELIVERED && o.status !== OrderStatus.CANCELED) ?? null;
     const history = orders.filter(o => o.orderId !== active?.orderId && o.status === OrderStatus.DELIVERED);
 
@@ -611,7 +635,7 @@ function OrderStatusModal({ isOpen, onClose, orders }: { isOpen: boolean; onClos
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
                     {active ? (
-                        <OrderProgressView status={active.status} items={active.items} />
+                        <OrderProgressView status={active.status} items={active.items} orderFlow={orderFlow} />
                     ) : (
                         <div className="text-center py-10 text-[var(--text-muted)]">
                             <CheckCircle size={36} className="mx-auto mb-3 opacity-20" />
@@ -1724,6 +1748,11 @@ const CartModal: React.FC<{
 }
 
 const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: string, storeId: string, clientName: string, isWaitingBill: boolean, currentStore: Store | null, currentTable: Table | null, requestBillOnOpen?: boolean }> = ({ isOpen, onClose, tableId, storeId, clientName, isWaitingBill, currentStore, currentTable, requestBillOnOpen = false }) => {
+    // Lojas `direct_print` (ex.: Sertão) não têm KDS — status por item
+    // (Enviado/Aceito/Preparando/Pronto) nunca reflete a realidade nesse
+    // fluxo, mesmo achado do OrderProgressView (achado real, WhatsApp do
+    // Ramon 2026-08-24).
+    const orderFlow = resolveOrderFlow(currentStore);
     const [tab, setTab] = useState<'split' | 'users' | 'calculator'>('split');
     const [people, setPeople] = useState(1);
     const [total, setTotal] = useState(0);
@@ -1851,16 +1880,9 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
         }
     };
 
-    const hasPendingItems = useMemo(() => {
-        return items.some(i => i.status === 'pending' || i.status === 'accepted');
-    }, [items]);
-
-    const handleRequestBill = async (cancelPending = false) => {
+    const handleRequestBill = async () => {
         setIsClosing(true);
         try {
-            if (cancelPending) {
-                await cancelPendingTableItems(tableId);
-            }
             await requestTableBill(tableId);
             toast.success("Conta solicitada com sucesso! O garçom trará a conta em instantes.");
             // Sem isso, o modal ficava montado (variant="sheet" não desmonta mais
@@ -1981,48 +2003,21 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                          <p className="text-sm text-[var(--text-muted)] mt-1">Ao solicitar o fechamento, não será possível adicionar novos itens.</p>
                      </div>
 
-                     {hasPendingItems && (
-                         <div className="bg-[var(--err)]/8 p-4 rounded-[var(--r-lg)] border border-[var(--err)]/20 text-left">
-                             <div className="flex items-start gap-2">
-                                 <AlertTriangle className="text-[var(--err)] flex-shrink-0 mt-0.5" size={20}/>
-                                 <div>
-                                     <p className="font-bold text-[var(--err)]">Itens Pendentes</p>
-                                     <p className="text-sm text-[var(--text-muted)] mt-1">
-                                         Existem pedidos que ainda não começaram a ser preparados pela cozinha.
-                                     </p>
-                                 </div>
-                             </div>
-                         </div>
-                     )}
-
+                     {/* Pedido real do Ramon (WhatsApp, 2026-08-24): "não é pra ter essa
+                         comunicação, tanto no cliente como na loja" — a trava de "itens
+                         pendentes" (dois botões, um deles cancelando itens sem perguntar
+                         de novo) foi removida. Pedir a conta agora é sempre uma única
+                         confirmação simples, com a lista de itens pedidos — sem checar
+                         status de preparo, que em lojas `direct_print` nunca reflete a
+                         realidade de qualquer forma (ver OrderProgressView). */}
                      <div className="flex flex-col gap-3">
-                         {hasPendingItems ? (
-                             <>
-                                <Button
-                                    variant="danger"
-                                    className="w-full"
-                                    onClick={() => handleRequestBill(true)}
-                                    isLoading={isClosing}
-                                >
-                                    Cancelar Pendentes e Fechar
-                                </Button>
-                                <Button
-                                    className="w-full"
-                                    onClick={() => handleRequestBill(false)}
-                                    isLoading={isClosing}
-                                >
-                                    Manter Pendentes e Fechar
-                                </Button>
-                             </>
-                         ) : (
-                             <Button
-                                className="w-full h-12 text-lg"
-                                onClick={() => handleRequestBill(false)}
-                                isLoading={isClosing}
-                            >
-                                Sim, Fechar Conta
-                            </Button>
-                         )}
+                         <Button
+                            className="w-full h-12 text-lg"
+                            onClick={() => handleRequestBill()}
+                            isLoading={isClosing}
+                        >
+                            Sim, Fechar Conta
+                        </Button>
                          <Button variant="secondary" onClick={() => setShowCloseConfirmation(false)}>
                              Voltar
                          </Button>
@@ -2100,7 +2095,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                 <li key={idx} className="flex justify-between items-center py-1">
                                                     <div className="flex items-center gap-2">
                                                         <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
-                                                        {getItemStatusBadge(it.status)}
+                                                        {orderFlow !== 'direct_print' && getItemStatusBadge(it.status)}
                                                     </div>
                                                     <span>{formatBRL(it.price_at_time * it.quantity)}</span>
                                                 </li>
@@ -2129,7 +2124,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                                 {data.items.map((it: any) => (
                                                     <div key={it.id} className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1">
                                                         <div className="flex items-center gap-1.5">
-                                                            {getItemStatusBadge(it.status)}
+                                                            {orderFlow !== 'direct_print' && getItemStatusBadge(it.status)}
                                                             <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                         </div>
                                                         <span className="num">{formatBRL(it.price_at_time * it.quantity)}</span>
@@ -3806,7 +3801,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             </motion.div>
                         )}
                     </AnimatePresence>
-                    {latestMesaOrder && (
+                    {latestMesaOrder && resolveOrderFlow(currentStore) !== 'direct_print' && (
                         // Entrada com spring (achado M5 da revisão final de 2026-08-16):
                         // a pill perdeu a animação de entrada quando o wrapper da barra
                         // do carrinho virou motion.div (Task 2) — sem AnimatePresence de
@@ -3884,6 +3879,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isOpen={isOrderStatusOpen}
                 onClose={() => setIsOrderStatusOpen(false)}
                 orders={mesaOrders}
+                orderFlow={resolveOrderFlow(currentStore)}
             />
 
             {currentTable && currentStore && (

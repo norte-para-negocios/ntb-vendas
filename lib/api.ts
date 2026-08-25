@@ -948,6 +948,7 @@ export const createOrder = async (
   items: CartItem[],
   customerName?: string,
   addedByRole: 'cliente' | 'garcom' = 'cliente',
+  addedByName?: string,
 ): Promise<{ success: boolean; orderId?: string }> => {
   try {
     const isCounter = tableId === null;
@@ -970,6 +971,7 @@ export const createOrder = async (
       p_customer_name: customerName || null,
       p_items: pItems,
       p_added_by_role: addedByRole,
+      p_added_by_name: addedByName || null,
     });
 
     if (error) throw error;

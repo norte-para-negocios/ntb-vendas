@@ -33,6 +33,18 @@ export interface DadosEmitenteNota {
   telefone?: string; // opcional — schema NFe aceita <fone> ausente
 }
 
+// Forma de pagamento real da venda (payment_details.methods, já existente
+// desde a Task 2 do plano Frente de Caixa — ver AGENTS.md/StoreModule.tsx).
+// Achado real (WhatsApp do Ramon, 2026-08-24): o `<pag>` do XML nunca lia
+// isso — vinha hardcoded "01" (Dinheiro) sempre, mesmo quando a venda foi em
+// crédito/débito/PIX. `amount` é o valor bruto realmente cobrado por esse
+// método (pode incluir taxa de serviço embutida) — ver `pagamentos` abaixo
+// pra como isso é conciliado com `vNF`.
+export interface PagamentoNota {
+  method: string; // 'CASH' | 'CREDIT' | 'DEBIT' | 'PIX' | 'COURTESY' — ver lib/labels.ts
+  amount: number;
+}
+
 export interface MontarXmlParams {
   modelo: '55' | '65';
   ambiente: 'homologacao' | 'producao';
@@ -41,6 +53,26 @@ export interface MontarXmlParams {
   emitente: DadosEmitenteNota;
   itens: ItemNota[];
   destinatario?: DestinatarioNota; // obrigatório pra modelo 55, ausente pra 65
+  // Opcional de propósito: sem isso (chamador antigo, ou venda sem
+  // payment_details detalhado), cai no fallback de sempre (Dinheiro, valor
+  // igual ao total de produtos) — nunca quebra uma emissão que já
+  // funcionava.
+  pagamentos?: PagamentoNota[];
+}
+
+// Código de forma de pagamento da SEFAZ (Nota Técnica 2015/002, grupo
+// <detPag>/<tPag>) — 01 Dinheiro, 03 Cartão de Crédito, 04 Cartão de
+// Débito, 17 Pagamento Instantâneo (PIX), 90 Sem pagamento (usado só pra
+// COURTESY — item de cortesia, sem cobrança real).
+function mapMetodoParaTPag(method: string): string {
+  switch (method) {
+    case 'CREDIT': return '03';
+    case 'DEBIT': return '04';
+    case 'PIX': return '17';
+    case 'COURTESY': return '90';
+    case 'CASH':
+    default: return '01';
+  }
 }
 
 // Texto obrigatório em homologação (SEFAZ rejeita sem isso). Pra NFC-e (sem
@@ -131,7 +163,7 @@ function componentesSaoPaulo(now: Date) {
 }
 
 export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: string; infNFeId: string } {
-  const { modelo, ambiente, serie, numero, emitente, itens, destinatario } = params;
+  const { modelo, ambiente, serie, numero, emitente, itens, destinatario, pagamentos } = params;
   if (!itens.length) throw new Error('Nota sem itens.');
   if (modelo === '55' && !destinatario) throw new Error('NF-e (modelo 55) exige destinatário.');
 
@@ -223,6 +255,49 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
 
   const vNF = vProdTotal.toFixed(2);
 
+  // Achado real (WhatsApp do Ramon, 2026-08-24, venda real de teste na Mesa
+  // 6): `<pag>` sempre saía "Dinheiro" hardcoded, mesmo pago em crédito. A
+  // taxa de serviço (10%) fica de fora de propósito nesta correção — vNF
+  // continua sendo só o valor de produto (vProdTotal), igual sempre foi;
+  // decidir se/como a taxa de serviço entra no documento fiscal é uma
+  // questão de classificação tributária real, não um bug de código, e fica
+  // pra decisão explícita com o contador da loja (mesmo padrão já usado
+  // pra NCM/CST neste projeto). O que ESTA correção resolve: `tPag` reflete
+  // a forma de pagamento real, e `vPag` soma exatamente `vNF` (nunca o
+  // total com taxa embutida), distribuído proporcionalmente entre os
+  // métodos reais usados — evita criar uma divergência nova entre `vNF` e
+  // a soma de `vPag`, que a SEFAZ rejeitaria.
+  let pagXml: string;
+  if (pagamentos && pagamentos.length > 0) {
+    const pagosReais = pagamentos.filter((p) => p.method !== 'COURTESY' && p.amount > 0);
+    if (pagosReais.length === 0) {
+      // Venda inteira em cortesia — sem pagamento real algum.
+      pagXml = `<pag><detPag><indPag>0</indPag><tPag>90</tPag><vPag>${vNF}</vPag></detPag></pag>`;
+    } else {
+      const totalReal = pagosReais.reduce((sum, p) => sum + p.amount, 0);
+      let acumulado = 0;
+      const detPags = pagosReais
+        .map((p, idx) => {
+          let vPagItem: number;
+          if (idx === pagosReais.length - 1) {
+            // Último método absorve o resto — garante que a soma bate
+            // exatamente com vNF, sem sobra/falta de arredondamento.
+            vPagItem = Number((vProdTotal - acumulado).toFixed(2));
+          } else {
+            vPagItem = Number(((p.amount / totalReal) * vProdTotal).toFixed(2));
+            acumulado += vPagItem;
+          }
+          return `<detPag><indPag>0</indPag><tPag>${mapMetodoParaTPag(p.method)}</tPag><vPag>${vPagItem.toFixed(2)}</vPag></detPag>`;
+        })
+        .join('');
+      pagXml = `<pag>${detPags}</pag>`;
+    }
+  } else {
+    // Fallback: sem payment_details detalhado (venda antiga, ou chamador
+    // que ainda não passa `pagamentos`) — mesmo comportamento de sempre.
+    pagXml = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vNF}</vPag></detPag></pag>`;
+  }
+
   const nfeXml =
     `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="${infNFeId}" versao="4.00">` +
     `<ide><cUF>${emitente.cUF}</cUF><cNF>${cNF}</cNF><natOp>VENDA AO CONSUMIDOR</natOp><mod>${modelo}</mod>` +
@@ -245,7 +320,7 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI>` +
     `<vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro>` +
     `<vNF>${vNF}</vNF></ICMSTot></total><transp><modFrete>9</modFrete></transp>` +
-    `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${vNF}</vPag></detPag></pag>` +
+    pagXml +
     // Grupo opcional pelo schema, mas exigido na prática por `nfe-danfe-pdf`
     // (lib/fiscal/pdf.ts) — sem ele, a lib quebra tentando ler
     // `infAdic.infCpl` de um `infAdic` undefined. `infCpl` vazio (string

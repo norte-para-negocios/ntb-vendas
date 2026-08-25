@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { extrairCertificado } from '@/lib/fiscal/certificado';
-import { montarXmlNota, ItemNota } from '@/lib/fiscal/xml';
+import { montarXmlNota, ItemNota, PagamentoNota } from '@/lib/fiscal/xml';
 import { assinarXmlNota } from '@/lib/fiscal/assinatura';
 import { montarQrCode, inserirSuplNoXmlAssinado } from '@/lib/fiscal/qrcode';
 import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
@@ -479,6 +479,14 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       },
       itens: itensXml,
       destinatario: modelo === '55' ? body.destinatario : undefined,
+      // Achado real (WhatsApp do Ramon, 2026-08-24): `<pag>` nunca lia a
+      // forma de pagamento real da venda. `payment_details.methods` já
+      // existe desde a Task 2 do plano Frente de Caixa — `paymentDetailsAncora`
+      // já foi buscado logo no início desta rota (checagem de emitir_nota),
+      // só reaproveitado aqui.
+      pagamentos: Array.isArray((paymentDetailsAncora as any)?.methods)
+        ? ((paymentDetailsAncora as any).methods as PagamentoNota[])
+        : undefined,
     });
     chave = montado.chave;
 

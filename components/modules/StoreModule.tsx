@@ -2213,7 +2213,7 @@ NOTIFY pgrst, 'reload schema';`;
             // pedido/item sozinha via fetch_kitchen_orders_secure.
             await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes, selectedOptions
-            }], loggedUser.name, 'garcom');
+            }], loggedUser.name, 'garcom', loggedUser.name);
 
             toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
 
@@ -2445,9 +2445,9 @@ NOTIFY pgrst, 'reload schema';`;
                                                 summary.items.map((item, idx) => (
                                                     <div key={idx} className="flex justify-between items-center gap-1.5 text-xs text-[var(--text)]">
                                                         <span className="truncate min-w-0 flex-1 font-medium">{item.quantity}x {getOrderItemDisplayName(item)}</span>
-                                                        {item.status === 'delivered' && <CheckCircle size={12} className="text-[var(--ok)] flex-shrink-0" />}
-                                                        {item.status === 'preparing' && <ChefHat size={12} className="text-[var(--info)] flex-shrink-0" />}
-                                                        {(item.status === 'pending' || item.status === 'accepted') && <Clock size={12} className="text-[var(--warn)] flex-shrink-0" />}
+                                                        {orderFlow !== 'direct_print' && item.status === 'delivered' && <CheckCircle size={12} className="text-[var(--ok)] flex-shrink-0" />}
+                                                        {orderFlow !== 'direct_print' && item.status === 'preparing' && <ChefHat size={12} className="text-[var(--info)] flex-shrink-0" />}
+                                                        {orderFlow !== 'direct_print' && (item.status === 'pending' || item.status === 'accepted') && <Clock size={12} className="text-[var(--warn)] flex-shrink-0" />}
                                                     </div>
                                                 ))
                                             ) : (
@@ -2636,15 +2636,17 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 {getOrderItemDisplayName(item)}
                                                                 {item.added_by_role === 'garcom' && (
                                                                     <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-[var(--info)]/15 text-[var(--info)]">
-                                                                        Garçom
+                                                                        {item.added_by_name || 'Garçom'}
                                                                     </span>
                                                                 )}
                                                             </span>
                                                             <div className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-1 ml-7">
-                                                                {item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
-                                                                 item.status === 'preparing' ? <span className="text-[var(--info)] flex items-center gap-1"><ChefHat size={10}/> Preparando</span> :
-                                                                 <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>}
-                                                                <span>• R$ {formatBRL(item.price_at_time)} un.</span>
+                                                                {orderFlow !== 'direct_print' && (
+                                                                    item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
+                                                                    item.status === 'preparing' ? <span className="text-[var(--info)] flex items-center gap-1"><ChefHat size={10}/> Preparando</span> :
+                                                                    <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>
+                                                                )}
+                                                                <span>{orderFlow !== 'direct_print' && '• '}R$ {formatBRL(item.price_at_time)} un.</span>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
@@ -7016,36 +7018,52 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                             </div>
                         </div>
 
-                        <div>
-                            <h4 className="font-bold text-[var(--text)] mb-2 border-b border-[var(--border)] pb-1">Pagamento</h4>
-                            <div className="text-sm space-y-1">
-                                {selectedOrderDetails.payment_details?.methods ? (
-                                    selectedOrderDetails.payment_details.methods.map((m: any, i: number) => (
-                                        <div key={i} className="flex justify-between">
-                                            <span className="text-[var(--text-muted)]">
-                                                {getPaymentMethodLabel(m.method)}
-                                                {m.brand && ` · ${getCardBrandLabel(m.brand)}`}
-                                            </span>
-                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(m.amount)}</span>
+                        {(() => {
+                            // Bug real (WhatsApp do Ramon, 2026-08-24): "Total Pago" recalculava
+                            // do zero (soma de order_items, sem taxa de serviço) em vez de usar a
+                            // mesma fonte que a seção "Pagamento" já mostra corretamente
+                            // (payment_details.methods, que inclui a taxa) — os dois números
+                            // divergiam no mesmo modal. Agora uma fonte só, usada nos dois
+                            // lugares; cai no total de produtos (sem taxa) só quando a venda é
+                            // antiga o bastante pra não ter payment_details.methods gravado.
+                            const itemsTotal = selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+                            const methods = selectedOrderDetails.payment_details?.methods;
+                            const totalPago = methods
+                                ? methods.reduce((sum: number, m: any) => sum + m.amount, 0)
+                                : itemsTotal;
+                            return (
+                                <>
+                                    <div>
+                                        <h4 className="font-bold text-[var(--text)] mb-2 border-b border-[var(--border)] pb-1">Pagamento</h4>
+                                        <div className="text-sm space-y-1">
+                                            {methods ? (
+                                                methods.map((m: any, i: number) => (
+                                                    <div key={i} className="flex justify-between">
+                                                        <span className="text-[var(--text-muted)]">
+                                                            {getPaymentMethodLabel(m.method)}
+                                                            {m.brand && ` · ${getCardBrandLabel(m.brand)}`}
+                                                        </span>
+                                                        <span className="font-medium text-[var(--text)]">R$ {formatBRL(m.amount)}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="flex justify-between">
+                                                    <span className="text-[var(--text-muted)]">{getPaymentMethodLabel(selectedOrderDetails.payment_method)}</span>
+                                                    <span className="font-medium text-[var(--text)]">R$ {formatBRL(itemsTotal)}</span>
+                                                </div>
+                                            )}
                                         </div>
-                                    ))
-                                ) : (
-                                    <div className="flex justify-between">
-                                        <span className="text-[var(--text-muted)]">{getPaymentMethodLabel(selectedOrderDetails.payment_method)}</span>
-                                        <span className="font-medium text-[var(--text)]">
-                                            R$ {formatBRL(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0)}
+                                    </div>
+
+                                    <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
+                                        <span className="font-bold text-lg text-[var(--text)]">Total Pago</span>
+                                        <span className="font-black text-2xl text-[var(--brand)]">
+                                            R$ {formatBRL(totalPago)}
                                         </span>
                                     </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
-                            <span className="font-bold text-lg text-[var(--text)]">Total Pago</span>
-                            <span className="font-black text-2xl text-[var(--brand)]">
-                                R$ {formatBRL(selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0)}
-                            </span>
-                        </div>
+                                </>
+                            );
+                        })()}
                     </div>
                 )}
             </Modal>

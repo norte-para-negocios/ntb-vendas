@@ -216,6 +216,7 @@ export interface OrderItem {
   price_at_time: number;
   selected_options?: { name: string; price_delta: number }[]; // snapshot gravado por create_order_secure
   added_by_role?: 'cliente' | 'garcom'; // migration 046 — quem lançou o item (default 'cliente')
+  added_by_name?: string | null; // migration 053 — nome de quem lançou (só populado quando added_by_role === 'garcom')
   order?: Order;
 }
 
