@@ -1164,6 +1164,29 @@ export const fetchCashShiftSummary = async (shiftId: string): Promise<CashShiftS
   return data as CashShiftSummary;
 };
 
+// Subprojeto 2 (2026-08-25) — histórico de turnos passados, consultável a
+// qualquer momento (não só na hora de fechar). Linha "resumida"; pra ver o
+// detalhe completo (total por forma de pagamento, sangria/suprimento) de um
+// turno específico, chama `fetchCashShiftSummary(row.id)` de novo — mesma
+// function já usada pela tela de fechamento, reaproveitada.
+export interface CashShiftHistoryRow {
+  id: string;
+  opened_at: string;
+  closed_at: string | null;
+  opening_float: number;
+  closing_counted_cash: number | null;
+  status: 'open' | 'closed';
+  notes: string | null;
+  operator_name: string | null;
+  difference: number | null;
+}
+
+export const fetchCashShiftsHistory = async (storeId: string, limit = 30): Promise<CashShiftHistoryRow[]> => {
+  const { data, error } = await supabase.rpc('fetch_cash_shifts_history_secure', { p_store_id: storeId, p_limit: limit });
+  if (error || !data) return [];
+  return data as CashShiftHistoryRow[];
+};
+
 // Task 4: fecha o turno de vez — `close_cash_shift_secure` grava
 // closing_counted_cash/closed_at/status e já devolve a diferença calculada
 // no servidor (mesma fórmula de `fetchCashShiftSummary`, sem round-trip

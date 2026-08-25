@@ -6,12 +6,12 @@ import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -3695,6 +3695,18 @@ const CaixaView: React.FC<{
     const [closingCountedCash, setClosingCountedCash] = useState('');
     const [isClosingShift, setIsClosingShift] = useState(false);
 
+    // Subprojeto 2 (2026-08-25): histórico de turnos passados, consultável a
+    // qualquer momento — não só na hora de fechar (achado real: o número da
+    // diferença sumia assim que o turno era fechado, sem jeito de conferir
+    // depois). `historySummary` reaproveita a MESMA function/tipo que a tela
+    // de fechamento já usa (fetchCashShiftSummary) — não duplica lógica de
+    // cálculo, só chama de novo pro turno escolhido na lista.
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [shiftsHistory, setShiftsHistory] = useState<CashShiftHistoryRow[]>([]);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [historySummary, setHistorySummary] = useState<CashShiftSummary | null>(null);
+    const [isLoadingHistorySummary, setIsLoadingHistorySummary] = useState(false);
+
     // Relógio "agora" só pra recalcular o "há quanto tempo espera" da fila
     // periodicamente sem precisar de novo fetch — mesmo padrão do `now` em
     // KdsView (indicador de atraso).
@@ -3822,6 +3834,166 @@ const CaixaView: React.FC<{
             setIsLoadingSummary(false);
         }
     };
+
+    const handleOpenHistory = async () => {
+        setShowHistoryModal(true);
+        setIsLoadingHistory(true);
+        try {
+            const rows = await fetchCashShiftsHistory(storeId);
+            setShiftsHistory(rows);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    };
+
+    const handleViewHistorySummary = async (row: CashShiftHistoryRow) => {
+        setIsLoadingHistorySummary(true);
+        try {
+            const summary = await fetchCashShiftSummary(row.id);
+            setHistorySummary(summary);
+            if (!summary) toast.error('Não foi possível carregar o resumo deste turno.');
+        } finally {
+            setIsLoadingHistorySummary(false);
+        }
+    };
+
+    // Computado uma vez, referenciado nos dois estados de retorno abaixo
+    // (sem turno / com turno) — a lista/detalhe de histórico faz sentido em
+    // qualquer um dos dois, então em vez de duplicar o JSX dos dois modais
+    // em cada branch, uma variável só.
+    const historyModals = (
+        <>
+            <Modal
+                isOpen={showHistoryModal}
+                onClose={() => { setShowHistoryModal(false); setHistorySummary(null); }}
+                title="Histórico de Turnos"
+                variant="sheet"
+            >
+                {historySummary || isLoadingHistorySummary ? (
+                    <div className="space-y-4">
+                        <button
+                            type="button"
+                            onClick={() => setHistorySummary(null)}
+                            className="text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand)] u-motion flex items-center gap-1"
+                        >
+                            <ArrowRight size={12} className="rotate-180" /> Voltar pra lista
+                        </button>
+                        {isLoadingHistorySummary ? (
+                            <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
+                                <RefreshCw size={24} className="animate-spin" />
+                            </div>
+                        ) : historySummary && (
+                            <div className="space-y-5">
+                                <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 text-sm">
+                                    <p className="text-[var(--text-muted)]">
+                                        {new Date(historySummary.shift.opened_at).toLocaleString('pt-BR')}
+                                        {historySummary.shift.closed_at && ` — ${new Date(historySummary.shift.closed_at).toLocaleString('pt-BR')}`}
+                                    </p>
+                                    {historySummary.shift.notes && (
+                                        <p className="text-[var(--text-muted)] mt-1">{historySummary.shift.notes}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-1.5">
+                                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                        Total por forma de pagamento
+                                    </h4>
+                                    {Object.keys(historySummary.totals_by_method).length === 0 ? (
+                                        <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
+                                    ) : (
+                                        <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                            {Object.entries(historySummary.totals_by_method).map(([method, total]) => (
+                                                <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
+                                                    <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
+                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                        <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
+                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(historySummary.total_sangria)}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                        <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
+                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(historySummary.total_suprimento)}</p>
+                                    </div>
+                                </div>
+                                <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                                    <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro</span>
+                                    <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(historySummary.expected_cash)}</span>
+                                </div>
+                                {historySummary.closing_counted_cash !== null && (
+                                    <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                                        <span className="text-sm font-bold text-[var(--text)]">Contado na gaveta</span>
+                                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(historySummary.closing_counted_cash)}</span>
+                                    </div>
+                                )}
+                                {historySummary.difference !== null && (
+                                    <div className={`rounded-xl px-4 py-3 flex items-center justify-between border-2 ${
+                                        Math.abs(historySummary.difference) < 0.005
+                                            ? 'border-[var(--ok)]/40 bg-[var(--ok)]/10'
+                                            : historySummary.difference > 0
+                                                ? 'border-[var(--info)]/40 bg-[var(--info)]/10'
+                                                : 'border-[var(--err)]/40 bg-[var(--err)]/10'
+                                    }`}>
+                                        <span className="text-sm font-bold text-[var(--text)]">
+                                            {Math.abs(historySummary.difference) < 0.005 ? 'Conferiu certinho' : historySummary.difference > 0 ? 'Sobrou' : 'Faltou'}
+                                        </span>
+                                        <span className="font-mono font-bold text-lg text-[var(--text)]">
+                                            {historySummary.difference > 0 ? '+' : ''}R$ {formatBRL(historySummary.difference)}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {isLoadingHistory ? (
+                            <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
+                                <RefreshCw size={24} className="animate-spin" />
+                            </div>
+                        ) : shiftsHistory.length === 0 ? (
+                            <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum turno registrado ainda.</p>
+                        ) : (
+                            shiftsHistory.map(row => (
+                                <button
+                                    key={row.id}
+                                    type="button"
+                                    disabled={row.status !== 'closed'}
+                                    onClick={() => handleViewHistorySummary(row)}
+                                    className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] hover:border-[var(--brand)] u-motion u-press-sm text-left disabled:opacity-60 disabled:cursor-default"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-[var(--text)]">
+                                            {new Date(row.opened_at).toLocaleDateString('pt-BR')} · {new Date(row.opened_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                        <p className="text-xs text-[var(--text-muted)] truncate">
+                                            {row.operator_name || row.notes || 'Operador não identificado'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {row.status === 'open' ? (
+                                            <Badge color="bg-[var(--info)]/10 text-[var(--info)]">Em andamento</Badge>
+                                        ) : row.difference !== null && Math.abs(row.difference) >= 0.005 ? (
+                                            <Badge color={row.difference > 0 ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--err)]/10 text-[var(--err)]'}>
+                                                {row.difference > 0 ? '+' : ''}R$ {formatBRL(row.difference)}
+                                            </Badge>
+                                        ) : (
+                                            <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]">Conferiu</Badge>
+                                        )}
+                                        {row.status === 'closed' && <ArrowRight size={14} className="text-[var(--text-muted)]" />}
+                                    </div>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                )}
+            </Modal>
+        </>
+    );
 
     const closingCountedValue = useMemo(() => {
         const v = parseFloat(closingCountedCash.replace(',', '.'));
@@ -3966,6 +4138,14 @@ const CaixaView: React.FC<{
                         </Button>
                     </div>
                 </Card>
+                <button
+                    type="button"
+                    onClick={handleOpenHistory}
+                    className="w-full mt-3 text-center text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand)] u-motion py-2"
+                >
+                    Ver histórico de turnos
+                </button>
+                {historyModals}
             </div>
         );
     }
@@ -3996,6 +4176,9 @@ const CaixaView: React.FC<{
                     </Button>
                     <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0">
                         <Lock size={16} className="mr-2" /> Fechar Caixa
+                    </Button>
+                    <Button onClick={handleOpenHistory} variant="ghost" className="shrink-0" title="Ver histórico de turnos">
+                        <History size={16} />
                     </Button>
                 </div>
             </Card>
@@ -4128,6 +4311,17 @@ const CaixaView: React.FC<{
                     </div>
                 ) : (
                     <div className="space-y-5">
+                        {/* Aviso de fila cheia (subprojeto 2, 2026-08-25) — não bloqueia
+                            o fechamento (mesas/pedidos continuam lá depois, é um estado
+                            válido), só evita fechar sem querer no meio do movimento. */}
+                        {queueItems.length > 0 && (
+                            <div className="rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
+                                <AlertCircle size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                                <p className="text-sm text-[var(--warn)] font-semibold">
+                                    Ainda há {queueItems.length} {queueItems.length === 1 ? 'recebível pendente' : 'recebíveis pendentes'} na fila. Eles continuam lá depois do fechamento.
+                                </p>
+                            </div>
+                        )}
                         <div className="space-y-1.5">
                             <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
                                 Total por forma de pagamento
@@ -4209,6 +4403,7 @@ const CaixaView: React.FC<{
                     </div>
                 )}
             </Modal>
+            {historyModals}
         </div>
     );
 };
