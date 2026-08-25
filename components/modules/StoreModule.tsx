@@ -7343,9 +7343,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                             // antiga o bastante pra não ter payment_details.methods gravado.
                             const itemsTotal = selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
                             const methods = selectedOrderDetails.payment_details?.methods;
-                            const totalPago = methods
-                                ? methods.reduce((sum: number, m: any) => sum + m.amount, 0)
-                                : itemsTotal;
+                            const totalPago = getOrderDisplayTotal(selectedOrderDetails);
                             return (
                                 <>
                                     <div>
