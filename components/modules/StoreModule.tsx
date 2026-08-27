@@ -4391,6 +4391,37 @@ const CaixaView: React.FC<{
         return [...tableItems, ...counterItems].sort((a, b) => a.waitingSince - b.waitingSince);
     }, [tables, activeOrders, counterOrders, store, serviceFeeRate]);
 
+    // Fase 2, Task 4 (plano "Fora do Cardápio"): achado real da auditoria —
+    // a fila acima só mostra mesa em WAITING_BILL. Numa loja sem
+    // acompanhamento de pedido (direct_print), o Caixa é o único humano
+    // olhando pra tela e não tinha NENHUMA visão de quais mesas estão
+    // ocupadas comendo agora, só das que já pediram a conta. Mesma fonte de
+    // dado que queueItems (tables/activeOrders), sem query nova.
+    const occupiedTables = useMemo(() => {
+        return tables
+            .filter(t => t.status === TableStatus.OCCUPIED || t.status === TableStatus.WAITING_BILL)
+            .map(t => {
+                const tableOrders = activeOrders.filter(o => o.table_id === t.id);
+                const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
+                const subtotal = items.reduce((s, i) => s + i.price_at_time * i.quantity, 0);
+                const total = calculateOrderTotal(subtotal, !!store.config?.charge_service_fee, serviceFeeRate, t.service_fee_removed);
+                const occupiedSince = tableOrders.reduce((earliest, o) => {
+                    const ts = new Date(o.created_at).getTime();
+                    return earliest === 0 || ts < earliest ? ts : earliest;
+                }, 0) || now;
+                const minutesOccupied = Math.max(0, Math.round((now - occupiedSince) / 60000));
+                return {
+                    id: t.id,
+                    number: t.number,
+                    hostName: t.current_host_name || undefined,
+                    total,
+                    minutesOccupied,
+                    isWaitingBill: t.status === TableStatus.WAITING_BILL,
+                };
+            })
+            .sort((a, b) => b.minutesOccupied - a.minutesOccupied);
+    }, [tables, activeOrders, store, serviceFeeRate, now]);
+
     const formatWaitingLabel = (waitingSince: number): string => {
         const minutes = Math.max(0, Math.round((now - waitingSince) / 60000));
         if (minutes < 1) return 'agora mesmo';
@@ -4506,6 +4537,38 @@ const CaixaView: React.FC<{
                     </Button>
                 </div>
             </Card>
+
+            {occupiedTables.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">
+                        Mesas ocupadas ({occupiedTables.length})
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {occupiedTables.map(t => {
+                            const colorClass = t.minutesOccupied >= 60
+                                ? 'border-[var(--err)]/40 bg-[var(--err)]/5 text-[var(--err)]'
+                                : t.minutesOccupied >= 30
+                                    ? 'border-[var(--warn)]/40 bg-[var(--warn)]/5 text-[var(--warn)]'
+                                    : 'border-[var(--ok)]/40 bg-[var(--ok)]/5 text-[var(--ok)]';
+                            return (
+                                <button
+                                    key={t.id}
+                                    onClick={() => onOpenTablePayment(t.id)}
+                                    className={`text-left p-3 rounded-xl border u-motion u-press-sm ${colorClass}`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
+                                        <span className="text-[11px] font-mono">{t.minutesOccupied}min</span>
+                                    </div>
+                                    <p className="text-xs text-[var(--text-muted)] truncate">{t.hostName || '—'}</p>
+                                    <p className="text-sm font-bold text-[var(--text)] mt-1">R$ {formatBRL(t.total)}</p>
+                                    {t.isWaitingBill && <p className="text-[10px] font-bold uppercase mt-0.5">Aguardando pagamento</p>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div>
                 <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">
