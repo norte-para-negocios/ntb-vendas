@@ -7,9 +7,10 @@ import { ALL_ON, resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, S
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque } from '@/lib/api';
-import { differenceInDays, format, parseISO } from 'date-fns';
+import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchSalesHistory } from '@/lib/api';
+import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
+import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -313,11 +314,39 @@ export const AdminModule: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Fase 4, Task 14 (plano "Fora do Cardápio"): faturamento do dia por loja
+  // direto na listagem do Master Admin — não uma tela nova, só enriquece a
+  // lista existente (decisão de escopo do plano: comparação multi-loja
+  // dentro do painel do LOJISTA/conta universal fica de fora, é grande
+  // demais pra caber aqui). Sem RPC nova: reaproveita `fetchSalesHistory`
+  // por loja (mesma function que o Dashboard de cada loja já usa), N
+  // chamadas em paralelo — aceitável pro número de lojas reais que este
+  // Master Admin lista hoje.
+  const [todayRevenueByStore, setTodayRevenueByStore] = useState<Record<string, number>>({});
+  const [isLoadingTodayRevenue, setIsLoadingTodayRevenue] = useState(false);
+
+  const loadTodayRevenue = async (storeList: Store[]) => {
+      if (storeList.length === 0) return;
+      setIsLoadingTodayRevenue(true);
+      const todayIso = startOfDay(new Date()).toISOString();
+      try {
+          const results = await Promise.all(storeList.map(async s => {
+              const orders = await fetchSalesHistory(s.id, todayIso);
+              const total = orders.reduce((sum, o) => sum + getOrderDisplayTotal(o), 0);
+              return [s.id, total] as const;
+          }));
+          setTodayRevenueByStore(Object.fromEntries(results));
+      } finally {
+          setIsLoadingTodayRevenue(false);
+      }
+  };
+
   const loadStores = async () => {
       setIsLoadingList(true);
       const data = await fetchAllStores();
       setStores(data);
       setIsLoadingList(false);
+      loadTodayRevenue(data);
   };
 
   const loadUsers = async () => {
@@ -1015,6 +1044,15 @@ export const AdminModule: React.FC = () => {
                             <span className="block text-xs text-[var(--text-muted)] uppercase font-bold">Slug</span>
                             <div className="flex items-center gap-1 text-[var(--text)] font-medium">
                                 <span className="truncate">/{store.slug}</span>
+                            </div>
+                        </div>
+                        <div className="col-span-2 bg-[var(--surface-2)] p-2 rounded border border-[var(--border)]">
+                            <span className="block text-xs text-[var(--text-muted)] uppercase font-bold">Faturamento Hoje</span>
+                            <div className="flex items-center gap-1 text-[var(--ok)] font-bold">
+                                <Wallet size={14} />
+                                {isLoadingTodayRevenue && todayRevenueByStore[store.id] === undefined
+                                    ? '...'
+                                    : `R$ ${formatBRL(todayRevenueByStore[store.id] ?? 0)}`}
                             </div>
                         </div>
                     </div>
