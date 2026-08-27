@@ -1059,6 +1059,47 @@ altura, não precisa gerar nada aqui) e insere direto em `products` com
 categoria/imagem/descrição aqui (o `ntb-estoque` não tem nenhum desses
 conceitos).
 
+**Pizza meio a meio de verdade — Sertão (2026-08-27, catálogo item B3 da
+reunião 2026-08-25):** o cardápio de pizza da loja "O Sertão Vai Virar
+Mar" veio do Omie com cada combinação de sabor como um produto fixo
+separado (`"1/2 Calabresa"`, `"1/2 Bacon Especial"` etc — 5 categorias/
+camadas de preço × ~10-31 sabores cada, ~110 produtos no total, a maioria
+já com um grupo "Tamanho" próprio de Média/Grande/Inteira configurado
+pelo cliente). Pedido real do Ramon/André: escolher tamanho → escolher
+sabor(es) → quantos sabores, em vez de caçar o SKU pré-combinado certo.
+Resolvido reaproveitando o mecanismo de `product_option_groups` que já
+existe (nenhuma migration nova): por camada de preço, um produto (o
+primeiro sabor daquela camada, renomeado — ex. "Pizza Tradicional") virou
+o produto-pai, mantendo o grupo "Tamanho" que já tinha, e ganhou dois
+grupos novos — "Sabor 1" (`single`, obrigatório, todos os sabores da
+camada, `price_delta=0`) e "Sabor 2 (opcional — meio a meio)" (`single`,
+opcional, mesma lista + "Sem segundo sabor" como primeira opção). Os
+outros ~105 produtos "1/2 X" da mesma categoria foram marcados
+`available=false` (nunca apagados, mesmo padrão de
+`consolidateProductsIntoVariants`). Aplicado direto via SQL no Postgres
+do Contabo (não é migration — é conteúdo/catálogo, não schema; mesmo
+critério já usado no backfill de `omie_codigo`), roteiro gerado por um
+script Node descartável. Verificado ao vivo em `/c/sertao-vai-virar-mar`:
+modal renderiza Tamanho → Sabor 1 → Sabor 2 corretamente, preço não muda
+ao trocar o segundo sabor (mesma camada = mesmo preço).
+
+**Decisão consciente, não pedir pra adivinhar:** meio a meio só é
+permitido DENTRO da mesma camada de preço (Tradicional só combina com
+Tradicional, etc.) — combinar sabores de camadas diferentes exigiria uma
+regra de precificação (ex.: cobrar o valor do sabor mais caro) que
+ninguém confirmou com o cliente ainda; ficou de fora de propósito.
+
+**Pendência real, não resolvida (fora do escopo desta correção):** 4
+produtos na categoria "Pizza" não seguem o padrão "1/2 X" e por isso
+não entraram na consolidação — `Frango Pequena`, `Lombinho Pequena`,
+`Presunto Pequena` (R$ 64,90 cada, pizza inteira de 1 sabor, preço bem
+acima da "Inteira (Pequena)" já disponível dentro do grupo Tamanho de
+cada sabor normal — R$ 42,45+R$ 22,45) e `Gatinho Bigodão` (R$ 18,00, sem
+contexto claro). Ficaram como estavam (visíveis, sem tocar) porque
+mudar/ocultar preço real de cliente sem confirmação seria adivinhar dado
+financeiro — perguntar ao Ramon/André antes de decidir o que fazer com
+esses 4.
+
 ## Cardápio por horário/turno (migration 018)
 
 Uma categoria inteira do cardápio pode ficar restrita a uma janela de
