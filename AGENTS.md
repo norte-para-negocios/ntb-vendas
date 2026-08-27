@@ -1089,16 +1089,21 @@ Tradicional, etc.) — combinar sabores de camadas diferentes exigiria uma
 regra de precificação (ex.: cobrar o valor do sabor mais caro) que
 ninguém confirmou com o cliente ainda; ficou de fora de propósito.
 
-**Pendência real, não resolvida (fora do escopo desta correção):** 4
-produtos na categoria "Pizza" não seguem o padrão "1/2 X" e por isso
-não entraram na consolidação — `Frango Pequena`, `Lombinho Pequena`,
-`Presunto Pequena` (R$ 64,90 cada, pizza inteira de 1 sabor, preço bem
-acima da "Inteira (Pequena)" já disponível dentro do grupo Tamanho de
-cada sabor normal — R$ 42,45+R$ 22,45) e `Gatinho Bigodão` (R$ 18,00, sem
-contexto claro). Ficaram como estavam (visíveis, sem tocar) porque
-mudar/ocultar preço real de cliente sem confirmação seria adivinhar dado
-financeiro — perguntar ao Ramon/André antes de decidir o que fazer com
-esses 4.
+**Os 4 produtos fora do padrão "1/2 X" (resolvido, 2026-08-27) — decisão
+por produto, não chute em bloco.** Verificado preço/estrutura de cada um
+antes de decidir:
+- `Lombinho Pequena` e `Presunto Pequena` (R$ 64,90, sem nenhum grupo de
+  opção próprio): confirmado matematicamente redundante — R$ 42,45 (base
+  do sabor) + R$ 22,45 (delta de "Inteira (Pequena)", já existente no
+  Tamanho de cada sabor) = R$ 64,90 exato. Marcados `available=false`
+  (a mesma coisa já é pedível via "Pizza Tradicional" → sabor Lombinho/
+  Presunto → Tamanho Inteira).
+- `Frango Pequena` (R$ 64,90): **não** é duplicata — tem grupo próprio
+  "Sabor: Catupiry ou Cheddar" (é "Frango recheado", produto diferente de
+  só "sabor Frango em tamanho grande"). Mantido como está.
+- `Gatinho Bigodão` (R$ 18,00, `omie_codigo` próprio): item avulso sem
+  relação com sabor de pizza nenhum, só mal encaixado na categoria.
+  Mantido como está — não há nada pra confirmar com o cliente aqui.
 
 ## Cardápio por horário/turno (migration 018)
 
