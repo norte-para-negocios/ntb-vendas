@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
-import { Order, TableSession, OrderRating, OperatorCheckin } from '@/types';
+import { Order, TableSession, OrderRating, OperatorCheckin, Table, TableStatus, OrderStatus } from '@/types';
 import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown, Star, Wallet, ArrowRight, AlertTriangle } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -11,7 +11,7 @@ import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMon
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
-import { fetchCheckinsHistory, fetchOpenCashShift, CashShift } from '@/lib/api';
+import { fetchCheckinsHistory, fetchOpenCashShift, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -54,6 +54,38 @@ export const StoreDashboardView: React.FC<{
         return () => { cancelled = true; };
     }, [storeId]);
 
+    // Fase 4, Task 12 (plano "Fora do Cardápio"): "alertas que avisam antes"
+    // — mesa ocupada sem pedido novo há mais de 40min. `Table` não tem
+    // `updated_at` (ver types/index.ts), então o sinal usado é o
+    // `created_at` do item mais recente entre os pedidos ativos da mesa —
+    // mais fiel ao que "sem pedido novo" realmente significa do que
+    // qualquer timestamp de atualização de status da mesa em si.
+    const STALE_TABLE_MINUTES = 40;
+    const [staleTables, setStaleTables] = useState<{ number: number; minutesSinceLastItem: number }[]>([]);
+
+    useEffect(() => {
+        if (!storeId) return;
+        let cancelled = false;
+        Promise.all([fetchTables(storeId), fetchActiveOrdersForTables(storeId)])
+            .then(([allTables, activeOrders]) => {
+                if (cancelled) return;
+                const nowMs = Date.now();
+                const stale = allTables
+                    .filter(t => t.status === TableStatus.OCCUPIED || t.status === TableStatus.WAITING_BILL)
+                    .map(t => {
+                        const items = activeOrders.filter(o => o.table_id === t.id).flatMap(o => o.order_items || []);
+                        if (items.length === 0) return null;
+                        const lastItemMs = Math.max(...items.map(i => new Date(i.created_at).getTime()));
+                        const minutesSinceLastItem = Math.round((nowMs - lastItemMs) / 60000);
+                        return minutesSinceLastItem >= STALE_TABLE_MINUTES ? { number: t.number, minutesSinceLastItem } : null;
+                    })
+                    .filter((v): v is { number: number; minutesSinceLastItem: number } => v !== null)
+                    .sort((a, b) => b.minutesSinceLastItem - a.minutesSinceLastItem);
+                setStaleTables(stale);
+            });
+        return () => { cancelled = true; };
+    }, [storeId]);
+
     const now = new Date();
 
     const dailySales = sales.filter(s => isSameDay(new Date(s.created_at), now));
@@ -63,6 +95,43 @@ export const StoreDashboardView: React.FC<{
     const dailyTableSessions = tableSessions.filter(s => isSameDay(new Date(s.opened_at), now));
     const weeklyTableSessions = tableSessions.filter(s => isSameWeek(new Date(s.opened_at), now, { locale: ptBR }));
     const monthlyTableSessions = tableSessions.filter(s => isSameMonth(new Date(s.opened_at), now));
+
+    // Fase 4, Task 12: "cancelamento acima do normal hoje" — % de itens
+    // cancelados hoje vs. a média dos últimos 7 dias (excluindo hoje).
+    // `sales` só traz pedidos `delivered` (fetch_sales_history_secure), mas
+    // os `order_items` embutidos não são filtrados por status — um item
+    // cancelado dentro de um pedido por outro lado entregue continua
+    // aparecendo aqui, que é exatamente o dado que esse alerta precisa, sem
+    // RPC nova. Não cobre pedido INTEIRO cancelado (esses nunca entram em
+    // `sales`), mas isso é uma fatia pequena e o plano já aceita esse
+    // recorte pra não exigir busca extra.
+    const cancellationRateAlert = useMemo(() => {
+        const cancelRateOf = (orders: Order[]) => {
+            const items = orders.flatMap(o => o.order_items || []);
+            if (items.length === 0) return null;
+            const canceled = items.filter(i => i.status === OrderStatus.CANCELED).length;
+            return canceled / items.length;
+        };
+        const todayRate = cancelRateOf(dailySales);
+        if (todayRate === null || todayRate === 0) return null;
+        const last7DaysSales = sales.filter(s => {
+            const d = new Date(s.created_at);
+            return isAfter(d, subDays(now, 7)) && !isSameDay(d, now);
+        });
+        const avgRate = cancelRateOf(last7DaysSales);
+        // Sem histórico de comparação (loja nova/poucos dias) — não dá pra
+        // dizer "acima do normal" sem uma base, então o alerta fica calado
+        // em vez de arriscar um falso positivo.
+        if (avgRate === null) return null;
+        // "Acima do normal" = pelo menos o dobro da média — limiar simples
+        // de propósito (sem modelo estatístico, ver escopo reduzido do
+        // plano), e só dispara se a média não for desprezível (>=1%) pra
+        // não alarmar por causa de ruído de amostra pequena.
+        if (avgRate >= 0.01 && todayRate >= avgRate * 2) {
+            return { todayRate, avgRate };
+        }
+        return null;
+    }, [sales, dailySales, now]);
 
     const calcStats = (orders: Order[]) => {
         // Acumula em centavos inteiros para evitar erro de arredondamento de ponto flutuante somando muitos pedidos.
@@ -341,6 +410,33 @@ export const StoreDashboardView: React.FC<{
                             </div>
                         </div>
                     </Card>
+                </section>
+            )}
+
+            {/* Fase 4, Task 12: alertas que avisam antes — só renderiza a
+                seção quando existe pelo menos um alerta, pra não ocupar
+                espaço em dia normal. */}
+            {(staleTables.length > 0 || cancellationRateAlert) && (
+                <section className="space-y-2">
+                    {staleTables.map(t => (
+                        <div key={t.number} className="flex items-center gap-3 p-3 rounded-xl border border-[var(--warn)]/30 bg-[var(--warn)]/5 text-sm">
+                            <AlertTriangle size={18} className="text-[var(--warn)] shrink-0" />
+                            <p className="text-[var(--text)]">
+                                <span className="font-bold">Mesa {t.number}</span> sem pedido novo há{' '}
+                                <span className="font-bold">{t.minutesSinceLastItem} min</span> — pode estar esquecida.
+                            </p>
+                        </div>
+                    ))}
+                    {cancellationRateAlert && (
+                        <div className="flex items-center gap-3 p-3 rounded-xl border border-[var(--err)]/30 bg-[var(--err)]/5 text-sm">
+                            <AlertTriangle size={18} className="text-[var(--err)] shrink-0" />
+                            <p className="text-[var(--text)]">
+                                <span className="font-bold">Cancelamento acima do normal hoje:</span>{' '}
+                                {(cancellationRateAlert.todayRate * 100).toFixed(0)}% dos itens, vs. média de{' '}
+                                {(cancellationRateAlert.avgRate * 100).toFixed(0)}% nos últimos 7 dias.
+                            </p>
+                        </div>
+                    )}
                 </section>
             )}
 
