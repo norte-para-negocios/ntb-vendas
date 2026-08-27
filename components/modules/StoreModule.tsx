@@ -11,8 +11,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -432,6 +432,33 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const notifications = useStoreNotifications(user.store.id);
+
+  // "Bater ponto" (migration 056) — turno pessoal do operador, sem relação
+  // com cash_shifts (turno do caixa físico, um só por loja). Carregado uma
+  // vez ao entrar no painel; sobrevive à troca de aba porque StoreLayout não
+  // desmonta entre abas (mesmo raciocínio do caixaPrintStatus acima).
+  const [openCheckin, setOpenCheckin] = useState<OperatorCheckin | null>(null);
+  const [checkinBusy, setCheckinBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchOpenCheckin(user.store.id, user.id).then(c => { if (!cancelled) setOpenCheckin(c); });
+    return () => { cancelled = true; };
+  }, [user.store.id, user.id]);
+  const handleToggleCheckin = async () => {
+    if (checkinBusy) return;
+    setCheckinBusy(true);
+    try {
+      if (openCheckin) {
+        const result = await endCheckin(openCheckin.id);
+        if (result.success) setOpenCheckin(null);
+      } else {
+        const created = await startCheckin(user.store.id, user.id, user.name);
+        if (created) setOpenCheckin(created);
+      }
+    } finally {
+      setCheckinBusy(false);
+    }
+  };
   // Reconciliação de impressão do Caixa (redesign 2026-08-23) — montada
   // aqui, não dentro de TablesView/CounterView, de propósito: StoreLayout é
   // o único componente que sobrevive à troca de aba (Mesas↔Balcão), então é
@@ -532,6 +559,13 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     ))}
                 </div>
                 <div className="p-3 border-t border-white/10">
+                    <button
+                        onClick={handleToggleCheckin}
+                        disabled={checkinBusy}
+                        className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-[var(--r-md)] u-motion text-[14px] disabled:opacity-50 ${openCheckin ? 'bg-[var(--ok)]/15 text-[var(--ok)]' : 'text-white/70 hover:text-white hover:bg-white/8'}`}
+                    >
+                        <Clock size={18}/> {openCheckin ? `Encerrar turno (${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto'}
+                    </button>
                     {user.role === 'universal' && onSwitchStore && (
                         <button onClick={onSwitchStore} className="flex items-center gap-3 w-full px-3 py-2.5 text-white/70 hover:text-white hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[14px]">
                             <RefreshCw size={18}/> Trocar de Loja
@@ -602,6 +636,25 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             </button>
           ))}
         </nav>
+
+        <div className="px-3 pb-1">
+          <button
+            onClick={handleToggleCheckin}
+            disabled={checkinBusy}
+            className={`flex items-center w-full px-3 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium u-motion disabled:opacity-50
+              ${openCheckin ? 'bg-[var(--ok)]/15 text-[var(--ok)] hover:bg-[var(--ok)]/25' : 'text-white/60 hover:bg-white/8 hover:text-white'}
+              ${isCollapsed ? 'justify-center' : 'gap-3'}
+            `}
+            title={isCollapsed ? (openCheckin ? `Encerrar turno (desde ${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto') : ''}
+          >
+            <Clock size={18} className="shrink-0" />
+            {!isCollapsed && (
+              <span className="truncate">
+                {openCheckin ? `Encerrar turno (${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto'}
+              </span>
+            )}
+          </button>
+        </div>
 
         <div className={`p-3 border-t border-white/8 ${isCollapsed ? 'space-y-1' : 'flex items-center gap-1'}`}>
           <ThemeToggle variant="sidebar" className={isCollapsed ? 'mx-auto' : ''} />
@@ -6709,10 +6762,12 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
+    const [checkins, setCheckins] = useState<OperatorCheckin[]>([]);
+    const [isLoadingCheckins, setIsLoadingCheckins] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
 
@@ -6748,6 +6803,12 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
 
     useEffect(() => {
         if (activeTab === 'sales' || activeTab === 'dashboard') loadSales();
+    }, [storeId, activeTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'shifts') return;
+        setIsLoadingCheckins(true);
+        fetchCheckinsHistory(storeId).then(data => { setCheckins(data); setIsLoadingCheckins(false); });
     }, [storeId, activeTab]);
 
     const handleClearSales = async () => {
@@ -7062,6 +7123,12 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 >
                     Notas Fiscais
                 </button>
+                <button
+                    onClick={() => setActiveTab('shifts')}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'shifts' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                >
+                    Turnos
+                </button>
             </div>
 
             {activeTab === 'dashboard' && <StoreDashboardView sales={sales} tableSessions={tableSessions} ratings={ratings} />}
@@ -7069,6 +7136,51 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
             {activeTab === 'users' && <UserManagementView storeId={storeId} />}
 
             {activeTab === 'link' && <MeuLinkView store={store} />}
+
+            {activeTab === 'shifts' && (
+                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
+                    <div className="p-4 border-b border-[var(--border)]">
+                        <h3 className="font-bold text-lg text-[var(--text)]">Turnos (ponto por operador)</h3>
+                        <p className="text-sm text-[var(--text-muted)]">Cada operador marca a própria entrada/saída pelo botão "Bater ponto" no menu lateral — independente do turno de caixa.</p>
+                    </div>
+                    {isLoadingCheckins ? (
+                        <div className="p-8 text-center text-[var(--text-muted)]">Carregando...</div>
+                    ) : checkins.length === 0 ? (
+                        <div className="p-8 text-center text-[var(--text-muted)]">Nenhum ponto registrado ainda.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] text-xs uppercase">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left">Operador</th>
+                                        <th className="px-4 py-2 text-left">Entrada</th>
+                                        <th className="px-4 py-2 text-left">Saída</th>
+                                        <th className="px-4 py-2 text-left">Duração</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {checkins.map(c => {
+                                        const start = parseISO(c.checkin_at);
+                                        const end = c.checkout_at ? parseISO(c.checkout_at) : null;
+                                        const minutes = end ? Math.round((end.getTime() - start.getTime()) / 60000) : null;
+                                        const duracao = minutes === null ? '—' : minutes >= 60 ? `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}` : `${minutes} min`;
+                                        return (
+                                            <tr key={c.id} className="border-t border-[var(--border)]">
+                                                <td className="px-4 py-2 font-medium text-[var(--text)]">{c.user_name}</td>
+                                                <td className="px-4 py-2 text-[var(--text-muted)]">{format(start, 'dd/MM/yyyy HH:mm')}</td>
+                                                <td className="px-4 py-2 text-[var(--text-muted)]">
+                                                    {end ? format(end, 'dd/MM/yyyy HH:mm') : <span className="text-[var(--ok)] font-medium">Em andamento</span>}
+                                                </td>
+                                                <td className="px-4 py-2 text-[var(--text-muted)]">{duracao}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {activeTab === 'fiscal' && (
                 <>

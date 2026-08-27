@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 
@@ -1661,6 +1661,36 @@ export const fetchOrderRatings = async (storeId: string, sinceDate?: string): Pr
   if (sinceDate) query = query.gte('created_at', sinceDate);
   const { data, error } = await query;
   if (error) { console.error('Error fetching order ratings:', error); return []; }
+  return data || [];
+};
+
+// "Bater ponto" — ver migration 056. Independente de cash_shifts (turno do
+// caixa físico, um só por loja): aqui é o turno pessoal do operador, vários
+// podem estar abertos ao mesmo tempo na mesma loja.
+export const fetchOpenCheckin = async (storeId: string, userId: string): Promise<OperatorCheckin | null> => {
+  const { data, error } = await supabase.from('operator_checkins').select('*').eq('store_id', storeId).eq('user_id', userId).is('checkout_at', null).maybeSingle();
+  if (error) { console.error('Error fetching open checkin:', error); return null; }
+  return data;
+};
+
+export const startCheckin = async (storeId: string, userId: string, userName: string): Promise<OperatorCheckin | null> => {
+  const { data, error } = await supabase.from('operator_checkins').insert({ store_id: storeId, user_id: userId, user_name: userName }).select('*').single();
+  if (error) { console.error('Error starting checkin:', error); return null; }
+  return data;
+};
+
+export const endCheckin = async (checkinId: string): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('operator_checkins').update({ checkout_at: new Date().toISOString() }).eq('id', checkinId);
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+};
+
+export const fetchCheckinsHistory = async (storeId: string, startDate?: string, endDate?: string): Promise<OperatorCheckin[]> => {
+  let query = supabase.from('operator_checkins').select('*').eq('store_id', storeId).order('checkin_at', { ascending: false }).limit(200);
+  if (startDate) query = query.gte('checkin_at', startDate);
+  if (endDate) query = query.lte('checkin_at', endDate);
+  const { data, error } = await query;
+  if (error) { console.error('Error fetching checkins history:', error); return []; }
   return data || [];
 };
 

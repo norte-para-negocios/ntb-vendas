@@ -341,6 +341,15 @@ export interface OrderRating {
   created_at: string;
 }
 
+export interface OperatorCheckin {
+  id: string;
+  store_id: string;
+  user_id: string;
+  user_name: string;
+  checkin_at: string;
+  checkout_at: string | null;
+}
+
 export interface UniversalUser {
   id: string;
   name: string;
