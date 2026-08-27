@@ -431,6 +431,12 @@ export interface SalesReportRow {
   // quebrar quem ainda só manda a contagem em `items`.
   itemsSummary?: string;
   total: number;
+  // Achado real (auditoria "o que falta", 2026-08-27 — item B13 da
+  // reunião): a contabilidade precisa saber quanto do faturamento é taxa
+  // de serviço (repasse, não receita própria) pra calcular a dedução de
+  // imposto certa — hoje esse valor não aparecia em nenhum relatório,
+  // só embutido no total. Opcional: balcão estruturalmente nunca cobra.
+  serviceFee?: number;
 }
 
 export function printSalesReport(opts: {
@@ -438,6 +444,7 @@ export function printSalesReport(opts: {
   periodLabel: string;
   rows: SalesReportRow[];
   totalRevenue: number;
+  totalServiceFee?: number;
 }): Promise<boolean> {
   const body = `
     <div class="report-header">
@@ -447,7 +454,7 @@ export function printSalesReport(opts: {
     </div>
     <table>
       <thead>
-        <tr><th>Data</th><th>Tipo</th><th>Cliente / Mesa</th><th class="right">Itens</th><th class="right">Total</th></tr>
+        <tr><th>Data</th><th>Tipo</th><th>Cliente / Mesa</th><th class="right">Itens</th><th class="right">Taxa Serviço</th><th class="right">Total</th></tr>
       </thead>
       <tbody>
         ${opts.rows
@@ -458,14 +465,20 @@ export function printSalesReport(opts: {
             <td>${escapeHtml(r.type)}</td>
             <td>${escapeHtml(r.customer)}</td>
             <td class="right">${r.items}</td>
+            <td class="right">${r.serviceFee ? `R$ ${formatBRL(r.serviceFee)}` : '—'}</td>
             <td class="right">R$ ${formatBRL(r.total)}</td>
           </tr>
-          ${r.itemsSummary ? `<tr class="items-summary-row"><td colspan="5">${escapeHtml(r.itemsSummary)}</td></tr>` : ''}`
+          ${r.itemsSummary ? `<tr class="items-summary-row"><td colspan="6">${escapeHtml(r.itemsSummary)}</td></tr>` : ''}`
           )
           .join('')}
       </tbody>
       <tfoot>
-        <tr><td colspan="4">Total do período</td><td class="right">R$ ${formatBRL(opts.totalRevenue)}</td></tr>
+        ${
+          opts.totalServiceFee
+            ? `<tr><td colspan="4">Total de taxa de serviço no período (repasse, não receita própria)</td><td class="right">R$ ${formatBRL(opts.totalServiceFee)}</td><td></td></tr>`
+            : ''
+        }
+        <tr><td colspan="5">Total do período</td><td class="right">R$ ${formatBRL(opts.totalRevenue)}</td></tr>
       </tfoot>
     </table>
   `;

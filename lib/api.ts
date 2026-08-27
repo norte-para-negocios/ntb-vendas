@@ -1151,6 +1151,10 @@ export const registerCashMovement = async (
 export interface CashShiftSummary {
   shift: CashShift;
   totals_by_method: Record<string, number>;
+  // Achado real (auditoria "o que falta", 2026-08-27 — item B11 da
+  // reunião): só crédito/débito têm bandeira; pagamento sem bandeira
+  // escolhida (campo opcional) não entra aqui.
+  totals_by_brand: Record<string, number>;
   total_sangria: number;
   total_suprimento: number;
   expected_cash: number;

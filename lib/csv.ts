@@ -10,7 +10,7 @@ function escapeCsvField(value: string): string {
 }
 
 export function downloadSalesReportCsv(rows: SalesReportRow[], filename: string): void {
-  const header = ['Data', 'Tipo', 'Cliente/Mesa', 'Itens', 'Produtos', 'Total'];
+  const header = ['Data', 'Tipo', 'Cliente/Mesa', 'Itens', 'Produtos', 'Taxa de Serviço', 'Total'];
   const lines = [
     header.join(';'),
     ...rows.map((r) =>
@@ -20,10 +20,19 @@ export function downloadSalesReportCsv(rows: SalesReportRow[], filename: string)
         escapeCsvField(r.customer),
         String(r.items),
         escapeCsvField(r.itemsSummary || ''),
+        (r.serviceFee || 0).toFixed(2).replace('.', ','),
         r.total.toFixed(2).replace('.', ','),
       ].join(';')
     ),
   ];
+  // Achado real (auditoria "o que falta", 2026-08-27 — item B13 da
+  // reunião): linha de total de taxa de serviço no período, pra
+  // contabilidade não precisar somar a coluna na mão pra calcular a
+  // dedução de imposto.
+  const totalServiceFee = rows.reduce((sum, r) => sum + (r.serviceFee || 0), 0);
+  if (totalServiceFee > 0) {
+    lines.push(['', '', '', '', 'TOTAL TAXA DE SERVIÇO NO PERÍODO (repasse, não receita própria)', totalServiceFee.toFixed(2).replace('.', ','), ''].join(';'));
+  }
   const csvContent = '﻿' + lines.join('\r\n'); // BOM pro Excel reconhecer UTF-8
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');

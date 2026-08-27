@@ -11,7 +11,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, subscribeToStoreOrderChanges } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -1441,6 +1441,13 @@ const TablesView: React.FC<{
     // Usuários) — não inventa uma regra nova de permissão só pra esta ação
     // menor.
     const canReassignJurisdiction = loggedUser.role === 'owner' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'admin', store);
+    // Achado real (auditoria "o que falta", 2026-08-27): a reunião com o
+    // Ramon (2026-08-25, item confirmado "nem garçom, nem caixa devem poder
+    // bloquear/desbloquear PIN") tinha essa regra combinada, mas nunca
+    // chegou a ser travada no código — qualquer um com acesso à aba Mesas
+    // conseguia. Mesmo critério de "gerente" já usado em
+    // canReassignJurisdiction acima.
+    const canManagePin = loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'admin', store);
     // Critical #2 (revisão de branch 2026-08-23 — "Reimprimir pode mentir
     // sucesso num aparelho sem impressora"): gate pra OFERECER o botão manual
     // "Reimprimir" em "Pedidos do Dia" abaixo, mesmo critério exato que
@@ -2439,15 +2446,17 @@ NOTIFY pgrst, 'reload schema';`;
     return (
         <>
             <div className="flex justify-end mb-4 gap-2">
-                <Button 
-                    variant={pinBlockEnabled ? "primary" : "secondary"}
-                    onClick={handlePinBlockToggle}
-                    className={`flex items-center gap-2 text-sm ${pinBlockEnabled ? 'bg-[var(--err)] hover:bg-[var(--err)]/90 text-white border-[var(--err)]' : 'text-[var(--text-muted)]'}`}
-                    title="Se ativado, novos clientes precisarão do PIN para abrir a mesa"
-                >
-                    {pinBlockEnabled ? <Lock size={18} /> : <Unlock size={18} />}
-                    {pinBlockEnabled ? "Bloqueio PIN Ativo" : "Bloqueio PIN Inativo"}
-                </Button>
+                {canManagePin && (
+                    <Button
+                        variant={pinBlockEnabled ? "primary" : "secondary"}
+                        onClick={handlePinBlockToggle}
+                        className={`flex items-center gap-2 text-sm ${pinBlockEnabled ? 'bg-[var(--err)] hover:bg-[var(--err)]/90 text-white border-[var(--err)]' : 'text-[var(--text-muted)]'}`}
+                        title="Se ativado, novos clientes precisarão do PIN para abrir a mesa"
+                    >
+                        {pinBlockEnabled ? <Lock size={18} /> : <Unlock size={18} />}
+                        {pinBlockEnabled ? "Bloqueio PIN Ativo" : "Bloqueio PIN Inativo"}
+                    </Button>
+                )}
 
                 <Button 
                     variant="secondary" 
@@ -2563,21 +2572,23 @@ NOTIFY pgrst, 'reload schema';`;
                                         </div>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={(e) => {
-                                        if(!isBlocked && hasOrders) return; // Prevent blocking if has orders
-                                        handleBlockToggle(e, table, inJurisdiction);
-                                    }}
-                                    disabled={(!isBlocked && hasOrders) || !inJurisdiction}
-                                    className={`p-2 rounded-lg u-motion u-press z-10 ${
-                                        isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
-                                        (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
-                                        'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
-                                    }`}
-                                    title={isBlocked ? "Desbloquear" : hasOrders ? "Mesa com pedidos não pode ser bloqueada" : "Bloquear Mesa"}
-                                >
-                                    {isBlocked ? <Lock size={20} /> : <Unlock size={20} />}
-                                </button>
+                                {canManagePin && (
+                                    <button
+                                        onClick={(e) => {
+                                            if(!isBlocked && hasOrders) return; // Prevent blocking if has orders
+                                            handleBlockToggle(e, table, inJurisdiction);
+                                        }}
+                                        disabled={(!isBlocked && hasOrders) || !inJurisdiction}
+                                        className={`p-2 rounded-lg u-motion u-press z-10 ${
+                                            isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
+                                            (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
+                                            'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
+                                        }`}
+                                        title={isBlocked ? "Desbloquear" : hasOrders ? "Mesa com pedidos não pode ser bloqueada" : "Bloquear Mesa"}
+                                    >
+                                        {isBlocked ? <Lock size={20} /> : <Unlock size={20} />}
+                                    </button>
+                                )}
                             </div>
 
                             {/* Status Badge */}
@@ -4193,6 +4204,21 @@ const CaixaView: React.FC<{
                                         </div>
                                     )}
                                 </div>
+                                {Object.keys(historySummary.totals_by_brand).length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                            Total por bandeira
+                                        </h4>
+                                        <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                            {Object.entries(historySummary.totals_by_brand).map(([brand, total]) => (
+                                                <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
+                                                    <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
+                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div className="rounded-xl border border-[var(--border)] px-3 py-2">
                                         <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
@@ -4622,6 +4648,27 @@ const CaixaView: React.FC<{
                                 </div>
                             )}
                         </div>
+
+                        {/* Achado real (auditoria "o que falta", 2026-08-27 —
+                            item B11 da reunião): conferência por bandeira
+                            (Mastercard, Alelo etc.) contra a maquineta física,
+                            não só por método. Pagamento sem bandeira escolhida
+                            (campo opcional) não aparece aqui de propósito. */}
+                        {Object.keys(closeSummary.totals_by_brand).length > 0 && (
+                            <div className="space-y-1.5">
+                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                    Total por bandeira
+                                </h4>
+                                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                    {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
+                                        <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
+                                            <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
+                                            <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-3 text-sm">
                             <div className="rounded-xl border border-[var(--border)] px-3 py-2">
@@ -6800,8 +6847,8 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     const SALES_PAGE_SIZE = 25;
     const [salesPage, setSalesPage] = useState(0);
 
-    const loadSales = async () => {
-        setIsLoading(true);
+    const loadSales = async (opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setIsLoading(true);
         const [data, sessions, ratingsData] = await Promise.all([fetchSalesHistory(storeId), fetchTableSessions(storeId), fetchOrderRatings(storeId)]);
         setSales(data);
         setTableSessions(sessions);
@@ -6811,6 +6858,28 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
 
     useEffect(() => {
         if (activeTab === 'sales' || activeTab === 'dashboard') loadSales();
+    }, [storeId, activeTab]);
+
+    // Achado real (auditoria "o que falta", 2026-08-27 — itens A8/A9 da
+    // reunião): fechar uma mesa/venda em outra aba nunca atualizava sozinho
+    // o Histórico de Vendas/Dashboard já abertos, só F5 ou trocar de aba
+    // forçava reload. order_change_pings (migration 029) já existe pra
+    // isso — pinga (sem dado sensível) a cada insert/update/delete em
+    // orders/order_items da loja; o client só precisa recarregar via RPC
+    // ao receber o ping. Debounce de 1s: fechar UMA mesa dispara vários
+    // pings em sequência (1 por order_item + 1 pela order em si) — sem
+    // isso, cada ping geraria uma chamada de rede própria.
+    useEffect(() => {
+        if (activeTab !== 'sales' && activeTab !== 'dashboard') return;
+        let timeout: ReturnType<typeof setTimeout> | null = null;
+        const unsubscribe = subscribeToStoreOrderChanges(storeId, () => {
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(() => loadSales({ silent: true }), 1000);
+        });
+        return () => {
+            if (timeout) clearTimeout(timeout);
+            unsubscribe();
+        };
     }, [storeId, activeTab]);
 
     useEffect(() => {
@@ -6992,6 +7061,17 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     const buildItemsSummary = (order: Order) =>
         order.order_items?.map(item => `${item.quantity}x ${getOrderItemDisplayName(item)}`).join(', ') || '';
 
+    // Achado real (auditoria "o que falta", 2026-08-27 — item B13 da
+    // reunião): mesma fórmula de handleReprintReceipt (total - subtotal dos
+    // itens) — o pedido não grava a taxa histórica exata como campo
+    // próprio, então isso é a melhor aproximação disponível a partir do
+    // valor realmente cobrado (getOrderDisplayTotal).
+    const calcOrderServiceFee = (order: Order): number => {
+        const itemsTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+        const fee = Number((getOrderDisplayTotal(order) - itemsTotal).toFixed(2));
+        return fee > 0.005 ? fee : 0;
+    };
+
     // Fix round 3 (Group C1): mesmo motivo de printTableBill acima — sem
     // await/catch, um throw dentro do executor de printHtmlDocument
     // (lib/print.ts) vira unhandled promise rejection em vez de aviso
@@ -7008,8 +7088,10 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                     items: order.order_items?.length || 0,
                     itemsSummary: buildItemsSummary(order),
                     total: getOrderDisplayTotal(order),
+                    serviceFee: calcOrderServiceFee(order),
                 })),
                 totalRevenue,
+                totalServiceFee: filteredAndSortedSales.reduce((sum, order) => sum + calcOrderServiceFee(order), 0),
             });
             if (!printed) {
                 toast.error('O relatório não imprimiu. Confira a impressora.');
@@ -7029,6 +7111,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 items: order.order_items?.length || 0,
                 itemsSummary: buildItemsSummary(order),
                 total: getOrderDisplayTotal(order),
+                serviceFee: calcOrderServiceFee(order),
             })),
             `vendas-${store.name.toLowerCase().replace(/\s+/g, '-')}.csv`
         );
