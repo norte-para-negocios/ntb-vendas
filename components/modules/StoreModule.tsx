@@ -19,7 +19,7 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -769,16 +769,6 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
           case OrderStatus.READY: return 'bg-[var(--ok)]/8 border-[var(--ok)]/40';
           default: return 'bg-[var(--surface-2)] border-[var(--border)]';
       }
-  };
-
-  // Helper function to extract name from notes: "[Name] Notes..."
-  const parseItemNote = (fullNote: string) => {
-      if (!fullNote) return { client: null, observation: '' };
-      const match = fullNote.match(/^\[(.*?)\]\s*(.*)$/);
-      if (match) {
-          return { client: match[1], observation: match[2].trim() };
-      }
-      return { client: null, observation: fullNote.trim() };
   };
 
   const printOrderTicket = (item: OrderItem) => {
@@ -2715,17 +2705,28 @@ NOTIFY pgrst, 'reload schema';`;
 
                                         return (
                                             <>
-                                                {items.map(item => (
+                                                {items.map(item => {
+                                                    // Achado real (reunião com o Ramon, 2026-08-25): nome do
+                                                    // cliente nunca aparecia na comanda em mesa com pedidos de
+                                                    // pessoas diferentes — só o item lançado pelo GARÇOM tinha
+                                                    // badge de atribuição. O nome do cliente vem embutido em
+                                                    // `notes` (createOrder, lib/api.ts), nunca extraído aqui.
+                                                    const clientNote = item.added_by_role !== 'garcom' ? parseItemNote(item.notes || '') : null;
+                                                    return (
                                                     <div key={item.id} className="flex justify-between p-3 border-b border-[var(--border)] text-sm hover:bg-[var(--surface-2)] transition-colors group">
                                                         <div className="flex-1">
                                                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                                                 <span className="bg-[var(--surface-2)] px-1.5 rounded text-xs text-[var(--text-muted)]">x{item.quantity}</span>
                                                                 {getOrderItemDisplayName(item)}
-                                                                {item.added_by_role === 'garcom' && (
+                                                                {item.added_by_role === 'garcom' ? (
                                                                     <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-[var(--info)]/15 text-[var(--info)]">
                                                                         {item.added_by_name || 'Garçom'}
                                                                     </span>
-                                                                )}
+                                                                ) : clientNote?.client ? (
+                                                                    <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-[var(--brand)]/15 text-[var(--brand)]">
+                                                                        {clientNote.client}
+                                                                    </span>
+                                                                ) : null}
                                                             </span>
                                                             <div className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-1 ml-7">
                                                                 {orderFlow !== 'direct_print' && (
@@ -2734,6 +2735,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                     <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>
                                                                 )}
                                                                 <span>{orderFlow !== 'direct_print' && '• '}R$ {formatBRL(item.price_at_time)} un.</span>
+                                                                {clientNote?.observation && <span>• {clientNote.observation}</span>}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
@@ -2747,7 +2749,8 @@ NOTIFY pgrst, 'reload schema';`;
                                                             </button>
                                                         </div>
                                                     </div>
-                                                ))}
+                                                    );
+                                                })}
                                                 {/* Task 3: linha da taxa de serviço agora SEMPRE aparece na
                                                     comanda, nos 3 estados possíveis — antes só existia
                                                     quando cobrando, e desligada (loja sem taxa OU taxa

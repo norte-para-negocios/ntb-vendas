@@ -85,6 +85,25 @@ export const getTagDisplay = (tag: string): { label: string; emoji: string } =>
 
 export const getTagLabel = (tag: string): string => getTagDisplay(tag).label;
 
+// Extrai o nome do cliente de `order_items.notes` — createOrder (lib/api.ts)
+// prefixa a observação do item com "[Nome do cliente]" quando o pedido vem
+// do cardápio QR (nunca uma coluna própria, ver create_order_secure). Antes
+// só existia como função local dentro de KdsView (usada pro ticket de
+// cozinha/bar); movida pra cá porque TablesView (comanda da mesa) também
+// precisa — achado real (reunião com o Ramon, 2026-08-25): o nome do
+// cliente nunca aparecia na comanda quando a mesa tinha pedidos de pessoas
+// diferentes, porque só o item lançado pelo GARÇOM (added_by_role/
+// added_by_name, migration 053) tinha um badge de atribuição; o nome do
+// cliente, embutido em `notes`, nunca era extraído nem mostrado ali.
+export const parseItemNote = (fullNote: string): { client: string | null; observation: string } => {
+    if (!fullNote) return { client: null, observation: '' };
+    const match = fullNote.match(/^\[(.*?)\]\s*(.*)$/);
+    if (match) {
+        return { client: match[1], observation: match[2].trim() };
+    }
+    return { client: null, observation: fullNote.trim() };
+};
+
 // Nome de exibição de um item de PEDIDO (histórico/impressão/KDS), com
 // adicionais entre parênteses — nunca travessão (regra do projeto).
 // Formato: "Pizza Marguerita (Catupiry)" ou, com múltiplos adicionais,
