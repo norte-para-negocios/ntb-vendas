@@ -11,7 +11,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, subscribeToStoreOrderChanges, applyModulesConfigFields } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, applyModulesConfigFields } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -1610,13 +1610,21 @@ const TablesView: React.FC<{
     const [reassignTeam, setReassignTeam] = useState<StoreUser[]>([]);
     const [isLoadingReassignTeam, setIsLoadingReassignTeam] = useState(false);
     const [savingReassignIds, setSavingReassignIds] = useState<Set<string>>(new Set());
+    // Fase 3, Task 10: quem bateu ponto agora nesta loja (fetchOpenCheckin
+    // já existia da Fase 4 do ponto pessoal, mas só pra UM usuário — aqui
+    // precisa de todos de uma vez, ver fetchOpenCheckinUserIds em lib/api.ts).
+    const [openCheckinUserIds, setOpenCheckinUserIds] = useState<Set<string>>(new Set());
 
     const handleOpenReassign = async () => {
         setShowReassignModal(true);
         setIsLoadingReassignTeam(true);
         try {
-            const members = await fetchStoreTeamMembers(storeId);
+            const [members, checkedInIds] = await Promise.all([
+                fetchStoreTeamMembers(storeId),
+                fetchOpenCheckinUserIds(storeId),
+            ]);
             setReassignTeam(members.filter(m => m.role !== 'owner' && m.role !== 'universal' && m.permissions?.tables !== false));
+            setOpenCheckinUserIds(checkedInIds);
         } finally {
             setIsLoadingReassignTeam(false);
         }
@@ -1647,15 +1655,22 @@ const TablesView: React.FC<{
     // garçom com as mesas dessa jurisdição que estão `OCCUPIED` neste
     // instante — não é o total de mesas atribuídas (isso já aparecia antes),
     // é quantas dessas estão com gente sentada AGORA.
+    // Fase 3, Task 10: "ligada ao ponto" — um garçom SEM ponto aberto some da
+    // sugestão de NOVA atribuição (não é candidato a pegar mais uma mesa
+    // agora), mas continua aparecendo normalmente se já é responsável pela
+    // mesa selecionada (jurisdição de mesa em andamento nunca é removida só
+    // por isso — o operador ainda pode desmarcar manualmente se quiser).
     const reassignTeamByLoad = useMemo(() => {
         return reassignTeam
             .filter(m => m.assigned_table_ids && m.assigned_table_ids.length > 0)
             .map(m => ({
                 ...m,
                 activeTableCount: tables.filter(t => t.status === TableStatus.OCCUPIED && (m.assigned_table_ids || []).includes(t.id)).length,
+                hasOpenCheckin: openCheckinUserIds.has(m.id),
             }))
+            .filter(m => m.hasOpenCheckin || (!!selectedTable && (m.assigned_table_ids || []).includes(selectedTable.id)))
             .sort((a, b) => a.activeTableCount - b.activeTableCount);
-    }, [reassignTeam, tables]);
+    }, [reassignTeam, tables, openCheckinUserIds, selectedTable]);
 
     // Important #I3: antes, `fetchSalesHistory` (RPC `limit 2000` com
     // `order_items` aninhado) rodava dentro de `loadData` — chamada a cada
@@ -3442,6 +3457,7 @@ NOTIFY pgrst, 'reload schema';`;
                 <div className="space-y-3">
                     <p className="text-xs text-[var(--text-muted)]">
                         Só mostra quem já tem jurisdição de mesas restrita configurada. Garçom sem restrição ("todas as mesas") já vê esta mesa por padrão.
+                        Quem não bateu ponto só aparece aqui se já for responsável por esta mesa.
                     </p>
                     {isLoadingReassignTeam ? (
                         <div className="flex items-center justify-center py-10 text-[var(--text-muted)]">
@@ -3449,20 +3465,28 @@ NOTIFY pgrst, 'reload schema';`;
                         </div>
                     ) : reassignTeamByLoad.length === 0 ? (
                         <p className="text-sm text-[var(--text-muted)] text-center py-8">
-                            Nenhum garçom com jurisdição restrita configurada ainda — configure em Administração → Usuários.
+                            Ninguém com jurisdição restrita e ponto aberto agora — configure jurisdição em Administração → Usuários, ou peça pra bater ponto.
                         </p>
                     ) : (
                         <div className="space-y-2">
-                            {/* Fase 3, Task 9: lista já vem ordenada do menos pro mais
-                                ocupado agora (reassignTeamByLoad) — sugestão visual de
-                                escala, o operador continua livre pra marcar qualquer um. */}
+                            {/* Fase 3, Tasks 9+10: lista já vem ordenada do menos pro mais
+                                ocupado agora e filtrada a quem bateu ponto (exceto quem já
+                                é responsável por esta mesa) — sugestão visual de escala, o
+                                operador continua livre pra marcar qualquer um. */}
                             {reassignTeamByLoad.map(member => {
                                 const hasTable = !!selectedTable && (member.assigned_table_ids || []).includes(selectedTable.id);
                                 const isSaving = savingReassignIds.has(member.id);
                                 return (
                                     <label key={member.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] cursor-pointer">
                                         <div className="min-w-0">
-                                            <p className="text-sm font-bold text-[var(--text)] truncate">{member.name}</p>
+                                            <p className="text-sm font-bold text-[var(--text)] truncate flex items-center gap-1.5">
+                                                {member.name}
+                                                {!member.hasOpenCheckin && (
+                                                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[var(--warn)]/10 text-[var(--warn)]">
+                                                        sem ponto
+                                                    </span>
+                                                )}
+                                            </p>
                                             <p className="text-xs text-[var(--text-muted)]">
                                                 {(member.assigned_table_ids || []).length} mesa(s) atribuída(s) ·{' '}
                                                 <span className={member.activeTableCount === 0 ? 'text-[var(--ok)] font-semibold' : 'font-semibold'}>

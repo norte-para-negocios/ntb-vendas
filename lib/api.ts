@@ -1682,6 +1682,17 @@ export const fetchOpenCheckin = async (storeId: string, userId: string): Promise
   return data;
 };
 
+// Fase 3, Task 10 (plano "Fora do Cardápio"): lista de quem está com ponto
+// aberto AGORA nesta loja (todos os operadores, não um só) — usado pra
+// filtrar a sugestão de escala (Task 9) a quem realmente está de plantão.
+// Não precisa de RPC: `operator_checkins` já é RLS `allow_all_anon` direto
+// (migration 056), mesmo nível de sensibilidade de order_ratings.
+export const fetchOpenCheckinUserIds = async (storeId: string): Promise<Set<string>> => {
+  const { data, error } = await supabase.from('operator_checkins').select('user_id').eq('store_id', storeId).is('checkout_at', null);
+  if (error) { console.error('Error fetching open checkin user ids:', error); return new Set(); }
+  return new Set((data || []).map(r => r.user_id));
+};
+
 export const startCheckin = async (storeId: string, userId: string, userName: string): Promise<OperatorCheckin | null> => {
   const { data, error } = await supabase.from('operator_checkins').insert({ store_id: storeId, user_id: userId, user_name: userName }).select('*').single();
   if (error) { console.error('Error starting checkin:', error); return null; }
