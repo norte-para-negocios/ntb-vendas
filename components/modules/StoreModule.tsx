@@ -7642,7 +7642,15 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 </button>
             </div>
 
-            {activeTab === 'dashboard' && <StoreDashboardView sales={sales} tableSessions={tableSessions} ratings={ratings} />}
+            {activeTab === 'dashboard' && (
+                <StoreDashboardView
+                    sales={sales}
+                    tableSessions={tableSessions}
+                    ratings={ratings}
+                    storeId={storeId}
+                    onNavigateToOperatorHistory={() => { setActiveTab('sales'); setHistoryView('operator'); }}
+                />
+            )}
 
             {activeTab === 'users' && <UserManagementView storeId={storeId} />}
 

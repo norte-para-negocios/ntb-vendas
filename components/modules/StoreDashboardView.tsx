@@ -1,8 +1,8 @@
 'use client';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
-import { Order, TableSession, OrderRating } from '@/types';
-import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown, Star } from 'lucide-react';
+import { Order, TableSession, OrderRating, OperatorCheckin } from '@/types';
+import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown, Star, Wallet, ArrowRight, AlertTriangle } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, Legend
@@ -11,6 +11,7 @@ import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMon
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { fetchCheckinsHistory, fetchOpenCashShift, CashShift } from '@/lib/api';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -19,9 +20,39 @@ const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'
 const MAX_REASONABLE_DELIVERY_MINUTES = 240;
 const MAX_REASONABLE_TABLE_MINUTES = 480;
 
-export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: TableSession[]; ratings: OrderRating[] }> = ({ sales, tableSessions, ratings }) => {
+export const StoreDashboardView: React.FC<{
+    sales: Order[];
+    tableSessions: TableSession[];
+    ratings: OrderRating[];
+    storeId?: string;
+    onNavigateToOperatorHistory?: () => void;
+}> = ({ sales, tableSessions, ratings, storeId, onNavigateToOperatorHistory }) => {
     const [periodType, setPeriodType] = useState<'custom' | 'today' | 'week' | 'month' | 'year'>('custom');
     const [periodDays, setPeriodDays] = useState<number>(90);
+
+    // Fase 4, Task 11 (plano "Fora do Cardápio"): "o que já é seu, visível de
+    // longe" — não é dado novo, é reunir 3 chamadas que já existiam
+    // espalhadas (ponto pessoal, turno de caixa, histórico por operador)
+    // numa única visão de topo. `storeId` é opcional pra não quebrar quem
+    // ainda não passa essa prop (nenhum call site hoje, mas mantém o
+    // componente utilizável isoladamente/em teste sem storeId).
+    const [workingNow, setWorkingNow] = useState<OperatorCheckin[]>([]);
+    const [openShift, setOpenShift] = useState<CashShift | null>(null);
+    const [isLoadingTodayCard, setIsLoadingTodayCard] = useState(false);
+
+    useEffect(() => {
+        if (!storeId) return;
+        let cancelled = false;
+        setIsLoadingTodayCard(true);
+        Promise.all([fetchCheckinsHistory(storeId), fetchOpenCashShift(storeId)])
+            .then(([checkins, shift]) => {
+                if (cancelled) return;
+                setWorkingNow(checkins.filter(c => !c.checkout_at));
+                setOpenShift(shift);
+            })
+            .finally(() => { if (!cancelled) setIsLoadingTodayCard(false); });
+        return () => { cancelled = true; };
+    }, [storeId]);
 
     const now = new Date();
 
@@ -256,6 +287,63 @@ export const StoreDashboardView: React.FC<{ sales: Order[]; tableSessions: Table
 
     return (
         <div className="space-y-8">
+            {/* Fase 4, Task 11: "Hoje na loja" — só aparece com storeId (quem
+                monta este componente sem essa prop continua vendo o dashboard
+                normal, sem esse card). */}
+            {storeId && (
+                <section>
+                    <Card className={`${cardCls} u-grow-in u-card`}>
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className={h4Cls + ' mb-0'}>Hoje na loja</h3>
+                            {isLoadingTodayCard && <span className="text-xs text-[var(--text-muted)]">Atualizando...</span>}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <Users size={13} /> Trabalhando agora
+                                </p>
+                                {workingNow.length === 0 ? (
+                                    <p className="text-sm text-[var(--text-muted)]">Ninguém bateu ponto ainda.</p>
+                                ) : (
+                                    <ul className="space-y-1">
+                                        {workingNow.map(c => (
+                                            <li key={c.id} className="text-sm font-semibold text-[var(--text)] flex items-center gap-1.5">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--ok)]" />
+                                                {c.user_name} <span className="text-[var(--text-muted)] font-normal">(trabalhando)</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <Wallet size={13} /> Turno de caixa
+                                </p>
+                                {openShift ? (
+                                    <p className="text-sm text-[var(--text)]">
+                                        <span className="font-semibold text-[var(--ok)]">Aberto</span> desde{' '}
+                                        {new Date(openShift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {' · '}fundo R$ {formatBRL(openShift.opening_float)}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-[var(--text-muted)]">Nenhum turno de caixa aberto agora.</p>
+                                )}
+                            </div>
+                            <div className="flex items-start md:items-center md:justify-end">
+                                {onNavigateToOperatorHistory && (
+                                    <button
+                                        onClick={onNavigateToOperatorHistory}
+                                        className="text-sm font-bold text-[var(--brand)] hover:underline flex items-center gap-1 u-motion"
+                                    >
+                                        Ver histórico por operador <ArrowRight size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </Card>
+                </section>
+            )}
+
             {/* Faturamento Bruto */}
             <section>
                 <h2 className="text-xl font-bold text-[var(--text)] mb-4">Faturamento Bruto</h2>
