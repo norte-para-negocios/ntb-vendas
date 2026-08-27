@@ -4040,6 +4040,15 @@ const CaixaView: React.FC<{
 }> = ({ store, loggedUser, onOpenTablePayment, onOpenCounterPayment }) => {
     const storeId = store.id;
     const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    const orderFlow = resolveOrderFlow(store);
+
+    // Fase 3, Task 8 (plano "Fora do Cardápio"): mesmo critério exato de
+    // `canReprint` em TablesView (ver Critical #2, CaixaPrintStation.tsx) —
+    // reimprimir manualmente um item pendente só faz sentido no aparelho de
+    // caixa de verdade, nunca em dono/universal checando de outro lugar.
+    const canReprintPending = orderFlow === 'direct_print' && isCaixaRole(loggedUser);
+    const [reprintingPendingIds, setReprintingPendingIds] = useState<Set<string>>(new Set());
+    const [printedRefreshNonce, setPrintedRefreshNonce] = useState(0);
 
     // Fase 2, Task 6 (plano "Fora do Cardápio"): sob carga alta (sexta à
     // noite), a mesma densidade de informação de um dia vazio atrapalha —
@@ -4492,6 +4501,33 @@ const CaixaView: React.FC<{
                     return earliest === 0 || ts < earliest ? ts : earliest;
                 }, 0) || now;
                 const minutesOccupied = Math.max(0, Math.round((now - occupiedSince) / 60000));
+
+                // Fase 3, Task 8: numa loja `direct_print` (sem KDS), o caixa
+                // não tem nenhuma outra tela mostrando "o que ainda tá pra
+                // preparar" por mesa — reaproveita o MESMO dedupe local que
+                // `CaixaPrintStation` usa (`wasKitchenTicketPrinted`), então só
+                // aparece aqui o que esta sessão de caixa ainda não confirmou
+                // impresso. Some sozinho da lista assim que a reconciliação em
+                // segundo plano (ou um reimprimir manual) marca o item.
+                const pendingPrintItems = orderFlow === 'direct_print'
+                    ? items
+                        .filter(i => (i.product?.destination === 'kitchen' || i.product?.destination === 'bar'))
+                        .filter(i => !wasKitchenTicketPrinted(storeId, i.product!.destination === 'bar' ? 'bar' : 'kitchen', i.id))
+                        .map(i => {
+                            const { client, observation } = parseItemNote(i.notes || '');
+                            return {
+                                id: i.id,
+                                orderId: i.order_id,
+                                productName: i.product?.name || 'Produto indisponível',
+                                quantity: i.quantity,
+                                destination: (i.product!.destination === 'bar' ? 'bar' : 'kitchen') as 'kitchen' | 'bar',
+                                addons: (i.selected_options || []).map(o => o.name).join(', ') || undefined,
+                                observation: observation || undefined,
+                                client,
+                            };
+                        })
+                    : [];
+
                 return {
                     id: t.id,
                     number: t.number,
@@ -4499,10 +4535,12 @@ const CaixaView: React.FC<{
                     total,
                     minutesOccupied,
                     isWaitingBill: t.status === TableStatus.WAITING_BILL,
+                    pendingPrintItems,
                 };
             })
             .sort((a, b) => b.minutesOccupied - a.minutesOccupied);
-    }, [tables, activeOrders, store, serviceFeeRate, now]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- printedRefreshNonce só existe pra forçar recálculo (wasKitchenTicketPrinted lê localStorage, não é reativo sozinho).
+    }, [tables, activeOrders, store, serviceFeeRate, now, orderFlow, printedRefreshNonce]);
 
     const rushMode = rushModeManual ?? (occupiedTables.length >= RUSH_THRESHOLD);
 
@@ -4513,6 +4551,42 @@ const CaixaView: React.FC<{
         const hours = Math.floor(minutes / 60);
         const rest = minutes % 60;
         return `há ${hours}h${rest > 0 ? ` ${rest}min` : ''}`;
+    };
+
+    // Fase 3, Task 8: mesmo mecanismo de `handleManualReprint` em TablesView
+    // ("Pedidos do Dia") — reimprime UM item pendente e marca no dedupe
+    // local, fazendo-o sumir da lista de "aguardando preparo" desta mesa.
+    const handleReprintPending = async (item: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string; client?: string | null }) => {
+        if (!canReprintPending || reprintingPendingIds.has(item.id)) return;
+        setReprintingPendingIds(prev => new Set(prev).add(item.id));
+        try {
+            const ok = await printPendingKitchenTicket({
+                storeId,
+                storeName: store.name,
+                paperWidthMm: store.config?.printer_paper_width_mm,
+                destination: item.destination,
+                itemId: item.id,
+                orderId: item.orderId,
+                tableNumber: item.tableNumber,
+                quantity: item.quantity,
+                productName: item.productName,
+                addons: item.addons,
+                observation: item.observation,
+                client: item.client,
+            });
+            if (ok) {
+                toast.success('Reimpresso com sucesso.');
+                setPrintedRefreshNonce(n => n + 1);
+            } else {
+                toast.error('A reimpressão falhou. Verifique a impressora.');
+            }
+        } finally {
+            setReprintingPendingIds(prev => {
+                const copy = new Set(prev);
+                copy.delete(item.id);
+                return copy;
+            });
+        }
     };
 
     // Loading inicial do turno — evita piscar a tela de "abrir caixa" por um
@@ -4558,7 +4632,7 @@ const CaixaView: React.FC<{
                             lá — nunca no dia a dia, quando quem abre o turno de
                             verdade é o operador. Não bloqueia abrir o caixa
                             (mesma filosofia do original), só avisa. */}
-                        {resolveOrderFlow(store) === 'direct_print' && (
+                        {orderFlow === 'direct_print' && (
                             <div className="text-left rounded-xl border border-[var(--warn)]/30 bg-[var(--warn)]/5 p-3 flex items-start gap-2">
                                 <AlertCircle size={16} className="text-[var(--warn)] shrink-0 mt-0.5" />
                                 <p className="text-xs text-[var(--text)]">
@@ -4656,19 +4730,46 @@ const CaixaView: React.FC<{
                                 );
                             }
                             return (
-                                <button
-                                    key={t.id}
-                                    onClick={() => onOpenTablePayment(t.id)}
-                                    className={`text-left p-3 rounded-xl border u-motion u-press-sm ${colorClass}`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
-                                        <span className="text-[11px] font-mono">{t.minutesOccupied}min</span>
-                                    </div>
-                                    <p className="text-xs text-[var(--text-muted)] truncate">{t.hostName || '—'}</p>
-                                    <p className="text-sm font-bold text-[var(--text)] mt-1">R$ {formatBRL(t.total)}</p>
-                                    {t.isWaitingBill && <p className="text-[10px] font-bold uppercase mt-0.5">Aguardando pagamento</p>}
-                                </button>
+                                <div key={t.id} className={`rounded-xl border overflow-hidden ${colorClass}`}>
+                                    <button
+                                        onClick={() => onOpenTablePayment(t.id)}
+                                        className="w-full text-left p-3 u-motion u-press-sm"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
+                                            <span className="text-[11px] font-mono">{t.minutesOccupied}min</span>
+                                        </div>
+                                        <p className="text-xs text-[var(--text-muted)] truncate">{t.hostName || '—'}</p>
+                                        <p className="text-sm font-bold text-[var(--text)] mt-1">R$ {formatBRL(t.total)}</p>
+                                        {t.isWaitingBill && <p className="text-[10px] font-bold uppercase mt-0.5">Aguardando pagamento</p>}
+                                    </button>
+                                    {/* Fase 3, Task 8: "a sala de controle também é a cozinha" — só
+                                        existe em loja `direct_print` (sem KDS); dá o mesmo "eu sei o
+                                        que tá sendo preparado agora" que uma loja com KDS já tem. */}
+                                    {t.pendingPrintItems.length > 0 && (
+                                        <div className="border-t border-current/20 bg-[var(--surface)]/60 px-3 py-2 space-y-1.5">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                                                {t.pendingPrintItems.length === 1 ? '1 item aguardando preparo' : `${t.pendingPrintItems.length} itens aguardando preparo`}
+                                            </p>
+                                            {t.pendingPrintItems.map(item => (
+                                                <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                                                    <span className="text-[var(--text)] truncate">{item.quantity}x {item.productName}</span>
+                                                    {canReprintPending && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={reprintingPendingIds.has(item.id)}
+                                                            onClick={() => handleReprintPending({ ...item, tableNumber: t.number })}
+                                                            className="shrink-0 p-1 rounded-full hover:bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+                                                            title="Reimprimir"
+                                                        >
+                                                            <RotateCcw size={12} className={reprintingPendingIds.has(item.id) ? 'animate-spin' : ''} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
                     </div>
