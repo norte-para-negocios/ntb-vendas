@@ -8439,8 +8439,27 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             const itemsTotal = selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
                             const methods = selectedOrderDetails.payment_details?.methods;
                             const totalPago = getOrderDisplayTotal(selectedOrderDetails);
+                            // Achado real (WhatsApp do usuário, 2026-08-27): a diferença entre
+                            // "Itens do Pedido" e "Total Pago" já existia (é a taxa de serviço),
+                            // mas nunca aparecia ESCRITA neste modal — só dava pra perceber
+                            // subtraindo os dois números na mão. Mesmo texto/valor que o
+                            // comprovante impresso já mostra (printBillReceipt), reaproveitado
+                            // aqui em vez de duplicar a lógica.
+                            const feeAmount = Number((totalPago - itemsTotal).toFixed(2));
                             return (
                                 <>
+                                    {feeAmount > 0.01 && (
+                                        <div className="flex justify-between text-sm -mt-2">
+                                            <span className="text-[var(--text-muted)]">Subtotal</span>
+                                            <span className="text-[var(--text-muted)]">R$ {formatBRL(itemsTotal)}</span>
+                                        </div>
+                                    )}
+                                    {feeAmount > 0.01 && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-[var(--text-muted)]">Taxa de Serviço ({formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)} opcional)</span>
+                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(feeAmount)}</span>
+                                        </div>
+                                    )}
                                     <div>
                                         <h4 className="font-bold text-[var(--text)] mb-2 border-b border-[var(--border)] pb-1">Pagamento</h4>
                                         <div className="text-sm space-y-1">
