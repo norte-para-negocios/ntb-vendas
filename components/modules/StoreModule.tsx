@@ -4006,6 +4006,13 @@ const CaixaView: React.FC<{
     const storeId = store.id;
     const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
 
+    // Fase 2, Task 6 (plano "Fora do Cardápio"): sob carga alta (sexta à
+    // noite), a mesma densidade de informação de um dia vazio atrapalha —
+    // `rushModeManual` deixa o operador ligar/desligar na mão; sem toque
+    // nenhum, liga sozinho a partir de RUSH_THRESHOLD mesas ocupadas.
+    const RUSH_THRESHOLD = 6;
+    const [rushModeManual, setRushModeManual] = useState<boolean | null>(null);
+
     // undefined = ainda não sabemos (loading inicial); null = sem turno
     // aberto; objeto = turno aberto.
     const [shift, setShift] = useState<CashShift | null | undefined>(undefined);
@@ -4462,6 +4469,8 @@ const CaixaView: React.FC<{
             .sort((a, b) => b.minutesOccupied - a.minutesOccupied);
     }, [tables, activeOrders, store, serviceFeeRate, now]);
 
+    const rushMode = rushModeManual ?? (occupiedTables.length >= RUSH_THRESHOLD);
+
     const formatWaitingLabel = (waitingSince: number): string => {
         const minutes = Math.max(0, Math.round((now - waitingSince) / 60000));
         if (minutes < 1) return 'agora mesmo';
@@ -4580,16 +4589,37 @@ const CaixaView: React.FC<{
 
             {occupiedTables.length > 0 && (
                 <div className="mb-6">
-                    <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">
-                        Mesas ocupadas ({occupiedTables.length})
-                    </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            Mesas ocupadas ({occupiedTables.length})
+                        </h3>
+                        <button
+                            onClick={() => setRushModeManual(prev => prev === null ? !rushMode : !prev)}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-full border u-motion u-press-sm ${rushMode ? 'border-[var(--ember,var(--warn))]/40 bg-[var(--warn)]/10 text-[var(--warn)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                            title="Simplifica a visão sob carga alta — liga sozinho a partir de 6 mesas"
+                        >
+                            {rushMode ? '⚡ Modo Rush ligado' : 'Modo Rush'}
+                        </button>
+                    </div>
+                    <div className={`grid gap-2 ${rushMode ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'}`}>
                         {occupiedTables.map(t => {
                             const colorClass = t.minutesOccupied >= 60
                                 ? 'border-[var(--err)]/40 bg-[var(--err)]/5 text-[var(--err)]'
                                 : t.minutesOccupied >= 30
                                     ? 'border-[var(--warn)]/40 bg-[var(--warn)]/5 text-[var(--warn)]'
                                     : 'border-[var(--ok)]/40 bg-[var(--ok)]/5 text-[var(--ok)]';
+                            if (rushMode) {
+                                return (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => onOpenTablePayment(t.id)}
+                                        className={`text-center p-2 rounded-xl border u-motion u-press-sm ${colorClass}`}
+                                    >
+                                        <span className="block font-bold text-[var(--text)]">Mesa {t.number}</span>
+                                        <span className="block text-xs font-bold text-[var(--text)]">R$ {formatBRL(t.total)}</span>
+                                    </button>
+                                );
+                            }
                             return (
                                 <button
                                     key={t.id}
