@@ -38,13 +38,17 @@ const StoreDashboardView = dynamic(
 
 // --- COMPONENTS ---
 
-// Dourado padrão usado como fallback em ClientModule.tsx (WINE_GOLD, hex
-// local só naquele arquivo, "carta de vinhos") — replicado aqui só pra
-// inicializar o `<input type="color">`/preview do seletor de cor de destaque
-// (Task 6) quando a loja ainda não tem `config.accent_color` próprio. Mesmo
-// precedente de const de cor fixa por arquivo já usado no projeto
-// (IFOOD_RED/IFOOD_PURPLE em ClientModule.tsx).
-const WINE_GOLD_DEFAULT = '#D4AF5C';
+// Azul padrão usado como fallback em ClientModule.tsx (var(--brand), hex
+// fixo aqui só porque `<input type="color">` não aceita CSS var) —
+// replicado aqui só pra inicializar o seletor/preview de cor de destaque
+// (Task 6) quando a loja ainda não tem `config.accent_color` próprio.
+// Era o dourado "carta de vinhos" (WINE_GOLD) até a Task 15 do plano
+// "Fora do Cardápio" (2026-08-27): ClientModule.tsx migrou esse fallback
+// pro azul da marca junto com o resto do redesign iFood, e este default
+// precisava acompanhar — senão "Salvar Cor" sem alterar nada reintroduzia
+// o dourado que a Task 15 acabou de tirar. Mesmo precedente de const de
+// cor fixa por arquivo já usado no projeto (IFOOD_RED/IFOOD_PURPLE).
+const ACCENT_COLOR_DEFAULT = '#484DB5';
 
 // Permissões da conta universal: era um objeto fixo com as 6 permissões
 // `true` (acesso total sempre) — motivo real de a aba Bar aparecer no
@@ -5672,7 +5676,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // cada pixel; só persiste ao clicar "Salvar Cor", que passa pela trava
     // de contraste em updateStoreAccentColor (lib/api.ts) — pode ser
     // recusado.
-    const [accentColorDraft, setAccentColorDraft] = useState<string>(store.config?.accent_color || WINE_GOLD_DEFAULT);
+    const [accentColorDraft, setAccentColorDraft] = useState<string>(store.config?.accent_color || ACCENT_COLOR_DEFAULT);
     const [accentColorError, setAccentColorError] = useState<string | null>(null);
     const [isSavingAccentColor, setIsSavingAccentColor] = useState(false);
 
@@ -5689,7 +5693,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
-        setAccentColorDraft(store.config?.accent_color || WINE_GOLD_DEFAULT);
+        setAccentColorDraft(store.config?.accent_color || ACCENT_COLOR_DEFAULT);
         setAccentColorError(null);
     }, [store]);
 
@@ -5786,7 +5790,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         try {
             const newConfig = await updateStoreAccentColor(store.id, currentStoreConfig, hexColor);
             setCurrentStoreConfig(newConfig);
-            setAccentColorDraft(hexColor || WINE_GOLD_DEFAULT);
+            setAccentColorDraft(hexColor || ACCENT_COLOR_DEFAULT);
             if (onStoreUpdate) {
                 onStoreUpdate({ ...store, config: newConfig });
             }
@@ -5951,17 +5955,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 </div>
 
                 {/* Cor de destaque por loja (Task 6, stores.config.accent_color) —
-                    substitui o WINE_GOLD fixo de ClientModule.tsx no preço e na
-                    categoria ativa do cardápio do cliente. Preview usa a MESMA
-                    marcação (font-semibold text-sm num, "R$ 32,90") do preço real
-                    do carrinho em ClientModule.tsx, sobre o mesmo fundo escuro
-                    (MENU_DARK_BG_HEX) onde essa cor realmente aparece — não é uma
-                    segunda implementação de preview divergente. */}
+                    texto/preview corrigidos na Task 15 do plano "Fora do Cardápio"
+                    (2026-08-27): desde o redesign iFood (2026-08-21), preço e
+                    categoria ativa do cardápio do cliente pararam de usar essa cor
+                    (preço é --text/roxo de promoção, categoria ativa é vermelho
+                    iFood) — o texto antigo aqui ficou descrevendo um efeito que não
+                    existe mais. Hoje `accent_color` só aparece na TELA DE
+                    IDENTIFICAÇÃO do cliente (ícone/borda da logo + texto de apoio),
+                    ver LoginScreen em ClientModule.tsx. Preview ajustado pra mostrar
+                    isso, não mais um preço. */}
                 <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                    <h4 className="font-bold text-[var(--text)]">Cor de destaque do cardápio</h4>
+                    <h4 className="font-bold text-[var(--text)]">Cor de destaque da tela de identificação</h4>
                     <p className="text-sm text-[var(--text-muted)] mb-3">
-                        Cor usada no preço e na categoria ativa do cardápio do cliente. Sem cor própria definida, o
-                        cardápio usa o dourado padrão.
+                        Cor usada no ícone e no texto de apoio da tela onde o cliente se identifica antes de pedir
+                        (&ldquo;Identifique-se para continuar seu pedido&rdquo;). Sem cor própria definida, o cardápio usa o
+                        azul padrão da marca.
                     </p>
                     <div className="flex items-center gap-4 flex-wrap">
                         <input
@@ -5973,7 +5981,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         />
                         <div className="px-4 py-3 rounded-lg border border-[var(--border)]" style={{ background: MENU_DARK_BG_HEX }}>
                             <span className="text-[10px] uppercase tracking-wide text-white/40 block mb-1">Pré-visualização</span>
-                            <span className="font-semibold text-sm num" style={{ color: accentColorDraft }}>R$ 32,90</span>
+                            <span className="font-semibold text-sm" style={{ color: accentColorDraft }}>Identifique-se para continuar seu pedido</span>
                         </div>
                         <div className="flex gap-2">
                             <Button onClick={() => handleSaveAccentColor(accentColorDraft)} isLoading={isSavingAccentColor}>
@@ -6298,7 +6306,23 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                              <Input label="Nome" value={pName} onChange={e => setPName(e.target.value)} />
                          </div>
                     </div>
-                    <Input label="Descrição" value={pDesc} onChange={e => setPDesc(e.target.value)} />
+                    {/* Fase 5, Task 16 (plano "Fora do Cardápio"): o campo já existia
+                        (products.description, hoje só usado na busca) — vira "história
+                        do prato" só com rótulo + campo maior, sem coluna nova. Trocado
+                        de Input (uma linha) pra textarea: uma "história" raramente cabe
+                        numa linha só, e o ProductModal (Task 16, ClientModule.tsx) agora
+                        dá destaque tipográfico a esse texto. */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[13px] font-medium text-[var(--text-muted)]">
+                            Descrição (opcional) — conte a história desse prato: origem, por que é especial, há quanto tempo está no cardápio
+                        </label>
+                        <textarea
+                            className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all"
+                            rows={3}
+                            value={pDesc}
+                            onChange={e => setPDesc(e.target.value)}
+                        />
+                    </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="Preço (R$)" type="number" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
                         <Input

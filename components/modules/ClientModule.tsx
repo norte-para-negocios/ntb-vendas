@@ -1220,8 +1220,15 @@ const ProductModal: React.FC<{
                 {/* Passo 2: bloco de identificação */}
                 <div className="px-4 pt-4">
                     <h2 className="text-[22px] font-bold leading-tight text-[var(--text)]">{product.name}</h2>
+                    {/* Fase 5, Task 16 (plano "Fora do Cardápio"): "o prato tem uma
+                        história" — description já existia (só usado na busca até aqui),
+                        ganha destaque tipográfico de verdade em vez de legenda pequena e
+                        muted: eyebrow + texto no --text (não --text-muted), mais respiro. */}
                     {!!product.description && (
-                        <p className="text-[14px] text-[var(--text-muted)] mt-1">{product.description}</p>
+                        <div className="mt-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand)]">Sobre este prato</p>
+                            <p className="text-[15px] leading-relaxed text-[var(--text)] mt-1">{product.description}</p>
+                        </div>
                     )}
 
                     {/* Badges (migration 019): catálogo fechado de lib/labels.ts, tom
