@@ -1640,6 +1640,23 @@ const TablesView: React.FC<{
         }
     };
 
+    // Fase 3, Task 9 (plano "Fora do Cardápio"): escala inteligente de mesa
+    // — sugestão visual (nunca automática, o operador continua escolhendo),
+    // ordenando quem já tem jurisdição restrita configurada do MENOS pro
+    // MAIS ocupado agora. "Ocupado agora" cruza `assigned_table_ids` do
+    // garçom com as mesas dessa jurisdição que estão `OCCUPIED` neste
+    // instante — não é o total de mesas atribuídas (isso já aparecia antes),
+    // é quantas dessas estão com gente sentada AGORA.
+    const reassignTeamByLoad = useMemo(() => {
+        return reassignTeam
+            .filter(m => m.assigned_table_ids && m.assigned_table_ids.length > 0)
+            .map(m => ({
+                ...m,
+                activeTableCount: tables.filter(t => t.status === TableStatus.OCCUPIED && (m.assigned_table_ids || []).includes(t.id)).length,
+            }))
+            .sort((a, b) => a.activeTableCount - b.activeTableCount);
+    }, [reassignTeam, tables]);
+
     // Important #I3: antes, `fetchSalesHistory` (RPC `limit 2000` com
     // `order_items` aninhado) rodava dentro de `loadData` — chamada a cada
     // ping Realtime de `order_change_pings`/`table_change_pings`, mesmo com
@@ -3430,20 +3447,28 @@ NOTIFY pgrst, 'reload schema';`;
                         <div className="flex items-center justify-center py-10 text-[var(--text-muted)]">
                             <RefreshCw size={22} className="animate-spin" />
                         </div>
-                    ) : reassignTeam.filter(m => m.assigned_table_ids && m.assigned_table_ids.length > 0).length === 0 ? (
+                    ) : reassignTeamByLoad.length === 0 ? (
                         <p className="text-sm text-[var(--text-muted)] text-center py-8">
                             Nenhum garçom com jurisdição restrita configurada ainda — configure em Administração → Usuários.
                         </p>
                     ) : (
                         <div className="space-y-2">
-                            {reassignTeam.filter(m => m.assigned_table_ids && m.assigned_table_ids.length > 0).map(member => {
+                            {/* Fase 3, Task 9: lista já vem ordenada do menos pro mais
+                                ocupado agora (reassignTeamByLoad) — sugestão visual de
+                                escala, o operador continua livre pra marcar qualquer um. */}
+                            {reassignTeamByLoad.map(member => {
                                 const hasTable = !!selectedTable && (member.assigned_table_ids || []).includes(selectedTable.id);
                                 const isSaving = savingReassignIds.has(member.id);
                                 return (
                                     <label key={member.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] cursor-pointer">
                                         <div className="min-w-0">
                                             <p className="text-sm font-bold text-[var(--text)] truncate">{member.name}</p>
-                                            <p className="text-xs text-[var(--text-muted)]">{(member.assigned_table_ids || []).length} mesa(s) atribuída(s)</p>
+                                            <p className="text-xs text-[var(--text-muted)]">
+                                                {(member.assigned_table_ids || []).length} mesa(s) atribuída(s) ·{' '}
+                                                <span className={member.activeTableCount === 0 ? 'text-[var(--ok)] font-semibold' : 'font-semibold'}>
+                                                    {member.activeTableCount} ativa{member.activeTableCount === 1 ? '' : 's'} agora
+                                                </span>
+                                            </p>
                                         </div>
                                         <input
                                             type="checkbox"
