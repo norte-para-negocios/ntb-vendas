@@ -55,6 +55,11 @@ export interface PagamentoNota {
 // de autorização, que este app nunca captura. tBand é opcional pelo schema
 // mesmo com tpIntegra=2, mas mandamos sempre que der pra mapear a bandeira
 // (ou "99" Outros como fallback) — mais completo, sem custo de rejeição.
+// Bandeiras adicionadas em CARD_BRAND_LABELS (lib/labels.ts, 2026-08-25:
+// alelo/sodexo/ticket/vr/cabal) caem de propósito no fallback '99' abaixo —
+// não adicionei os códigos numéricos da Nota Técnica 2015/002 pra elas sem
+// confirmar contra a tabela oficial (tBand é campo informativo, sem risco
+// de rejeição, mas errar o número seria pior que "99 Outros" genérico).
 function mapBandeiraParaTBand(brand?: string): string {
   switch (brand) {
     case 'visa': return '01';

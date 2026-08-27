@@ -6739,10 +6739,16 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
             result = result.filter(order => order.order_type === filterType);
         }
         if (filterCustomer) {
+            // Achado real (reunião com o Ramon, 2026-08-25): o filtro já se
+            // chama "Cliente / Mesa" na UI, mas só buscava um OU outro —
+            // pedido de mesa nunca batia pelo nome do cliente, só por
+            // "Mesa N". Agora busca nos dois ao mesmo tempo (uma venda de
+            // mesa pode ter cliente E número; balcão só tem cliente).
             const search = filterCustomer.toLowerCase();
             result = result.filter(order => {
-                const name = order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão');
-                return name.toLowerCase().includes(search);
+                const tableName = order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : '';
+                const customerName = order.customer_name || (order.order_type === 'counter' ? 'Cliente Balcão' : '');
+                return tableName.toLowerCase().includes(search) || customerName.toLowerCase().includes(search);
             });
         }
         if (filterMinItems) {
@@ -6788,6 +6794,33 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     }, [sales, filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, sortColumn, sortDirection]);
 
     const totalRevenue = filteredAndSortedSales.reduce((acc, order) => acc + getOrderDisplayTotal(order), 0);
+
+    // Achado real (reunião com o Ramon, 2026-08-25): "esse histórico de
+    // vendas aqui, ele está por mesa, mas tem que ter um histórico de
+    // vendas por produto, mais detalhado" — o dashboard só tem Top 5, sem
+    // filtro de período nem lista completa. Reaproveita os MESMOS filtros
+    // (data/tipo/cliente) já aplicados em filteredAndSortedSales — nenhuma
+    // busca nova ao banco, só reagrupa order_items já carregados.
+    // getOrderItemDisplayName agrupa por produto+adicional (ex.: "Pizza
+    // (Catupiry)" separado de "Pizza" puro), mesmo critério do ranking de
+    // mais vendidos do dashboard.
+    const [historyView, setHistoryView] = useState<'sale' | 'product'>('sale');
+    const productBreakdown = useMemo(() => {
+        const byName = new Map<string, { quantity: number; revenue: number }>();
+        for (const order of filteredAndSortedSales) {
+            for (const item of order.order_items || []) {
+                if (item.status === 'canceled') continue;
+                const name = getOrderItemDisplayName(item);
+                const entry = byName.get(name) || { quantity: 0, revenue: 0 };
+                entry.quantity += item.quantity;
+                entry.revenue += item.price_at_time * item.quantity;
+                byName.set(name, entry);
+            }
+        }
+        return Array.from(byName.entries())
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.revenue - a.revenue);
+    }, [filteredAndSortedSales]);
 
     // Volta pra primeira página sempre que filtro ou ordenação mudam, senão o usuário
     // pode ficar preso numa página que não existe mais no novo resultado filtrado.
@@ -6851,6 +6884,53 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
             })),
             `vendas-${store.name.toLowerCase().replace(/\s+/g, '-')}.csv`
         );
+    };
+
+    // Achado real (reunião com o Ramon, 2026-08-25): "o imprimir aqui
+    // deveria ser aqui... deveria vir aqui para o histórico de venda" — não
+    // existia NENHUMA forma de reimprimir o comprovante de uma venda já
+    // fechada a partir do Histórico (só dava pra reimprimir o TICKET de
+    // cozinha/bar via "Pedidos do Dia"). Reaproveita printBillReceipt com os
+    // dados já disponíveis no pedido; `serviceFee.rate` usa a taxa atual da
+    // loja como aproximação (o pedido não grava a taxa histórica exata),
+    // mas `amount`/`charged` vêm do valor real cobrado (payment_details),
+    // nunca recalculados.
+    const handleReprintReceipt = async (order: Order) => {
+        const itemsTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+        const total = getOrderDisplayTotal(order);
+        const feeAmount = Number((total - itemsTotal).toFixed(2));
+        const methods = order.payment_details?.methods;
+        try {
+            const printed = await printBillReceipt({
+                storeName: store.name,
+                cnpj: store.cnpj,
+                paperWidthMm: store.config?.printer_paper_width_mm,
+                label: `${order.order_type === 'table' ? `MESA ${order.tables?.number || '?'}` : `BALCÃO - ${order.customer_name || 'Cliente'}`} - REIMPRESSÃO`,
+                items: (order.order_items || []).map(item => ({
+                    quantity: item.quantity,
+                    name: getOrderItemDisplayName(item),
+                    total: item.price_at_time * item.quantity,
+                })),
+                subtotal: itemsTotal,
+                serviceFee: order.order_type === 'table' ? {
+                    charged: feeAmount > 0.005,
+                    rate: store.config?.service_fee_rate ?? SERVICE_FEE_RATE,
+                    amount: Math.max(0, feeAmount),
+                    removedForTable: false,
+                } : undefined,
+                total,
+                payment: {
+                    methods: methods && methods.length > 0 ? methods : [{ method: order.payment_method || 'CASH', amount: total }],
+                    changeDue: 0,
+                },
+            });
+            if (!printed) {
+                toast.error('O comprovante não imprimiu. Confira a impressora.');
+            }
+        } catch (e) {
+            console.error('handleReprintReceipt (histórico de vendas) lançou:', e);
+            toast.error('O comprovante não imprimiu. Confira a impressora.');
+        }
     };
 
     const SortIcon = ({ column }: { column: string }) => {
@@ -7187,7 +7267,23 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                     <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
                         <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-4">
                             <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-lg text-[var(--text)]">Histórico de Vendas</h3>
+                                <div className="flex items-center gap-3">
+                                    <h3 className="font-bold text-lg text-[var(--text)]">Histórico de Vendas</h3>
+                                    <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-xs font-bold">
+                                        <button
+                                            onClick={() => setHistoryView('sale')}
+                                            className={`px-3 py-1.5 u-motion ${historyView === 'sale' ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}
+                                        >
+                                            Por Venda
+                                        </button>
+                                        <button
+                                            onClick={() => setHistoryView('product')}
+                                            className={`px-3 py-1.5 u-motion ${historyView === 'product' ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}
+                                        >
+                                            Por Produto
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="flex items-center gap-2">
                                     <Button variant="secondary" onClick={() => setShowFilters(!showFilters)}>
                                         <Search size={16} className="mr-2" />
@@ -7266,6 +7362,37 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                 </div>
                             )}
                         </div>
+                        {historyView === 'product' ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] font-medium uppercase text-xs">
+                                        <tr>
+                                            <th className="px-4 py-3">Produto</th>
+                                            <th className="px-4 py-3 text-right">Quantidade</th>
+                                            <th className="px-4 py-3 text-right">Faturamento</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[var(--border)]">
+                                        {productBreakdown.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={3} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                                    Nenhuma venda encontrada com os filtros atuais.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            productBreakdown.map((row, i) => (
+                                                <tr key={row.name} className="u-stagger" style={stagger(Math.min(i, 10) * 30)}>
+                                                    <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
+                                                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{row.quantity}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                        <>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] font-medium uppercase text-xs">
@@ -7366,6 +7493,8 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                 </div>
                             </div>
                         )}
+                        </>
+                        )}
                     </Card>
                 </div>
             )}
@@ -7451,6 +7580,13 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                             R$ {formatBRL(totalPago)}
                                         </span>
                                     </div>
+                                    <Button
+                                        variant="secondary"
+                                        className="w-full"
+                                        onClick={() => handleReprintReceipt(selectedOrderDetails)}
+                                    >
+                                        <Printer size={16} className="mr-2" /> Reimprimir Comprovante
+                                    </Button>
                                 </>
                             );
                         })()}

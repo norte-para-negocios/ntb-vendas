@@ -48,12 +48,25 @@ export const getPaymentMethodLabel = (method?: string | null): string =>
 // impresso (que já é obrigado a escapar campo livre, ver lib/print.ts) e
 // mantém consistência visual no modal de pagamento e no relatório de vendas.
 // Só se aplica a CREDIT/DEBIT — PIX/CASH/COURTESY nunca têm bandeira.
+// Achado real (reunião com o Ramon, 2026-08-25): "tem refeição, tem uma
+// série de cartões aí" — o catálogo só tinha as 5 bandeiras de crédito/
+// débito mais comuns, sem nenhum vale-refeição/alimentação (Alelo, Sodexo,
+// Ticket, VR), que na prática também são lançados como CREDIT/DEBIT no
+// caixa deste app (não é um método de pagamento à parte, só uma bandeira
+// diferente). Ver mapBandeiraParaTBand (lib/fiscal/xml.ts) — bandeira nova
+// sem código SEFAZ confirmado cai no fallback seguro "99 Outros", nunca
+// bloqueia a nota.
 export const CARD_BRAND_LABELS: Record<string, string> = {
     visa: 'Visa',
     mastercard: 'Mastercard',
     elo: 'Elo',
     amex: 'Amex',
     hipercard: 'Hipercard',
+    alelo: 'Alelo',
+    sodexo: 'Sodexo',
+    ticket: 'Ticket',
+    vr: 'VR',
+    cabal: 'Cabal',
     outro: 'Outra',
 };
 
