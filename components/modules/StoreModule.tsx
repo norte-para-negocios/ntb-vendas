@@ -1761,6 +1761,7 @@ const TablesView: React.FC<{
             destination: 'kitchen' | 'bar';
             addons?: string;
             observation?: string;
+            client?: string | null;
             closed: boolean;
             printed: boolean;
             addedByName?: string | null;
@@ -1769,6 +1770,7 @@ const TablesView: React.FC<{
             (order.order_items || []).forEach(item => {
                 if (item.status === OrderStatus.CANCELED) return;
                 const destination: 'kitchen' | 'bar' = item.product?.destination === 'bar' ? 'bar' : 'kitchen';
+                const { client, observation } = parseItemNote(item.notes || '');
                 rows.push({
                     id: item.id,
                     orderId: item.order_id,
@@ -1778,7 +1780,8 @@ const TablesView: React.FC<{
                     quantity: item.quantity,
                     destination,
                     addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
-                    observation: item.notes || undefined,
+                    observation: observation || undefined,
+                    client,
                     closed,
                     printed: wasKitchenTicketPrinted(storeId, destination, item.id),
                     addedByName: item.added_by_role === 'garcom' ? item.added_by_name : null,
@@ -1796,7 +1799,7 @@ const TablesView: React.FC<{
     // sendo criado antes do `activatedAt` desta sessão, mas serve pra
     // qualquer linha "sem registro") ganha aqui um jeito de recuperação com
     // toque humano — nunca fica só invisível na lista.
-    const handleManualReprint = async (row: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string }) => {
+    const handleManualReprint = async (row: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string; client?: string | null }) => {
         // Guarda redundante ao gate visual (`canReprint` no botão acima) —
         // Critical #2: a ação em si nunca deve rodar fora do aparelho de
         // caixa de verdade, mesmo se algo chamar isto por outro caminho no
@@ -1818,6 +1821,7 @@ const TablesView: React.FC<{
                 productName: row.productName,
                 addons: row.addons,
                 observation: row.observation,
+                client: row.client,
             });
             if (ok) {
                 toast.success('Reimpresso com sucesso.');
@@ -2032,6 +2036,7 @@ NOTIFY pgrst, 'reload schema';`;
                 items: summary.allItems.map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
+                    client: parseItemNote(item.notes || '').client,
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: summary.subtotal,
@@ -2263,6 +2268,7 @@ NOTIFY pgrst, 'reload schema';`;
                         items: summary.allItems.map(item => ({
                             quantity: item.quantity,
                             name: getOrderItemDisplayName(item),
+                            client: parseItemNote(item.notes || '').client,
                             total: item.price_at_time * item.quantity,
                         })),
                         subtotal: summary.subtotal,
@@ -3646,6 +3652,7 @@ const CounterView: React.FC<{
                     items: items.map(item => ({
                         quantity: item.quantity,
                         name: getOrderItemDisplayName(item),
+                        client: parseItemNote(item.notes || '').client,
                         total: item.price_at_time * item.quantity,
                     })),
                     subtotal: total,
@@ -3722,6 +3729,7 @@ const CounterView: React.FC<{
                 items: items.map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
+                    client: parseItemNote(item.notes || '').client,
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: total,
@@ -7049,6 +7057,7 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                 items: (order.order_items || []).map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
+                    client: parseItemNote(item.notes || '').client,
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: itemsTotal,

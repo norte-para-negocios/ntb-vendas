@@ -264,6 +264,11 @@ export interface BillReceiptItem {
   quantity: number;
   name: string;
   total: number;
+  // Achado real (reunião com o Ramon, 2026-08-25): em mesa com várias
+  // pessoas pedindo pelo próprio celular, a tela ("Ver Comanda") já mostra
+  // quem pediu cada item (parseItemNote), mas o comprovante IMPRESSO nunca
+  // teve esse campo — cliente via certo na tela e sumia no papel.
+  client?: string | null;
 }
 
 // Task 3 (2026-08-22): estado explícito da taxa de serviço nesta conta —
@@ -380,7 +385,7 @@ export function printBillReceipt(opts: {
             (i) => `
           <tr>
             <td>${i.quantity}x</td>
-            <td style="padding-right:4px;">${escapeHtml(i.name)}</td>
+            <td style="padding-right:4px;">${escapeHtml(i.name)}${i.client ? `<div style="font-size:10px;color:#555;">Cliente: ${escapeHtml(i.client)}</div>` : ''}</td>
             <td class="right">${formatBRL(i.total)}</td>
           </tr>`
           )

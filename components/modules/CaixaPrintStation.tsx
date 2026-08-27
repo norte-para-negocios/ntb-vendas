@@ -93,6 +93,7 @@ import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnection
 import { printKitchenTicket } from '@/lib/print';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
+import { parseItemNote } from '@/lib/labels';
 import { Store, OrderItem, StoreUser } from '@/types';
 
 type Destination = 'kitchen' | 'bar';
@@ -206,6 +207,7 @@ export async function printPendingKitchenTicket(params: {
   productName: string;
   addons?: string;
   observation?: string;
+  client?: string | null;
   paperWidthMm?: 48 | 58 | 80;
 }): Promise<boolean> {
   const ok = await printKitchenTicket({
@@ -213,6 +215,7 @@ export async function printPendingKitchenTicket(params: {
     storeName: params.storeName,
     orderType: 'MESA',
     identifier: `MESA ${params.tableNumber}`,
+    client: params.client,
     quantity: params.quantity,
     productName: params.productName,
     addons: params.addons,
@@ -335,15 +338,17 @@ async function reconcileDestination(
       // interromperia o `for` no meio do lote (achado real do station
       // original, fix round 2 Group B2).
       try {
+        const { client, observation } = parseItemNote(item.notes || '');
         return await printKitchenTicket({
           kind,
           storeName,
           orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
           identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
+          client,
           quantity: item.quantity,
           productName: item.product?.name || 'Produto indisponível',
           addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
-          observation: item.notes || undefined,
+          observation: observation || undefined,
           orderIdShort: item.order_id.slice(0, 8),
         });
       } catch (e) {
