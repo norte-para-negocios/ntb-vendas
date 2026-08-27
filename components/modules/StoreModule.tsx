@@ -4438,6 +4438,21 @@ const CaixaView: React.FC<{
                                 onChange={e => setOpeningFloat(e.target.value)}
                             />
                         </div>
+                        {/* Fase 1, Task 3 (plano "Fora do Cardápio"): o Master
+                            Admin já tinha esse aviso no cadastro da loja, mas só
+                            lá — nunca no dia a dia, quando quem abre o turno de
+                            verdade é o operador. Não bloqueia abrir o caixa
+                            (mesma filosofia do original), só avisa. */}
+                        {resolveOrderFlow(store) === 'direct_print' && (
+                            <div className="text-left rounded-xl border border-[var(--warn)]/30 bg-[var(--warn)]/5 p-3 flex items-start gap-2">
+                                <AlertCircle size={16} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                                <p className="text-xs text-[var(--text)]">
+                                    Esta loja envia pedido direto pra impressão, sem tela de cozinha. Antes de abrir,
+                                    confira que a impressora está funcionando — use &ldquo;Testar Impressão&rdquo;
+                                    logo abaixo assim que o caixa abrir.
+                                </p>
+                            </div>
+                        )}
                         <Button
                             onClick={handleOpenShift}
                             isLoading={isOpeningShift}
