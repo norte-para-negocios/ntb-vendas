@@ -23,7 +23,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -2106,9 +2106,16 @@ NOTIFY pgrst, 'reload schema';`;
             // de hoje. Ver early-exit em app/api/fiscal/emitir/route.ts.
             // Task 2: `cash_shift_id` idem — só presente quando o módulo
             // caixa está ligado (ver bloco acima).
+            // Achado real (reunião com o Ramon, 2026-08-25): `paymentMethods`
+            // guarda o dinheiro BRUTO entregue pelo cliente (pode ter troco
+            // embutido) — persistir isso sem ajuste inflava a nota fiscal
+            // pelo valor do troco, divergindo do histórico de vendas. Ver
+            // lib/calc.ts (getPaymentMethodsForRecord) pro porquê completo.
+            // `paymentMethods` cru continua indo pro recibo impresso abaixo
+            // (payment.methods), que precisa mostrar o valor bruto + troco.
             const paymentData = {
                 total: summary.total,
-                methods: paymentMethods,
+                methods: getPaymentMethodsForRecord(paymentMethods, summary.total),
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
@@ -3473,9 +3480,11 @@ const CounterView: React.FC<{
             // Task 4: mesmo princípio de TablesView — a chave só entra no
             // payload quando a loja tem emissão automática configurada.
             // Task 2: `cash_shift_id` idem — ver bloco acima.
+            // Mesmo achado/correção de TablesView.handleFinishPayment — ver
+            // lib/calc.ts (getPaymentMethodsForRecord).
             const paymentData = {
                 total,
-                methods: paymentMethods,
+                methods: getPaymentMethodsForRecord(paymentMethods, total),
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };

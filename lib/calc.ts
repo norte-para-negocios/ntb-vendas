@@ -73,6 +73,49 @@ export function calculateChangeForMethods(
   return calculateChange(cashPaid, amountOwedInCash);
 }
 
+// Achado real (reunião com o Ramon, 2026-08-25): histórico de vendas, nota
+// fiscal e cupom impresso podiam mostrar 3 valores DIFERENTES pra mesma
+// venda. Causa: `methods` (o mesmo array acima usado pro troco) guarda o
+// dinheiro BRUTO entregue pelo cliente — pode ser maior que o devido, de
+// propósito, quando o caixa espera dar troco. Esse array vira
+// `payment_details.methods` sem ajuste nenhum, e é dele que
+// `lib/fiscal/xml.ts` deriva `vOutro`/`vNF` (soma bruta dos métodos) —
+// então uma venda de R$41,80 paga com uma nota de R$50 gerava nota fiscal
+// de R$50, enquanto o histórico (que lê `payment_details.total`, o valor
+// correto) continuava mostrando R$41,80.
+//
+// Esta função devolve `methods` com o valor de CASH limitado ao que
+// realmente cobre a conta (exclui o troco) — nunca deve ser chamada com o
+// resultado usado pra imprimir o comprovante do cliente (esse continua
+// precisando do valor bruto entregue + troco, ver `payment.methods` em
+// printBillReceipt), só para o que vira `payment_details`/base fiscal.
+// Métodos não-CASH nunca têm conceito de troco, ficam inalterados. Mais de
+// uma entrada de CASH (raro, mas possível): o valor devido em dinheiro é
+// distribuído proporcionalmente, com a última entrada absorvendo o resto
+// do arredondamento — mesmo princípio já usado em `detPag`/`vOutro` por
+// item em lib/fiscal/xml.ts.
+export function getPaymentMethodsForRecord<T extends { method: string; amount: number }>(
+  methods: T[],
+  total: number,
+): T[] {
+  const nonCashPaid = methods.filter((m) => m.method !== 'CASH').reduce((acc, m) => acc + m.amount, 0);
+  const amountOwedInCash = Math.max(0, Number((total - nonCashPaid).toFixed(2)));
+  const cashEntries = methods.filter((m) => m.method === 'CASH');
+  const cashRawTotal = cashEntries.reduce((acc, m) => acc + m.amount, 0);
+  if (cashEntries.length === 0 || cashRawTotal <= amountOwedInCash) return methods;
+
+  let acumulado = 0;
+  return methods.map((m) => {
+    if (m.method !== 'CASH') return m;
+    const isLast = cashEntries.indexOf(m) === cashEntries.length - 1;
+    const novoValor = isLast
+      ? Number((amountOwedInCash - acumulado).toFixed(2))
+      : Number((amountOwedInCash * (m.amount / cashRawTotal)).toFixed(2));
+    acumulado += novoValor;
+    return { ...m, amount: novoValor };
+  });
+}
+
 // Preço efetivo de um produto (migration 019): promo_price quando setado E
 // menor que o preço cheio, senão price. A guarda `< price` é rede de
 // segurança pro client — o CHECK do banco (promo_price < price) e o

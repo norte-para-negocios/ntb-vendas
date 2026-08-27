@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { PAYMENT_METHOD_LABELS, CARD_BRAND_LABELS } from '@/lib/labels';
+import { getPaymentMethodsForRecord } from '@/lib/calc';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -119,11 +120,25 @@ export async function POST(request: NextRequest) {
 
   const admin = getSupabaseAdmin();
 
+  // Defesa em profundidade (achado real, reunião com o Ramon, 2026-08-25):
+  // não confiar que o client já normalizou o troco embutido no método CASH
+  // antes de mandar pra cá — esta rota roda com service role e é a
+  // autoridade de escrita real de payment_details do balcão, então
+  // reaplicar a mesma normalização aqui (lib/calc.ts,
+  // getPaymentMethodsForRecord) garante a invariante mesmo se algum client
+  // futuro esquecer de fazer isso. Nunca rejeita — só corrige o valor
+  // gravado, mesmo espírito de "nunca impedir o fechamento" já seguido no
+  // resto das rotas fire-and-forget deste projeto.
+  const paymentDetailsNormalizado = {
+    ...body.paymentDetails,
+    methods: getPaymentMethodsForRecord(body.paymentDetails.methods, body.paymentDetails.total),
+  };
+
   const { data, error } = await admin
     .from('orders')
     .update({
       payment_method: body.paymentMethod,
-      payment_details: body.paymentDetails,
+      payment_details: paymentDetailsNormalizado,
       updated_at: new Date().toISOString(),
     })
     .eq('id', body.orderId)
