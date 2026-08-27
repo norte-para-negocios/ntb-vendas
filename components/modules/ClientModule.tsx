@@ -16,6 +16,7 @@ import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE } from '@/lib/calc';
+import { normalizeForSearch } from '@/lib/search';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
@@ -2812,14 +2813,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // preço primeiro" faz sentido dentro de uma seção, não faria sentido
     // comparar entre seções diferentes.
     const productsByCategory = useMemo(() => {
-        const term = searchTerm.trim().toLowerCase();
+        // Achado real (reunião com o Ramon, 2026-08-25): buscar "muqueca" sem
+        // o acento não encontrava "Moqueca" cadastrado com acento.
+        // normalizeForSearch (lib/search.ts) remove diacríticos dos dois
+        // lados antes de comparar.
+        const term = normalizeForSearch(searchTerm.trim());
         const map: Record<string, Product[]> = {};
         visibleCategories.forEach(cat => {
             let prods = products.filter(p => p.category_id === cat.id);
             if (term) {
                 // Busca por descrição (migration 019): além do nome, também bate se
                 // o termo aparecer na descrição do produto (campo opcional).
-                prods = prods.filter(p => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term));
+                prods = prods.filter(p => normalizeForSearch(p.name).includes(term) || (p.description && normalizeForSearch(p.description).includes(term)));
             }
             if (favoritesOnly) prods = prods.filter(p => favoriteIds.has(p.id));
 

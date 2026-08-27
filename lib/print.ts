@@ -28,8 +28,15 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-const THERMAL_STYLES = `
-  body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 48mm; margin: 0; padding: 0; font-size: 10px; color: #000; }
+// Achado real (reunião com o Ramon, 2026-08-25): comanda saía cortada numa
+// impressora térmica de 58mm/80mm porque a largura era fixa em 48mm (a
+// impressora antiga de uma das lojas). Todo o resto do CSS já usa `%`
+// (relativo), então parametrizar só essa única linha basta — sem precisar
+// tocar em nenhuma outra regra. `store.config.printer_paper_width_mm`
+// (types/index.ts), padrão 48 = comportamento idêntico ao de sempre pras
+// lojas que nunca configuraram isso.
+const thermalStyles = (widthMm: 48 | 58 | 80 = 48) => `
+  body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: ${widthMm}mm; margin: 0; padding: 0; font-size: 10px; color: #000; }
   .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 6px; }
   .store-name { font-size: 12px; font-weight: bold; text-transform: uppercase; }
   .doc-title { font-size: 11px; font-weight: bold; text-transform: uppercase; margin-top: 2px; }
@@ -218,8 +225,8 @@ function printHtmlDocument(title: string, styles: string, bodyHtml: string): Pro
   });
 }
 
-function openThermalPrint(title: string, bodyHtml: string): Promise<boolean> {
-  return printHtmlDocument(title, THERMAL_STYLES, bodyHtml);
+function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 48 | 58 | 80): Promise<boolean> {
+  return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
 
 export function printKitchenTicket(opts: {
@@ -233,6 +240,7 @@ export function printKitchenTicket(opts: {
   addons?: string;
   observation?: string;
   orderIdShort: string;
+  paperWidthMm?: 48 | 58 | 80;
 }): Promise<boolean> {
   const body = `
     <div class="header">
@@ -249,7 +257,7 @@ export function printKitchenTicket(opts: {
     ${opts.observation ? `<div class="obs">OBS: ${escapeHtml(opts.observation)}</div>` : ''}
     <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;
-  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body);
+  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm);
 }
 
 export interface BillReceiptItem {
@@ -313,6 +321,7 @@ export function printBillReceipt(opts: {
   // conferência da conta) nunca passa isto — continua idêntico. Só o
   // comprovante impresso DEPOIS do caixa finalizar preenche este campo.
   payment?: BillPaymentInfo;
+  paperWidthMm?: 48 | 58 | 80;
 }): Promise<boolean> {
   const feeRow = opts.serviceFee
     ? opts.serviceFee.charged
@@ -390,7 +399,7 @@ export function printBillReceipt(opts: {
     ${paymentSection}
     <div class="footer">Obrigado pela preferência!</div>
   `;
-  return openThermalPrint(`Comprovante - ${opts.label}`, body);
+  return openThermalPrint(`Comprovante - ${opts.label}`, body, opts.paperWidthMm);
 }
 
 const REPORT_STYLES = `

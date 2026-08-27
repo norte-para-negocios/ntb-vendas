@@ -206,6 +206,7 @@ export async function printPendingKitchenTicket(params: {
   productName: string;
   addons?: string;
   observation?: string;
+  paperWidthMm?: 48 | 58 | 80;
 }): Promise<boolean> {
   const ok = await printKitchenTicket({
     kind: params.destination === 'bar' ? 'BAR' : 'COZINHA',
@@ -217,6 +218,7 @@ export async function printPendingKitchenTicket(params: {
     addons: params.addons,
     observation: params.observation,
     orderIdShort: params.orderId.slice(0, 8),
+    paperWidthMm: params.paperWidthMm,
   });
   if (ok) {
     const ids = loadPrintedIds(params.storeId, params.destination);

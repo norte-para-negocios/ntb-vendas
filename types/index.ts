@@ -67,6 +67,11 @@ export interface Store {
     // ANTES de persistir — nunca salva uma cor ilegível sobre o fundo escuro
     // do cardápio.
     accent_color?: string | null;
+    // Achado real (reunião com o Ramon, 2026-08-25): comanda saía cortada
+    // numa impressora térmica maior porque o template estava fixo em 48mm
+    // (a impressora antiga da loja). undefined = 48mm (comportamento atual,
+    // sem mudança pras 7 lojas reais). Ver lib/print.ts (thermalStyles).
+    printer_paper_width_mm?: 48 | 58 | 80;
   };
 }
 

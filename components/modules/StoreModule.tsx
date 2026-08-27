@@ -24,6 +24,7 @@ import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/pr
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { normalizeForSearch } from '@/lib/search';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -790,6 +791,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
       printKitchenTicket({
           kind: destination === 'kitchen' ? 'COZINHA' : 'BAR',
           storeName,
+          paperWidthMm: store.config?.printer_paper_width_mm,
           orderType,
           identifier,
           client,
@@ -1064,10 +1066,23 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
         });
     }, [storeId]);
 
+    // Achado real (reunião com o Ramon, 2026-08-25): buscar "camarão" só
+    // trazia resultado da categoria ativa (ex.: Entradas), mesmo tendo
+    // "camarão" em outras categorias — porque o filtro de categoria rodava
+    // incondicionalmente, antes do termo de busca sequer entrar. Com termo
+    // de busca preenchido, ignora a categoria ativa e busca em todo o
+    // cardápio; sem termo, continua restrito à categoria como sempre.
+    // normalizeForSearch (lib/search.ts) também resolve o segundo achado da
+    // mesma reunião: busca ignorando acento.
     const filteredProducts = useMemo(() => {
         let prods = [...products];
-        if (activeCategory) prods = prods.filter(p => p.category_id === activeCategory);
-        if (searchTerm) prods = prods.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        const term = searchTerm.trim();
+        if (term) {
+            const normalizedTerm = normalizeForSearch(term);
+            prods = prods.filter(p => normalizeForSearch(p.name).includes(normalizedTerm));
+        } else if (activeCategory) {
+            prods = prods.filter(p => p.category_id === activeCategory);
+        }
         return prods;
     }, [products, activeCategory, searchTerm]);
 
@@ -1713,6 +1728,7 @@ const TablesView: React.FC<{
             const ok = await printPendingKitchenTicket({
                 storeId,
                 storeName: store.name,
+                paperWidthMm: store.config?.printer_paper_width_mm,
                 destination: row.destination,
                 itemId: row.id,
                 orderId: row.orderId,
@@ -1930,6 +1946,7 @@ NOTIFY pgrst, 'reload schema';`;
             const printed = await printBillReceipt({
                 storeName: store.name,
                 cnpj: store.cnpj,
+                paperWidthMm: store.config?.printer_paper_width_mm,
                 label: `MESA ${table.number}`,
                 items: summary.allItems.map(item => ({
                     quantity: item.quantity,
@@ -2151,6 +2168,7 @@ NOTIFY pgrst, 'reload schema';`;
                     const printed = await printBillReceipt({
                         storeName: store.name,
                         cnpj: store.cnpj,
+                        paperWidthMm: store.config?.printer_paper_width_mm,
                         label: `MESA ${selectedTable.number} - PAGO`,
                         items: summary.allItems.map(item => ({
                             quantity: item.quantity,
@@ -3505,6 +3523,7 @@ const CounterView: React.FC<{
                 const printed = await printBillReceipt({
                     storeName: store.name,
                     cnpj: store.cnpj,
+                    paperWidthMm: store.config?.printer_paper_width_mm,
                     label: `BALCÃO - ${paymentOrder.customer_name || 'Cliente'} - PAGO`,
                     items: items.map(item => ({
                         quantity: item.quantity,
@@ -3580,6 +3599,7 @@ const CounterView: React.FC<{
             const printed = await printBillReceipt({
                 storeName: store.name,
                 cnpj: store.cnpj,
+                paperWidthMm: store.config?.printer_paper_width_mm,
                 label: `BALCÃO - ${order.customer_name || 'Cliente'}`,
                 items: items.map(item => ({
                     quantity: item.quantity,
@@ -5126,6 +5146,12 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // padrao otimista do toggle de taxa de servico logo acima.
     const [showBestsellersEnabled, setShowBestsellersEnabled] = useState(store.config?.show_bestsellers ?? false);
 
+    // Largura de papel da impressora térmica (achado real, reunião com o
+    // Ramon, 2026-08-25) — mesmo padrão jsonb de sempre. undefined = 48mm
+    // (comportamento atual, sem mudança pras 7 lojas reais que nunca
+    // configuraram isso).
+    const [paperWidthMm, setPaperWidthMm] = useState<48 | 58 | 80>(store.config?.printer_paper_width_mm ?? 48);
+
     // Sugestoes de observacao rapida (migration 019, cardapio que vende) —
     // mesmo padrao/coluna jsonb ja usado pela taxa de servico
     // (stores.config), so' com uma chave nova (note_suggestions). Vazio =
@@ -5154,6 +5180,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
         setNoteSuggestions(store.config?.note_suggestions ?? []);
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
+        setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
         setAccentColorDraft(store.config?.accent_color || WINE_GOLD_DEFAULT);
@@ -5221,6 +5248,23 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             console.error("Error updating bestsellers config", e);
             setShowBestsellersEnabled(!newValue); // revert on error
             toast.error("Erro ao atualizar configuração de mais vendidos.");
+        }
+    };
+
+    const handleChangePaperWidth = async (newValue: 48 | 58 | 80) => {
+        const previous = paperWidthMm;
+        setPaperWidthMm(newValue); // otimista, mesmo padrão do toggle de taxa de serviço acima
+        try {
+            const newConfig = { ...currentStoreConfig, printer_paper_width_mm: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+        } catch (e) {
+            console.error("Error updating printer paper width config", e);
+            setPaperWidthMm(previous); // revert on error
+            toast.error("Erro ao atualizar largura do papel da impressora.");
         }
     };
 
@@ -5377,6 +5421,27 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBestsellersEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
+                </div>
+
+                {/* Largura de papel da impressora térmica (achado real, reunião com o
+                    Ramon, 2026-08-25) — comanda saía cortada numa impressora maior que
+                    a antiga 48mm da loja. Afeta ticket de cozinha/bar e comprovante de
+                    mesa/balcão (lib/print.ts), nunca o relatório de vendas (A4). */}
+                <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                    <div>
+                        <h4 className="font-bold text-[var(--text)]">🖨️ Largura do papel da impressora</h4>
+                        <p className="text-sm text-[var(--text-muted)]">Ajusta o ticket de cozinha/bar e o comprovante de mesa/balcão pro tamanho real da bobina térmica.</p>
+                    </div>
+                    <select
+                        value={paperWidthMm}
+                        onChange={e => handleChangePaperWidth(Number(e.target.value) as 48 | 58 | 80)}
+                        aria-label="Largura do papel da impressora"
+                        className="flex-shrink-0 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold"
+                    >
+                        <option value={48}>48mm</option>
+                        <option value={58}>58mm</option>
+                        <option value={80}>80mm</option>
+                    </select>
                 </div>
 
                 {/* Cor de destaque por loja (Task 6, stores.config.accent_color) —
