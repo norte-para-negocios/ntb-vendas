@@ -440,6 +440,16 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   let numero: number;
   let xmlAssinado: string;
   let resposta: Awaited<ReturnType<typeof transmitirNota>>;
+  // Achado real (2026-08-27, venda ao vivo): valorTotal (calculado acima,
+  // antes do XML existir) é só o subtotal dos itens — nunca incluiu a taxa
+  // de serviço, divergindo do histórico de vendas e do comprovante impresso
+  // (que sempre mostraram o total certo). Assim que montarXmlNota calcula o
+  // vNF real (subtotal + vOutro), este vira A fonte de verdade pro
+  // valor_total gravado em fiscal_notas dali em diante — nunca dois números
+  // divergentes pro mesmo documento. Inicializado com valorTotal (sem taxa)
+  // como fallback só pro caso raríssimo de falhar ANTES da montagem do XML
+  // (nem chega a ter um vNF calculado).
+  let valorTotalComTaxa: number = valorTotal;
 
   try {
     // 5. Numeração atômica.
@@ -532,6 +542,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         : undefined,
     });
     chave = montado.chave;
+    valorTotalComTaxa = montado.valorTotalComTaxa;
 
     xmlAssinado = assinarXmlNota(montado.xml, montado.infNFeId, certPem, keyPem);
 
@@ -576,6 +587,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   } catch (e) {
     const { error: insertErr } = await admin.from('fiscal_notas').insert({
       ...notaBase,
+      valor_total: valorTotalComTaxa,
       status: 'erro',
       motivo_erro: e instanceof Error ? e.message : 'Erro desconhecido na emissão.',
     });
@@ -598,6 +610,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
 
     const { error: insertErr } = await admin.from('fiscal_notas').insert({
       ...notaBase,
+      valor_total: valorTotalComTaxa,
       status,
       chave_acesso: chave,
       numero,
@@ -653,6 +666,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     .from('fiscal_notas')
     .insert({
       ...notaBase,
+      valor_total: valorTotalComTaxa,
       status: 'autorizada',
       chave_acesso: chave,
       numero,

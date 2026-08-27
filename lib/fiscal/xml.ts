@@ -188,7 +188,7 @@ function componentesSaoPaulo(now: Date) {
   };
 }
 
-export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: string; infNFeId: string } {
+export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: string; infNFeId: string; valorTotalComTaxa: number } {
   const { modelo, ambiente, serie, numero, emitente, itens, destinatario, pagamentos } = params;
   if (!itens.length) throw new Error('Nota sem itens.');
   if (modelo === '55' && !destinatario) throw new Error('NF-e (modelo 55) exige destinatário.');
@@ -376,8 +376,17 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     // `infAdic.infCpl` de um `infAdic` undefined. `infCpl` vazio (string
     // zero-length) é rejeitado pela SEFAZ (cStat=225, minLength do schema),
     // por isso um texto fixo não-vazio em vez de string vazia.
-    `<infAdic><infCpl>Documento emitido pelo sistema NTB Vendas.</infCpl></infAdic>` +
+    // Achado real (WhatsApp do usuário, 2026-08-27, venda ao vivo na loja "O
+    // Sertão Vai Virar Mar"): `vOutro` sempre foi cobrado corretamente (ver
+    // comentário acima), mas nunca aparecia ESCRITO em lugar nenhum legível
+    // do documento — só um valor solto no schema, invisível pra quem lê o
+    // DANFE/cupom impresso. `infCpl` (Informações Complementares, já
+    // obrigatório pra nfe-danfe-pdf não quebrar, ver comentário abaixo) é o
+    // lugar certo pra isso: texto livre, sempre visível no documento
+    // impresso. Só aparece quando há taxa de verdade (`vOutro > 0`) — nota
+    // sem taxa de serviço mantém o texto fixo de sempre, sem essa linha.
+    `<infAdic><infCpl>Documento emitido pelo sistema NTB Vendas.${vOutro > 0 ? ` Inclui taxa de servico opcional de R$ ${vOutro.toFixed(2)}.` : ''}</infCpl></infAdic>` +
     `</infNFe></NFe>`;
 
-  return { xml: nfeXml, chave, infNFeId };
+  return { xml: nfeXml, chave, infNFeId, valorTotalComTaxa: Number(vNF) };
 }
