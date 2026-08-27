@@ -86,6 +86,25 @@ export function playPrintFailureAlert() {
   }
 }
 
+// Fase 3, Task 7 (plano "Fora do Cardápio"): alerta de item que acabou de
+// ULTRAPASSAR o prep_time_minutes esperado — precisa soar mais urgente que
+// "pedido novo" (playNewOrderAlert, 2 tons graves iguais e calmos), sem
+// reaproveitar playPrintFailureAlert (isso significaria "impressão falhou"
+// pra quem já associou aquele som a outra coisa). Padrão: 2 tons agudos
+// alternados, rápidos — lido como "atenção" sem ser um alarme de pânico.
+export function playItemLateAlert() {
+  try {
+    const audioCtx = getContext();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    tone(audioCtx, 988, 0, 0.1);
+    tone(audioCtx, 784, 0.12, 0.1);
+    tone(audioCtx, 988, 0.24, 0.1);
+  } catch {
+    // autoplay bloqueado ou API indisponível
+  }
+}
+
 export function vibrateAlert(pattern: number[]) {
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
     try { navigator.vibrate(pattern); } catch {}

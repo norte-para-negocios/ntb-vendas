@@ -22,7 +22,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
-import { playPreparingAlert, playNewOrderAlert, vibrateAlert } from '@/lib/audioAlert';
+import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { formatScheduleLabel } from '@/lib/schedule';
@@ -785,6 +785,36 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
       return elapsedMinutes > prepMinutes;
   };
 
+  // Fase 3, Task 7: cronômetro visual do item — cor conforme proporção
+  // decorrida/esperado (verde <70%, amarelo 70-100%, vermelho >=100%).
+  // Sem prep_time_minutes cadastrado no produto, não dá pra calcular
+  // proporção nenhuma — só mostra o tempo cru, sem cor de urgência.
+  const getPrepProgress = (item: OrderItem) => {
+      const prepMinutes = item.product?.prep_time_minutes;
+      const elapsedMinutes = (now - new Date(item.created_at).getTime()) / 60000;
+      const ratio = prepMinutes ? elapsedMinutes / prepMinutes : null;
+      return { elapsedMinutes, ratio };
+  };
+
+  // Fase 3, Task 7 (plano "Fora do Cardápio"): som distinto (playItemLateAlert)
+  // na primeira vez que um item cruza pra atrasado — diferente do som de
+  // "pedido novo" (notifyNewPendingItems acima). O ref evita repetir o som a
+  // cada re-render/tick de 30s enquanto o item continua atrasado.
+  const lateAlertedIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+      orders.forEach(item => {
+          if (isItemLate(item) && !lateAlertedIdsRef.current.has(item.id)) {
+              lateAlertedIdsRef.current.add(item.id);
+              playItemLateAlert();
+          }
+      });
+      const currentIds = new Set(orders.map(o => o.id));
+      lateAlertedIdsRef.current.forEach(id => {
+          if (!currentIds.has(id)) lateAlertedIdsRef.current.delete(id);
+      });
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- isItemLate é recriada a cada render mas só lê `now`/`orders`, já nas deps.
+  }, [orders, now]);
+
   const advanceStatus = async (item: OrderItem) => {
       let nextStatus = OrderStatus.PENDING;
 
@@ -853,6 +883,8 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
             {orders.map(item => {
                 const { client, observation } = parseItemNote(item.notes || '');
                 const late = isItemLate(item);
+                const { elapsedMinutes, ratio } = getPrepProgress(item);
+                const timerColorClass = ratio === null ? 'text-[var(--text-muted)]' : ratio >= 1 ? 'text-[var(--err)] font-bold' : ratio >= 0.7 ? 'text-[var(--warn)] font-bold' : 'text-[var(--ok)]';
 
                 return (
                     <motion.div
@@ -906,9 +938,12 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                 >
                                     <Printer size={18} />
                                 </button>
-                                <div className="flex items-center gap-1 text-xs font-mono text-[var(--text-muted)] bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)]">
+                                <div
+                                    className={`flex items-center gap-1 text-xs font-mono bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)] ${timerColorClass}`}
+                                    title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
+                                >
                                     <Clock size={12}/>
-                                    {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    {Math.floor(elapsedMinutes)}min
                                 </div>
                             </div>
                         </div>
