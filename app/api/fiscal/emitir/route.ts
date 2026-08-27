@@ -24,6 +24,14 @@ interface RequestBody {
   // Ausente/vazio em modelo 55 não é mais um erro genérico: ver a checagem
   // logo antes da FASE 1 abaixo, que grava 'pendente' em vez de lançar.
   destinatario?: { cpfCnpj: string; nome: string };
+  // Nota fiscal individualizada por pessoa (migration 055, pedido real da
+  // reunião 2026-08-25): quando presentes, restringe a emissão a SÓ esses
+  // itens (em vez do pedido inteiro) e identifica a nota como sendo dessa
+  // pessoa — permite mais de uma nota autorizada pro mesmo pedido (ver
+  // fiscal_notas_unico_por_pessoa). Ausentes = comportamento de sempre
+  // (emite o pedido inteiro, sem pessoa_identificador).
+  itemIds?: string[];
+  pessoaNome?: string;
 }
 
 // Orquestra a emissão fiscal (NFC-e/NF-e) de um pedido fechado — chamado
@@ -110,22 +118,34 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       paymentDetailsAncora = order.payment_details as Record<string, unknown> | null;
     }
   } else if (body.tableId) {
-    // Mesma janela de 5 min de app/api/integracao/ordem-producao/route.ts —
-    // evita pegar pedidos de uma sessão anterior da mesma mesa.
-    // `.order('created_at')` é NECESSÁRIO (não só estético): `orderIds[0]`
-    // vira a "âncora" que identifica esta venda especificamente (ver
-    // notaBase abaixo) — sem ordenação explícita, a ordem devolvida pelo
-    // Postgres não é garantida estável entre duas execuções da mesma query,
-    // o que quebraria a checagem de idempotência (duas chamadas pra a MESMA
-    // sessão de fechamento poderiam resolver âncoras diferentes e não se
-    // reconhecerem como a mesma venda).
-    const { data: orders } = await admin
-      .from('orders')
-      .select('id, store_id, payment_details')
-      .eq('table_id', body.tableId)
-      .eq('status', 'delivered')
-      .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
-      .order('created_at', { ascending: true });
+    // Nota por pessoa (migration 055): emitida NO MEIO do serviço, com a
+    // mesa ainda aberta de propósito (esse é o ponto da feature — "emitir
+    // já, mesmo a mesa continuando aberta pros outros") — o pedido ainda
+    // não está `status='delivered'` nesse momento. Achado real testando ao
+    // vivo: a checagem original (`status='delivered'` + janela de 5min,
+    // pensada só pro caminho automático disparado por
+    // closeTableSession/closeCounterOrder LOGO DEPOIS do fechamento) fazia
+    // esta query nunca achar nada em qualquer emissão individual
+    // mid-serviço, sempre voltando "Pedido(s) não encontrado(s)". Com
+    // itemIds presente, ignora status/janela — só o pedido aberto da mesa
+    // interessa, resolvido do mesmo jeito que create_order_secure reaproveita
+    // um pending existente.
+    //
+    // Mesma janela de 5 min de app/api/integracao/ordem-producao/route.ts
+    // pro caminho AUTOMÁTICO (sem itemIds) — evita pegar pedidos de uma
+    // sessão anterior da mesma mesa. `.order('created_at')` é NECESSÁRIO
+    // (não só estético): `orderIds[0]` vira a "âncora" que identifica esta
+    // venda especificamente (ver notaBase abaixo) — sem ordenação
+    // explícita, a ordem devolvida pelo Postgres não é garantida estável
+    // entre duas execuções da mesma query, o que quebraria a checagem de
+    // idempotência (duas chamadas pra a MESMA sessão de fechamento
+    // poderiam resolver âncoras diferentes e não se reconhecerem como a
+    // mesma venda).
+    let queryOrders = admin.from('orders').select('id, store_id, payment_details').eq('table_id', body.tableId);
+    queryOrders = body.itemIds?.length
+      ? queryOrders.neq('status', 'canceled')
+      : queryOrders.eq('status', 'delivered').gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+    const { data: orders } = await queryOrders.order('created_at', { ascending: true });
     if (orders?.length) {
       storeId = orders[0].store_id;
       orderIds = orders.map((o) => o.id);
@@ -197,6 +217,12 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // Migration 037 aplica o mesmo ajuste no índice único do banco.
   const tableIdParaChecagem = body.tableId ?? null;
   const orderIdParaChecagem = orderIds[0];
+  // Nota por pessoa (migration 055): a chave de idempotência precisa incluir
+  // pessoaNome, senão a nota da 2ª pessoa da mesma mesa seria vista como
+  // "duplicata" da 1ª e nunca emitiria. `pessoaNome` ausente/vazio continua
+  // resolvendo pra `is('pessoa_identificador', null)`, idêntico ao
+  // comportamento de sempre pro caminho automático (pedido inteiro).
+  const pessoaNome = body.pessoaNome?.trim() || null;
   let checagemIdempotencia = admin
     .from('fiscal_notas')
     .select('id')
@@ -206,6 +232,9 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   checagemIdempotencia = tableIdParaChecagem
     ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
     : checagemIdempotencia.is('table_id', null);
+  checagemIdempotencia = pessoaNome
+    ? checagemIdempotencia.eq('pessoa_identificador', pessoaNome)
+    : checagemIdempotencia.is('pessoa_identificador', null);
   const { data: notaExistente } = await checagemIdempotencia.maybeSingle();
   if (notaExistente) {
     return NextResponse.json({ skipped: true, reason: 'Nota já existe para esta venda' });
@@ -239,14 +268,27 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   }
 
   // 4. Itens da venda (com NCM do produto).
-  const { data: items } = await admin
+  // Nota por pessoa (migration 055): `itemIds`, quando presente, restringe
+  // aos itens dessa pessoa; sempre exclui itens já cobertos por outra nota
+  // AUTORIZADA (`fiscal_nota_id`) — sem isso, o fechamento final da mesa
+  // (caminho automático, sem itemIds) cobraria de novo o que já foi
+  // faturado individualmente no meio do serviço.
+  let queryItems = admin
     .from('order_items')
-    .select('quantity, status, price_at_time, selected_options, product:products(id, name, ncm, omie_codigo)')
-    .in('order_id', orderIds);
+    .select('id, quantity, status, price_at_time, selected_options, fiscal_nota_id, product:products(id, name, ncm, omie_codigo)')
+    .in('order_id', orderIds)
+    .is('fiscal_nota_id', null);
+  if (body.itemIds?.length) {
+    queryItems = queryItems.in('id', body.itemIds);
+  }
+  const { data: items } = await queryItems;
 
   const itensValidos = (items ?? []).filter((i) => i.status !== 'canceled');
   if (!itensValidos.length) {
-    return NextResponse.json({ skipped: true, reason: 'Nenhum item pra emitir' });
+    // Caminho automático (sem itemIds) com tudo já faturado individualmente
+    // não é erro nem precisa gravar linha nenhuma — é exatamente o efeito
+    // esperado quando toda a mesa já saiu com nota por pessoa.
+    return NextResponse.json({ skipped: true, reason: 'Nenhum item pendente de faturamento' });
   }
 
   const itemSemNcm = itensValidos.find((i) => !(i as any).product?.ncm);
@@ -263,6 +305,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     modelo,
     ambiente: config.ambiente as 'homologacao' | 'producao',
     valor_total: valorTotal,
+    pessoa_identificador: pessoaNome,
   };
 
   if (itemSemNcm) {
@@ -606,17 +649,21 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     console.error('Emissão fiscal: nota autorizada mas pós-processamento (PDF/storage) falhou:', e);
   }
 
-  const { error: insertErr } = await admin.from('fiscal_notas').insert({
-    ...notaBase,
-    status: 'autorizada',
-    chave_acesso: chave,
-    numero,
-    serie,
-    protocolo: resposta.protocolo,
-    xml_path: xmlPath,
-    pdf_path: pdfPath,
-    motivo_erro: motivoPosAutorizacao,
-  });
+  const { data: notaInserida, error: insertErr } = await admin
+    .from('fiscal_notas')
+    .insert({
+      ...notaBase,
+      status: 'autorizada',
+      chave_acesso: chave,
+      numero,
+      serie,
+      protocolo: resposta.protocolo,
+      xml_path: xmlPath,
+      pdf_path: pdfPath,
+      motivo_erro: motivoPosAutorizacao,
+    })
+    .select('id')
+    .single();
   if (insertErr) {
     // Pior caso: a nota está autorizada na SEFAZ de verdade, mas nem essa
     // linha de bookkeeping foi gravada — registra bem alto no log pra
@@ -626,6 +673,23 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       `Emissão fiscal: nota AUTORIZADA (chave=${chave}, protocolo=${resposta.protocolo}) mas falha ao gravar fiscal_notas:`,
       insertErr,
     );
+  } else {
+    // Marca os itens cobertos por ESTA nota como faturados (migration 055)
+    // — impede o fechamento final da mesa (caminho automático) de cobrar
+    // de novo o que já saiu numa nota individual. Falha aqui não desfaz a
+    // nota já autorizada (mesmo princípio de "nada pode virar erro depois
+    // do cStat=100" do resto desta rota) — só loga, uma reconciliação
+    // manual via fiscal_notas.id ainda é possível.
+    const { error: marcarErr } = await admin
+      .from('order_items')
+      .update({ fiscal_nota_id: notaInserida.id })
+      .in('id', itensValidos.map((i) => i.id));
+    if (marcarErr) {
+      console.error(
+        `Emissão fiscal: nota AUTORIZADA (chave=${chave}) mas falha ao marcar order_items.fiscal_nota_id=${notaInserida.id}:`,
+        marcarErr,
+      );
+    }
   }
 
   return NextResponse.json({

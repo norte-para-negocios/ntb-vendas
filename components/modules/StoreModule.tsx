@@ -1627,6 +1627,44 @@ const TablesView: React.FC<{
         return breakdown;
     }, [currentTableSummary]);
 
+    // Nota fiscal individualizada por pessoa (migration 055, pedido real da
+    // reunião com o Ramon, 2026-08-25): "se a pessoa paga separado, não vai
+    // ser só uma nota... hoje você não consegue individualizar" — antes só
+    // dava pra emitir o pedido inteiro de uma vez, no fechamento da mesa.
+    // Reaproveita o mesmo agrupamento de usersBreakdown; itens já cobertos
+    // por essa chamada saem pendentes de faturamento no fechamento final
+    // automático da mesa (route.ts filtra fiscal_nota_id is null).
+    const [emitindoNotaDe, setEmitindoNotaDe] = useState<string | null>(null);
+    const handleEmitirNotaIndividual = async (userName: string, items: OrderItem[]) => {
+        if (!selectedTable) return;
+        setEmitindoNotaDe(userName);
+        try {
+            const destinatario = buildDestinatario(paymentDestCpfCnpj, paymentDestNome);
+            const res = await fetch('/api/fiscal/emitir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tableId: selectedTable.id,
+                    itemIds: items.map(i => i.id),
+                    pessoaNome: userName,
+                    destinatario,
+                }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                toast.success(`Nota fiscal de ${userName} autorizada (chave ${data.chave?.slice(-6) ?? ''}).`);
+            } else if (data.skipped) {
+                toast.info(data.reason || 'Nada pra faturar.');
+            } else {
+                toast.error(`Falha ao emitir nota de ${userName}: ${data.reason || data.xMotivo || 'erro desconhecido'}`);
+            }
+        } catch (e: any) {
+            toast.error(`Falha ao emitir nota de ${userName}: ${e.message}`);
+        } finally {
+            setEmitindoNotaDe(null);
+        }
+    };
+
     // "Pedidos do Dia" (Task 2, 2026-08-22 — "Histórico de Pedidos Enviados"
     // original, expandido no redesign de 2026-08-23 a pedido do dono: "o
     // histórico desaparecia quando a mesa fechava, ele quer o dia inteiro,
@@ -3013,7 +3051,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="p-2 border-t border-[var(--border)]">
+                                        <div className="p-2 border-t border-[var(--border)] space-y-1.5">
                                             <Button
                                                 className="w-full text-xs h-8"
                                                 variant="secondary"
@@ -3024,6 +3062,17 @@ NOTIFY pgrst, 'reload schema';`;
                                             >
                                                 Lançar Pagamento de {name}
                                             </Button>
+                                            {emissaoFiscalConfigurada && (
+                                                <Button
+                                                    className="w-full text-xs h-8"
+                                                    variant="outline"
+                                                    isLoading={emitindoNotaDe === name}
+                                                    disabled={emitindoNotaDe !== null}
+                                                    onClick={() => handleEmitirNotaIndividual(name, data.items)}
+                                                >
+                                                    Emitir Nota Fiscal de {name}
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
