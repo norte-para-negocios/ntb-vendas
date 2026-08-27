@@ -309,6 +309,52 @@ export const StoreDashboardView: React.FC<{
         return result;
     }, [tableSales]);
 
+    // Fase 4, Task 13 (plano "Fora do Cardápio"): "mapa de calor de ocupação
+    // por hora" já existia só num eixo (hora do dia); cruza com o dia da
+    // semana também. Mesma faixa de horas do gráfico de barras acima
+    // (minHour..maxHour com movimento real), reaproveitando `tableSales` —
+    // sem chamada nova, é o mesmo dado visto por outro ângulo.
+    const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const occupancyHeatmap = useMemo(() => {
+        if (tableSales.length === 0) return { hours: [] as number[], grid: [] as number[][], max: 0 };
+        let minHour = 23, maxHour = 0;
+        const counts = new Map<string, number>(); // key `${day}-${hour}`
+        tableSales.forEach(o => {
+            const d = new Date(o.created_at);
+            const day = d.getDay();
+            const hour = d.getHours();
+            if (hour < minHour) minHour = hour;
+            if (hour > maxHour) maxHour = hour;
+            const key = `${day}-${hour}`;
+            counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        const hours: number[] = [];
+        for (let h = minHour; h <= maxHour; h++) hours.push(h);
+        let max = 0;
+        const grid = DAY_LABELS.map((_, day) => hours.map(h => {
+            const v = counts.get(`${day}-${h}`) || 0;
+            if (v > max) max = v;
+            return v;
+        }));
+        return { hours, grid, max };
+    }, [tableSales]);
+
+    // Fase 4, Task 13: funil simples do período filtrado — mesas abertas
+    // (periodTableSessions) → mesas que chegaram a ter pedido (algum pedido
+    // de mesa criado dentro da janela aberta→fechada da sessão) → mesas
+    // fechadas (closed_at presente — fechar mesa neste app sempre passa por
+    // RECEBER & FINALIZAR, então "fechada" já implica "com pagamento").
+    const funnelStats = useMemo(() => {
+        const opened = periodTableSessions.length;
+        const withOrder = periodTableSessions.filter(s => tableSales.some(o =>
+            o.table_id === s.table_id &&
+            isAfter(new Date(o.created_at), new Date(s.opened_at)) &&
+            (!s.closed_at || isBefore(new Date(o.created_at), new Date(s.closed_at)))
+        )).length;
+        const closed = periodTableSessions.filter(s => s.closed_at).length;
+        return { opened, withOrder, closed };
+    }, [periodTableSessions, tableSales]);
+
     const avgDeliveryTime = useMemo(() => {
         let totalMins = 0; let count = 0; let excluded = 0;
         periodSales.forEach(o => {
@@ -616,6 +662,70 @@ export const StoreDashboardView: React.FC<{
                                         <Bar dataKey="count" fill="#484DB5" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
+                            </div>
+                        </Card>
+
+                        {/* Fase 4, Task 13: mapa de calor cruzando dia da semana ×
+                            hora — mesmo dado do gráfico acima, outro ângulo. Sem
+                            biblioteca de heatmap: grid CSS simples, intensidade da
+                            cor de marca proporcional à contagem (0 = célula vazia). */}
+                        {occupancyHeatmap.hours.length > 0 && (
+                            <Card className={`${cardCls} mt-4 overflow-x-auto`}>
+                                <h4 className={h4Cls}>Ocupação por Dia da Semana × Hora</h4>
+                                <div className="inline-block min-w-full">
+                                    <div className="grid gap-1" style={{ gridTemplateColumns: `48px repeat(${occupancyHeatmap.hours.length}, 1fr)` }}>
+                                        <div />
+                                        {occupancyHeatmap.hours.map(h => (
+                                            <div key={h} className="text-[10px] text-center text-[var(--text-muted)] font-mono">{h}h</div>
+                                        ))}
+                                        {DAY_LABELS.map((label, day) => (
+                                            <React.Fragment key={label}>
+                                                <div className="text-xs font-bold text-[var(--text-muted)] flex items-center">{label}</div>
+                                                {occupancyHeatmap.grid[day].map((v, i) => {
+                                                    const intensity = occupancyHeatmap.max > 0 ? v / occupancyHeatmap.max : 0;
+                                                    return (
+                                                        <div
+                                                            key={i}
+                                                            title={`${label} ${occupancyHeatmap.hours[i]}h: ${v} mesa(s)`}
+                                                            className="aspect-square rounded-sm flex items-center justify-center text-[9px] font-bold"
+                                                            style={{
+                                                                backgroundColor: v === 0 ? 'var(--surface-2)' : `color-mix(in srgb, var(--brand) ${Math.round(20 + intensity * 80)}%, var(--surface-2))`,
+                                                                color: intensity > 0.5 ? '#fff' : 'var(--text-muted)',
+                                                            }}
+                                                        >
+                                                            {v > 0 ? v : ''}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
+                            </Card>
+                        )}
+
+                        {/* Fase 4, Task 13: funil simples do período filtrado. */}
+                        <Card className={`${cardCls} mt-4`}>
+                            <h4 className={h4Cls}>Funil de Conversão (Mesas)</h4>
+                            <div className="grid grid-cols-3 gap-3 text-center">
+                                <div>
+                                    <p className="text-2xl font-black text-[var(--text)]">{funnelStats.opened}</p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1">Mesas abertas</p>
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-black text-[var(--info)]">{funnelStats.withOrder}</p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                        Com pedido
+                                        {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.withOrder / funnelStats.opened * 100)}%)</span>}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-black text-[var(--ok)]">{funnelStats.closed}</p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                        Fechadas com pagamento
+                                        {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.closed / funnelStats.opened * 100)}%)</span>}
+                                    </p>
+                                </div>
                             </div>
                         </Card>
                     </div>
