@@ -6610,6 +6610,10 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     const [opModAdmin, setOpModAdmin] = useState(storeModulesAtual.admin);
     const [opOrderFlow, setOpOrderFlow] = useState<OrderFlow>(resolveOrderFlow(store));
     const [isSavingOperacao, setIsSavingOperacao] = useState(false);
+    // Mesma proteção do Master Admin (checklist de direct_print) — sem isso
+    // o lojista pode ligar "Restringir fechamento de conta" sem ter marcado
+    // a permissão Caixa em ninguém da equipe e travar o próprio caixa.
+    const [caixaTeamCount, setCaixaTeamCount] = useState<number | null>(null);
 
     const handleSaveOperacao = async () => {
         setIsSavingOperacao(true);
@@ -6930,6 +6934,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         if (activeTab !== 'shifts') return;
         setIsLoadingCheckins(true);
         fetchCheckinsHistory(storeId).then(data => { setCheckins(data); setIsLoadingCheckins(false); });
+    }, [storeId, activeTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'operacao') return;
+        fetchStoreTeamMembers(storeId).then(members => {
+            setCaixaTeamCount(members.filter(m => m.permissions?.caixa === true).length);
+        });
     }, [storeId, activeTab]);
 
     const handleClearSales = async () => {
@@ -7406,6 +7417,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <Wallet size={14} className="shrink-0" />
                             {opModCaixa ? 'Restrito a quem tem permissão de Caixa' : 'Qualquer um com acesso a Mesas pode fechar a conta'}
                         </button>
+                        {opModCaixa && caixaTeamCount === 0 && (
+                            <div className="flex items-start gap-2 text-xs text-[var(--warn)] font-semibold bg-[var(--warn)]/10 border border-[var(--warn)]/30 rounded-lg p-3">
+                                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                <span>Nenhum usuário da equipe tem a permissão &ldquo;Caixa&rdquo; marcada ainda — se salvar assim, ninguém vai conseguir fechar conta. Marque a permissão em Gestão de Usuários antes.</span>
+                            </div>
+                        )}
                     </div>
 
                     <Button onClick={handleSaveOperacao} isLoading={isSavingOperacao} className="w-full sm:w-auto">
