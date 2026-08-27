@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Wine, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
@@ -24,15 +24,14 @@ import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
 
 // --- COMPONENTS ---
 
-// Identidade "carta de vinhos" do cardápio do cliente: dourado só pra
-// preço/valor e etiqueta de proveniência — regra original do projeto,
-// restaurada em 2026-08-16 depois de uma rodada que também tinha jogado
-// dourado nos CTAs/botões (o usuário achou "amarelo demais"). Ação
-// continua sendo o azul da marca (--brand), igual ao resto do produto
-// (admin, lojista, landing). Hex fixo de propósito, como os outros
-// consts de marca do projeto (AuthBackdrop, app/page.tsx) — não é um
-// token do design system porque só existe nesta tela.
-const WINE_GOLD = '#D4AF5C';
+// Identidade "carta de vinhos" original (dourado só pra preço/valor,
+// 2026-08-16) foi inteiramente substituída pela paleta iFood abaixo
+// (redesign 2026-08-21) — preço sem promoção nunca mais é colorido (ver
+// PriceRow), e o dourado (WINE_GOLD) que sobrava isolado no LoginScreen/
+// CartModal foi removido na Task 15 do plano "Fora do Cardápio"
+// (2026-08-27): o resto do cardápio inteiro já falava a língua da paleta
+// abaixo, um copo de vinho dourado solto ali era o único ponto fora da
+// curva (e nem toda loja vende vinho).
 
 // Paleta iFood (correção 2026-08-21, pedido direto do usuário: quer as
 // cores REAIS do iFood, não o azul desta empresa). iFood distingue AÇÃO de
@@ -760,16 +759,23 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
           <div className="w-full max-w-sm flex flex-col items-center">
             <div className="mb-6 text-center u-grow-in">
                 {store?.logo_url ? (
-                    <Image src={store.logo_url} alt={`Logo de ${store.name}`} width={80} height={80} className="w-20 h-20 rounded-[1.4rem] mx-auto mb-4 object-cover" style={{ boxShadow: '0 18px 40px -12px rgba(0,0,0,0.5)', border: '2px solid rgba(212,175,92,0.45)' }} />
+                    <Image src={store.logo_url} alt={`Logo de ${store.name}`} width={80} height={80} className="w-20 h-20 rounded-[1.4rem] mx-auto mb-4 object-cover" style={{ boxShadow: '0 18px 40px -12px rgba(0,0,0,0.5)', border: `2px solid ${store?.config?.accent_color || 'var(--brand)'}73` }} />
                 ) : (
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(212,175,92,0.15)', border: '1px solid rgba(212,175,92,0.35)' }}>
-                        <Wine size={26} style={{ color: store?.config?.accent_color || WINE_GOLD }} />
+                    // Task 15 (plano "Fora do Cardápio"): último resto visível da
+                    // identidade "carta de vinhos" (WINE_GOLD/Wine) — o resto do
+                    // cardápio já migrou pro ícone genérico UtensilsCrossed em
+                    // --brand desde o redesign iFood (2026-08-21, ver estado vazio
+                    // do cardápio acima), então um copo de vinho dourado isolado
+                    // aqui destoava (nem toda loja vende vinho). Trocado pro mesmo
+                    // ícone/cor genéricos usados em todo o resto do app.
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-[var(--brand-soft)]">
+                        <UtensilsCrossed size={26} style={{ color: store?.config?.accent_color || 'var(--brand)' }} />
                     </div>
                 )}
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
-                <p className="text-sm" style={{ color: store?.config?.accent_color || WINE_GOLD }}>Identifique-se para continuar seu pedido</p>
+                <p className="text-sm" style={{ color: store?.config?.accent_color || 'var(--brand)' }}>Identifique-se para continuar seu pedido</p>
             </div>
-            <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)', border: '1px solid rgba(212,175,92,0.3)' }}>
+            <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)' }}>
                 {onClose && (
                     <button
                         onClick={onClose}
@@ -3877,7 +3883,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isLoading={isLoading}
                 onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
                 onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
-                accentColor={currentStore?.config?.accent_color || WINE_GOLD}
+                accentColor={currentStore?.config?.accent_color || 'var(--text)'}
             />
 
             <OrderStatusModal
