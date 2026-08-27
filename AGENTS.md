@@ -1104,13 +1104,20 @@ produtos-pai — a baixa de estoque agora depende só dos `omie_codigo` das
 opções de Sabor 1/Sabor 2 selecionadas, reconfirmado com o mesmo pedido
 de teste (2 resultados, batendo exato com os 2 sabores).
 
-**Confirma, mas não resolve, a imprecisão já documentada (item B4 do
-catálogo da reunião):** cada sabor escolhido dispara sua PRÓPRIA Ordem
-de Produção de quantidade cheia — ou seja, "meio a meio" hoje consome
-estoque como se fossem 2 pizzas inteiras, não 2 metades. Não é regressão
-desta correção (o problema já existia antes, pra qualquer adicional com
-`omie_codigo`); resolver isso exigiria o ntb-estoque suportar frações de
-receita, fora de escopo aqui.
+**Correção de entendimento (2026-08-27, mesmo dia — o usuário corrigiu
+uma conclusão errada registrada aqui antes):** cada sabor escolhido
+dispara sua própria Ordem de Produção, mas isso NÃO é consumo em
+dobro — cada `omie_codigo` de sabor já está cadastrado no Omie como a
+ficha técnica de **meia pizza** daquele sabor (é literalmente por isso
+que a SKU original era `"1/2 Calabresa"` etc., ver seção acima). Duas
+OPs de meia pizza = consumo de UMA pizza inteira, exatamente correto.
+Não há imprecisão nem limitação real aqui — o item B4 do catálogo está
+de fato resolvido, sem ressalva. A única coisa que precisa (e já
+recebeu) cuidado é esconder esse detalhe interno do Omie da experiência
+do cliente/garçom: os grupos "Sabor 1"/"Sabor 2 (opcional — meio a
+meio)" mostram só nomes de sabor e o termo comum de cardápio "meio a
+meio", nunca "meia pizza" no sentido de código/ficha técnica — ninguém
+que usa o app percebe que por trás são 2 SKUs de meia pizza separados.
 
 **Os 4 produtos fora do padrão "1/2 X" (resolvido, 2026-08-27) — decisão
 por produto, não chute em bloco.** Verificado preço/estrutura de cada um
