@@ -2319,6 +2319,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // sem coluna/RPC nenhuma — ver efeitos abaixo).
     const [bestsellerIds, setBestsellerIds] = useState<Set<string>>(new Set());
     const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+    // Fase 5, Task 17: contagem de visitas recorrentes (localStorage, sem conta).
+    const [visitCount, setVisitCount] = useState(0);
     const [favoritesOnly, setFavoritesOnly] = useState(false);
 
     // Cardapio por horario/turno (migration 018): `scheduleNow` tickando a
@@ -2489,6 +2491,33 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             setFavoriteIds(new Set(raw ? JSON.parse(raw) : []));
         } catch {
             setFavoriteIds(new Set());
+        }
+    }, [currentStore?.id]);
+
+    // Fase 5, Task 17 (plano "Fora do Cardápio"): "sem conta, com memória" —
+    // mesmo princípio de localStorage já usado em favoritos acima, chave
+    // própria por loja (`visit_count_${storeId}`), sem backend/conta nenhuma.
+    // Throttle de 1x/dia (compara `toDateString()`, não timestamp exato —
+    // a mesma pessoa recarregando o cardápio 10x no mesmo dia conta como 1
+    // visita, senão o número inflaria sem significar nada) via a data
+    // gravada junto no mesmo registro. A partir de 3 visitas, mostra o badge
+    // discreto perto do cabeçalho (heroMetaParts, ver JSX abaixo).
+    useEffect(() => {
+        if (!currentStore?.id) return;
+        const key = `visit_count_${currentStore.id}`;
+        const today = new Date().toDateString();
+        try {
+            const raw = localStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : { count: 0, lastVisit: null };
+            if (parsed.lastVisit !== today) {
+                const next = { count: (parsed.count || 0) + 1, lastVisit: today };
+                localStorage.setItem(key, JSON.stringify(next));
+                setVisitCount(next.count);
+            } else {
+                setVisitCount(parsed.count || 0);
+            }
+        } catch {
+            // localStorage indisponível/corrompido — badge simplesmente não aparece, sem quebrar o cardápio.
         }
     }, [currentStore?.id]);
 
@@ -3452,6 +3481,17 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     {heroMetaParts.length > 0 && (
                         <p className="mt-1 text-[13px] text-[var(--text-muted)]">
                             {heroMetaParts.join(' • ')}
+                        </p>
+                    )}
+
+                    {/* Fase 5, Task 17: "Você já esteve aqui Xx" — só a partir da
+                        3ª visita (1ª e 2ª não dizem nada de especial ainda).
+                        Puramente informativo pro cliente, sem nenhum benefício/
+                        desconto atrelado (isso seria fidelidade de verdade, fora
+                        de escopo aqui). */}
+                    {visitCount >= 3 && (
+                        <p className="mt-1 flex items-center gap-1 text-[12px] font-medium text-[var(--brand)]">
+                            <Heart size={12} className="fill-[var(--brand)]" /> Você já esteve aqui {visitCount}x
                         </p>
                     )}
 
