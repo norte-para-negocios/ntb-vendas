@@ -261,3 +261,16 @@ export const isTableInJurisdiction = (
 // sempre que o lojista não mexer nos módulos.
 export const isDefaultStoreModules = (modules: StoreModules): boolean =>
   (Object.keys(ALL_ON) as (keyof StoreModules)[]).every((k) => modules[k] === ALL_ON[k]);
+
+// Presets de perfil de loja (2026-08-27, plano "Fora do Cardápio" — Fase 1,
+// Task 1): configurar uma loja nova hoje é decidir 7 chaves independentes
+// (6 módulos + fluxo de pedido) uma a uma. Um preset só PRÉ-MARCA os campos
+// do formulário (AdminModule.tsx/StoreModule.tsx) — nunca salva sozinho, o
+// dono ainda revisa e confirma como já faz hoje. Lista fechada de propósito
+// (4 arquétipos reais já vistos nas lojas existentes), não um editor livre.
+export const STORE_PROFILE_PRESETS: Record<string, { label: string; modules: StoreModules; orderFlow: OrderFlow }> = {
+  completo: { label: 'Restaurante completo', modules: ALL_ON, orderFlow: 'kds' },
+  so_balcao: { label: 'Só balcão', modules: { ...ALL_ON, tables: false, kitchen_kds: false, bar_kds: false }, orderFlow: 'direct_print' },
+  bar_sem_cozinha: { label: 'Bar sem cozinha', modules: { ...ALL_ON, kitchen_kds: false }, orderFlow: 'kds' },
+  mesa_sem_bar: { label: 'Mesa sem bar', modules: { ...ALL_ON, bar_kds: false }, orderFlow: 'kds' },
+};

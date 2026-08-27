@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, StoreModules, OrderFlow } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -7341,6 +7341,30 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         <div>
                             <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><LayoutGrid size={14}/> Módulos desta loja</h4>
                             <p className="text-xs text-[var(--text-muted)]">Desligue o que essa loja não usa — a aba some do painel por completo (sidebar e barra inferior), sem depender de usuário nenhum. Ex.: loja sem bar desliga "Bar (KDS)".</p>
+                        </div>
+                        {/* Presets (Fase 1, Task 1 — plano "Fora do Cardápio"): só
+                            pré-marcam os campos abaixo, nunca salvam sozinhos —
+                            o dono ainda revisa e clica "Salvar Operação". */}
+                        <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(STORE_PROFILE_PRESETS).map(([key, preset]) => (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => {
+                                        setOpModTables(preset.modules.tables);
+                                        setOpModCounter(preset.modules.counter);
+                                        setOpModKitchenKds(preset.modules.kitchen_kds);
+                                        setOpModBarKds(preset.modules.bar_kds);
+                                        setOpModCaixa(preset.modules.caixa);
+                                        setOpModMenu(preset.modules.menu);
+                                        setOpModAdmin(preset.modules.admin);
+                                        setOpOrderFlow(preset.orderFlow);
+                                    }}
+                                    className="px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--brand)]/40 u-motion u-press-sm"
+                                >
+                                    {preset.label}
+                                </button>
+                            ))}
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {([

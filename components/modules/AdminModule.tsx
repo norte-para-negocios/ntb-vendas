@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { ALL_ON, resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, StoreModules, OrderFlow } from '@/lib/storeModules';
+import { ALL_ON, resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -1275,6 +1275,32 @@ export const AdminModule: React.FC = () => {
                   <div>
                       <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><LayoutGrid size={14}/> Módulos desta loja</h4>
                       <p className="text-xs text-[var(--text-muted)]">Desligue o que essa loja não usa — a aba some do painel do lojista por completo (sidebar e barra inferior), sem depender de usuário nenhum.</p>
+                  </div>
+                  {/* Presets (Fase 1, Task 1 — plano "Fora do Cardápio"): ajuda
+                      a decidir "o que essa loja vai poder editar" logo na
+                      criação, em vez de marcar 7 campos independentes do zero.
+                      Só pré-marca — o admin ainda revisa e salva a loja como
+                      já fazia antes. */}
+                  <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(STORE_PROFILE_PRESETS).map(([key, preset]) => (
+                          <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                  setModTables(preset.modules.tables);
+                                  setModCounter(preset.modules.counter);
+                                  setModKitchenKds(preset.modules.kitchen_kds);
+                                  setModBarKds(preset.modules.bar_kds);
+                                  setModCaixa(preset.modules.caixa);
+                                  setModMenu(preset.modules.menu);
+                                  setModAdmin(preset.modules.admin);
+                                  setOrderFlow(preset.orderFlow);
+                              }}
+                              className="px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--brand)]/40 u-motion u-press-sm"
+                          >
+                              {preset.label}
+                          </button>
+                      ))}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {/* Fix round 2 (Group D1): "Caixa" saiu desta grade —
