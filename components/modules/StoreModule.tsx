@@ -6308,6 +6308,17 @@ const DEFAULT_TEAM_PERMISSIONS = {
     caixa: false,
 };
 
+// Presets de permissão por função real (Fase 1, Task 2 — plano "Fora do
+// Cardápio"): cadastrar um garçom hoje é marcar checkbox um a um. Um preset
+// só PRÉ-MARCA — nunca esconde o formulário nem impede ajuste fino depois.
+// Só aparece pra usuário NOVO (editar um já existente nunca reseta
+// permissão que o admin configurou com cuidado antes).
+const TEAM_PERMISSION_PRESETS: Record<string, { label: string; permissions: typeof DEFAULT_TEAM_PERMISSIONS }> = {
+    garcom_so_serve: { label: 'Garçom que só serve', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, caixa: false } },
+    garcom_recebe: { label: 'Garçom que também recebe', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, caixa: true } },
+    caixa_fixo: { label: 'Caixa fixo', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, counter: true, caixa: true } },
+};
+
 const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [users, setUsers] = useState<StoreUser[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -6494,6 +6505,20 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
                     <div className="bg-[var(--surface-2)] p-3 rounded-lg border border-[var(--border)]">
                         <label className="text-sm font-bold text-[var(--text)] mb-2 block">Permissões de Acesso</label>
+                        {!editingUser && (
+                            <div className="flex flex-wrap gap-1.5 mb-3">
+                                {Object.entries(TEAM_PERMISSION_PRESETS).map(([key, preset]) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => setPermissions({ ...preset.permissions })}
+                                        className="px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--brand)]/40 u-motion u-press-sm"
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm cursor-pointer">
                                 <input type="checkbox" checked={permissions.tables} onChange={() => togglePermission('tables')} className="rounded text-[var(--brand)] focus:ring-[var(--brand)]" />
