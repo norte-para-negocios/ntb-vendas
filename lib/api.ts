@@ -1501,7 +1501,12 @@ export interface CreateStoreParams {
 // significa isso (ver lib/storeModules.ts) — e remove a chave de um config
 // existente se o admin editar uma loja de volta pro default (senão
 // "desfazer" a customização no formulário nunca desfaria no banco).
-const applyModulesConfigFields = (config: Record<string, any>, params: CreateStoreParams): Record<string, any> => {
+// Exportada (2026-08-27, painel do lojista ganha a mesma seção "Operação"
+// que só existia no Master Admin) — assinatura estreitada pro subconjunto
+// que a function realmente usa, pra não obrigar quem chama de fora de
+// createStore/updateStore a montar um CreateStoreParams inteiro só pra
+// mudar módulos/fluxo.
+export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow }): Record<string, any> => {
   const next = { ...config };
   if (params.modules && !isDefaultStoreModules(params.modules)) {
     next.modules = params.modules;
