@@ -1089,6 +1089,29 @@ Tradicional, etc.) — combinar sabores de camadas diferentes exigiria uma
 regra de precificação (ex.: cobrar o valor do sabor mais caro) que
 ninguém confirmou com o cliente ainda; ficou de fora de propósito.
 
+**Bug real achado e corrigido testando a baixa de estoque de verdade
+(2026-08-27, mesmo dia).** O script de consolidação só trocava o `name`
+do produto-pai reaproveitado — nunca limpava o `products.omie_codigo`
+que ele já tinha (herdado do sabor original que virou o pai, ex.: "Pizza
+Tradicional" reaproveitou "1/2 4 Queijos" e ficou com `omie_codigo
+90004`). Resultado: toda venda de qualquer pizza dessa camada disparava
+uma Ordem de Produção FANTASMA de "4 Queijos" além dos 2 sabores
+realmente escolhidos (confirmado com um pedido de teste real via
+`/api/integracao/ordem-producao`, loja de teste do ntb-estoque ligada ao
+Sertão — `nCodOP` negativo confirma simulação, nunca tocou Omie de
+verdade). Corrigido com `update products set omie_codigo = null` nos 5
+produtos-pai — a baixa de estoque agora depende só dos `omie_codigo` das
+opções de Sabor 1/Sabor 2 selecionadas, reconfirmado com o mesmo pedido
+de teste (2 resultados, batendo exato com os 2 sabores).
+
+**Confirma, mas não resolve, a imprecisão já documentada (item B4 do
+catálogo da reunião):** cada sabor escolhido dispara sua PRÓPRIA Ordem
+de Produção de quantidade cheia — ou seja, "meio a meio" hoje consome
+estoque como se fossem 2 pizzas inteiras, não 2 metades. Não é regressão
+desta correção (o problema já existia antes, pra qualquer adicional com
+`omie_codigo`); resolver isso exigiria o ntb-estoque suportar frações de
+receita, fora de escopo aqui.
+
 **Os 4 produtos fora do padrão "1/2 X" (resolvido, 2026-08-27) — decisão
 por produto, não chute em bloco.** Verificado preço/estrutura de cada um
 antes de decidir:
