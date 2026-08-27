@@ -2158,9 +2158,18 @@ NOTIFY pgrst, 'reload schema';`;
             // lib/calc.ts (getPaymentMethodsForRecord) pro porquê completo.
             // `paymentMethods` cru continua indo pro recibo impresso abaixo
             // (payment.methods), que precisa mostrar o valor bruto + troco.
+            // Painel de recebimento por garçom (pedido real da reunião com o
+            // Ramon, 2026-08-25): "quero ver quantas vezes o Ramon recebeu,
+            // quantas vezes foi o giro... visão gerencial do recebimento
+            // dessas mesas" — nada registrava QUEM de fato clicou em
+            // finalizar/receber uma mesa (só `added_by_name` de item, não de
+            // pagamento). Aditivo dentro de payment_details (jsonb, sem
+            // migration), mesmo padrão de cash_shift_id acima.
             const paymentData = {
                 total: summary.total,
                 methods: getPaymentMethodsForRecord(paymentMethods, summary.total),
+                operador_nome: loggedUser.name,
+                operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
@@ -3552,9 +3561,13 @@ const CounterView: React.FC<{
             // Task 2: `cash_shift_id` idem — ver bloco acima.
             // Mesmo achado/correção de TablesView.handleFinishPayment — ver
             // lib/calc.ts (getPaymentMethodsForRecord).
+            // Painel de recebimento por garçom — mesmo achado de
+            // TablesView.handleFinishPayment.
             const paymentData = {
                 total,
                 methods: getPaymentMethodsForRecord(paymentMethods, total),
+                operador_nome: loggedUser.name,
+                operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
@@ -6853,7 +6866,24 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
     // getOrderItemDisplayName agrupa por produto+adicional (ex.: "Pizza
     // (Catupiry)" separado de "Pizza" puro), mesmo critério do ranking de
     // mais vendidos do dashboard.
-    const [historyView, setHistoryView] = useState<'sale' | 'product'>('sale');
+    const [historyView, setHistoryView] = useState<'sale' | 'product' | 'operator'>('sale');
+    // Painel de recebimento por garçom (pedido real, reunião 2026-08-25):
+    // "quantas vezes o Ramon recebeu, quantas vezes foi o giro". Reagrupa
+    // por payment_details.operador_nome — vendas de antes desta mudança
+    // (sem o campo) caem em "Sem registro", nunca escondidas.
+    const operatorBreakdown = useMemo(() => {
+        const byOperator = new Map<string, { sales: number; revenue: number }>();
+        for (const order of filteredAndSortedSales) {
+            const nome = (order.payment_details as { operador_nome?: string } | null)?.operador_nome || 'Sem registro';
+            const entry = byOperator.get(nome) || { sales: 0, revenue: 0 };
+            entry.sales += 1;
+            entry.revenue += getOrderDisplayTotal(order);
+            byOperator.set(nome, entry);
+        }
+        return Array.from(byOperator.entries())
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.revenue - a.revenue);
+    }, [filteredAndSortedSales]);
     const productBreakdown = useMemo(() => {
         const byName = new Map<string, { quantity: number; revenue: number }>();
         for (const order of filteredAndSortedSales) {
@@ -7331,6 +7361,12 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                         >
                                             Por Produto
                                         </button>
+                                        <button
+                                            onClick={() => setHistoryView('operator')}
+                                            className={`px-3 py-1.5 u-motion ${historyView === 'operator' ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}
+                                        >
+                                            Por Operador
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -7433,6 +7469,35 @@ const StoreAdminView: React.FC<{ store: Store }> = ({ store }) => {
                                                 <tr key={row.name} className="u-stagger" style={stagger(Math.min(i, 10) * 30)}>
                                                     <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
                                                     <td className="px-4 py-3 text-right text-[var(--text-muted)]">{row.quantity}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : historyView === 'operator' ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] font-medium uppercase text-xs">
+                                        <tr>
+                                            <th className="px-4 py-3">Operador</th>
+                                            <th className="px-4 py-3 text-right">Vendas Fechadas</th>
+                                            <th className="px-4 py-3 text-right">Total Recebido</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[var(--border)]">
+                                        {operatorBreakdown.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={3} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                                    Nenhuma venda encontrada com os filtros atuais.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            operatorBreakdown.map((row, i) => (
+                                                <tr key={row.name} className="u-stagger" style={stagger(Math.min(i, 10) * 30)}>
+                                                    <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
+                                                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{row.sales}</td>
                                                     <td className="px-4 py-3 text-right font-bold text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
                                                 </tr>
                                             ))
