@@ -1236,6 +1236,12 @@ const PaymentCaptureFields: React.FC<{
     onFinish: () => void;
     finishDisabled: boolean;
     finishLabel: string;
+    // Fase 2, Task 5 (plano "Fora do Cardápio"): fechar uma conta com 1 método
+    // só e valor exato ainda levava 3 toques (escolher método → lançar →
+    // finalizar). Só aparece com a lista de pagamentos vazia (`methods.length
+    // === 0`) — não faz sentido em split, onde o valor nunca é o total
+    // inteiro. Cada botão já finaliza direto, sem passar pela lista.
+    onOneClickFinish?: (method: string) => void;
     // Task 4 (2026-08-23, resolução backlog pendente): opt-out por venda,
     // em cima do default por loja (`modelo_emissao_automatica`) que já
     // existe. Só aparece quando o CALLER já confirmou que a loja tem
@@ -1252,7 +1258,7 @@ const PaymentCaptureFields: React.FC<{
     total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
     currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
     changeDue, onFinish, finishDisabled, finishLabel,
-    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, children,
+    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, onOneClickFinish, children,
 }) => (
     <div className="space-y-6 pt-2">
         <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
@@ -1283,6 +1289,25 @@ const PaymentCaptureFields: React.FC<{
                 </button>
             ))}
         </div>
+
+        {onOneClickFinish && methods.length === 0 && total > 0 && (
+            <div className="flex flex-wrap gap-2">
+                {[
+                    { id: 'CASH', label: 'Dinheiro' },
+                    { id: 'PIX', label: 'PIX' },
+                    { id: 'CREDIT', label: 'Crédito' },
+                    { id: 'DEBIT', label: 'Débito' },
+                ].map(m => (
+                    <button
+                        key={m.id}
+                        onClick={() => onOneClickFinish(m.id)}
+                        className="flex-1 min-w-[calc(50%-0.25rem)] px-3 py-2 rounded-lg border-2 border-[var(--ok)]/30 bg-[var(--ok)]/5 text-[var(--ok)] text-xs font-bold u-motion u-press-sm hover:bg-[var(--ok)]/10"
+                    >
+                        {m.label} • R$ {formatBRL(total)} • Finalizar
+                    </button>
+                ))}
+            </div>
+        )}
 
         {/* Bandeira do cartão — só faz sentido pra CREDIT/DEBIT. Catálogo
             fechado (lib/labels.ts CARD_BRAND_LABELS), nunca texto livre. */}
@@ -2157,13 +2182,19 @@ NOTIFY pgrst, 'reload schema';`;
         setPaymentMethods(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleFinishPayment = async () => {
+    // Fase 2, Task 5 (plano "Fora do Cardápio"): `methodsOverride` existe só
+    // pro atalho de 1 toque (handleOneClickFinish abaixo) — chamar
+    // setPaymentMethods() e handleFinishPayment() em sequência no mesmo
+    // clique leria o state ANTIGO (setState é assíncrono), por isso o
+    // atalho nunca passa pela lista — monta o método/valor direto aqui.
+    const handleFinishPayment = async (methodsOverride?: { method: string; amount: number; brand?: string }[]) => {
         if (!selectedTable) return;
         if (isFinishingRef.current) return;
         isFinishingRef.current = true;
 
         try {
             const summary = getTableSummary(selectedTable.id);
+            const methods = methodsOverride ?? paymentMethods;
 
             // Task 2 (2026-08-22): este gate existe pra impedir fechar a
             // mesa com item ainda "em preparo" no KDS — status só avança
@@ -2185,7 +2216,7 @@ NOTIFY pgrst, 'reload schema';`;
                 }
             }
 
-            const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
+            const totalPaid = methods.reduce((acc, p) => acc + p.amount, 0);
 
             if (totalPaid < summary.total - 0.01) { // Tolerance for float
                 toast.error('O valor pago é menor que o total da conta.');
@@ -2232,7 +2263,7 @@ NOTIFY pgrst, 'reload schema';`;
             // migration), mesmo padrão de cash_shift_id acima.
             const paymentData = {
                 total: summary.total,
-                methods: getPaymentMethodsForRecord(paymentMethods, summary.total),
+                methods: getPaymentMethodsForRecord(methods, summary.total),
                 operador_nome: loggedUser.name,
                 operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
@@ -2289,7 +2320,10 @@ NOTIFY pgrst, 'reload schema';`;
                         // Reaproveita `changeDue` já calculado acima (com a
                         // correção do achado real de troco em pagamento
                         // dividido) — nunca recalcular a fórmula de novo aqui.
-                        payment: { methods: paymentMethods, changeDue },
+                        // Exceção: atalho de 1 toque paga o valor exato, então
+                        // troco é sempre 0 por construção (sem round-trip de
+                        // state pra evitar ler `changeDue` desatualizado).
+                        payment: { methods, changeDue: methodsOverride ? 0 : changeDue },
                     });
                     if (!printed) {
                         toast.error('A conta foi fechada, mas o comprovante não imprimiu. Confira a impressora do caixa.');
@@ -3025,6 +3059,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 onFinish={handleFinishPayment}
                                 finishDisabled={remainingToPay > 0.01}
                                 finishLabel="FINALIZAR MESA"
+                                onOneClickFinish={(method) => handleFinishPayment([{ method, amount: remainingToPay }])}
                                 showEmitirNotaToggle={emissaoFiscalConfigurada}
                                 emitirNota={emitirNotaFiscal}
                                 onEmitirNotaChange={setEmitirNotaFiscal}
@@ -3597,14 +3632,18 @@ const CounterView: React.FC<{
         setPaymentMethods(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleFinishCounterPayment = async () => {
+    // Fase 2, Task 5 (plano "Fora do Cardápio"): `methodsOverride` só existe
+    // pro atalho de 1 toque — ver comentário equivalente em
+    // TablesView.handleFinishPayment pro porquê (setState é assíncrono).
+    const handleFinishCounterPayment = async (methodsOverride?: { method: string; amount: number; brand?: string }[]) => {
         if (!paymentOrder) return;
         if (isFinishingRef.current) return;
         isFinishingRef.current = true;
 
         try {
             const total = getOrderTotal(paymentOrder);
-            const totalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0);
+            const methods = methodsOverride ?? paymentMethods;
+            const totalPaid = methods.reduce((acc, p) => acc + p.amount, 0);
 
             // Mesma checagem em duas camadas que TablesView.handleFinishPayment
             // já faz (botão desabilitado + reconferência no clique contra um
@@ -3635,7 +3674,7 @@ const CounterView: React.FC<{
             // TablesView.handleFinishPayment.
             const paymentData = {
                 total,
-                methods: getPaymentMethodsForRecord(paymentMethods, total),
+                methods: getPaymentMethodsForRecord(methods, total),
                 operador_nome: loggedUser.name,
                 operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
@@ -3668,7 +3707,7 @@ const CounterView: React.FC<{
                     })),
                     subtotal: total,
                     total,
-                    payment: { methods: paymentMethods, changeDue },
+                    payment: { methods, changeDue: methodsOverride ? 0 : changeDue },
                 });
                 if (!printed) {
                     toast.error('O pedido foi fechado, mas o comprovante não imprimiu. Confira a impressora do caixa.');
@@ -3899,6 +3938,7 @@ const CounterView: React.FC<{
                     onFinish={handleFinishCounterPayment}
                     finishDisabled={remainingToPay > 0.01}
                     finishLabel="FINALIZAR VENDA"
+                    onOneClickFinish={(method) => handleFinishCounterPayment([{ method, amount: remainingToPay }])}
                     showEmitirNotaToggle={emissaoFiscalConfigurada}
                     emitirNota={emitirNotaFiscal}
                     onEmitirNotaChange={setEmitirNotaFiscal}
