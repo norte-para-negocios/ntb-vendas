@@ -755,13 +755,27 @@ export const fetchKitchenOrders = async (
 // conexão" no indicador, não é a garantia de entrega.
 export type StoreOrdersConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
+// Achado ao vivo (2026-08-28): esta função tem 2 chamadores independentes
+// no mesmo navegador (CaixaPrintStation.tsx, sempre montado; e o
+// auto-refresh de Histórico de Vendas/Dashboard em Administração,
+// StoreModule.tsx) -- com o mesmo `storeId`, os dois abriam canal com o
+// MESMO nome fixo (`caixa_print_${storeId}`). Antes, um login sem
+// permissão de caixa nunca tinha o primeiro rodando, então nunca colidia;
+// ao liberar a impressão automática pra qualquer login (isCaixaRole
+// sempre true), os dois passaram a coexistir de verdade e o Supabase
+// Realtime rejeita adicionar listener num canal cujo nome já está
+// inscrito ("cannot add 'postgres_changes' listener... after
+// subscribe()"), quebrando a aba Administração inteira. `channelKey`
+// (obrigatório, cada chamador usa o próprio) garante nomes de canal
+// nunca colidem entre si, mesmo escutando a mesma tabela pro mesmo storeId.
 export const subscribeToStoreOrderChanges = (
   storeId: string,
   onChange: () => void,
   onStatusChange?: (status: StoreOrdersConnectionStatus) => void,
+  channelKey: string = 'default',
 ): (() => void) => {
   const channel = supabase
-    .channel(`caixa_print_${storeId}`)
+    .channel(`caixa_print_${storeId}_${channelKey}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, onChange)
     .subscribe((status) => {
       if (!onStatusChange) return;

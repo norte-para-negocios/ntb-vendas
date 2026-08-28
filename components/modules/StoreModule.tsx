@@ -7579,7 +7579,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         const unsubscribe = subscribeToStoreOrderChanges(storeId, () => {
             if (timeout) clearTimeout(timeout);
             timeout = setTimeout(() => loadSales({ silent: true }), 1000);
-        });
+        }, undefined, 'admin_sales');
         return () => {
             if (timeout) clearTimeout(timeout);
             unsubscribe();

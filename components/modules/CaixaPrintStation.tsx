@@ -413,8 +413,19 @@ async function reconcileDestination(
         return false;
       }
     };
+    // Achado ao vivo (2026-08-28): quando já existe impressora USB/rede
+    // cadastrada pra este destino, o `window.print()` abaixo (pensado pra
+    // loja SEM impressora de rede nenhuma) não tem mais nenhuma impressora
+    // real esperando por ele -- ele falhava (ou imprimia em qualquer coisa
+    // marcada como padrão do Windows/Mac daquele aparelho, sem relação com
+    // cozinha/bar de verdade), e essa falha deixava o botão "Reimprimir"
+    // manual aparecendo pra um pedido que JÁ saiu certinho pela fila.
+    // `printersForItem.length > 0` é o mesmo sinal já usado acima pra
+    // decidir se enfileira -- reusado aqui pra decidir se `window.print()`
+    // sequer deveria rodar: a fila sendo real substitui o caminho antigo
+    // pra este destino, não some ADITIVA a ele.
     // eslint-disable-next-line no-await-in-loop -- impressão sequencial de propósito: dois print() quase simultâneos empilhariam diálogos nativos no mesmo instante.
-    const ok = await doPrint();
+    const ok = printersForItem.length > 0 ? true : await doPrint();
 
     if (ok) {
       printedIds.add(item.id);
@@ -535,7 +546,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
   useEffect(() => {
     if (!active || !store) return;
     reconcile();
-    const unsubscribe = subscribeToStoreOrderChanges(store.id, () => reconcile(), setConnectionStatus);
+    const unsubscribe = subscribeToStoreOrderChanges(store.id, () => reconcile(), setConnectionStatus, 'print');
     const intervalId = window.setInterval(() => reconcile(), 10000);
     const onVisible = () => { if (document.visibilityState === 'visible') reconcile(); };
     document.addEventListener('visibilitychange', onVisible);
