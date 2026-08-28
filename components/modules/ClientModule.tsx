@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallba
 import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
@@ -769,6 +769,85 @@ function useWatchingPresence(storeId: string | undefined, tableId: string | unde
     }, [storeId, tableId, watching]);
 }
 
+// Task 21 (plano "Fora do Cardápio"): reserva de mesa direto do cardápio —
+// MVP sem escolher mesa específica (decisão do lojista no dia) e sem
+// confirmação automática por SMS/WhatsApp. Modal standalone, sem PIN/login
+// nenhum (mesmo princípio de order_ratings: dado não sensível o bastante
+// pra exigir sessão).
+const ReservationModal: React.FC<{ isOpen: boolean; onClose: () => void; storeId: string }> = ({ isOpen, onClose, storeId }) => {
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [partySize, setPartySize] = useState('2');
+    const [date, setDate] = useState('');
+    const [time, setTime] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [sent, setSent] = useState(false);
+
+    const handleSubmit = async () => {
+        const trimmedName = name.trim();
+        const trimmedPhone = phone.trim();
+        const size = parseInt(partySize, 10);
+        if (!trimmedName || !trimmedPhone || !date || !time || !size || size <= 0) {
+            toast.error('Preencha nome, telefone, data, horário e quantas pessoas.');
+            return;
+        }
+        const reservedFor = new Date(`${date}T${time}`);
+        if (isNaN(reservedFor.getTime())) {
+            toast.error('Data/horário inválidos.');
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const result = await createReservation({
+                storeId,
+                customerName: trimmedName,
+                customerPhone: trimmedPhone,
+                partySize: size,
+                reservedFor: reservedFor.toISOString(),
+            });
+            if (!result.success) throw new Error(result.message);
+            setSent(true);
+        } catch (e: any) {
+            toast.error('Erro ao enviar reserva: ' + e.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleClose = () => {
+        onClose();
+        // Reseta pra próxima vez que abrir (não faz sentido reabrir já no
+        // estado "enviado" de uma reserva anterior).
+        setTimeout(() => {
+            setName(''); setPhone(''); setPartySize('2'); setDate(''); setTime(''); setSent(false);
+        }, 200);
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={handleClose} title="Reservar mesa">
+            {sent ? (
+                <div className="text-center py-6">
+                    <CheckCircle size={40} className="mx-auto mb-3 text-[var(--ok)]" />
+                    <p className="font-bold text-[var(--text)] mb-1">Reserva enviada!</p>
+                    <p className="text-sm text-[var(--text-muted)] mb-4">O estabelecimento vai confirmar sua reserva em breve.</p>
+                    <Button className="w-full" onClick={handleClose}>Fechar</Button>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    <Input label="Seu nome" value={name} onChange={e => setName(e.target.value)} placeholder="Como podemos te chamar?" />
+                    <Input label="Telefone (WhatsApp)" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                    <div className="grid grid-cols-2 gap-3">
+                        <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                        <Input label="Horário" type="time" value={time} onChange={e => setTime(e.target.value)} />
+                    </div>
+                    <Input label="Quantas pessoas" type="number" min="1" value={partySize} onChange={e => setPartySize(e.target.value)} />
+                    <Button className="w-full" onClick={handleSubmit} isLoading={isSubmitting}>Enviar reserva</Button>
+                </div>
+            )}
+        </Modal>
+    );
+};
+
 const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, isHost?: boolean, table?: Table | null) => void, storeSlug: string, store: Store | null, onClose?: () => void }> = ({ onLogin, storeSlug, store, onClose }) => {
     const [name, setName] = useState('');
     const [pin, setPin] = useState('');
@@ -776,6 +855,8 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
     const [tables, setTables] = useState<Table[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [mode, setMode] = useState<'table' | 'counter'>('table'); // Default mode
+    // Task 21: reserva de mesa — modal separado, sem PIN/login (ver ReservationModal acima).
+    const [showReservationModal, setShowReservationModal] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -972,8 +1053,24 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                         ? 'Entrar / Recuperar'
                         : (mode === 'counter' ? 'Abrir Comanda' : 'Abrir Mesa')}
                 </Button>
+
+                {/* Task 21: reserva pra outro dia/horário — ação bem diferente de
+                    "entrar agora pra pedir", por isso um link discreto separado
+                    do fluxo principal, não mais um botão do mesmo peso. */}
+                {store?.id && (
+                    <button
+                        type="button"
+                        onClick={() => setShowReservationModal(true)}
+                        className="w-full text-center text-sm text-[var(--text-muted)] hover:text-[var(--text)] u-motion py-1"
+                    >
+                        Quero reservar uma mesa pra outro horário
+                    </button>
+                )}
             </Card>
           </div>
+          {store?.id && (
+              <ReservationModal isOpen={showReservationModal} onClose={() => setShowReservationModal(false)} storeId={store.id} />
+          )}
         </div>
     );
 };

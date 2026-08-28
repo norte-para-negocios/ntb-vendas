@@ -12,8 +12,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, applyModulesConfigFields, triggerPushForOrder } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, applyModulesConfigFields, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
@@ -1540,6 +1540,41 @@ const TablesView: React.FC<{
     // AÇÃO que pode mentir sucesso.
     const canReprint = orderFlow === 'direct_print' && isCaixaRole(loggedUser);
     const watchedTables = useWatchedTables(storeId);
+
+    // Task 21 (plano "Fora do Cardápio"): reservas de hoje em diante — MVP
+    // sem realtime (reserva é um evento raro comparado a pedido/mesa, um
+    // refresh manual/no load da aba já é suficiente, não justifica mais um
+    // canal de Realtime).
+    const [reservations, setReservations] = useState<TableReservation[]>([]);
+    const [isLoadingReservations, setIsLoadingReservations] = useState(false);
+    const [savingReservationIds, setSavingReservationIds] = useState<Set<string>>(new Set());
+
+    const loadReservations = async () => {
+        setIsLoadingReservations(true);
+        try {
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const data = await fetchReservationsByStore(storeId, startOfToday.toISOString());
+            setReservations(data);
+        } finally {
+            setIsLoadingReservations(false);
+        }
+    };
+
+    useEffect(() => { loadReservations(); }, [storeId]);
+
+    const handleUpdateReservation = async (reservationId: string, status: 'confirmed' | 'canceled') => {
+        setSavingReservationIds(prev => new Set(prev).add(reservationId));
+        try {
+            const result = await updateReservationStatus(reservationId, status);
+            if (!result.success) throw new Error(result.message);
+            setReservations(prev => prev.map(r => r.id === reservationId ? { ...r, status } : r));
+        } catch (e: any) {
+            toast.error('Erro ao atualizar reserva: ' + e.message);
+        } finally {
+            setSavingReservationIds(prev => { const copy = new Set(prev); copy.delete(reservationId); return copy; });
+        }
+    };
     const isFinishingRef = useRef(false);
     // Fix round 1 (Task 2 review, Minor #3): mesmo estilo de guarda que
     // isFinishingRef já usa em handleFinishPayment — sem isso, um duplo
@@ -2562,6 +2597,48 @@ NOTIFY pgrst, 'reload schema';`;
 
     return (
         <>
+            {/* Task 21 (plano "Fora do Cardápio"): reservas de hoje em diante —
+                sem escolha de mesa específica (decisão do lojista no dia), só
+                confirma/cancela. Some sozinha quando não há nenhuma reserva
+                pendente/confirmada, pra não ocupar espaço em dia sem reserva. */}
+            {reservations.filter(r => r.status !== 'canceled').length > 0 && (
+                <div className="mb-4 bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
+                    <div className="p-3 border-b border-[var(--border)] flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-[var(--text)]">
+                            Reservas de hoje ({reservations.filter(r => r.status !== 'canceled').length})
+                        </h3>
+                        <button type="button" onClick={loadReservations} className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] u-motion" disabled={isLoadingReservations}>
+                            <RefreshCw size={14} className={isLoadingReservations ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
+                    <div className="divide-y divide-[var(--border)]">
+                        {reservations.filter(r => r.status !== 'canceled').map(r => (
+                            <div key={r.id} className="p-3 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-[var(--text)] truncate">
+                                        {r.customer_name} · {r.party_size} pessoa{r.party_size === 1 ? '' : 's'}
+                                    </p>
+                                    <p className="text-xs text-[var(--text-muted)]">
+                                        {new Date(r.reserved_for).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {r.customer_phone}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {r.status === 'pending' ? (
+                                        <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-[var(--warn)]/10 text-[var(--warn)]">Pendente</span>
+                                    ) : (
+                                        <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-[var(--ok)]/10 text-[var(--ok)]">Confirmada</span>
+                                    )}
+                                    {r.status === 'pending' && (
+                                        <Button size="sm" disabled={savingReservationIds.has(r.id)} onClick={() => handleUpdateReservation(r.id, 'confirmed')}>Confirmar</Button>
+                                    )}
+                                    <Button size="sm" variant="outline" disabled={savingReservationIds.has(r.id)} onClick={() => handleUpdateReservation(r.id, 'canceled')}>Cancelar</Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-end mb-4 gap-2">
                 {canManagePin && (
                     <Button

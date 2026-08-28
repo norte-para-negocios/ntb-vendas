@@ -355,6 +355,20 @@ export interface OperatorCheckin {
   checkout_at: string | null;
 }
 
+// Reserva de mesa direto do cardápio (Task 21, plano "Fora do Cardápio",
+// 2026-08-27) — MVP: cliente pede sem escolher mesa específica, lojista
+// confirma/cancela manualmente (ver migration 059).
+export interface TableReservation {
+  id: string;
+  store_id: string;
+  customer_name: string;
+  customer_phone: string;
+  party_size: number;
+  reserved_for: string;
+  status: 'pending' | 'confirmed' | 'canceled';
+  created_at: string;
+}
+
 export interface UniversalUser {
   id: string;
   name: string;

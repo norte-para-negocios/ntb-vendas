@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 
@@ -1726,6 +1726,47 @@ export const fetchCheckinsHistory = async (storeId: string, startDate?: string, 
   const { data, error } = await query;
   if (error) { console.error('Error fetching checkins history:', error); return []; }
   return data || [];
+};
+
+// Reserva de mesa direto do cardápio (Task 21, plano "Fora do Cardápio",
+// 2026-08-27, migration 059) — MVP sem confirmação automática/bloqueio de
+// mesa. `createReservation` é chamada pelo cliente (sem login/PIN, mesmo
+// princípio de order_ratings); `fetchReservationsByStore`/
+// `updateReservationStatus` são do lado do lojista (TablesView).
+export const createReservation = async (params: {
+  storeId: string;
+  customerName: string;
+  customerPhone: string;
+  partySize: number;
+  reservedFor: string;
+}): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('table_reservations').insert({
+    store_id: params.storeId,
+    customer_name: params.customerName,
+    customer_phone: params.customerPhone,
+    party_size: params.partySize,
+    reserved_for: params.reservedFor,
+  });
+  if (error) { console.error('Error creating reservation:', error); return { success: false, message: error.message }; }
+  return { success: true };
+};
+
+// `sinceDate` opcional: TablesView só precisa das reservas de hoje em
+// diante (reservas passadas não fazem sentido de aparecer numa tela
+// operacional do dia a dia) — filtro por `reserved_for`, não `created_at`
+// (a reserva pode ter sido CRIADA ontem pra HOJE).
+export const fetchReservationsByStore = async (storeId: string, sinceDate?: string): Promise<TableReservation[]> => {
+  let query = supabase.from('table_reservations').select('*').eq('store_id', storeId).order('reserved_for', { ascending: true }).limit(200);
+  if (sinceDate) query = query.gte('reserved_for', sinceDate);
+  const { data, error } = await query;
+  if (error) { console.error('Error fetching reservations:', error); return []; }
+  return data || [];
+};
+
+export const updateReservationStatus = async (reservationId: string, status: 'confirmed' | 'canceled'): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('table_reservations').update({ status }).eq('id', reservationId);
+  if (error) { console.error('Error updating reservation status:', error); return { success: false, message: error.message }; }
+  return { success: true };
 };
 
 // Conta universal: um login só que, em vez de estar preso a uma loja
