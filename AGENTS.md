@@ -2021,6 +2021,78 @@ mesmo par arquivo/senha) antes de tentar de novo. O resto da configuração
 (série, endereço, CSC, NCM do produto de teste) já está pronto — só falta a
 senha certa pra completar a validação real.
 
+## Caixa por operador (`cash_shifts`, migration 062)
+
+Pedido direto do dono (2026-08-28, ao vivo): "frente de caixa"
+(`cash_shifts`, migration 051) nasceu com um limite intencional de V1,
+documentado na própria migration como "P1" — só existe **um turno de
+caixa aberto por vez, por LOJA**, independente de quem abriu
+(`cash_shifts_one_open_per_store`, índice único em `(store_id)`). Na
+prática: se o Operador A abre o caixa, o Operador B não consegue abrir o
+dele — teria que usar o turno do A pra finalizar pagamento, quebrando a
+responsabilização individual (cada login devia bater ponto, vender, e
+fechar o PRÓPRIO caixa pra prestação de contas depois).
+
+**Resolvido**: índice único movido pra `(store_id, operator_user_id)`
+(`cash_shifts_one_open_per_operator`) — mesmo padrão já usado em
+`operator_checkins` (migration 056). Agora N operadores podem ter turno
+aberto ao mesmo tempo na mesma loja, cada um só vê/mexe no próprio:
+
+- `open_cash_shift_secure` — checagem de unicidade agora é "você já tem
+  um turno aberto" (`operator_user_id is not distinct from
+  p_operator_user_id`), não "existe algum turno na loja".
+- `fetch_open_cash_shift_secure(p_store_id, p_operator_user_id)` — ganhou
+  parâmetro obrigatório (assinatura mudou de 1 pra 2 args, `DROP FUNCTION
+  IF EXISTS` antes, mesmo cuidado já documentado na migration 052 —
+  `CREATE OR REPLACE` com lista de parâmetros diferente cria overload
+  novo, não substitui). Devolve o turno DESTE operador, não "o" turno.
+- `fetch_open_cash_shifts_secure(p_store_id)` (NOVA, plural) — lista
+  TODOS os turnos abertos agora (com `operator_name`), pra visão
+  gerencial (dashboard). `close_cash_shift_secure`/
+  `register_cash_movement_secure`/`fetch_cash_shift_summary_secure` não
+  mudaram — já operavam por `shift_id` explícito, nunca tiveram a
+  ambiguidade "qual turno da loja".
+- `lib/api.ts`: `fetchOpenCashShift(storeId, operatorUserId)` — parâmetro
+  novo obrigatório (`null` pra conta universal, mesmo critério de sempre:
+  `loggedUser.role === 'universal' ? null : loggedUser.id`). Nova
+  `fetchOpenCashShifts(storeId)` (plural) pro dashboard.
+- **3 call sites em `StoreModule.tsx` corrigidos** pra passar o operador:
+  `CaixaView.loadShift` (a tela de Caixa agora mostra O MEU turno, não "o"
+  turno), `TablesView.handleFinishPayment` e
+  `CounterView.handleFinishCounterPayment` (o pagamento agora é sempre
+  atribuído ao turno de QUEM está finalizando, nunca "qualquer turno
+  aberto na loja" — esse era o bug real de atribuição errada quando dois
+  caixas estivessem abertos ao mesmo tempo, mesmo antes desta correção
+  ninguém conseguia ter dois abertos simultaneamente pra expor o bug).
+- `StoreDashboardView.tsx` ("Turno de caixa", card "Hoje na loja") trocou
+  de "mostra o turno" (singular) pra listar todos os turnos abertos agora
+  com o nome de cada operador (`fetchOpenCashShifts`).
+
+**Não mudou nesta correção** (fora de escopo, mencionado pelo dono como
+ideia maior/"mega plano" mas não pedido explicitamente agora): ligar
+`operator_checkins` (ponto) ao ciclo de abertura/fechamento de caixa (ex.
+forçar checkin antes de abrir caixa, ou fechar turno automaticamente no
+checkout) — os dois sistemas continuam propositalmente independentes
+(mesmo motivo já documentado na migration 056: nem todo mundo que bate
+ponto abre caixa, ex. garçom). "Histórico por operador" na tela de vendas
+(`operatorBreakdown`, StoreModule.tsx) já agrupava por
+`payment_details.operador_nome` antes desta correção e não precisou
+mudar — já estava correto pra múltiplos turnos concorrentes.
+
+**Nota sobre a conta universal**: índice único do Postgres não trata
+múltiplos `NULL` como duplicata (comportamento padrão SQL) — a conta
+universal (`operator_user_id = null`) pode abrir mais de um turno "sem
+operador" concorrente sem ser barrada. Aceitável: universal é conta de
+equipe compartilhada, não uma identidade individual — o problema
+resolvido aqui é especificamente entre operadores reais.
+
+**Testado ao vivo** (SQL direto + UI, ZZ Laboratorio): dois `store_users`
+diferentes abrindo turno na mesma loja ao mesmo tempo (segundo não é mais
+bloqueado pelo primeiro), tentativa de abrir 2 turnos com o MESMO
+operador corretamente recusada, `fetch_open_cash_shift_secure`/
+`fetch_open_cash_shifts_secure` devolvendo os valores certos, e o fluxo
+completo abrir→ver no dashboard→fechar confirmado na tela de Caixa real.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`

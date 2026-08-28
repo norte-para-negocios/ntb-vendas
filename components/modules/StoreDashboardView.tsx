@@ -11,7 +11,7 @@ import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMon
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
-import { fetchCheckinsHistory, fetchOpenCashShift, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
+import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
 
 const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
 
@@ -37,18 +37,22 @@ export const StoreDashboardView: React.FC<{
     // ainda não passa essa prop (nenhum call site hoje, mas mantém o
     // componente utilizável isoladamente/em teste sem storeId).
     const [workingNow, setWorkingNow] = useState<OperatorCheckin[]>([]);
-    const [openShift, setOpenShift] = useState<CashShift | null>(null);
+    // Migration 062 ("caixa por operador"): pode haver mais de um turno
+    // aberto ao mesmo tempo agora (um por operador) — esta é uma tela
+    // gerencial (dono/universal olhando o resumo do dia), então mostra
+    // TODOS os turnos abertos, não "o" turno (fetchOpenCashShifts, plural).
+    const [openShifts, setOpenShifts] = useState<(CashShift & { operator_name: string | null })[]>([]);
     const [isLoadingTodayCard, setIsLoadingTodayCard] = useState(false);
 
     useEffect(() => {
         if (!storeId) return;
         let cancelled = false;
         setIsLoadingTodayCard(true);
-        Promise.all([fetchCheckinsHistory(storeId), fetchOpenCashShift(storeId)])
-            .then(([checkins, shift]) => {
+        Promise.all([fetchCheckinsHistory(storeId), fetchOpenCashShifts(storeId)])
+            .then(([checkins, shifts]) => {
                 if (cancelled) return;
                 setWorkingNow(checkins.filter(c => !c.checkout_at));
-                setOpenShift(shift);
+                setOpenShifts(shifts);
             })
             .finally(() => { if (!cancelled) setIsLoadingTodayCard(false); });
         return () => { cancelled = true; };
@@ -432,14 +436,19 @@ export const StoreDashboardView: React.FC<{
                             </div>
                             <div>
                                 <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <Wallet size={13} /> Turno de caixa
+                                    <Wallet size={13} /> {openShifts.length > 1 ? `Turnos de caixa (${openShifts.length})` : 'Turno de caixa'}
                                 </p>
-                                {openShift ? (
-                                    <p className="text-sm text-[var(--text)]">
-                                        <span className="font-semibold text-[var(--ok)]">Aberto</span> desde{' '}
-                                        {new Date(openShift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        {' · '}fundo R$ {formatBRL(openShift.opening_float)}
-                                    </p>
+                                {openShifts.length > 0 ? (
+                                    <ul className="space-y-1">
+                                        {openShifts.map((s) => (
+                                            <li key={s.id} className="text-sm text-[var(--text)]">
+                                                <span className="font-semibold text-[var(--ok)]">Aberto</span>
+                                                {s.operator_name ? ` — ${s.operator_name}` : ''} desde{' '}
+                                                {new Date(s.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {' · '}fundo R$ {formatBRL(s.opening_float)}
+                                            </li>
+                                        ))}
+                                    </ul>
                                 ) : (
                                     <p className="text-sm text-[var(--text-muted)]">Nenhum turno de caixa aberto agora.</p>
                                 )}

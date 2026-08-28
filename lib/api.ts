@@ -1101,10 +1101,26 @@ export interface CashShift {
   notes: string | null;
 }
 
-export const fetchOpenCashShift = async (storeId: string): Promise<CashShift | null> => {
-  const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId });
+// `operatorUserId` obrigatório desde a migration 062 ("caixa por
+// operador") — devolve o turno aberto DESTE operador especificamente,
+// não "o turno da loja" (agora pode haver mais de um aberto ao mesmo
+// tempo, um por operador). `null` pra conta universal (mesmo
+// tratamento de sempre, ver openCashShift abaixo).
+export const fetchOpenCashShift = async (storeId: string, operatorUserId: string | null): Promise<CashShift | null> => {
+  const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId });
   if (error || !data) return null;
   return data as CashShift;
+};
+
+// Lista TODOS os turnos abertos agora numa loja (qualquer operador) — pro
+// dashboard/visão gerencial, que precisa saber "quantos caixas estão
+// abertos e por quem" desde que deixou de ser sempre 0 ou 1 (migration
+// 062). `fetchOpenCashShift` (singular, acima) continua sendo "o MEU
+// turno", usado pra liberar pagamento/mostrar a tela de Caixa.
+export const fetchOpenCashShifts = async (storeId: string): Promise<(CashShift & { operator_name: string | null })[]> => {
+  const { data, error } = await supabase.rpc('fetch_open_cash_shifts_secure', { p_store_id: storeId });
+  if (error) { console.error('Error fetching open cash shifts:', error); return []; }
+  return (data as (CashShift & { operator_name: string | null })[]) || [];
 };
 
 // Task 3 (frente-de-caixa): abre um turno novo — chamado pela aba "Caixa"

@@ -2345,15 +2345,17 @@ NOTIFY pgrst, 'reload schema';`;
             // Task 2 (2026-08-23, plano frente-de-caixa) — "sem caixa
             // aberto, não recebe pagamento": só entra em jogo quando a loja
             // tem o módulo caixa ligado (o `if` inteiro nunca executa pras
-            // 7 lojas reais de hoje, que resolvem `caixa: false`). Regra do
-            // banco é um único turno aberto POR LOJA (não por operador —
-            // ver migration 051), então basta checar se existe algum;
-            // quem abriu não precisa ser quem está finalizando agora.
+            // 7 lojas reais de hoje, que resolvem `caixa: false`). Desde a
+            // migration 062 ("caixa por operador"), o turno é sempre O DE
+            // QUEM ESTÁ FINALIZANDO ESTE PAGAMENTO agora (`loggedUser`) —
+            // antes bastava existir QUALQUER turno aberto na loja, o que
+            // atribuía a venda ao operador errado quando dois caixas
+            // estavam abertos ao mesmo tempo.
             let cashShiftId: string | undefined;
             if (resolveStoreModules(store).caixa) {
-                const openShift = await fetchOpenCashShift(store.id);
+                const openShift = await fetchOpenCashShift(store.id, loggedUser.role === 'universal' ? null : loggedUser.id);
                 if (!openShift) {
-                    toast.error('Nenhum turno de caixa aberto. Abra o caixa antes de receber pagamentos.');
+                    toast.error('Você não tem um turno de caixa aberto. Abra o seu caixa antes de receber pagamentos.');
                     return;
                 }
                 cashShiftId = openShift.id;
@@ -3832,12 +3834,13 @@ const CounterView: React.FC<{
             }
 
             // Task 2 (frente-de-caixa) — mesma trava de TablesView.handleFinishPayment,
-            // ver comentário lá pro porquê completo.
+            // ver comentário lá pro porquê completo (migration 062, "caixa
+            // por operador": é sempre o turno de QUEM está finalizando).
             let cashShiftId: string | undefined;
             if (resolveStoreModules(store).caixa) {
-                const openShift = await fetchOpenCashShift(store.id);
+                const openShift = await fetchOpenCashShift(store.id, loggedUser.role === 'universal' ? null : loggedUser.id);
                 if (!openShift) {
-                    toast.error('Nenhum turno de caixa aberto. Abra o caixa antes de receber pagamentos.');
+                    toast.error('Você não tem um turno de caixa aberto. Abra o seu caixa antes de receber pagamentos.');
                     return;
                 }
                 cashShiftId = openShift.id;
@@ -4244,8 +4247,14 @@ const CaixaView: React.FC<{
         return () => clearInterval(tick);
     }, []);
 
+    // Migration 062 ("caixa por operador"): "o turno" agora é sempre O MEU
+    // turno (deste `loggedUser` logado nesta sessão) — pode haver outros
+    // operadores com turno aberto ao mesmo tempo na mesma loja, e esta
+    // tela não precisa (nem deve) saber disso pra decidir se mostra "abrir
+    // caixa" ou a fila. Mesmo critério de `handleOpenShift` abaixo pra
+    // conta universal (sem linha em store_users, manda null).
     const loadShift = async () => {
-        const s = await fetchOpenCashShift(storeId);
+        const s = await fetchOpenCashShift(storeId, loggedUser.role === 'universal' ? null : loggedUser.id);
         setShift(s);
     };
 
