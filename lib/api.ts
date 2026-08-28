@@ -1022,8 +1022,12 @@ export const updateOrderItemStatus = async (itemId: string, status: OrderStatus)
   return { success: true };
 };
 
-export const cancelSpecificOrderItem = async (itemId: string) => {
-  await supabase.rpc('cancel_order_item_secure', { p_item_id: itemId });
+export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string) => {
+  await supabase.rpc('cancel_order_item_secure', {
+    p_item_id: itemId,
+    p_operator_user_id: operatorUserId ?? null,
+    p_operator_name: operatorName ?? null,
+  });
 };
 
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
@@ -1097,6 +1101,8 @@ export interface CashShift {
   closed_at: string | null;
   opening_float: number;
   closing_counted_cash: number | null;
+  closing_cash_breakdown: Record<string, number> | null;
+  approved_by_user_id: string | null;
   status: 'open' | 'closed';
   notes: string | null;
 }
@@ -1162,12 +1168,16 @@ export const registerCashMovement = async (
   type: 'sangria' | 'suprimento',
   amount: number,
   reason: string,
+  operatorName?: string,
+  alertThreshold?: number,
 ): Promise<{ success: boolean; id?: string; message?: string }> => {
   const { data, error } = await supabase.rpc('register_cash_movement_secure', {
     p_shift_id: shiftId,
     p_type: type,
     p_amount: amount,
     p_reason: reason,
+    p_operator_name: operatorName ?? null,
+    p_alert_threshold: alertThreshold ?? null,
   });
   if (error) return { success: false, message: error.message };
   return data as { success: boolean; id?: string; message?: string };
@@ -1228,13 +1238,60 @@ export const fetchCashShiftsHistory = async (storeId: string, limit = 30): Promi
 export const closeCashShift = async (
   shiftId: string,
   closingCountedCash: number,
-): Promise<{ success: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string }> => {
+  closingCashBreakdown?: Record<string, number> | null,
+  maxTolerance?: number | null,
+  approvedByUserId?: string | null,
+): Promise<{ success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string }> => {
   const { data, error } = await supabase.rpc('close_cash_shift_secure', {
     p_shift_id: shiftId,
     p_closing_counted_cash: closingCountedCash,
+    p_closing_cash_breakdown: closingCashBreakdown ?? null,
+    p_max_tolerance: maxTolerance ?? null,
+    p_approved_by_user_id: approvedByUserId ?? null,
   });
   if (error) return { success: false, message: error.message };
-  return data as { success: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+  return data as { success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+};
+
+export const verifyCashSupervisor = async (
+  storeId: string,
+  email: string,
+  password: string,
+): Promise<{ success: boolean; user_id?: string; name?: string; message?: string }> => {
+  const { data, error } = await supabase.rpc('verify_cash_supervisor_secure', {
+    p_store_id: storeId,
+    p_email: email,
+    p_password: password,
+  });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; user_id?: string; name?: string; message?: string };
+};
+
+export interface CashShiftAuditEvent {
+  id: string;
+  store_id: string;
+  shift_id: string | null;
+  operator_user_id: string | null;
+  operator_name: string;
+  event_type: 'item_cancelado' | 'sangria_grande';
+  details: Record<string, any>;
+  created_at: string;
+}
+
+export const fetchCashShiftAudit = async (
+  storeId: string,
+  shiftId?: string | null,
+  operatorUserId?: string | null,
+  limit: number = 50,
+): Promise<CashShiftAuditEvent[]> => {
+  const { data, error } = await supabase.rpc('fetch_cash_shift_audit_secure', {
+    p_store_id: storeId,
+    p_shift_id: shiftId ?? null,
+    p_operator_user_id: operatorUserId ?? null,
+    p_limit: limit,
+  });
+  if (error) { console.error('Error fetching cash shift audit:', error); return []; }
+  return (data as CashShiftAuditEvent[]) || [];
 };
 
 export const toggleTableBlock = async (tableId: string, _currentStatus: TableStatus) => {

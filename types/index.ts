@@ -97,6 +97,11 @@ export interface StoreUserPermissions {
   // "não é caixa", senão qualquer garçom já cadastrado ganharia poder de
   // finalizar pagamento sem ninguém ter concedido isso.
   caixa?: boolean;
+  // Melhorias no fluxo de Caixa (2026-08-28): vê o valor esperado no
+  // fechamento mesmo com contagem cega ligada, e aprova fechamentos com
+  // diferença acima da tolerância máxima. Ausência = false (mesmo padrão
+  // estrito de `caixa`, nunca o fallback permissivo das 6 chaves antigas).
+  supervisiona_caixa?: boolean;
 }
 
 export interface StoreUser {
