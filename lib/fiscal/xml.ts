@@ -302,9 +302,24 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
             : Number(p.amount.toFixed(2));
           acumulado += vPagItem;
           const tPag = mapMetodoParaTPag(p.method);
+          // Achado real (rejeição cStat=391, venda ao vivo 2026-08-27): a
+          // Nota Técnica 2025.001 (vigente desde 01/09/2025) tornou o grupo
+          // <card> obrigatório também pra tPag=17 (PIX), não só cartão
+          // (03/04) — antes disso a exigência de PIX era opcional por UF, e
+          // o código só cobria cartão. `tBand` (bandeira do cartão) não
+          // existe pra PIX — só entra no grupo quando é cartão de verdade;
+          // incluir uma bandeira falsa aqui seria pior que omitir. `cnpj`/
+          // `cAut` (dados da operadora/autorização) só são exigidos quando
+          // `tpIntegra=1` (pagamento integrado ao automação da loja) — como
+          // não temos integração real com operadora/PSP nenhuma (nem de
+          // cartão nem de PIX), `tpIntegra=2` ("não integrado") é o valor
+          // correto e dispensa esses dois campos, mesmo princípio já usado
+          // pro cartão.
           const cardXml = tPag === '03' || tPag === '04'
             ? `<card><tpIntegra>2</tpIntegra><tBand>${mapBandeiraParaTBand(p.brand)}</tBand></card>`
-            : '';
+            : tPag === '17'
+              ? `<card><tpIntegra>2</tpIntegra></card>`
+              : '';
           return `<detPag><indPag>0</indPag><tPag>${tPag}</tPag><vPag>${vPagItem.toFixed(2)}</vPag>${cardXml}</detPag>`;
         })
         .join('');
