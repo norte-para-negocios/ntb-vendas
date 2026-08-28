@@ -33,7 +33,7 @@ import { Button, Input, Card, Badge } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
-  enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob,
+  enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters,
 } from '@/lib/api';
 import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
 import { PrinterConfig, PrintJob, Store } from '@/types';
@@ -87,14 +87,22 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [port, setPort] = useState('9100');
   const [usbSystemName, setUsbSystemName] = useState('');
   const [destination, setDestination] = useState<PrinterConfig['destination']>('all');
+  // Achado ao vivo (2026-08-28): lista de impressoras USB detectadas pelo
+  // agente local (print-agent/, migration 065) — quando existe, vira
+  // seletor em vez de campo de texto livre. Vazia = nenhum agente rodou
+  // ainda nesta loja, cai pro texto livre (comportamento anterior).
+  const [discoveredPrinters, setDiscoveredPrinters] = useState<string[]>([]);
+  const [usbManualEntry, setUsbManualEntry] = useState(false);
 
   const load = useCallback(async () => {
-    const [printerList, jobList] = await Promise.all([
+    const [printerList, jobList, discovered] = await Promise.all([
       fetchPrinterConfigs(store.id),
       fetchRecentPrintJobs(store.id, 30),
+      fetchDiscoveredPrinters(store.id),
     ]);
     setPrinters(printerList);
     setJobs(jobList);
+    setDiscoveredPrinters(discovered);
     setIsLoading(false);
   }, [store.id]);
 
@@ -277,7 +285,33 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           )}
 
           {connectionType === 'usb' && (
-            <Input label="Nome da impressora no sistema" placeholder="Ex: EPSON TM-T20" value={usbSystemName} onChange={(e) => setUsbSystemName(e.target.value)} />
+            discoveredPrinters.length > 0 && !usbManualEntry ? (
+              <div className="flex flex-col gap-1">
+                <label className="text-[13px] font-medium text-[var(--text-muted)]">Impressora instalada neste computador</label>
+                <select
+                  value={usbSystemName}
+                  onChange={(e) => setUsbSystemName(e.target.value)}
+                  className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
+                >
+                  <option value="">Selecione...</option>
+                  {discoveredPrinters.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => setUsbManualEntry(true)} className="text-xs text-[var(--brand)] self-start mt-1 underline">
+                  Não achei a minha, digitar o nome manualmente
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <Input label="Nome da impressora no sistema" placeholder="Ex: EPSON TM-T20" value={usbSystemName} onChange={(e) => setUsbSystemName(e.target.value)} />
+                {discoveredPrinters.length > 0 && (
+                  <button type="button" onClick={() => setUsbManualEntry(false)} className="text-xs text-[var(--brand)] self-start underline">
+                    Ver impressoras detectadas automaticamente
+                  </button>
+                )}
+              </div>
+            )
           )}
 
           {(connectionType === 'network' || connectionType === 'usb') && (

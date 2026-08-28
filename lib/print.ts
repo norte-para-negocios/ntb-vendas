@@ -40,7 +40,7 @@ const thermalStyles = (widthMm: 48 | 58 | 80 = 48) => `
   .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 6px; }
   .store-name { font-size: 12px; font-weight: bold; text-transform: uppercase; }
   .doc-title { font-size: 11px; font-weight: bold; text-transform: uppercase; margin-top: 2px; }
-  .meta { font-size: 8px; color: #333; margin-top: 2px; }
+  .meta { font-size: 8px; color: #000; margin-top: 2px; }
   .info { margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 6px; text-align: center; }
   .big-text { font-size: 12px; font-weight: bold; }
   .item-line { font-size: 12px; font-weight: bold; margin: 6px 0; line-height: 1.2; }
@@ -55,7 +55,7 @@ const thermalStyles = (widthMm: 48 | 58 | 80 = 48) => `
   .summary-table td { padding: 2px 0; }
   .summary-table td.right { text-align: right; white-space: nowrap; padding-left: 5px; }
   .total { border-top: 1px dashed #000; margin-top: 6px; padding-top: 5px; font-size: 13px; font-weight: bold; text-align: right; }
-  .footer { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; text-align: center; font-size: 9px; color: #333; }
+  .footer { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; text-align: center; font-size: 9px; color: #000; }
   @media print { @page { margin: 0; size: auto; } body { margin: 0; padding: 0; } }
 `;
 
@@ -490,7 +490,7 @@ export function printBillReceipt(opts: {
             (i) => `
           <tr>
             <td>${i.quantity}x</td>
-            <td style="padding-right:4px;">${escapeHtml(i.name)}${i.client ? `<div style="font-size:10px;color:#555;">Cliente: ${escapeHtml(i.client)}</div>` : ''}</td>
+            <td style="padding-right:4px;">${escapeHtml(i.name)}${i.client ? `<div style="font-size:10px;color:#000;">Cliente: ${escapeHtml(i.client)}</div>` : ''}</td>
             <td class="right">${formatBRL(i.total)}</td>
           </tr>`
           )

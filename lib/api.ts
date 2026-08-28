@@ -1887,6 +1887,17 @@ export const fetchPrinterConfigs = async (storeId: string): Promise<PrinterConfi
   return data || [];
 };
 
+// Impressoras USB detectadas pelo agente local rodando no computador da
+// loja (migration 065, achado ao vivo 2026-08-28: digitar o nome exato
+// da impressora era fricção/erro desnecessário). Lista vazia = nenhum
+// agente rodou ainda nesta loja, ou nenhuma impressora local instalada —
+// a UI cai pro campo de texto livre nesse caso.
+export const fetchDiscoveredPrinters = async (storeId: string): Promise<string[]> => {
+  const { data, error } = await supabase.from('discovered_printers').select('name').eq('store_id', storeId).order('name', { ascending: true });
+  if (error) { console.error('Error fetching discovered printers:', error); return []; }
+  return (data || []).map((row) => row.name);
+};
+
 export const createPrinterConfig = async (params: {
   storeId: string;
   name: string;

@@ -87,6 +87,55 @@ function printViaUsb(printerName, content) {
   });
 }
 
+// Achado ao vivo (2026-08-28): pedir pra digitar o nome exato da
+// impressora instalada é fricção/erro desnecessário -- o computador já
+// sabe quais impressoras tem instaladas. Detecta e grava em
+// discovered_printers (migration 065); a aba Impressão lê de lá pra
+// mostrar como lista de seleção em vez de campo de texto livre.
+function detectLocalPrinters() {
+  return new Promise((resolve) => {
+    if (process.platform === 'win32') {
+      execFile('powershell.exe', ['-NoProfile', '-Command', 'Get-Printer | Select-Object -ExpandProperty Name'], (err, stdout) => {
+        if (err) { resolve(null); return; }
+        resolve(stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean));
+      });
+    } else {
+      // macOS/Linux via CUPS -- `lpstat -p` imprime uma linha por
+      // impressora, formato "printer NOME is idle. ...".
+      execFile('lpstat', ['-p'], (err, stdout) => {
+        if (err) { resolve(null); return; }
+        const names = stdout
+          .split(/\r?\n/)
+          .map((l) => {
+            const m = l.match(/^printer\s+(\S+)/);
+            return m ? m[1] : null;
+          })
+          .filter(Boolean);
+        resolve(names);
+      });
+    }
+  });
+}
+
+async function syncDiscoveredPrinters(supabase, storeId) {
+  const names = await detectLocalPrinters();
+  // null = o comando falhou (ex.: lpstat/powershell não existe nesta
+  // máquina) -- nunca apaga a lista já conhecida por causa disso, só
+  // desiste silenciosamente desta rodada.
+  if (names === null) return;
+  if (names.length > 0) {
+    await supabase.from('discovered_printers').upsert(
+      names.map((name) => ({ store_id: storeId, name, updated_at: new Date().toISOString() })),
+      { onConflict: 'store_id,name' }
+    );
+  }
+  const { data: existing } = await supabase.from('discovered_printers').select('id, name').eq('store_id', storeId);
+  const stale = (existing || []).filter((row) => !names.includes(row.name));
+  if (stale.length > 0) {
+    await supabase.from('discovered_printers').delete().in('id', stale.map((r) => r.id));
+  }
+}
+
 async function printJob(printer, content) {
   if (printer.connection_type === 'network') {
     await printViaNetwork(printer.ip_address, printer.port, content);
@@ -121,6 +170,10 @@ async function main() {
 
   await refreshPrinters();
   setInterval(refreshPrinters, 30000);
+
+  await syncDiscoveredPrinters(supabase, store.id);
+  console.log('Impressoras instaladas neste computador detectadas e enviadas pro painel.');
+  setInterval(() => syncDiscoveredPrinters(supabase, store.id), 60000);
 
   const tick = async () => {
     if (printersById.size === 0) return;
