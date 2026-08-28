@@ -157,13 +157,35 @@ async function syncDiscoveredPrinters(supabase, storeId) {
   }
 }
 
-async function printJob(printer, content) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
     await printViaNetwork(printer.ip_address, printer.port, content);
   } else if (printer.connection_type === 'usb') {
     await printViaUsb(printer.usb_system_name, content);
   } else {
     throw new Error(`Tipo de conexao nao suportado pelo agente: ${printer.connection_type}`);
+  }
+}
+
+// Achado ao vivo (2026-08-28): InvalidPrinterException do Windows aparece
+// sobretudo logo depois que a impressora acabou de ser reconfigurada
+// (driver reinstalado, preferencia alterada) -- é o próprio SO ainda
+// "assentando" a config nova, some sozinho em segundos. Sem retry, isso
+// virava 'error' permanente na fila, exigindo alguém notar e reenviar na
+// mão. 1 retentativa automática, com uma pausa curta, cobre esse caso sem
+// mascarar falha real (impressora desligada/errada continua falhando nas
+// duas tentativas e vira 'error' normalmente).
+async function printJob(printer, content) {
+  try {
+    await printOnce(printer, content);
+  } catch (firstErr) {
+    console.error(`  Falhou na 1a tentativa (${firstErr.message}), tentando de novo em 2s...`);
+    await sleep(2000);
+    await printOnce(printer, content);
   }
 }
 
