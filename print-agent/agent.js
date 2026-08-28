@@ -196,8 +196,21 @@ async function main() {
   console.log('Impressoras instaladas neste computador detectadas e enviadas pro painel.');
   setInterval(() => syncDiscoveredPrinters(supabase, store.id), 60000);
 
+  // Achado ao vivo (2026-08-28): "bar" e "caixa" falharam com
+  // InvalidPrinterException nos MESMOS segundos -- setInterval dispara um
+  // tick novo a cada pollIntervalMs mesmo que o tick anterior ainda esteja
+  // no meio de um Out-Printer (execFile tem overhead real). Dois ticks
+  // sobrepostos podiam imprimir em impressoras DIFERENTES ao mesmo tempo,
+  // e o Windows não aguenta duas chamadas de impressão simultâneas logo
+  // depois de reconfigurar as impressoras -- derruba as duas com erro de
+  // "configurações inválidas" mesmo as duas estando certas. `tickRunning`
+  // garante no máximo 1 tick por vez: uma impressão sempre espera a
+  // anterior terminar, não importa a impressora.
+  let tickRunning = false;
   const tick = async () => {
-    if (printersById.size === 0) return;
+    if (tickRunning) return;
+    tickRunning = true;
+    if (printersById.size === 0) { tickRunning = false; return; }
     try {
       const { data: jobs, error } = await supabase
         .from('print_jobs')
@@ -228,6 +241,8 @@ async function main() {
       }
     } catch (e) {
       console.error('Erro inesperado no ciclo de impressao (ignorado, tentando de novo):', e.message);
+    } finally {
+      tickRunning = false;
     }
   };
 
