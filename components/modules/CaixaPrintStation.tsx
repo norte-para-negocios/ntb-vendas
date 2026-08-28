@@ -281,8 +281,20 @@ interface FailedEntry {
 // de 10s, dedupe em memória), rodando duas cópias independentes do mesmo
 // mecanismo na mesma sessão. `isCaixaRole` sozinha é pura/sem estado, então
 // dá pra reusar só o critério sem reusar o efeito.
+// Achado ao vivo (2026-08-28): a exigência de `permissions.caixa === true`
+// vetava o próprio dono de disparar a reconciliação -- na loja Sertão, quem
+// estava logado no aparelho do caixa de verdade durante o teste era o
+// dono, então NADA imprimia sozinho, contrariando o requisito confirmado
+// pelo dono na hora ("qualquer pedido de qualquer lugar, imprime, não
+// importa quem tá logado"). `owner` volta a contar (é o próprio dono no
+// aparelho real de caixa, não mais um bypass genérico como antes da
+// revisão de 2026-08-23). `universal` continua de fora -- é a mesma
+// exclusão da revisão anterior, pelo mesmo motivo já documentado ali:
+// `permissions.caixa` de uma conta universal só espelha se a LOJA tem o
+// módulo Caixa ligado, não se aquele login específico é operador de caixa.
 export function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
-  if (user.role === 'owner' || user.role === 'universal') return false;
+  if (user.role === 'owner') return true;
+  if (user.role === 'universal') return false;
   return user.permissions?.caixa === true;
 }
 

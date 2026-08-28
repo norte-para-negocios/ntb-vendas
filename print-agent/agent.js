@@ -26,8 +26,13 @@ const net = require('net');
 const { execFile } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 
+// Quando empacotado como .exe (pkg), __dirname aponta pro sistema de
+// arquivos virtual dentro do executável -- config.json precisa vir de
+// perto do .exe real (process.execPath), não de dentro dele.
+const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
+
 function loadConfig() {
-  const configPath = path.join(__dirname, 'config.json');
+  const configPath = path.join(baseDir, 'config.json');
   if (!fs.existsSync(configPath)) {
     console.error('\n[ERRO] Nao encontrei config.json nesta pasta.');
     console.error('Copie config.example.json para config.json e preencha o slug da loja antes de rodar.\n');
@@ -92,29 +97,45 @@ function printViaUsb(printerName, content) {
 // sabe quais impressoras tem instaladas. Detecta e grava em
 // discovered_printers (migration 065); a aba Impressão lê de lá pra
 // mostrar como lista de seleção em vez de campo de texto livre.
-function detectLocalPrinters() {
+function runCommand(file, args) {
   return new Promise((resolve) => {
-    if (process.platform === 'win32') {
-      execFile('powershell.exe', ['-NoProfile', '-Command', 'Get-Printer | Select-Object -ExpandProperty Name'], (err, stdout) => {
-        if (err) { resolve(null); return; }
-        resolve(stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean));
-      });
-    } else {
-      // macOS/Linux via CUPS -- `lpstat -p` imprime uma linha por
-      // impressora, formato "printer NOME is idle. ...".
-      execFile('lpstat', ['-p'], (err, stdout) => {
-        if (err) { resolve(null); return; }
-        const names = stdout
-          .split(/\r?\n/)
-          .map((l) => {
-            const m = l.match(/^printer\s+(\S+)/);
-            return m ? m[1] : null;
-          })
-          .filter(Boolean);
-        resolve(names);
-      });
-    }
+    execFile(file, args, { timeout: 10000 }, (err, stdout) => {
+      resolve(err ? null : stdout);
+    });
   });
+}
+
+async function detectLocalPrinters() {
+  if (process.platform === 'win32') {
+    // Dois métodos, mesclados: Get-Printer (moderno, PowerShell) pode
+    // faltar/estar desabilitado em algumas instalações Windows; wmic
+    // (mais antigo, mas quase sempre disponível) serve de reforço. Achado
+    // ao vivo (2026-08-28): "está conectada no cabo mas não aparece" quase
+    // sempre é a impressora nunca ter sido INSTALADA no Windows (sem
+    // driver/fila configurada) -- nenhum dos dois métodos vê um USB cru
+    // sem instalação, isso é limitação do próprio Windows, não do agente.
+    const [psOut, wmicOut] = await Promise.all([
+      runCommand('powershell.exe', ['-NoProfile', '-Command', 'Get-Printer | Select-Object -ExpandProperty Name']),
+      runCommand('wmic.exe', ['printer', 'get', 'name']),
+    ]);
+    if (psOut === null && wmicOut === null) return null;
+    const names = new Set();
+    (psOut || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((n) => names.add(n));
+    (wmicOut || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && l.toLowerCase() !== 'name').forEach((n) => names.add(n));
+    return Array.from(names);
+  } else {
+    // macOS/Linux via CUPS -- `lpstat -p` imprime uma linha por
+    // impressora, formato "printer NOME is idle. ...".
+    const stdout = await runCommand('lpstat', ['-p']);
+    if (stdout === null) return null;
+    return stdout
+      .split(/\r?\n/)
+      .map((l) => {
+        const m = l.match(/^printer\s+(\S+)/);
+        return m ? m[1] : null;
+      })
+      .filter(Boolean);
+  }
 }
 
 async function syncDiscoveredPrinters(supabase, storeId) {
@@ -148,7 +169,7 @@ async function printJob(printer, content) {
 
 async function main() {
   const config = loadConfig();
-  const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+  const supabase = createClient(config.servidorUrl, config.chaveDeAcesso);
   const pollIntervalMs = config.pollIntervalMs || 3000;
 
   console.log(`Agente de impressao NTB Vendas iniciado. Loja: ${config.storeSlug}`);
