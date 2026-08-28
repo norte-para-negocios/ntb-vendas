@@ -917,6 +917,20 @@ const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destin
   }).catch((e) => console.error('Emissão fiscal automática falhou:', e));
 };
 
+// Fase 5, Task 19 (plano "Fora do Cardápio"): push real (funciona com o app
+// do cliente fechado) — mesmo padrão fire-and-forget de triggerOrdemProducao/
+// triggerEmissaoFiscal acima, mas EXPORTADA porque quem dispara é o KDS
+// (StoreModule.tsx, advanceStatus), não outra função deste arquivo. Loja/
+// ambiente sem VAPID configurado responde `{ok:false}` sem erro nenhum — ver
+// app/api/push/send/route.ts.
+export const triggerPushForOrder = (orderId: string, title: string, body: string) => {
+  fetch('/api/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId, title, body }),
+  }).catch((e) => console.error('Push notification falhou:', e));
+};
+
 export const callWaiter = async (tableId: string) => {
   const { error } = await supabase.rpc('request_waiter_secure', { p_table_id: tableId });
   if (error) { console.error('Erro ao chamar garçom:', error); throw error; }

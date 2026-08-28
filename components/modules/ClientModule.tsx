@@ -351,6 +351,19 @@ function useMesaOrders(storeId: string | undefined, orderIds: string[]) {
     return { orders, latest };
 }
 
+// Fase 5, Task 19 (plano "Fora do Cardápio"): conversão padrão da VAPID
+// public key (base64url) pro Uint8Array que `PushManager.subscribe` exige —
+// não tem embutido no browser, é o mesmo helper que toda implementação de
+// web-push usa (spec não define um jeito nativo de fazer essa conversão).
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+}
+
 const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: () => void }> = ({ orderId, onReset, onLogout }) => {
     const { currentStore } = useApp();
     const orderFlow = resolveOrderFlow(currentStore);
@@ -364,6 +377,59 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
     // Snapshot do fetch anterior — usado só pra diff, nunca renderizado.
     // null = ainda não carregou nenhuma vez (evita alertar no load inicial).
     const prevItemsRef = useRef<OrderItem[] | null>(null);
+
+    // Fase 5, Task 19: push real (chega com o app fechado/tela bloqueada) —
+    // complementa o alerta local (som/vibração/toast, só funciona com a aba
+    // aberta) já existente logo abaixo. Pedido de permissão SEMPRE atrelado
+    // a um clique explícito do cliente (botão "Ativar notificações"), nunca
+    // automático no load — o navegador pode bloquear silenciosamente e é má
+    // prática de UX pedir permissão sem gesto do usuário.
+    const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+    const [pushEnabled, setPushEnabled] = useState(false);
+    const [isEnablingPush, setIsEnablingPush] = useState(false);
+
+    useEffect(() => {
+        if (!pushSupported) return;
+        navigator.serviceWorker.getRegistration('/sw.js').then(async (reg) => {
+            const sub = await reg?.pushManager.getSubscription();
+            if (sub) setPushEnabled(true);
+        }).catch(() => {});
+    }, [pushSupported]);
+
+    const handleEnablePush = async () => {
+        if (!pushSupported) return;
+        const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!vapidPublicKey) {
+            toast.error('Notificações não configuradas nesta loja.');
+            return;
+        }
+        setIsEnablingPush(true);
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                toast.error('Permissão de notificação negada.');
+                return;
+            }
+            const reg = await navigator.serviceWorker.register('/sw.js');
+            await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
+            });
+            await fetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId, subscription: sub.toJSON() }),
+            });
+            setPushEnabled(true);
+            toast.success('Notificações ativadas! Você será avisado mesmo com o app fechado.');
+        } catch (e) {
+            console.error('Erro ao ativar notificações push:', e);
+            toast.error('Não foi possível ativar notificações neste navegador.');
+        } finally {
+            setIsEnablingPush(false);
+        }
+    };
 
     const notifyItemTransitions = (nextItems: OrderItem[]) => {
         const prevById = new Map((prevItemsRef.current || []).map(i => [i.id, i.status]));
@@ -568,6 +634,26 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                         <div className="p-2 text-center text-xs text-[var(--text-muted)]">
                              Aguarde chamar seu nome ou número no painel.
                         </div>
+
+                        {/* Fase 5, Task 19: só oferece o botão se o navegador suporta
+                            push E ainda não está ativado nesta assinatura — depois de
+                            ativado, o cliente pode fechar o app e ainda assim ser
+                            avisado quando o pedido ficar pronto. */}
+                        {pushSupported && !pushEnabled && (
+                            <button
+                                type="button"
+                                onClick={handleEnablePush}
+                                disabled={isEnablingPush}
+                                className="flex items-center gap-2 text-sm font-semibold text-[var(--brand)] bg-[var(--brand-soft)] px-4 py-2.5 rounded-full u-motion u-press-sm disabled:opacity-60"
+                            >
+                                <Bell size={16} /> {isEnablingPush ? 'Ativando...' : 'Avisar mesmo com o app fechado'}
+                            </button>
+                        )}
+                        {pushEnabled && (
+                            <p className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                                <BellRing size={12} /> Notificações ativadas
+                            </p>
+                        )}
                     </>
                 )}
             </div>
