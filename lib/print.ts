@@ -269,6 +269,73 @@ export function printKitchenTicket(opts: {
 // puro + quebra de linha direto na porta 9100 (RAW/JetDirect) e já
 // quebra/corta razoavelmente sozinha — comandos de negrito/corte
 // específicos por fabricante ficam de fora deste MVP.
+// Chute conservador de caracteres por linha em Font A (12x24, o padrão de
+// fábrica de praticamente toda impressora térmica ESC/POS) por largura de
+// papel — sem enviar nenhum comando ESC/POS de fonte, é só pra quebrar a
+// linha ANTES de mandar, senão a impressora quebra sozinha no meio da
+// palavra. Aproximado de propósito (varia por fabricante) — é conteúdo de
+// TESTE, não precisa ser exato.
+const CHARS_PER_LINE: Record<48 | 58 | 80, number> = { 48: 32, 58: 32, 80: 48 };
+
+function wrapLine(text: string, maxChars: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    if ((current + ' ' + word).trim().length > maxChars) {
+      if (current) lines.push(current);
+      current = word;
+    } else {
+      current = (current + ' ' + word).trim();
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+// Aba "Impressão" → "Imprimir teste" (2026-08-27): ticket TOTALMENTE
+// genérico, sem nenhum dado de pedido/mesa/cliente real — só existe pra
+// validar que a impressora física recebe e imprime texto de ponta a
+// ponta (rede/USB, via agente local). Nunca reaproveitar pra nada que
+// pareça um documento oficial (sem CNPJ, sem valor, sem "NOTA FISCAL").
+export function buildGenericTestTicketText(paperWidthMm: 48 | 58 | 80, storeName?: string): string {
+  const maxChars = CHARS_PER_LINE[paperWidthMm];
+  const divider = '-'.repeat(maxChars);
+  const lines: string[] = [];
+  if (storeName) lines.push(...wrapLine(storeName.toUpperCase(), maxChars));
+  lines.push('TESTE DE IMPRESSAO');
+  lines.push(`Papel: ${paperWidthMm}mm (~${maxChars} col.)`);
+  lines.push(new Date().toLocaleString('pt-BR'));
+  lines.push(divider);
+  lines.push('1x Produto de teste A');
+  lines.push('2x Produto de teste B, com nome mais comprido pra testar a quebra de linha');
+  lines.push('...'.padEnd(maxChars, ' ').slice(0, maxChars));
+  lines.push(divider);
+  lines.push('Se este texto saiu legivel e sem cortar');
+  lines.push('palavra no meio, a largura esta correta.');
+  lines.push(divider);
+  lines.push('Documento sem valor fiscal -- so teste.');
+  lines.push('\n\n\n');
+  return lines.flatMap((l) => (l.length > maxChars ? wrapLine(l, maxChars) : [l])).join('\n');
+}
+
+// Mesmo ticket genérico acima, mas pro caminho browser_default
+// (window.print(), respeitando o CSS de largura real via thermalStyles —
+// diferente do texto puro, aqui a largura em mm importa de verdade).
+export function printGenericTestTicket(paperWidthMm: 48 | 58 | 80, storeName?: string): Promise<boolean> {
+  const body = `
+    <div class="header">
+      ${storeName ? `<div class="store-name">${escapeHtml(storeName)}</div>` : ''}
+      <div class="doc-title">TESTE DE IMPRESSÃO</div>
+      <div class="meta">Papel: ${paperWidthMm}mm — ${new Date().toLocaleString()}</div>
+    </div>
+    <div class="item-line">1x Produto de teste A</div>
+    <div class="item-line">2x Produto de teste B, com nome mais comprido pra testar a quebra de linha</div>
+    <div class="footer">Documento sem valor fiscal — só teste.</div>
+  `;
+  return openThermalPrint('Teste de Impressão', body, paperWidthMm);
+}
+
 export function buildKitchenTicketText(opts: {
   kind: 'COZINHA' | 'BAR';
   storeName?: string;

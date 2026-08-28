@@ -35,7 +35,7 @@ import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
   enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob,
 } from '@/lib/api';
-import { printKitchenTicket, buildKitchenTicketText } from '@/lib/print';
+import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
 import { PrinterConfig, PrintJob, Store } from '@/types';
 
 const CONNECTION_LABELS: Record<PrinterConfig['connection_type'], string> = {
@@ -70,6 +70,12 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  // Largura de papel do teste — só afeta o ticket GENÉRICO desta tela
+  // (buildGenericTestTicketText/printGenericTestTicket), nunca o
+  // config.printer_paper_width_mm real da loja (usado nos tickets de
+  // pedido de verdade). Pedido explícito do dono (2026-08-28): testar o
+  // corte/quebra de linha em cada largura antes de decidir qual comprar.
+  const [testPaperWidth, setTestPaperWidth] = useState<48 | 58 | 80>(48);
 
   const [name, setName] = useState('');
   const [connectionType, setConnectionType] = useState<PrinterConfig['connection_type']>('network');
@@ -152,39 +158,26 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // na hora). Pra 'network'/'usb', enfileira um print_job de verdade —
   // só imprime se o agente local estiver rodando e pegando a fila desta
   // loja, o que esta tela deixa claro no aviso abaixo do botão.
+  // Ticket 100% genérico (buildGenericTestTicketText/printGenericTestTicket,
+  // lib/print.ts) — sem dado de pedido/mesa/cliente real, só pra validar
+  // que a impressora física recebe e corta o texto certo na largura
+  // escolhida (testPaperWidth). Nunca usa printKitchenTicket/
+  // buildKitchenTicketText (esses são o caminho de PEDIDO DE VERDADE).
   const handleTestPrint = async (printer: PrinterConfig) => {
     setTestingId(printer.id);
     try {
       if (printer.connection_type === 'browser_default') {
-        const ok = await printKitchenTicket({
-          kind: 'COZINHA',
-          storeName: store.name,
-          orderType: 'MESA',
-          identifier: 'TESTE DE IMPRESSÃO',
-          quantity: 1,
-          productName: `Ticket de teste — ${printer.name}`,
-          observation: 'Se isso imprimiu sem pedir nenhum clique, está configurado corretamente.',
-          orderIdShort: 'TESTE',
-        });
+        const ok = await printGenericTestTicket(testPaperWidth, store.name);
         if (ok) toast.success('Ticket de teste enviado ao navegador. Confira a impressora.');
         else toast.error('Falha ao enviar o ticket de teste.');
         return;
       }
-      const content = buildKitchenTicketText({
-        kind: 'COZINHA',
-        storeName: store.name,
-        orderType: 'MESA',
-        identifier: 'TESTE DE IMPRESSÃO',
-        quantity: 1,
-        productName: `Ticket de teste — ${printer.name}`,
-        observation: 'Se isso saiu na impressora, o agente local está funcionando.',
-        orderIdShort: 'TESTE',
-      });
+      const content = buildGenericTestTicketText(testPaperWidth, store.name);
       const result = await enqueuePrintJob({
         storeId: store.id,
         printerConfigId: printer.id,
         destination: printer.destination,
-        title: `Teste — ${printer.name}`,
+        title: `Teste (${testPaperWidth}mm) — ${printer.name}`,
         content,
       });
       if (result.success) toast.success('Job de teste enfileirado. Se o agente local estiver rodando, imprime em segundos.');
@@ -221,6 +214,27 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           </Button>
         )}
       </div>
+
+      <Card className="p-3 flex items-center justify-between gap-3 flex-wrap bg-[var(--surface-2)]">
+        <div>
+          <p className="text-xs font-semibold text-[var(--text)]">Largura do papel do teste</p>
+          <p className="text-[11px] text-[var(--text-muted)]">Só afeta o ticket genérico de "Imprimir teste" abaixo — não muda a configuração real da loja.</p>
+        </div>
+        <div className="flex gap-1.5">
+          {([48, 58, 80] as const).map((mm) => (
+            <button
+              key={mm}
+              type="button"
+              onClick={() => setTestPaperWidth(mm)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border u-motion u-press-sm ${
+                testPaperWidth === mm ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
+              }`}
+            >
+              {mm}mm
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {showAddForm && (
         <Card className="p-4 space-y-3">
