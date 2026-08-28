@@ -1367,7 +1367,59 @@ Três tipos de documento, todos usados em `StoreModule.tsx`:
 - Relatório de vendas filtrado (`printSalesReport`) — **não** é térmico, é A4
   normal (lista de vendas do período com os filtros aplicados na tela).
 
-## Backlog / Próximos passos
+### Aba "Impressão" + fila server-side (2026-08-27, migration 061)
+
+Pedido direto do dono, na véspera de um teste ao vivo na loja: hoje a
+impressão automática (`CaixaPrintStation.tsx`) só sabe imprimir na
+impressora PADRÃO DO SISTEMA OPERACIONAL do aparelho do caixa, via
+`window.print()` — sem nenhuma tela de configuração, sem opção de
+impressora de REDE (IP), e sem histórico de fila persistido (o dedupe
+existente vive só no `localStorage` de UM navegador). Essa arquitetura
+continua sendo a PRIMEIRA opção (não foi removida, é a mais simples e já
+testada) — o que foi adicionado é um caminho alternativo pra quem quer
+impressora de rede/USB.
+
+- **`printer_configs`** (por loja: nome, `connection_type`
+  `browser_default`/`network`/`usb`, IP+porta, nome do dispositivo no
+  sistema, `destination` cozinha/bar/ambos, `is_active`) e **`print_jobs`**
+  (fila real, persistida no servidor: `status` pending→printing→done/error,
+  `content` em texto puro) — RLS `allow_all_anon` direto, sem RPC (mesmo
+  nível de sensibilidade de `categories`/`products`, decisão consciente pra
+  ir rápido: nome/IP de impressora e texto de ticket já são semi-públicos).
+- **`components/modules/PrinterSettingsView.tsx`** — nova sub-aba
+  "Impressão" em Administração (`StoreModule.tsx`, ao lado de "Notas
+  Fiscais"/"Turnos"): cadastro de impressora, botão "Imprimir teste" por
+  impressora (pra `browser_default` reusa o MESMO `printKitchenTicket` já
+  testado do `CaixaPrintStation`; pra `network`/`usb` enfileira um
+  `print_job` de verdade), e a fila dos últimos 30 jobs com status
+  (poll de 5s, sem Realtime — é tela de configuração, não operação).
+- **`CaixaPrintStation.tsx`** ganhou um segundo caminho ADITIVO (nunca no
+  lugar do `window.print()` existente): a cada reconciliação, busca
+  `printer_configs` ativas de rede/USB da loja e enfileira o MESMO ticket
+  (em texto puro, `lib/print.ts:buildKitchenTicketText`) pra cada uma que
+  bater com o destino do item — best-effort, uma falha aqui nunca derruba
+  nem marca falha no caminho `window.print()` já testado pelas 6 lojas
+  reais (que continuam com zero `printer_configs` cadastrado, portanto
+  zero mudança de comportamento pra elas).
+- **`print-agent/`** (fora do Next.js, roda no PC da loja) — programa Node
+  standalone (`agent.js`, zero dependência nativa de propósito: rede usa
+  `net` puro/porta 9100 RAW-JetDirect, USB usa o comando `Out-Printer` do
+  PowerShell no Windows ou `lp` no Mac/Linux via `child_process.execFile`,
+  nunca um módulo tipo `node-printer` que exigiria compilar binding nativo
+  no dia — risco alto demais pra instalar na hora, na loja) que resolve o
+  slug da loja (`config.json`, nunca committado — ver `.gitignore`) pro
+  `store_id`, consulta `printer_configs` ativas e faz polling em
+  `print_jobs` `pending`, marcando `printing`→`done`/`error`. README em
+  português explica instalação (`npm install` + `npm start`) pro dono/
+  equipe conseguir rodar sozinho.
+- **Testado de ponta a ponta nesta sessão** com um servidor TCP local
+  fazendo de impressora de rede falsa: cadastro de impressora pela UI →
+  botão "Imprimir teste" → job aparece "Na fila" → agente local pega,
+  conecta na porta 9100 e manda o texto → job vira "Impresso" na tela em
+  segundos, sem nenhum clique além do botão inicial. **O que NÃO foi
+  testado remotamente** (única coisa que só a loja pode confirmar): se a
+  impressora física real de lá aceita a mesma conexão sem drama — rede
+  costuma ser universal, USB às vezes pede ajuste de driver no Windows.
 
 **Implementado (2026-07-01/02):**
 

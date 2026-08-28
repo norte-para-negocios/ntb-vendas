@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
+import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 
@@ -1799,6 +1799,91 @@ export const fetchReservationsByStore = async (storeId: string, sinceDate?: stri
 export const updateReservationStatus = async (reservationId: string, status: 'confirmed' | 'canceled'): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('table_reservations').update({ status }).eq('id', reservationId);
   if (error) { console.error('Error updating reservation status:', error); return { success: false, message: error.message }; }
+  return { success: true };
+};
+
+// Aba "Impressão" (2026-08-27, teste na loja no dia seguinte, migration
+// 061) — cadastro de impressora (browser_default/network/usb) e a fila
+// de print_jobs que o agente local (print-agent/) consome pras
+// impressoras 'network'/'usb'. `printer_configs`/`print_jobs` não têm o
+// mesmo nível de sensibilidade de orders/tables (nome/IP de impressora,
+// texto de ticket já semi-público) — allow_all_anon direto, sem RPC.
+export const fetchPrinterConfigs = async (storeId: string): Promise<PrinterConfig[]> => {
+  const { data, error } = await supabase.from('printer_configs').select('*').eq('store_id', storeId).order('created_at', { ascending: true });
+  if (error) { console.error('Error fetching printer configs:', error); return []; }
+  return data || [];
+};
+
+export const createPrinterConfig = async (params: {
+  storeId: string;
+  name: string;
+  connectionType: 'browser_default' | 'network' | 'usb';
+  ipAddress?: string | null;
+  port?: number;
+  usbSystemName?: string | null;
+  destination: 'kitchen' | 'bar' | 'all';
+}): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('printer_configs').insert({
+    store_id: params.storeId,
+    name: params.name,
+    connection_type: params.connectionType,
+    ip_address: params.ipAddress || null,
+    port: params.port || 9100,
+    usb_system_name: params.usbSystemName || null,
+    destination: params.destination,
+  });
+  if (error) { console.error('Error creating printer config:', error); return { success: false, message: error.message }; }
+  return { success: true };
+};
+
+export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination'>>): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('printer_configs').update(updates).eq('id', id);
+  if (error) { console.error('Error updating printer config:', error); return { success: false, message: error.message }; }
+  return { success: true };
+};
+
+export const deletePrinterConfig = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('printer_configs').delete().eq('id', id);
+  if (error) { console.error('Error deleting printer config:', error); return { success: false, message: error.message }; }
+  return { success: true };
+};
+
+// Enfileira um job pro agente local pegar (impressoras 'network'/'usb') —
+// também usado pro botão "Imprimir teste" da aba nova, e pode ser
+// chamado em paralelo ao window.print() existente (CaixaPrintStation)
+// só pra deixar histórico visível na fila, mesmo quando quem imprimiu de
+// verdade foi o navegador.
+export const enqueuePrintJob = async (params: {
+  storeId: string;
+  printerConfigId?: string | null;
+  destination: 'kitchen' | 'bar' | 'all';
+  title: string;
+  content: string;
+}): Promise<{ success: boolean; id?: string; message?: string }> => {
+  const { data, error } = await supabase.from('print_jobs').insert({
+    store_id: params.storeId,
+    printer_config_id: params.printerConfigId || null,
+    destination: params.destination,
+    title: params.title,
+    content: params.content,
+  }).select('id').single();
+  if (error) { console.error('Error enqueueing print job:', error); return { success: false, message: error.message }; }
+  return { success: true, id: data?.id };
+};
+
+export const fetchRecentPrintJobs = async (storeId: string, limit: number = 30): Promise<PrintJob[]> => {
+  const { data, error } = await supabase.from('print_jobs').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(limit);
+  if (error) { console.error('Error fetching print jobs:', error); return []; }
+  return data || [];
+};
+
+// Reenfileira um job que falhou/travou — usado pelo botão "Reenviar" da
+// fila na aba Impressão. Volta pro estado 'pending' com um novo
+// created_at (mesmo id, timeline continua no mesmo card) pro agente
+// local pegar de novo na próxima consulta.
+export const retryPrintJob = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('print_jobs').update({ status: 'pending', error_message: null, printed_at: null }).eq('id', id);
+  if (error) { console.error('Error retrying print job:', error); return { success: false, message: error.message }; }
   return { success: true };
 };
 

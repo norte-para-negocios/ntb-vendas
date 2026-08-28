@@ -89,8 +89,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
-import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus } from '@/lib/api';
-import { printKitchenTicket } from '@/lib/print';
+import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob } from '@/lib/api';
+import { printKitchenTicket, buildKitchenTicketText } from '@/lib/print';
+import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
 import { parseItemNote } from '@/lib/labels';
@@ -285,6 +286,16 @@ export function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): bool
   return user.permissions?.caixa === true;
 }
 
+// Impressoras de rede/USB (aba "Impressão", migration 061, 2026-08-27)
+// cadastradas pra esta loja e este destino — best-effort, ADITIVO ao
+// window.print() de sempre, nunca no lugar dele: um erro aqui (rede
+// fora, tabela vazia) não pode derrubar o mecanismo já testado que as 6
+// lojas reais dependem hoje. `!printerConfigId` filtra 'browser_default'
+// (metadado, sem fila) e inativas.
+function matchingNetworkPrinters(printers: PrinterConfig[], destination: Destination): PrinterConfig[] {
+  return printers.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === destination || p.destination === 'all'));
+}
+
 async function reconcileDestination(
   storeId: string,
   destination: Destination,
@@ -293,6 +304,7 @@ async function reconcileDestination(
   printedIdsRef: React.MutableRefObject<Record<Destination, Set<string>>>,
   failedRef: React.MutableRefObject<Map<string, FailedEntry>>,
   setFailedItems: (m: Map<string, FailedEntry>) => void,
+  networkPrinters: PrinterConfig[],
 ): Promise<boolean> {
   let fetchFailed = false;
   const items = await fetchKitchenOrders(storeId, destination, () => { fetchFailed = true; });
@@ -332,6 +344,35 @@ async function reconcileDestination(
     const orderType = item.order?.order_type;
     const tableNumber = item.order?.tables?.number;
     const description = ticketDescription(item);
+
+    // Aditivo (ver matchingNetworkPrinters acima): enfileira o MESMO
+    // ticket, em texto puro, pra cada impressora de rede/USB cadastrada
+    // pra este destino — o agente local (print-agent/) é quem realmente
+    // manda pro papel. Fire-and-forget de propósito: uma falha aqui
+    // (rede fora, tabela sem linha) não pode interromper nem marcar
+    // falha no caminho window.print() já testado, que segue seu próprio
+    // rastreamento de erro logo abaixo.
+    const printersForItem = matchingNetworkPrinters(networkPrinters, destination);
+    if (printersForItem.length > 0) {
+      const { client: netClient, observation: netObservation } = parseItemNote(item.notes || '');
+      const content = buildKitchenTicketText({
+        kind,
+        storeName,
+        orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
+        identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
+        client: netClient,
+        quantity: item.quantity,
+        productName: item.product?.name || 'Produto indisponível',
+        addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
+        observation: netObservation || undefined,
+        orderIdShort: item.order_id.slice(0, 8),
+      });
+      printersForItem.forEach((printer) => {
+        enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content })
+          .catch((e) => console.error('enqueuePrintJob (auto) falhou:', e));
+      });
+    }
+
     const doPrint = async () => {
       // try/catch: printKitchenTicket é Promise<boolean>, não um contrato
       // blindado contra throw — sem isto, uma rejeição não tratada
@@ -439,9 +480,13 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     reconcileLockRef.current = true;
     let fetchFailed = false;
     try {
+      // Best-effort, fora do try/catch de impressão: uma falha aqui só
+      // significa "nenhuma impressora de rede/USB entra nesta passada",
+      // o window.print() de sempre continua rodando normalmente.
+      const networkPrinters = await fetchPrinterConfigs(s.id).catch(() => [] as PrinterConfig[]);
       for (const destination of ['kitchen', 'bar'] as const) {
         // eslint-disable-next-line no-await-in-loop -- sequencial de propósito, mesmo motivo do print sequencial dentro de reconcileDestination.
-        const failed = await reconcileDestination(s.id, destination, s.name, activatedAtRef.current, printedIdsRef, failedRef, setFailedItemsState);
+        const failed = await reconcileDestination(s.id, destination, s.name, activatedAtRef.current, printedIdsRef, failedRef, setFailedItemsState, networkPrinters);
         if (failed) fetchFailed = true;
       }
     } catch (e) {

@@ -48,3 +48,10 @@ scripts/.pooler-host
 
 # Superpowers brainstorming companion (mockup scratch, não é código do produto)
 .superpowers/
+
+# Agente local de impressão (print-agent/) — config.json tem o slug real
+# da loja de cada instalação; cada computador da loja tem o seu, nunca
+# deve ser commitado por cima do outro. node_modules idem (instalado
+# localmente na loja via npm install, não versionado).
+/print-agent/config.json
+/print-agent/node_modules

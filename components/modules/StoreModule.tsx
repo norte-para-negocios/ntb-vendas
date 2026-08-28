@@ -7,6 +7,7 @@ import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
 import { THEME_PRESETS, resolveThemePreset, ThemePreset } from '@/lib/theme';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
+import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -7394,7 +7395,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'operacao'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'operacao' | 'impressao'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -7804,6 +7805,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'shifts' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                 >
                     Turnos
+                </button>
+                <button
+                    onClick={() => setActiveTab('impressao')}
+                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'impressao' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                >
+                    Impressão
                 </button>
                 <button
                     onClick={() => setActiveTab('operacao')}
@@ -8224,6 +8231,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             </Collapsible>
                 </>
             )}
+
+            {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">

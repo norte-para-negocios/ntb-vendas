@@ -1,0 +1,13 @@
+{
+  "name": "ntb-vendas-print-agent",
+  "version": "1.0.0",
+  "description": "Agente local de impressao do NTB Vendas -- roda no computador da loja, conectado na impressora, e consome a fila de impressao (print_jobs) do sistema.",
+  "private": true,
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

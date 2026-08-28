@@ -369,6 +369,36 @@ export interface TableReservation {
   created_at: string;
 }
 
+// Aba "Impressão" (2026-08-27, teste na loja no dia seguinte) — ver
+// migration 061. connection_type='browser_default' é só metadado (a
+// impressão continua sendo window.print(), via CaixaPrintStation.tsx);
+// 'network'/'usb' são consumidas pelo agente local (print-agent/).
+export interface PrinterConfig {
+  id: string;
+  store_id: string;
+  name: string;
+  connection_type: 'browser_default' | 'network' | 'usb';
+  ip_address: string | null;
+  port: number;
+  usb_system_name: string | null;
+  destination: 'kitchen' | 'bar' | 'all';
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PrintJob {
+  id: string;
+  store_id: string;
+  printer_config_id: string | null;
+  destination: 'kitchen' | 'bar' | 'all';
+  title: string;
+  content: string;
+  status: 'pending' | 'printing' | 'done' | 'error';
+  error_message: string | null;
+  created_at: string;
+  printed_at: string | null;
+}
+
 export interface UniversalUser {
   id: string;
   name: string;

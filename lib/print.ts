@@ -260,6 +260,44 @@ export function printKitchenTicket(opts: {
   return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm);
 }
 
+// Aba "Impressão" (2026-08-27, migration 061): versão em TEXTO PURO do
+// mesmo ticket acima, pro agente local (print-agent/) mandar direto por
+// socket de rede (ESC/POS) ou impressora USB do sistema — esses caminhos
+// não passam pelo navegador/window.print(), então não faz sentido HTML.
+// Mantido como texto simples (sem comando ESC/POS de formatação) de
+// propósito: praticamente toda impressora térmica de rede aceita texto
+// puro + quebra de linha direto na porta 9100 (RAW/JetDirect) e já
+// quebra/corta razoavelmente sozinha — comandos de negrito/corte
+// específicos por fabricante ficam de fora deste MVP.
+export function buildKitchenTicketText(opts: {
+  kind: 'COZINHA' | 'BAR';
+  storeName?: string;
+  orderType: string;
+  identifier: string;
+  client?: string | null;
+  quantity: number;
+  productName: string;
+  addons?: string;
+  observation?: string;
+  orderIdShort: string;
+}): string {
+  const lines: string[] = [];
+  if (opts.storeName) lines.push(opts.storeName.toUpperCase());
+  lines.push(opts.kind);
+  lines.push(new Date().toLocaleString('pt-BR'));
+  lines.push('--------------------------------');
+  lines.push(`${opts.orderType}: ${opts.identifier}`);
+  if (opts.client) lines.push(`Cliente: ${opts.client}`);
+  lines.push('');
+  lines.push(`${opts.quantity}x ${opts.productName}`);
+  if (opts.addons) lines.push(`Adicional: ${opts.addons}`);
+  if (opts.observation) lines.push(`OBS: ${opts.observation.toUpperCase()}`);
+  lines.push('--------------------------------');
+  lines.push(`Pedido #${opts.orderIdShort}`);
+  lines.push('\n\n\n');
+  return lines.join('\n');
+}
+
 export interface BillReceiptItem {
   quantity: number;
   name: string;
