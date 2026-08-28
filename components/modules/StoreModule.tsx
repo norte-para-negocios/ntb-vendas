@@ -4189,6 +4189,15 @@ const CaixaView: React.FC<{
     const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
     const orderFlow = resolveOrderFlow(store);
 
+    // Melhorias no fluxo de Caixa (2026-08-28): contagem cega — owner/
+    // universal e quem tem `supervisiona_caixa` sempre veem o esperado;
+    // o resto só vê depois de confirmar, se a loja ligou a config.
+    const canSeeExpectedBeforeClosing = !store.config?.cash_shift_blind_count
+        || loggedUser.role === 'owner'
+        || loggedUser.role === 'universal'
+        || loggedUser.permissions?.supervisiona_caixa === true;
+    const [closedResultDifference, setClosedResultDifference] = useState<{ expected: number; counted: number; difference: number } | null>(null);
+
     // Fase 3, Task 8 (plano "Fora do Cardápio"): mesmo critério exato de
     // `canReprint` em TablesView (ver Critical #2, CaixaPrintStation.tsx) —
     // reimprimir manualmente um item pendente só faz sentido no aparelho de
@@ -4571,6 +4580,12 @@ const CaixaView: React.FC<{
             const result = await closeCashShift(shift.id, closingCountedValue, breakdownAsNumbers);
             if (result.success) {
                 toast.success('Caixa fechado.');
+                // Contagem cega (Task 4): quem não viu o esperado durante a
+                // contagem vê agora, num modal de resultado — nunca escondido
+                // pra sempre, só depois de confirmar.
+                if (!canSeeExpectedBeforeClosing && result.expected_cash !== undefined && result.difference !== undefined) {
+                    setClosedResultDifference({ expected: result.expected_cash, counted: closingCountedValue, difference: result.difference });
+                }
                 setShowCloseModal(false);
                 setCloseSummary(null);
                 // Volta ao estado "sem turno aberto" (mesma tela da Task 3).
@@ -4745,6 +4760,53 @@ const CaixaView: React.FC<{
         }
     };
 
+    // Contagem cega (Task 4): resultado só mostrado DEPOIS de confirmar o
+    // fechamento, pra quem não tem `supervisiona_caixa` e a loja ligou a
+    // config — nunca escondido pra sempre. Extraído como variável (em vez de
+    // JSX inline lá embaixo) porque `handleConfirmCloseShift` chama
+    // `setShift(null)` no mesmo fechamento que abre este modal — sem isso o
+    // componente cai direto no `if (!shift)` abaixo (um `return` totalmente
+    // separado do que tem a modal), e o resultado nunca chegava a aparecer
+    // (achado ao testar ao vivo, não só revisão de código).
+    const closedResultModal = (
+        <Modal
+            isOpen={!!closedResultDifference}
+            onClose={() => setClosedResultDifference(null)}
+            title="Resultado do fechamento"
+            size="sm"
+        >
+            {closedResultDifference && (
+                <div className="space-y-4">
+                    <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                        <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
+                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closedResultDifference.expected)}</span>
+                    </div>
+                    <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                        <span className="text-sm font-bold text-[var(--text)]">Total contado</span>
+                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closedResultDifference.counted)}</span>
+                    </div>
+                    <div className={`rounded-xl px-4 py-3 flex items-center justify-between border-2 ${
+                        Math.abs(closedResultDifference.difference) < 0.005
+                            ? 'border-[var(--ok)]/40 bg-[var(--ok)]/10'
+                            : closedResultDifference.difference > 0
+                                ? 'border-[var(--info)]/40 bg-[var(--info)]/10'
+                                : 'border-[var(--err)]/40 bg-[var(--err)]/10'
+                    }`}>
+                        <span className="text-sm font-bold text-[var(--text)]">
+                            {Math.abs(closedResultDifference.difference) < 0.005 ? 'Confere certinho' : closedResultDifference.difference > 0 ? 'Sobra' : 'Falta'}
+                        </span>
+                        <span className="font-mono font-bold text-lg text-[var(--text)]">
+                            {closedResultDifference.difference > 0 ? '+' : ''}R$ {formatBRL(closedResultDifference.difference)}
+                        </span>
+                    </div>
+                    <Button className="w-full" onClick={() => setClosedResultDifference(null)}>
+                        Ok
+                    </Button>
+                </div>
+            )}
+        </Modal>
+    );
+
     // Loading inicial do turno — evita piscar a tela de "abrir caixa" por um
     // frame antes de saber se já existe um turno aberto.
     if (shift === undefined) {
@@ -4814,6 +4876,7 @@ const CaixaView: React.FC<{
                 >
                     Ver histórico de turnos
                 </button>
+                {closedResultModal}
                 {historyModals}
             </div>
         );
@@ -5121,10 +5184,12 @@ const CaixaView: React.FC<{
                             </div>
                         </div>
 
-                        <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
-                            <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
-                            <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
-                        </div>
+                        {canSeeExpectedBeforeClosing && (
+                            <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                                <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
+                                <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
+                            </div>
+                        )}
 
                         <div>
                             <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
@@ -5155,7 +5220,7 @@ const CaixaView: React.FC<{
                             </div>
                         </div>
 
-                        {liveDifference !== null && (
+                        {canSeeExpectedBeforeClosing && liveDifference !== null && (
                             <div className={`rounded-xl px-4 py-3 flex items-center justify-between border-2 ${
                                 Math.abs(liveDifference) < 0.005
                                     ? 'border-[var(--ok)]/40 bg-[var(--ok)]/10'
@@ -5183,6 +5248,7 @@ const CaixaView: React.FC<{
                     </div>
                 )}
             </Modal>
+            {closedResultModal}
             {historyModals}
         </div>
     );
@@ -5769,6 +5835,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // padrao otimista do toggle de taxa de servico logo acima.
     const [showBestsellersEnabled, setShowBestsellersEnabled] = useState(store.config?.show_bestsellers ?? false);
 
+    // Melhorias no fluxo de Caixa (2026-08-28), Task 4 — contagem cega no
+    // fechamento de turno: mesmo padrão jsonb de sempre (stores.config).
+    const [blindCountEnabled, setBlindCountEnabled] = useState(store.config?.cash_shift_blind_count ?? false);
+
     // Largura de papel da impressora térmica (achado real, reunião com o
     // Ramon, 2026-08-25) — mesmo padrão jsonb de sempre. undefined = 48mm
     // (comportamento atual, sem mudança pras 7 lojas reais que nunca
@@ -5831,6 +5901,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
         setNoteSuggestions(store.config?.note_suggestions ?? []);
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
+        setBlindCountEnabled(store.config?.cash_shift_blind_count ?? false);
         setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
@@ -5882,6 +5953,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             console.error("Error updating config", e);
             setServiceFeeEnabled(!newValue); // Revert on error
             toast.error("Erro ao atualizar configuração de taxa de serviço.");
+        }
+    };
+
+    const handleToggleBlindCount = async () => {
+        const newValue = !blindCountEnabled;
+        setBlindCountEnabled(newValue);
+        try {
+            const newConfig = { ...currentStoreConfig, cash_shift_blind_count: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig });
+        } catch (e) {
+            console.error('Error updating blind count config', e);
+            setBlindCountEnabled(!newValue);
+            toast.error('Erro ao atualizar configuração de contagem cega.');
         }
     };
 
@@ -6053,6 +6139,21 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${serviceFeeEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
                     >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${serviceFeeEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                </div>
+
+                {/* Melhorias no fluxo de Caixa (2026-08-28), Task 4 —
+                    contagem cega no fechamento de turno. */}
+                <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                    <div>
+                        <h4 className="font-bold text-[var(--text)]">Contagem cega no fechamento de caixa</h4>
+                        <p className="text-sm text-[var(--text-muted)]">Quem fecha o caixa só vê o valor esperado DEPOIS de confirmar a contagem — evita ajustar a contagem pra bater. Quem tem a permissão &ldquo;Supervisiona caixa&rdquo; continua vendo antes.</p>
+                    </div>
+                    <button
+                        onClick={handleToggleBlindCount}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${blindCountEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${blindCountEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                 </div>
 
@@ -6834,6 +6935,7 @@ const DEFAULT_TEAM_PERMISSIONS = {
     menu: false,
     admin: false,
     caixa: false,
+    supervisiona_caixa: false,
 };
 
 // Presets de permissão por função real (Fase 1, Task 2 — plano "Fora do
@@ -6916,6 +7018,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 menu: user.permissions?.menu !== false,
                 admin: user.permissions?.admin !== false,
                 caixa: user.permissions?.caixa === true,
+                supervisiona_caixa: user.permissions?.supervisiona_caixa === true,
             });
             setPassword(''); // Don't show password
             const assignedIds = user.assigned_table_ids;
@@ -7079,6 +7182,13 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <p className="text-[11px] text-[var(--text-muted)] pl-6 -mt-1">
                                 Sem esta permissão, o usuário vê e gerencia mesas normalmente, mas só pode
                                 pedir a conta — quem finaliza e recebe o pagamento é sempre o caixa.
+                            </p>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input type="checkbox" checked={!!permissions.supervisiona_caixa} onChange={() => togglePermission('supervisiona_caixa')} className="rounded text-[var(--brand)] focus:ring-[var(--brand)]" />
+                                Supervisiona caixa
+                            </label>
+                            <p className="text-[11px] text-[var(--text-muted)] pl-6 -mt-1">
+                                Vê o valor esperado ao fechar o próprio caixa mesmo com contagem cega ligada, e pode aprovar o fechamento de qualquer operador quando a diferença passa do limite configurado.
                             </p>
                         </div>
                     </div>

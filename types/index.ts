@@ -77,6 +77,10 @@ export interface Store {
     // undefined/null/valor desconhecido = 'classico' (comportamento atual,
     // sem mudança).
     theme_preset?: 'classico' | 'pizzaria' | 'boteco' | 'praia' | null;
+    // Melhorias no fluxo de Caixa (2026-08-28), Task 4 — contagem cega no
+    // fechamento de turno: undefined/false = comportamento atual (esperado
+    // sempre visível durante a contagem, sem mudança pras lojas reais).
+    cash_shift_blind_count?: boolean;
   };
 }
 
