@@ -21,6 +21,7 @@ import { isCategoryAvailableNow } from '@/lib/schedule';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
+import { THEME_PRESETS, resolveThemePreset } from '@/lib/theme';
 
 // --- COMPONENTS ---
 
@@ -2440,6 +2441,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const { orders: mesaOrders, latest: latestMesaOrder } = useMesaOrders(currentStore?.id, mesaOrderIds);
     useWatchingPresence(currentStore?.id, currentTable?.id, isOrderStatusOpen);
 
+    // Fase 5, Task 18: preset de identidade visual (fonte de destaque, textura
+    // do hero, emoji das abas) — ver lib/theme.ts.
+    const theme = THEME_PRESETS[resolveThemePreset(currentStore?.config?.theme_preset)];
+
     // Carrega loja + cardápio. Extraído do useEffect pra poder ser reusado pelo
     // botão "Tentar de novo" da tela de erro de conexão (achado de UX #4).
     const loadStoreAndMenu = useCallback(async () => {
@@ -3241,10 +3246,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             <div
                                 className="absolute inset-0 flex items-center justify-center"
                                 style={{
-                                    backgroundImage:
-                                        'radial-gradient(circle, color-mix(in srgb, white 14%, transparent) 1px, transparent 1px), ' +
-                                        'linear-gradient(135deg, var(--ink), color-mix(in srgb, var(--ink) 82%, var(--brand)))',
-                                    backgroundSize: '16px 16px, 100% 100%',
+                                    // Fase 5, Task 18: textura do preset de identidade visual
+                                    // (lib/theme.ts) — 'classico' é byte-idêntico ao padrão
+                                    // de pontos que já existia aqui antes desta feature.
+                                    backgroundImage: theme.heroBackgroundImage,
+                                    backgroundSize: theme.heroBackgroundSize,
                                 }}
                             >
                                 <ImageIcon size={48} strokeWidth={1.5} className="text-white/15" aria-hidden="true" />
@@ -3424,7 +3430,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] text-left u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                         >
                             <MapPin size={16} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
-                            <h1 className="min-w-0 flex-1 truncate text-[20px] font-semibold leading-tight text-[var(--text)]">
+                            {/* Fase 5, Task 18: fonte de destaque do preset de identidade
+                                visual — 'classico' cai em var(--font-sans-src), idêntico
+                                ao peso/família de sempre (nenhuma mudança visual pra loja
+                                sem preset escolhido). */}
+                            <h1
+                                className="min-w-0 flex-1 truncate text-[20px] font-semibold leading-tight text-[var(--text)]"
+                                style={{ fontFamily: theme.displayFont }}
+                            >
                                 {currentStore.name}
                             </h1>
                             <ChevronRight
@@ -3737,6 +3750,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     className={`flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap border-b-2 u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)] border-transparent'}`}
                                     style={isActive ? { borderColor: IFOOD_RED } : undefined}
                                 >
+                                    {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
                                     {cat.name}
                                 </button>
                             );
@@ -3764,7 +3778,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             style={{ scrollMarginTop: stickyOffset }}
                             className="border-b border-[var(--border)] last:border-0 pt-4 pb-2"
                         >
-                            <h2 className="text-[19px] font-bold text-[var(--text)] mb-1">{cat.name}</h2>
+                            <h2 className="text-[19px] font-bold text-[var(--text)] mb-1" style={{ fontFamily: theme.displayFont }}>
+                                {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
+                                {cat.name}
+                            </h2>
                             <div className="pb-2">
                                 {catProducts.map((product, i) => (
                                     <ProductCard

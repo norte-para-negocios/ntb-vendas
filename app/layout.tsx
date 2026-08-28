@@ -30,8 +30,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Fase 5, Task 18: 3 fontes de destaque a mais, uma por preset de
+            identidade visual do cardápio do cliente (lib/theme.ts) — carregadas
+            aqui (link compartilhado por todo o app) porque não há como
+            injetar um <link> por loja num layout raiz estático; o custo de
+            rede é o mesmo request a mais de sempre, só com mais famílias. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;500&family=Fredoka:wght@500;700&family=Kalam:wght@400;700&family=Quicksand:wght@500;700&display=swap"
           rel="stylesheet"
         />
         <style>{`

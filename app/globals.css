@@ -72,6 +72,18 @@
   --dur: 180ms;
   --dur-slow: 280ms;
 
+  /* Fase 5, Task 18 (plano "Fora do Cardápio"): kit de identidade visual do
+     cardápio do cliente — 4 presets fechados (`stores.config.theme_preset`,
+     ver lib/theme.ts), cada um só troca a fonte de destaque + 1 textura de
+     fundo sutil no hero + o emoji das abas de categoria. Token global aqui
+     é só o FALLBACK ("clássico" = comportamento de sempre, sem preset
+     configurado); o valor real por loja é aplicado via `style` inline em
+     ClientModule.tsx (CSS var não pode variar por loja num arquivo estático
+     compartilhado por todo o app). Nome de família igual ao body de
+     propósito — "clássico" nunca teve fonte de destaque própria.
+  */
+  --theme-font-display: var(--font-sans-src);
+
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease: var(--ease-out);

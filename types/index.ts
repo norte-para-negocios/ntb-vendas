@@ -72,6 +72,11 @@ export interface Store {
     // (a impressora antiga da loja). undefined = 48mm (comportamento atual,
     // sem mudança pras 7 lojas reais). Ver lib/print.ts (thermalStyles).
     printer_paper_width_mm?: 48 | 58 | 80;
+    // Kit de identidade visual (Task 18, plano "Fora do Cardápio",
+    // 2026-08-27) — ver lib/theme.ts (THEME_PRESETS/resolveThemePreset).
+    // undefined/null/valor desconhecido = 'classico' (comportamento atual,
+    // sem mudança).
+    theme_preset?: 'classico' | 'pizzaria' | 'boteco' | 'praia' | null;
   };
 }
 

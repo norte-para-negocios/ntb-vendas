@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
+import { THEME_PRESETS, resolveThemePreset, ThemePreset } from '@/lib/theme';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -5680,6 +5681,34 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [accentColorError, setAccentColorError] = useState<string | null>(null);
     const [isSavingAccentColor, setIsSavingAccentColor] = useState(false);
 
+    // Fase 5, Task 18 (plano "Fora do Cardápio"): kit de identidade visual —
+    // 4 presets fechados (fonte de destaque + textura do hero + emoji de
+    // categoria, ver lib/theme.ts), reaproveitando `accent_color` já
+    // existente pra cor (nunca reimplementa cor aqui).
+    const [themePreset, setThemePreset] = useState<ThemePreset>(resolveThemePreset(store.config?.theme_preset));
+    const [isSavingThemePreset, setIsSavingThemePreset] = useState(false);
+
+    const handleSaveThemePreset = async (preset: ThemePreset) => {
+        const previous = themePreset;
+        setThemePreset(preset); // otimista, mesmo padrão de persistNoteSuggestions
+        setIsSavingThemePreset(true);
+        try {
+            const newConfig = { ...currentStoreConfig, theme_preset: preset };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+            toast.success(`Identidade visual "${THEME_PRESETS[preset].label}" aplicada!`);
+        } catch (e) {
+            console.error('Error updating theme preset', e);
+            setThemePreset(previous);
+            toast.error('Erro ao atualizar a identidade visual.');
+        } finally {
+            setIsSavingThemePreset(false);
+        }
+    };
+
     // A `store` recebida via prop ja e a fonte da verdade (StoreModule mantem
     // `user.store` atualizado via `onStoreUpdate` a cada mudanca real de
     // config) — nao ha motivo pra rebuscar do banco aqui (achado de
@@ -5999,6 +6028,36 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <AlertCircle size={13} className="flex-shrink-0" /> {accentColorError}
                         </p>
                     )}
+                </div>
+
+                {/* Fase 5, Task 18 (plano "Fora do Cardápio"): kit de identidade
+                    visual — 4 presets fechados, cada um só troca fonte de
+                    destaque + textura do hero + emoji de categoria no cardápio
+                    do cliente (ver lib/theme.ts). Cor continua sendo só o
+                    seletor acima — nunca duplicado aqui. */}
+                <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                    <h4 className="font-bold text-[var(--text)]">Identidade visual do cardápio</h4>
+                    <p className="text-sm text-[var(--text-muted)] mb-3">
+                        Escolha um estilo pra tipografia e textura de fundo do cardápio do cliente. &ldquo;Clássico&rdquo; é o
+                        visual atual, sem nenhuma mudança.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {(Object.entries(THEME_PRESETS) as [ThemePreset, typeof THEME_PRESETS[ThemePreset]][]).map(([key, preset]) => (
+                            <button
+                                key={key}
+                                type="button"
+                                disabled={isSavingThemePreset}
+                                onClick={() => handleSaveThemePreset(key)}
+                                className={`px-3 py-2 rounded-xl border text-sm font-semibold u-motion u-press-sm disabled:opacity-50 ${
+                                    themePreset === key
+                                        ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]'
+                                        : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                                }`}
+                            >
+                                {preset.categoryEmoji ? `${preset.categoryEmoji} ` : ''}{preset.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Sugestoes de observacao rapida (migration 019) — chips de atalho
