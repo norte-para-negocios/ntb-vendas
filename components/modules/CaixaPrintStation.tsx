@@ -281,21 +281,25 @@ interface FailedEntry {
 // de 10s, dedupe em memória), rodando duas cópias independentes do mesmo
 // mecanismo na mesma sessão. `isCaixaRole` sozinha é pura/sem estado, então
 // dá pra reusar só o critério sem reusar o efeito.
-// Achado ao vivo (2026-08-28): a exigência de `permissions.caixa === true`
-// vetava o próprio dono de disparar a reconciliação -- na loja Sertão, quem
-// estava logado no aparelho do caixa de verdade durante o teste era o
-// dono, então NADA imprimia sozinho, contrariando o requisito confirmado
-// pelo dono na hora ("qualquer pedido de qualquer lugar, imprime, não
-// importa quem tá logado"). `owner` volta a contar (é o próprio dono no
-// aparelho real de caixa, não mais um bypass genérico como antes da
-// revisão de 2026-08-23). `universal` continua de fora -- é a mesma
-// exclusão da revisão anterior, pelo mesmo motivo já documentado ali:
-// `permissions.caixa` de uma conta universal só espelha se a LOJA tem o
-// módulo Caixa ligado, não se aquele login específico é operador de caixa.
-export function isCaixaRole(user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
-  if (user.role === 'owner') return true;
-  if (user.role === 'universal') return false;
-  return user.permissions?.caixa === true;
+// Achado ao vivo (2026-08-28, corrigido em 2 passos): a exigência de
+// `permissions.caixa === true` vetava dono E universal de disparar a
+// reconciliação -- na loja Sertão, o teste ao vivo foi feito logado como
+// "Equipe Norte Para Negócios" (conta universal), e o requisito confirmado
+// pelo dono na hora foi explícito e repetido: "qualquer login, qualquer
+// pedido, imprime -- não importa quem tá logado". Primeiro passo (liberar só
+// `owner`) não bastou porque o teste real usa universal. Segundo passo:
+// TODO login com sessão de loja válida conta agora, sem exceção nenhuma.
+// A preocupação original da revisão de 2026-08-23 (dono/universal abrindo o
+// painel num aparelho qualquer, sem impressora nenhuma, disparando
+// `window.print()` à toa) continua real só pra impressora "Sistema padrão"
+// (browser_default) -- mas o roteamento de verdade desta loja usa
+// impressoras USB/rede cadastradas (`enqueuePrintJob`, ver
+// `matchingNetworkPrinters` abaixo), que é seguro disparar de qualquer
+// login: só grava uma linha na fila, quem imprime de fato é o agente ligado
+// na impressora certa, nunca o aparelho de quem clicou. Trade-off aceito
+// por pedido explícito do dono, não esquecimento.
+export function isCaixaRole(_user: Pick<StoreUser, 'role' | 'permissions'>): boolean {
+  return true;
 }
 
 // Impressoras de rede/USB (aba "Impressão", migration 061, 2026-08-27)
