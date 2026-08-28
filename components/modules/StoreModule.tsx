@@ -1343,13 +1343,18 @@ const PaymentCaptureFields: React.FC<{
             ))}
         </div>
 
+        {/* Achado real ao vivo (2026-08-28): o atalho de 1 toque abaixo
+            finaliza direto sem passar pela lista (ver comentário de
+            handleFinishPayment) — pra CREDIT/DEBIT isso pulava a bandeira
+            do cartão inteiramente, quebrando a conferência por bandeira no
+            fechamento de caixa. Removido daqui: cartão sempre passa pelo
+            fluxo normal (lançar → bandeira obrigatória → finalizar).
+            CASH/PIX não têm bandeira, continuam com o atalho. */}
         {onOneClickFinish && methods.length === 0 && total > 0 && (
             <div className="flex flex-wrap gap-2">
                 {[
                     { id: 'CASH', label: 'Dinheiro' },
                     { id: 'PIX', label: 'PIX' },
-                    { id: 'CREDIT', label: 'Crédito' },
-                    { id: 'DEBIT', label: 'Débito' },
                 ].map(m => (
                     <button
                         key={m.id}
@@ -1363,10 +1368,13 @@ const PaymentCaptureFields: React.FC<{
         )}
 
         {/* Bandeira do cartão — só faz sentido pra CREDIT/DEBIT. Catálogo
-            fechado (lib/labels.ts CARD_BRAND_LABELS), nunca texto livre. */}
+            fechado (lib/labels.ts CARD_BRAND_LABELS), nunca texto livre.
+            Obrigatória (2026-08-28, achado ao vivo): sem ela, a conferência
+            por bandeira no fechamento de caixa fica incompleta — handleAddPayment
+            bloqueia lançar pagamento de cartão sem bandeira escolhida. */}
         {(currentMethod === 'CREDIT' || currentMethod === 'DEBIT') && (
             <div className="animate-fade-in">
-                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Bandeira (opcional)</p>
+                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Bandeira</p>
                 <div className="grid grid-cols-3 gap-2">
                     {Object.entries(CARD_BRAND_LABELS).map(([id, label]) => (
                         <button
@@ -2283,10 +2291,17 @@ NOTIFY pgrst, 'reload schema';`;
         if (isNaN(amount) || amount <= 0) return;
 
         const isCard = currentPaymentMethod === 'CREDIT' || currentPaymentMethod === 'DEBIT';
+        // Achado real ao vivo (2026-08-28): bandeira era opcional, quebrando
+        // a conferência por bandeira no fechamento de caixa quando alguém
+        // esquecia de escolher. Agora obrigatória pra cartão.
+        if (isCard && !currentPaymentBrand) {
+            toast.error('Escolha a bandeira do cartão antes de lançar o pagamento.');
+            return;
+        }
         setPaymentMethods(prev => [...prev, {
             method: currentPaymentMethod,
             amount,
-            ...(isCard && currentPaymentBrand ? { brand: currentPaymentBrand } : {}),
+            ...(isCard ? { brand: currentPaymentBrand } : {}),
         }]);
         setCurrentPaymentBrand('');
 
@@ -3797,10 +3812,17 @@ const CounterView: React.FC<{
         if (isNaN(amount) || amount <= 0) return;
 
         const isCard = currentPaymentMethod === 'CREDIT' || currentPaymentMethod === 'DEBIT';
+        // Achado real ao vivo (2026-08-28): bandeira era opcional, quebrando
+        // a conferência por bandeira no fechamento de caixa quando alguém
+        // esquecia de escolher. Agora obrigatória pra cartão.
+        if (isCard && !currentPaymentBrand) {
+            toast.error('Escolha a bandeira do cartão antes de lançar o pagamento.');
+            return;
+        }
         setPaymentMethods(prev => [...prev, {
             method: currentPaymentMethod,
             amount,
-            ...(isCard && currentPaymentBrand ? { brand: currentPaymentBrand } : {}),
+            ...(isCard ? { brand: currentPaymentBrand } : {}),
         }]);
         setCurrentPaymentBrand('');
 
