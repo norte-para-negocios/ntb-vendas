@@ -16,6 +16,7 @@ import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
+import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
@@ -4223,7 +4224,11 @@ const CaixaView: React.FC<{
     const [showCloseModal, setShowCloseModal] = useState(false);
     const [closeSummary, setCloseSummary] = useState<CashShiftSummary | null>(null);
     const [isLoadingSummary, setIsLoadingSummary] = useState(false);
-    const [closingCountedCash, setClosingCountedCash] = useState('');
+    // Melhorias no fluxo de Caixa (2026-08-28): breakdown por cédula/moeda
+    // em vez de um único total — chave é o valor da denominação em string
+    // (ex. "50"), valor é a quantidade digitada. O total nunca é digitado
+    // direto, sempre somado a partir daqui (sumDenominationBreakdown).
+    const [closingCashBreakdown, setClosingCashBreakdown] = useState<Record<string, string>>({});
     const [isClosingShift, setIsClosingShift] = useState(false);
 
     // Subprojeto 2 (2026-08-25): histórico de turnos passados, consultável a
@@ -4361,7 +4366,7 @@ const CaixaView: React.FC<{
     const handleCloseShiftClick = async () => {
         if (!shift) return;
         setShowCloseModal(true);
-        setClosingCountedCash('');
+        setClosingCashBreakdown({});
         setIsLoadingSummary(true);
         try {
             const summary = await fetchCashShiftSummary(shift.id);
@@ -4547,24 +4552,23 @@ const CaixaView: React.FC<{
         </>
     );
 
-    const closingCountedValue = useMemo(() => {
-        const v = parseFloat(closingCountedCash.replace(',', '.'));
-        return isNaN(v) ? null : v;
-    }, [closingCountedCash]);
+    const closingCountedValue = useMemo(() => sumDenominationBreakdown(closingCashBreakdown), [closingCashBreakdown]);
 
     const liveDifference = useMemo(() => {
-        if (closingCountedValue === null || !closeSummary) return null;
+        if (!closeSummary) return null;
         return closingCountedValue - closeSummary.expected_cash;
     }, [closingCountedValue, closeSummary]);
 
     const handleConfirmCloseShift = async () => {
-        if (!shift || closingCountedValue === null || closingCountedValue < 0) {
-            toast.error('Informe o valor conferido na gaveta.');
-            return;
-        }
+        if (!shift) return;
         setIsClosingShift(true);
         try {
-            const result = await closeCashShift(shift.id, closingCountedValue);
+            const breakdownAsNumbers: Record<string, number> = {};
+            CASH_DENOMINATIONS.forEach((value) => {
+                const count = parseInt(closingCashBreakdown[String(value)] || '0', 10);
+                if (count > 0) breakdownAsNumbers[String(value)] = count;
+            });
+            const result = await closeCashShift(shift.id, closingCountedValue, breakdownAsNumbers);
             if (result.success) {
                 toast.success('Caixa fechado.');
                 setShowCloseModal(false);
@@ -5124,20 +5128,30 @@ const CaixaView: React.FC<{
 
                         <div>
                             <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
-                                Valor conferido na gaveta
+                                Contagem da gaveta
                             </label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    autoFocus
-                                    className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
-                                    placeholder="0.00"
-                                    value={closingCountedCash}
-                                    onChange={e => setClosingCountedCash(e.target.value)}
-                                />
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                {CASH_DENOMINATIONS.map((value) => (
+                                    <div key={value} className="flex flex-col gap-1">
+                                        <span className="text-xs font-bold text-[var(--text-muted)] text-center">
+                                            {value >= 1 ? `R$ ${value}` : `R$ ${value.toFixed(2)}`}
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            inputMode="numeric"
+                                            className="w-full px-2 py-2 rounded-lg border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-center font-bold"
+                                            placeholder="0"
+                                            value={closingCashBreakdown[String(value)] || ''}
+                                            onChange={(e) => setClosingCashBreakdown((prev) => ({ ...prev, [String(value)]: e.target.value }))}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-3 flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)]">
+                                <span className="text-sm font-bold text-[var(--text)]">Total contado</span>
+                                <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closingCountedValue)}</span>
                             </div>
                         </div>
 
