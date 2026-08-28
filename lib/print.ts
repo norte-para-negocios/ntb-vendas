@@ -512,6 +512,61 @@ export function printBillReceipt(opts: {
   return openThermalPrint(`Comprovante - ${opts.label}`, body, opts.paperWidthMm);
 }
 
+// Achado ao vivo (2026-08-28, loja real com 3 impressoras cabeadas —
+// Cozinha/Bar/Caixa): a impressora do Caixa precisa do COMPROVANTE de
+// pagamento (não ticket de pedido), mas via rede/USB (agente local) em
+// vez de window.print(). Mesmo texto de printBillReceipt, em texto puro,
+// reaproveitando wrapLine/CHARS_PER_LINE já usados pelo ticket de teste
+// genérico acima.
+export function buildBillReceiptText(opts: {
+  storeName: string;
+  cnpj?: string | null;
+  label: string;
+  items: BillReceiptItem[];
+  subtotal: number;
+  serviceFee?: BillServiceFeeInfo;
+  total: number;
+  payment?: BillPaymentInfo;
+  paperWidthMm?: 48 | 58 | 80;
+}): string {
+  const maxChars = CHARS_PER_LINE[opts.paperWidthMm || 48];
+  const divider = '-'.repeat(maxChars);
+  const lines: string[] = [];
+  lines.push(...wrapLine(opts.storeName.toUpperCase(), maxChars));
+  if (opts.cnpj) lines.push(`CNPJ: ${opts.cnpj}`);
+  lines.push(new Date().toLocaleString('pt-BR'));
+  lines.push(divider);
+  lines.push(...wrapLine(opts.label, maxChars));
+  lines.push(divider);
+  opts.items.forEach((i) => {
+    lines.push(...wrapLine(`${i.quantity}x ${i.name} - R$ ${formatBRL(i.total)}`, maxChars));
+    if (i.client) lines.push(`  Cliente: ${i.client}`);
+  });
+  lines.push(divider);
+  if (opts.serviceFee) {
+    lines.push(`Subtotal: R$ ${formatBRL(opts.subtotal)}`);
+    if (opts.serviceFee.charged) {
+      lines.push(`Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)} opcional): R$ ${formatBRL(opts.serviceFee.amount)}`);
+    } else {
+      lines.push(...wrapLine(opts.serviceFee.removedForTable ? 'Taxa de serviço opcional removida nesta mesa' : 'Este estabelecimento não cobra taxa de serviço', maxChars));
+    }
+  }
+  lines.push(`TOTAL: R$ ${formatBRL(opts.total)}`);
+  if (opts.payment) {
+    lines.push(divider);
+    lines.push('FORMA DE PAGAMENTO');
+    opts.payment.methods.forEach((m) => {
+      const brandSuffix = m.brand ? ` (${getCardBrandLabel(m.brand)})` : '';
+      lines.push(`${getPaymentMethodLabel(m.method)}${brandSuffix}: R$ ${formatBRL(m.amount)}`);
+    });
+    if (opts.payment.changeDue > 0) lines.push(`Troco: R$ ${formatBRL(opts.payment.changeDue)}`);
+  }
+  lines.push(divider);
+  lines.push('Obrigado pela preferência!');
+  lines.push('\n\n\n');
+  return lines.join('\n');
+}
+
 const REPORT_STYLES = `
   body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 24px; font-size: 13px; }
   .report-header { text-align: center; border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 16px; }

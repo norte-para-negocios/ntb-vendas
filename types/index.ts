@@ -390,7 +390,11 @@ export interface PrinterConfig {
   ip_address: string | null;
   port: number;
   usb_system_name: string | null;
-  destination: 'kitchen' | 'bar' | 'all';
+  // 'receipt' (2026-08-28, migration 064): impressora dedicada ao
+  // comprovante de pagamento (printBillReceipt), separada da(s) impressora(s)
+  // de ticket de cozinha/bar — achado ao vivo, loja real com 3 impressoras
+  // cabeadas distintas (cozinha, bar, caixa).
+  destination: 'kitchen' | 'bar' | 'all' | 'receipt';
   is_active: boolean;
   created_at: string;
 }
@@ -399,7 +403,11 @@ export interface PrintJob {
   id: string;
   store_id: string;
   printer_config_id: string | null;
-  destination: 'kitchen' | 'bar' | 'all';
+  // 'receipt' (2026-08-28, migration 064): impressora dedicada ao
+  // comprovante de pagamento (printBillReceipt), separada da(s) impressora(s)
+  // de ticket de cozinha/bar — achado ao vivo, loja real com 3 impressoras
+  // cabeadas distintas (cozinha, bar, caixa).
+  destination: 'kitchen' | 'bar' | 'all' | 'receipt';
   title: string;
   content: string;
   status: 'pending' | 'printing' | 'done' | 'error';

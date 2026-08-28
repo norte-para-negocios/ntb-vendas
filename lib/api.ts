@@ -1894,7 +1894,7 @@ export const createPrinterConfig = async (params: {
   ipAddress?: string | null;
   port?: number;
   usbSystemName?: string | null;
-  destination: 'kitchen' | 'bar' | 'all';
+  destination: 'kitchen' | 'bar' | 'all' | 'receipt';
 }): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').insert({
     store_id: params.storeId,
@@ -1929,7 +1929,7 @@ export const deletePrinterConfig = async (id: string): Promise<{ success: boolea
 export const enqueuePrintJob = async (params: {
   storeId: string;
   printerConfigId?: string | null;
-  destination: 'kitchen' | 'bar' | 'all';
+  destination: 'kitchen' | 'bar' | 'all' | 'receipt';
   title: string;
   content: string;
 }): Promise<{ success: boolean; id?: string; message?: string }> => {
@@ -1942,6 +1942,30 @@ export const enqueuePrintJob = async (params: {
   }).select('id').single();
   if (error) { console.error('Error enqueueing print job:', error); return { success: false, message: error.message }; }
   return { success: true, id: data?.id };
+};
+
+// Achado ao vivo (2026-08-28, loja real com 3 impressoras cabeadas —
+// Cozinha/Bar/Caixa): enfileira o comprovante de pagamento pra toda
+// impressora de rede/USB ativa com destino 'receipt'/'all' da loja.
+// Aditivo ao window.print() existente (printBillReceipt em
+// StoreModule.tsx) — nunca no lugar dele, mesmo princípio do
+// CaixaPrintStation pros tickets de cozinha/bar. Fire-and-forget de
+// propósito: falha aqui nunca deve impedir o fechamento, que já
+// aconteceu antes desta chamada.
+export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string): Promise<void> => {
+  const { data: printers, error } = await supabase
+    .from('printer_configs')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('connection_type', ['network', 'usb'])
+    .in('destination', ['receipt', 'all']);
+  if (error) { console.error('Error fetching receipt printers:', error); return; }
+  await Promise.all(
+    (printers || []).map((printer) =>
+      enqueuePrintJob({ storeId, printerConfigId: printer.id, destination: printer.destination, title, content })
+    )
+  );
 };
 
 export const fetchRecentPrintJobs = async (storeId: string, limit: number = 30): Promise<PrintJob[]> => {

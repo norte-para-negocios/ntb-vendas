@@ -48,6 +48,10 @@ const DESTINATION_LABELS: Record<PrinterConfig['destination'], string> = {
   kitchen: 'Cozinha',
   bar: 'Bar',
   all: 'Cozinha e Bar',
+  // Achado ao vivo (2026-08-28, migration 064): loja real com 3
+  // impressoras cabeadas distintas — a do caixa imprime o comprovante de
+  // pagamento (printBillReceipt), não ticket de pedido.
+  receipt: 'Caixa (comprovante)',
 };
 
 const STATUS_BADGE: Record<PrintJob['status'], { label: string; className: string; icon: React.ReactNode }> = {
@@ -285,7 +289,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           <div className="flex flex-col gap-1">
             <label className="text-[13px] font-medium text-[var(--text-muted)]">Destino</label>
             <div className="flex gap-2">
-              {(['kitchen', 'bar', 'all'] as const).map((dest) => (
+              {(['kitchen', 'bar', 'all', 'receipt'] as const).map((dest) => (
                 <button
                   key={dest}
                   type="button"
