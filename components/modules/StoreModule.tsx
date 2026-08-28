@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
 import { THEME_PRESETS, resolveThemePreset, ThemePreset } from '@/lib/theme';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, applyModulesConfigFields, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, updateStoreAccentColor, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, uploadStoreCover, updateStoreCoverUrl, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { supabase } from '@/lib/supabaseClient';
@@ -7130,53 +7130,13 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
     const storeId = store.id;
 
-    // Aba "Operação" (2026-08-27, pedido explícito do usuário): "módulos
-    // desta loja"/"fluxo de pedidos"/"quem fecha a conta" só existiam no
-    // Master Admin — o lojista tinha que pedir pra equipe Norte pra ligar um
-    // Bar, trocar de acompanhamento por tela pra impressão direta, ou
-    // decidir se o garçom finaliza pagamento sozinho. Mesmo mecanismo de
-    // lib/storeModules.ts (resolveStoreModules/resolveOrderFlow), mesmos
-    // textos/UI de AdminModule.tsx — duplicado de propósito, mesmo padrão já
-    // usado pra Certificado/Configuração Fiscal (arquivos diferentes, sem
-    // componente compartilhado, público muito diferente).
-    const storeModulesAtual = resolveStoreModules(store);
-    const [opModTables, setOpModTables] = useState(storeModulesAtual.tables);
-    const [opModCounter, setOpModCounter] = useState(storeModulesAtual.counter);
-    const [opModKitchenKds, setOpModKitchenKds] = useState(storeModulesAtual.kitchen_kds);
-    const [opModBarKds, setOpModBarKds] = useState(storeModulesAtual.bar_kds);
-    const [opModCaixa, setOpModCaixa] = useState(storeModulesAtual.caixa);
-    const [opModMenu, setOpModMenu] = useState(storeModulesAtual.menu);
-    const [opModAdmin, setOpModAdmin] = useState(storeModulesAtual.admin);
-    const [opOrderFlow, setOpOrderFlow] = useState<OrderFlow>(resolveOrderFlow(store));
-    const [isSavingOperacao, setIsSavingOperacao] = useState(false);
-    // Mesma proteção do Master Admin (checklist de direct_print) — sem isso
-    // o lojista pode ligar "Restringir fechamento de conta" sem ter marcado
-    // a permissão Caixa em ninguém da equipe e travar o próprio caixa.
-    const [caixaTeamCount, setCaixaTeamCount] = useState<number | null>(null);
-
-    const handleSaveOperacao = async () => {
-        setIsSavingOperacao(true);
-        try {
-            const modules: StoreModules = {
-                tables: opModTables,
-                counter: opModCounter,
-                kitchen_kds: opModKitchenKds,
-                bar_kds: opModBarKds,
-                caixa: opModCaixa,
-                menu: opModMenu,
-                admin: opModAdmin,
-            };
-            const newConfig = applyModulesConfigFields(store.config || {}, { modules, orderFlow: opOrderFlow });
-            await updateStoreConfig(store.id, newConfig);
-            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig as Store['config'] });
-            toast.success('Operação da loja atualizada.');
-        } catch (e) {
-            console.error('Erro ao salvar operação da loja:', e);
-            toast.error('Erro ao salvar. Tente novamente.');
-        } finally {
-            setIsSavingOperacao(false);
-        }
-    };
+    // Aba "Operação" (self-service de módulos/fluxo de pedido pelo
+    // lojista) REMOVIDA (2026-08-28, pedido direto do dono): decidir
+    // mesa/balcão, número de mesas e quais módulos a loja usa é uma
+    // decisão comercial ligada ao plano contratado — só o Master Admin
+    // (AdminModule.tsx, "Editar Loja", que já tem os mesmos controles)
+    // pode mudar isso. Existiu por ~1 dia (2026-08-27) antes desta
+    // reversão.
 
     // Certificado digital + Configuração do Emissor Fiscal — mesma tela que
     // já existe pro Master Admin (AdminModule.tsx), aberta pro lojista
@@ -7404,7 +7364,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'operacao' | 'impressao'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -7473,13 +7433,6 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         if (activeTab !== 'shifts') return;
         setIsLoadingCheckins(true);
         fetchCheckinsHistory(storeId).then(data => { setCheckins(data); setIsLoadingCheckins(false); });
-    }, [storeId, activeTab]);
-
-    useEffect(() => {
-        if (activeTab !== 'operacao') return;
-        fetchStoreTeamMembers(storeId).then(members => {
-            setCaixaTeamCount(members.filter(m => m.permissions?.caixa === true).length);
-        });
     }, [storeId, activeTab]);
 
     const handleClearSales = async () => {
@@ -7821,12 +7774,6 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 >
                     Impressão
                 </button>
-                <button
-                    onClick={() => setActiveTab('operacao')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'operacao' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Operação
-                </button>
             </div>
 
             {activeTab === 'dashboard' && (
@@ -7885,126 +7832,6 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             </table>
                         </div>
                     )}
-                </div>
-            )}
-
-            {activeTab === 'operacao' && (
-                <div className="space-y-4">
-                    <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)] space-y-3">
-                        <div>
-                            <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><LayoutGrid size={14}/> Módulos desta loja</h4>
-                            <p className="text-xs text-[var(--text-muted)]">Desligue o que essa loja não usa — a aba some do painel por completo (sidebar e barra inferior), sem depender de usuário nenhum. Ex.: loja sem bar desliga "Bar (KDS)".</p>
-                        </div>
-                        {/* Presets (Fase 1, Task 1 — plano "Fora do Cardápio"): só
-                            pré-marcam os campos abaixo, nunca salvam sozinhos —
-                            o dono ainda revisa e clica "Salvar Operação". */}
-                        <div className="flex flex-wrap gap-1.5">
-                            {Object.entries(STORE_PROFILE_PRESETS).map(([key, preset]) => (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() => {
-                                        setOpModTables(preset.modules.tables);
-                                        setOpModCounter(preset.modules.counter);
-                                        setOpModKitchenKds(preset.modules.kitchen_kds);
-                                        setOpModBarKds(preset.modules.bar_kds);
-                                        setOpModCaixa(preset.modules.caixa);
-                                        setOpModMenu(preset.modules.menu);
-                                        setOpModAdmin(preset.modules.admin);
-                                        setOpOrderFlow(preset.orderFlow);
-                                    }}
-                                    className="px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--brand)]/40 u-motion u-press-sm"
-                                >
-                                    {preset.label}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {([
-                                { key: 'tables', label: 'Mesas', icon: LayoutDashboard, value: opModTables, set: setOpModTables },
-                                { key: 'counter', label: 'Balcão', icon: Coffee, value: opModCounter, set: setOpModCounter },
-                                { key: 'kitchen_kds', label: 'Cozinha (KDS)', icon: ChefHat, value: opModKitchenKds, set: setOpModKitchenKds },
-                                { key: 'bar_kds', label: 'Bar (KDS)', icon: Wine, value: opModBarKds, set: setOpModBarKds },
-                                { key: 'menu', label: 'Cardápio', icon: UtensilsCrossed, value: opModMenu, set: setOpModMenu },
-                                { key: 'admin', label: 'Administração', icon: BarChart3, value: opModAdmin, set: setOpModAdmin },
-                            ] as const).map(({ key, label, icon: Icon, value, set }) => (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={value}
-                                    aria-label={label}
-                                    onClick={() => set(!value)}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold u-motion u-press-sm transition-colors ${value ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                                >
-                                    <Icon size={14} className="shrink-0" />
-                                    <span className="truncate">{label}</span>
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="pt-3 border-t border-[var(--border)] space-y-2">
-                            <label className="text-xs font-semibold text-[var(--text)]">Fluxo de pedidos</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={opOrderFlow === 'kds'}
-                                    onClick={() => setOpOrderFlow('kds')}
-                                    className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${opOrderFlow === 'kds' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                                >
-                                    Acompanhamento na tela (KDS)
-                                </button>
-                                <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={opOrderFlow === 'direct_print'}
-                                    onClick={() => setOpOrderFlow('direct_print')}
-                                    className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${opOrderFlow === 'direct_print' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                                >
-                                    Envia direto para impressão
-                                </button>
-                            </div>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                                {opOrderFlow === 'direct_print'
-                                    ? 'Ao enviar, o pedido vai direto pra impressão — sem tela de acompanhamento de cozinha/bar. Confira em Caixa → "Testar Impressão" antes de abrir a loja.'
-                                    : 'Pedido enviado aparece na tela da Cozinha/Bar até ser preparado e entregue.'}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)] space-y-3">
-                        <div>
-                            <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Wallet size={14}/> Quem fecha a conta</h4>
-                            <p className="text-xs text-[var(--text-muted)]">
-                                Hoje, qualquer pessoa da equipe com acesso a Mesas pode receber o pagamento e fechar a conta de um cliente.
-                                Ligue esta opção se você quiser que só quem tiver a permissão &ldquo;Caixa&rdquo; marcada (aba Gestão de Usuários) possa
-                                finalizar o pagamento — o resto da equipe continua vendo as mesas e podendo pedir a conta, só não consegue
-                                mais receber e encerrar sozinho.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={opModCaixa}
-                            aria-label="Restringir fechamento de conta a quem tem permissão de Caixa"
-                            onClick={() => setOpModCaixa(!opModCaixa)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold u-motion u-press-sm transition-colors w-full sm:w-auto ${opModCaixa ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                        >
-                            <Wallet size={14} className="shrink-0" />
-                            {opModCaixa ? 'Restrito a quem tem permissão de Caixa' : 'Qualquer um com acesso a Mesas pode fechar a conta'}
-                        </button>
-                        {opModCaixa && caixaTeamCount === 0 && (
-                            <div className="flex items-start gap-2 text-xs text-[var(--warn)] font-semibold bg-[var(--warn)]/10 border border-[var(--warn)]/30 rounded-lg p-3">
-                                <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                                <span>Nenhum usuário da equipe tem a permissão &ldquo;Caixa&rdquo; marcada ainda — se salvar assim, ninguém vai conseguir fechar conta. Marque a permissão em Gestão de Usuários antes.</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <Button onClick={handleSaveOperacao} isLoading={isSavingOperacao} className="w-full sm:w-auto">
-                        Salvar Operação
-                    </Button>
                 </div>
             )}
 

@@ -2021,6 +2021,28 @@ mesmo par arquivo/senha) antes de tentar de novo. O resto da configuração
 (série, endereço, CSC, NCM do produto de teste) já está pronto — só falta a
 senha certa pra completar a validação real.
 
+## Configurar operação da loja é EXCLUSIVO do Master Admin (revertido 2026-08-28)
+
+A aba "Operação" (Administração, painel do lojista) — que deixava o
+próprio lojista ligar/desligar módulos (Mesas/Balcão/KDS/Cardápio/Admin),
+trocar o fluxo de pedido e restringir fechamento de conta a quem tem
+permissão de Caixa — foi **removida** um dia depois de ter sido
+adicionada. Decisão explícita do dono: mesa/balcão, número de mesas e
+quais módulos a loja usa é uma decisão comercial ligada ao **plano
+contratado** pela loja — só o Master Admin (`AdminModule.tsx`, "Editar
+Loja", que já tem os mesmos controles e continua sendo o único lugar
+onde isso pode mudar) pode decidir isso, nunca o lojista. Contrato
+(mesa/balcão) e número de mesas nunca chegaram a ser expostos pro
+lojista — só o toggle de módulos/fluxo de pedido existiu brevemente.
+Nenhuma migração de banco envolvida (era puramente UI/estado do lado do
+lojista); `StoreModule.tsx` voltou a ter as mesmas 7 abas de
+Administração de antes (sem "Operação").
+
+Fica registrado como contexto pra qualquer sessão futura: se alguém
+pedir de novo pro lojista poder mexer em módulos/fluxo sozinho, **checar
+com o dono antes** — já foi tentado e revertido no dia seguinte por ser
+incompatível com a ideia de planos pagos por funcionalidade.
+
 ## Caixa por operador (`cash_shifts`, migration 062)
 
 Pedido direto do dono (2026-08-28, ao vivo): "frente de caixa"
