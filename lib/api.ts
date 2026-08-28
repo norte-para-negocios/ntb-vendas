@@ -1610,6 +1610,36 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
 export const updateStore = async (id: string, params: CreateStoreParams): Promise<{ success: boolean; message?: string }> => {
   try {
+    // Achado real ao vivo (reunião com o Ramon, 2026-08-27): trocar o
+    // contrato de uma loja existente de "Balcão + Mesas" pra "Apenas
+    // Balcão" só atualizava `contract_type` — as `tables` já cadastradas
+    // continuavam lá pra sempre, ambíguas com o próprio contrato da loja
+    // ("tirei lá e deixei aqui", nas palavras do usuário). Corrigido:
+    // zera as mesas quando o novo contrato é "apenas balcão"
+    // (sync_store_tables_secure já suporta target 0 — usado desde sempre,
+    // migration 030) — mas só quando nenhuma está OCUPADA/aguardando
+    // pagamento agora, nunca apaga silenciosamente uma mesa com gente
+    // sentada ou pedido em andamento. Mesa BLOQUEADA (sem atividade de
+    // cliente real) pode ser removida normalmente. Checagem ANTES do
+    // update de `stores`: se bloquear, a loja continua com o
+    // contract_type antigo, nunca um estado pela metade (contrato mudado
+    // mas mesa ainda ativa por baixo).
+    if (params.contractType === 'balcao') {
+      // `tables` não tem policy de SELECT pro anon (migration 031) -- um
+      // `.from('tables').select(...)` direto sempre volta vazio sem erro,
+      // então essa checagem só funciona via RPC security definer (bug real
+      // achado em QA ao vivo 2026-08-27: mesa ocupada não bloqueava o
+      // salvar antes desta correção, ver migration 060).
+      const { data: activeCount, error: countErr } = await supabase.rpc('count_active_tables_secure', { p_store_id: id });
+      if (countErr) console.error('Error checking active tables before clearing:', countErr);
+      if (activeCount) {
+        return {
+          success: false,
+          message: `Não foi possível mudar para "Apenas Balcão": ${activeCount} mesa(s) ocupada(s)/aguardando pagamento agora. Feche essas mesas antes de trocar o tipo de contrato.`,
+        };
+      }
+    }
+
     // Busca o config atual pra só sobrescrever service_fee_rate (e o perfil
     // de módulos, ver applyModulesConfigFields), sem apagar outras flags
     // (use_pin, allow_client_open, require_pin_for_open, charge_service_fee)
@@ -1633,6 +1663,9 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
     if (params.contractType === 'balcao_mesas') {
       const { error: syncErr } = await supabase.rpc('sync_store_tables_secure', { p_store_id: id, p_target_count: params.tableCount });
       if (syncErr) console.error('Error syncing tables:', syncErr);
+    } else {
+      const { error: syncErr } = await supabase.rpc('sync_store_tables_secure', { p_store_id: id, p_target_count: 0 });
+      if (syncErr) console.error('Error clearing tables:', syncErr);
     }
 
     return { success: true };

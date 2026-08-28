@@ -1464,6 +1464,35 @@ mudança não tem efeito colateral em nada que já funciona).
 teto de 100 (`<input type="range" min="1" max="100">`) — virou um
 `<input type="number" min="1">` sem limite superior.
 
+**Resolvido (2026-08-27) — ambiguidade "Apenas Balcão" vs. mesas
+cadastradas, achado real na reunião com o Ramon.** Trocar o contrato de
+uma loja de "Balcão + Mesas" pra "Apenas Balcão" só atualizava
+`contract_type`, deixando as `tables` já cadastradas órfãs pra sempre
+("tirei lá e deixei aqui"). Corrigido em `updateStore` (`lib/api.ts`):
+zera as mesas (`sync_store_tables_secure(id, 0)`) sempre que o novo
+contrato não é `balcao_mesas`, mas só quando nenhuma mesa está
+`occupied`/`waiting_bill` no momento — bloqueia o save com mensagem clara
+em vez de apagar mesa com cliente sentado. **Bug real achado testando ao
+vivo, corrigido no mesmo commit**: a checagem inicial usava
+`supabase.from('tables').select(..., {count:'exact', head:true})` direto
+com a chave anônima — mas `tables` não tem NENHUMA policy de SELECT pro
+anon desde a migration 031 (`select_tables_none`), então o select sempre
+voltava vazio *sem erro visível* e o bloqueio nunca disparava (confirmado
+ao vivo: mesa marcada `occupied` não impediu a troca). Corrigido com uma
+RPC nova `count_active_tables_secure` (migration 060, mesmo padrão
+`security definer` de todo o resto do acesso a `tables` desde a migration
+030) — **qualquer checagem nova sobre dado de `tables` neste projeto tem
+que passar por RPC, nunca por `.from('tables').select()` direto, ou vai
+falhar do mesmo jeito silencioso.** Depois de aplicar uma function nova
+que `anon`/`authenticated` vão chamar, também é preciso `NOTIFY pgrst,
+'reload schema'` (ou reiniciar o container `rest-vendas`) — o PostgREST
+cacheia o schema e não vê a function nova sozinho, erro `PGRST202`.
+Testado ao vivo numa loja de teste dedicada (criada e apagada só pra
+isso): caminho feliz (sem mesa ocupada) zera as mesas e troca o
+contrato; caminho de bloqueio (1 mesa `occupied`) mantém o contrato
+antigo e mostra a mensagem de erro, confirmado nos dois casos via SQL
+direto no Postgres do Contabo.
+
 **⚠️ REGRA CRÍTICA (2026-07-06), vale pra qualquer trabalho de emissão
 fiscal neste projeto daqui pra frente: SEMPRE testar em ambiente de
 HOMOLOGAÇÃO da SEFAZ. NUNCA emitir nota fiscal real durante

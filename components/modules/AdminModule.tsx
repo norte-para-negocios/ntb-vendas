@@ -1798,8 +1798,27 @@ export const AdminModule: React.FC = () => {
                             onChange={e => setTableCount(Math.max(1, parseInt(e.target.value) || 1))}
                             className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40"
                         />
-                        {editingId && <p className="text-xs text-[var(--info)] mt-2">Nota: Reduzir mesas não apaga as existentes automaticamente.</p>}
+                        {/* Achado real (2026-08-27): o texto antigo aqui dizia o
+                            OPOSTO do que sync_store_tables_secure realmente faz —
+                            reduzir o número apaga as mesas de número mais alto de
+                            verdade (migration 030). Corrigido pra avisar o que
+                            realmente acontece, não o contrário. */}
+                        {editingId && <p className="text-xs text-[var(--warn)] mt-2">Atenção: reduzir o número de mesas APAGA as mesas de número mais alto que excederem o novo total.</p>}
                       </div>
+                  )}
+                  {/* Achado real ao vivo (reunião com o Ramon, 2026-08-27): trocar
+                      uma loja existente pra "Apenas Balcão" remove as mesas já
+                      cadastradas (ver updateStore, lib/api.ts) — evita a
+                      ambiguidade "contrato diz balcão mas as mesas continuam no
+                      banco" que o usuário encontrou testando ao vivo. Bloqueado
+                      no servidor se alguma mesa estiver ocupada/aguardando
+                      pagamento agora; aviso aqui é só pra não pegar o Master de
+                      surpresa quando isso acontecer sem erro nenhum. */}
+                  {editingId && contractType === 'balcao' && (
+                      <p className="text-xs text-[var(--warn)] flex items-start gap-1.5">
+                          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                          Ao salvar, as mesas já cadastradas nesta loja serão removidas (só se nenhuma estiver ocupada agora).
+                      </p>
                   )}
               </div>
               {errorMsg && <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
