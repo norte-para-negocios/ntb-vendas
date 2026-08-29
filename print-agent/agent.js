@@ -211,8 +211,26 @@ async function main() {
     console.log(`Impressoras ativas (rede/USB) carregadas: ${printersById.size}`);
   };
 
+  // Achado ao vivo (2026-08-28/29): não havia nenhum jeito de o painel
+  // saber se o agente estava mesmo rodando -- migration 066. Reaproveita
+  // este mesmo ciclo de 30s (não cria um setInterval a mais) pra avisar
+  // "estou vivo, agora são X, Y impressoras carregadas". Best-effort: uma
+  // falha aqui não pode derrubar o resto do agente, só fica sem heartbeat
+  // até a próxima rodada.
+  const sendHeartbeat = async () => {
+    try {
+      await supabase.from('print_agent_status').upsert(
+        { store_id: store.id, last_seen_at: new Date().toISOString(), printers_loaded: printersById.size, updated_at: new Date().toISOString() },
+        { onConflict: 'store_id' }
+      );
+    } catch (e) {
+      console.error('Heartbeat falhou (ignorado, tenta de novo em 30s):', e.message);
+    }
+  };
+
   await refreshPrinters();
-  setInterval(refreshPrinters, 30000);
+  await sendHeartbeat();
+  setInterval(async () => { await refreshPrinters(); await sendHeartbeat(); }, 30000);
 
   await syncDiscoveredPrinters(supabase, store.id);
   console.log('Impressoras instaladas neste computador detectadas e enviadas pro painel.');

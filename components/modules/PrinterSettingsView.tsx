@@ -28,12 +28,12 @@
 // finge que "enfileirou" é o mesmo que "imprimiu".
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
-  enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters,
+  enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters, fetchPrintAgentStatus,
 } from '@/lib/api';
 import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
 import { PrinterConfig, PrintJob, Store } from '@/types';
@@ -93,16 +93,23 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // ainda nesta loja, cai pro texto livre (comportamento anterior).
   const [discoveredPrinters, setDiscoveredPrinters] = useState<string[]>([]);
   const [usbManualEntry, setUsbManualEntry] = useState(false);
+  // Achado ao vivo (2026-08-28/29, migration 066): não dava pra saber se o
+  // agente local estava mesmo rodando -- `lastSeenAt` comparado contra
+  // `Date.now()` do PRÓPRIO navegador (nunca contra o relógio do agente,
+  // que pode estar errado). `null` = agente nunca rodou nesta loja.
+  const [agentStatus, setAgentStatus] = useState<{ lastSeenAt: string; printersLoaded: number } | null>(null);
 
   const load = useCallback(async () => {
-    const [printerList, jobList, discovered] = await Promise.all([
+    const [printerList, jobList, discovered, agent] = await Promise.all([
       fetchPrinterConfigs(store.id),
       fetchRecentPrintJobs(store.id, 30),
       fetchDiscoveredPrinters(store.id),
+      fetchPrintAgentStatus(store.id),
     ]);
     setPrinters(printerList);
     setJobs(jobList);
     setDiscoveredPrinters(discovered);
+    setAgentStatus(agent);
     setIsLoading(false);
   }, [store.id]);
 
@@ -226,6 +233,25 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           </Button>
         )}
       </div>
+
+      {printers.some((p) => p.connection_type === 'network' || p.connection_type === 'usb') && (() => {
+        // 90s de folga sobre o heartbeat de 30s do agente (migration 066) --
+        // cobre um ciclo perdido por lentidão de rede sem gritar "offline"
+        // à toa. Compara contra Date.now() do NAVEGADOR, nunca contra o
+        // relógio do computador do agente (pode estar errado/atrasado).
+        const ageMs = agentStatus ? Date.now() - new Date(agentStatus.lastSeenAt).getTime() : null;
+        const online = ageMs !== null && ageMs < 90000;
+        return (
+          <Card className={`p-3 flex items-center gap-2 text-xs font-medium ${online ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--err)]/10 text-[var(--err)]'}`}>
+            {online ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            {online
+              ? `Agente local conectado — ${agentStatus!.printersLoaded} impressora(s) carregada(s).`
+              : agentStatus
+                ? `Agente local offline há ${Math.round((ageMs as number) / 60000)} min — impressoras USB/rede não vão imprimir sozinhas até ele voltar.`
+                : 'Agente local nunca conectou nesta loja — impressoras USB/rede não imprimem sem ele rodando no computador da loja.'}
+          </Card>
+        );
+      })()}
 
       <Card className="p-3 flex items-center justify-between gap-3 flex-wrap bg-[var(--surface-2)]">
         <div>

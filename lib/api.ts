@@ -1912,6 +1912,19 @@ export const fetchDiscoveredPrinters = async (storeId: string): Promise<string[]
   return (data || []).map((row) => row.name);
 };
 
+// Achado ao vivo (2026-08-28/29): não havia nenhum jeito de o painel saber
+// se o agente local estava mesmo rodando -- migration 066. `null` = agente
+// nunca rodou nesta loja (nunca gravou heartbeat nenhum), distinto de
+// "rodou mas está atrasado" (a UI decide isso comparando `lastSeenAt`
+// contra o relógio do PRÓPRIO navegador, nunca aqui — o relógio do
+// computador do agente pode estar errado).
+export const fetchPrintAgentStatus = async (storeId: string): Promise<{ lastSeenAt: string; printersLoaded: number } | null> => {
+  const { data, error } = await supabase.from('print_agent_status').select('last_seen_at, printers_loaded').eq('store_id', storeId).maybeSingle();
+  if (error) { console.error('Error fetching print agent status:', error); return null; }
+  if (!data) return null;
+  return { lastSeenAt: data.last_seen_at, printersLoaded: data.printers_loaded };
+};
+
 export const createPrinterConfig = async (params: {
   storeId: string;
   name: string;
