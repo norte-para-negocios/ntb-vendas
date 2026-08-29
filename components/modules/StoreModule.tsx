@@ -7569,147 +7569,155 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 (AdminModule.tsx), aberta pro lojista também (2026-07-07). Só
                 armazenamento/configuração, nenhuma lógica de emissão de NFC-e
                 de verdade (ver AGENTS.md, seção "Configuração do emissor
-                fiscal"). */}
-            <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false}>
-              <div className="space-y-6">
-
-                {/* Certificado Digital */}
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
-                        {certBadge()}
+                fiscal"). Progressive disclosure (2026-08-29): antes era um
+                único Collapsible cobrindo ~200 linhas; agora cada grupo de
+                campos tem o próprio, nenhuma lógica de validação/salvamento
+                mudou. */}
+            <div className="space-y-3">
+                <Collapsible title="Certificado Digital" defaultOpen={true}>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
+                            {certBadge()}
+                        </div>
+                        <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
+                            <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
+                            <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
+                        </label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input type="date" label="Validade do certificado" value={certExpiresAt} onChange={e => setCertExpiresAt(e.target.value)} />
+                            <Input type="password" label="Senha do certificado" placeholder="Deixe em branco pra manter a atual" value={certPassword} onChange={e => setCertPassword(e.target.value)} />
+                        </div>
+                        <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
+                            Salvar Certificado
+                        </Button>
                     </div>
-                    <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
-                        <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
-                        <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
-                    </label>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input type="date" label="Validade do certificado" value={certExpiresAt} onChange={e => setCertExpiresAt(e.target.value)} />
-                        <Input type="password" label="Senha do certificado" placeholder="Deixe em branco pra manter a atual" value={certPassword} onChange={e => setCertPassword(e.target.value)} />
-                    </div>
-                    <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
-                        Salvar Certificado
-                    </Button>
-                </div>
-                <hr className="border-[var(--border)]" />
+                </Collapsible>
 
                 {/* Configuração do Emissor Fiscal (store_fiscal_config,
                     migration 024 + 025) — só armazenamento/configuração, sem
                     lógica de emissão real ainda. */}
-                <div className="space-y-4">
-                    <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Configuração do Emissor</label>
+                <Collapsible title="Ambiente e Emissão Automática" defaultOpen={false}>
+                    <div className="space-y-4">
+                        <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Configuração do Emissor</label>
 
-                    <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20 flex gap-3">
-                        <AlertCircle className="text-[var(--warn)] flex-shrink-0" size={20} />
-                        <p className="text-sm text-[var(--warn)]">
-                            ⚠️ Sempre configure e teste em Homologação primeiro. Nunca emita nota fiscal real durante testes.
-                        </p>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
-                        <select
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 disabled:opacity-60 disabled:cursor-not-allowed"
-                          value={fiscalAmbiente}
-                          onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
-                          disabled={store.is_test}
-                        >
-                            <option value="homologacao">Homologação</option>
-                            <option value="producao">Produção</option>
-                        </select>
-                        {store.is_test && (
-                            <p className="text-xs text-[var(--text-muted)]">🔒 Loja de teste — ambiente sempre em homologação.</p>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-semibold text-[var(--text)]">Modelo de emissão automática</label>
-                        <select
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
-                          value={fiscalModeloEmissaoAutomatica}
-                          onChange={e => setFiscalModeloEmissaoAutomatica(e.target.value as 'nenhuma' | 'nfce' | 'nfe')}
-                        >
-                            <option value="nenhuma">Nenhuma (não emite automaticamente)</option>
-                            <option value="nfce">NFC-e (cupom fiscal)</option>
-                            <option value="nfe">NF-e (com destinatário)</option>
-                        </select>
-                        {fiscalModeloEmissaoAutomatica !== 'nenhuma' && !certStatus && (
-                            <p className="text-xs text-[var(--warn)]">⚠️ Nenhum certificado cadastrado ainda — a emissão automática não vai funcionar até o certificado ser configurado acima.</p>
-                        )}
-                    </div>
-
-                    {/* Reorganizado (2026-08-16, pedido explícito do usuário): antes NF-e e
-                        NFC-e apareciam sempre lado a lado, misturados com CSC (que só existe
-                        pra NFC-e) mesmo quando a loja usa só um dos dois — ou nenhum. Agora só
-                        aparece o bloco do tipo escolhido acima em "Modelo de emissão automática". */}
-                    {fiscalModeloEmissaoAutomatica === 'nfe' && (
-                        <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
-                            <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Input type="number" label="Série" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
-                                <Input type="number" label="Último número emitido" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
-                            </div>
-                            <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
-                                <textarea
-                                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
-                                  rows={2}
-                                  value={fiscalObservacaoNfe}
-                                  onChange={e => setFiscalObservacaoNfe(e.target.value)}
-                                />
-                            </div>
+                        <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20 flex gap-3">
+                            <AlertCircle className="text-[var(--warn)] flex-shrink-0" size={20} />
+                            <p className="text-sm text-[var(--warn)]">
+                                ⚠️ Sempre configure e teste em Homologação primeiro. Nunca emita nota fiscal real durante testes.
+                            </p>
                         </div>
-                    )}
 
-                    {fiscalModeloEmissaoAutomatica === 'nfce' && (
-                        <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
-                            <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Input type="number" label="Série" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
-                                <Input type="number" label="Último número emitido" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
-                            </div>
-                            <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
-                            <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
-                                    <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
-                                    <Input type="password" label="CSCID" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
+                            <select
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                              value={fiscalAmbiente}
+                              onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
+                              disabled={store.is_test}
+                            >
+                                <option value="homologacao">Homologação</option>
+                                <option value="producao">Produção</option>
+                            </select>
+                            {store.is_test && (
+                                <p className="text-xs text-[var(--text-muted)]">🔒 Loja de teste — ambiente sempre em homologação.</p>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-sm font-semibold text-[var(--text)]">Modelo de emissão automática</label>
+                            <select
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                              value={fiscalModeloEmissaoAutomatica}
+                              onChange={e => setFiscalModeloEmissaoAutomatica(e.target.value as 'nenhuma' | 'nfce' | 'nfe')}
+                            >
+                                <option value="nenhuma">Nenhuma (não emite automaticamente)</option>
+                                <option value="nfce">NFC-e (cupom fiscal)</option>
+                                <option value="nfe">NF-e (com destinatário)</option>
+                            </select>
+                            {fiscalModeloEmissaoAutomatica !== 'nenhuma' && !certStatus && (
+                                <p className="text-xs text-[var(--warn)]">⚠️ Nenhum certificado cadastrado ainda — a emissão automática não vai funcionar até o certificado ser configurado acima.</p>
+                            )}
+                        </div>
+                    </div>
+                </Collapsible>
+
+                <Collapsible title="Numeração (NF-e / NFC-e / CT-e / MDF-e)" defaultOpen={false}>
+                    <div className="space-y-4">
+                        {/* Reorganizado (2026-08-16, pedido explícito do usuário): antes NF-e e
+                            NFC-e apareciam sempre lado a lado, misturados com CSC (que só existe
+                            pra NFC-e) mesmo quando a loja usa só um dos dois — ou nenhum. Agora só
+                            aparece o bloco do tipo escolhido acima em "Modelo de emissão automática". */}
+                        {fiscalModeloEmissaoAutomatica === 'nfe' && (
+                            <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
+                                <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input type="number" label="Série" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
                                 </div>
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
-                                    <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
-                                    <Input type="password" label="CSCID" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
+                                <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
+                                    <textarea
+                                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                      rows={2}
+                                      value={fiscalObservacaoNfe}
+                                      onChange={e => setFiscalObservacaoNfe(e.target.value)}
+                                    />
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {fiscalModeloEmissaoAutomatica === 'nenhuma' && (
-                        <p className="text-xs text-[var(--text-muted)] italic">Escolha NFC-e ou NF-e acima pra configurar série, numeração e (se for NFC-e) o CSC.</p>
-                    )}
-
-                    <details className="border border-[var(--border)] rounded-lg p-3">
-                        <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Outros documentos — CT-e / MDF-e (avançado)</summary>
-                        <div className="grid grid-cols-2 gap-4 mt-3">
-                            <div className="space-y-2">
-                                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
-                                <Input type="number" label="Série" className="font-mono" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
-                                <Input type="number" label="Último número emitido" className="font-mono" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
-                                <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                        {fiscalModeloEmissaoAutomatica === 'nfce' && (
+                            <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
+                                <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input type="number" label="Série" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                                </div>
+                                <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
+                                <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
+                                        <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
+                                        <Input type="password" label="CSCID" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
+                                        <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
+                                        <Input type="password" label="CSCID" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
-                                <Input type="number" label="Série" className="font-mono" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
-                                <Input type="number" label="Último número emitido" className="font-mono" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
-                                <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
-                            </div>
-                        </div>
-                    </details>
+                        )}
 
-                    <div className="pt-4 border-t border-[var(--border)] space-y-4">
-                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Dados gerais</p>
+                        {fiscalModeloEmissaoAutomatica === 'nenhuma' && (
+                            <p className="text-xs text-[var(--text-muted)] italic">Escolha NFC-e ou NF-e acima pra configurar série, numeração e (se for NFC-e) o CSC.</p>
+                        )}
+
+                        <details className="border border-[var(--border)] rounded-lg p-3">
+                            <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Outros documentos — CT-e / MDF-e (avançado)</summary>
+                            <div className="grid grid-cols-2 gap-4 mt-3">
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
+                                    <Input type="number" label="Série" className="font-mono" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
+                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
+                                    <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
+                                    <Input type="number" label="Série" className="font-mono" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
+                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
+                                    <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                </Collapsible>
+
+                <Collapsible title="Dados Gerais" defaultOpen={false}>
+                    <div className="space-y-4">
                         <Input label="Inscrição municipal" className="font-mono" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
                         <Input label="Telefone" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
                         <div className="grid grid-cols-2 gap-4">
@@ -7726,10 +7734,11 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             />
                         </div>
                     </div>
+                </Collapsible>
 
-                    {/* Identificação da empresa (migration 025) */}
-                    <div className="pt-4 border-t border-[var(--border)] space-y-3">
-                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Identificação da empresa</p>
+                {/* Identificação da empresa (migration 025) */}
+                <Collapsible title="Identificação da Empresa" defaultOpen={false}>
+                    <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-4">
                             <Input label="Razão Social" placeholder="Opcional" value={fiscalRazaoSocial} onChange={e => setFiscalRazaoSocial(e.target.value)} />
                             <Input label="Nome Fantasia" placeholder="Opcional" value={fiscalNomeFantasia} onChange={e => setFiscalNomeFantasia(e.target.value)} />
@@ -7763,14 +7772,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <Input label="CEP" placeholder="Opcional" value={fiscalEnderecoCep} onChange={e => setFiscalEnderecoCep(e.target.value)} />
                         </div>
                     </div>
+                </Collapsible>
 
-                    {/* Padrões de impostos (migration 025) — default por
-                        loja, não classificação por produto/NCM. */}
-                    <div className="pt-4 border-t border-[var(--border)] space-y-3">
-                        <div>
-                            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Padrões de impostos</p>
-                            <p className="text-xs text-[var(--text-muted)]">Códigos conforme tabela da contabilidade/SEFAZ.</p>
-                        </div>
+                {/* Padrões de impostos (migration 025) — default por
+                    loja, não classificação por produto/NCM. */}
+                <Collapsible title="Padrões de Impostos" defaultOpen={false}>
+                    <div className="space-y-3">
+                        <p className="text-xs text-[var(--text-muted)]">Códigos conforme tabela da contabilidade/SEFAZ.</p>
                         <div className="grid grid-cols-2 gap-4">
                             <Input label="CST/CSOSN Padrão" placeholder="Ex: 102" value={fiscalCstCsosnPadrao} onChange={e => setFiscalCstCsosnPadrao(e.target.value)} />
                             <Input label="CST/PIS Padrão" placeholder="Ex: 49" value={fiscalCstPisPadrao} onChange={e => setFiscalCstPisPadrao(e.target.value)} />
@@ -7785,13 +7793,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         </div>
                         <Input label="Natureza de Operação Padrão" placeholder="Ex: 0 - Emitente" value={fiscalNaturezaOperacaoPadrao} onChange={e => setFiscalNaturezaOperacaoPadrao(e.target.value)} />
                     </div>
+                </Collapsible>
 
-                    <Button variant="secondary" className="w-full" onClick={handleSaveFiscalConfig} isLoading={isSavingFiscalConfig}>
-                        Salvar Configuração Fiscal
-                    </Button>
-                </div>
-              </div>
-            </Collapsible>
+                <Button variant="secondary" className="w-full" onClick={handleSaveFiscalConfig} isLoading={isSavingFiscalConfig}>
+                    Salvar Configuração Fiscal
+                </Button>
+            </div>
                 </>
             )}
 
