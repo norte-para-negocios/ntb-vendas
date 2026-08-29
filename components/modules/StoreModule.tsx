@@ -2728,7 +2728,13 @@ NOTIFY pgrst, 'reload schema';`;
                 )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {/* items-start (pedido do dono, 2026-08-29 — "caber o máximo de coisa
+                na tela"): sem isso, o grid estica TODO card da linha pra igualar
+                o mais alto (comportamento padrão de CSS grid), reintroduzindo
+                espaço vazio numa mesa com poucos itens só porque a vizinha tem
+                muitos. Cada card agora só ocupa a altura que o próprio conteúdo
+                precisa. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
                 <AnimatePresence>
                 {tables.map((table, tableIdx) => {
                     const summary = getTableSummary(table.id);
@@ -2771,9 +2777,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <Card
                             hoverable={inJurisdiction}
                             onClick={() => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
-                            className={`relative flex flex-col justify-between p-4 transition-[height,background-color,border-color,box-shadow] duration-300 border-2 group ${
-                                areCardsCollapsed ? (isWaiterRequested ? 'h-[152px]' : 'h-[88px]') : 'h-[340px]'
-                            } ${
+                            className={`relative flex flex-col p-3 transition-[background-color,border-color,box-shadow] duration-300 border-2 group ${
                                 isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
                                 isWaiterRequested ? 'border-[var(--err)]/50 bg-[var(--err)]/5 shadow-xl animate-pulse' :
                                 table.status === 'waiting_bill' ? 'bg-[var(--warn)]/5 border-[var(--warn)]/30 shadow-lg' :
@@ -2834,17 +2838,6 @@ NOTIFY pgrst, 'reload schema';`;
                                     }`}>
                                         {getTableStatusLabel(isBlocked ? 'blocked' : isOccupied ? table.status : 'available')}
                                     </span>
-                                    {isOccupied && (
-                                        <span className="flex items-center gap-1 text-xs text-[var(--text-muted)] min-w-0 flex-1">
-                                            <User size={11} className="shrink-0" />
-                                            <span className="font-bold truncate">{table.current_host_name || 'Lojista'}</span>
-                                            {watchedTables.has(table.id) && (
-                                                <span title="Cliente acompanhando o pedido agora" className="shrink-0 text-[var(--info)] flex items-center">
-                                                    <Eye size={11} />
-                                                </span>
-                                            )}
-                                        </span>
-                                    )}
                                     {canManagePin && (
                                         <button
                                             onClick={(e) => {
@@ -2861,6 +2854,21 @@ NOTIFY pgrst, 'reload schema';`;
                                         >
                                             {isBlocked ? <Lock size={14} /> : <Unlock size={14} />}
                                         </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Nome do cliente, linha própria embaixo do header (pedido do
+                                dono, 2026-08-29: "seria interessante o nome aparecer embaixo
+                                disso tudo" — junto na mesma linha ficava truncado demais). */}
+                            {isOccupied && (
+                                <div className="flex items-center gap-1 text-xs text-[var(--text-muted)] mb-1 min-w-0">
+                                    <User size={11} className="shrink-0" />
+                                    <span className="font-bold truncate">{table.current_host_name || 'Lojista'}</span>
+                                    {watchedTables.has(table.id) && (
+                                        <span title="Cliente acompanhando o pedido agora" className="shrink-0 text-[var(--info)] flex items-center">
+                                            <Eye size={11} />
+                                        </span>
                                     )}
                                 </div>
                             )}
@@ -2912,9 +2920,9 @@ NOTIFY pgrst, 'reload schema';`;
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex-1 flex flex-col items-center justify-center opacity-30">
-                                        <UtensilsCrossed size={40} />
-                                        <p className="text-xs font-bold mt-2">Disponível</p>
+                                    <div className="flex flex-col items-center justify-center opacity-30 py-3">
+                                        <UtensilsCrossed size={24} />
+                                        <p className="text-xs font-bold mt-1">Disponível</p>
                                     </div>
                                 )
                             )}
