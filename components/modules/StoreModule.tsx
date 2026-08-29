@@ -2804,12 +2804,12 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                             )}
 
-                            {/* Card recolhido (pedido do dono, 2026-08-29): tudo numa linha só
-                                — número, PIN, status, cliente — em vez dos 3 blocos empilhados
-                                do card expandido, que sobravam bastante espaço vazio já sem os
-                                itens do pedido. */}
-                            {areCardsCollapsed && (
-                                <div className="flex items-center gap-2 min-w-0">
+                            {/* Header numa linha só — número, PIN, status, cliente — nos DOIS
+                                modos (recolhido e expandido, pedido do dono 2026-08-29: "quero
+                                que fique assim mesmo quando não colapsado"). Só a área de
+                                itens do pedido abaixo continua ligada/desligada pelo toggle. */}
+                            {(
+                                <div className="flex items-center gap-2 min-w-0 mb-2">
                                     <div className="flex items-baseline gap-1 shrink-0">
                                         <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Mesa</span>
                                         <span className="text-xl font-black text-[var(--text)]">{table.number}</span>
@@ -2876,80 +2876,6 @@ NOTIFY pgrst, 'reload schema';`;
                                         isNoOrderTooLong ? `Sem pedido há ${minutesSinceLastOrder}min` : null,
                                     ].filter(Boolean).join(' · ')}
                                 </div>
-                            )}
-
-                            {!areCardsCollapsed && (
-                            <>
-                            {/* Header: Number & Block Button */}
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex flex-col">
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Mesa</span>
-                                        <span className="text-5xl font-black text-[var(--text)]">{table.number}</span>
-                                    </div>
-                                    {/* PIN Display - Compact & Toggleable */}
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">PIN:</span>
-                                        <div className="flex items-center gap-2 bg-[var(--surface-2)] px-2 py-0.5 rounded-md">
-                                            <span className="font-mono font-bold text-sm text-[var(--text)]">
-                                                {visiblePins.has(table.id) ? table.pin : '••••'}
-                                            </span>
-                                            <button
-                                                onClick={(e) => togglePin(e, table.id, inJurisdiction)}
-                                                disabled={!inJurisdiction}
-                                                className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
-                                                title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
-                                            >
-                                                {visiblePins.has(table.id) ? <EyeOff size={14} /> : <Eye size={14} />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                {canManagePin && (
-                                    <button
-                                        onClick={(e) => {
-                                            if(!isBlocked && hasOrders) return; // Prevent blocking if has orders
-                                            handleBlockToggle(e, table, inJurisdiction);
-                                        }}
-                                        disabled={(!isBlocked && hasOrders) || !inJurisdiction}
-                                        className={`p-2 rounded-lg u-motion u-press z-10 ${
-                                            isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
-                                            (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
-                                            'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
-                                        }`}
-                                        title={isBlocked ? "Desbloquear" : hasOrders ? "Mesa com pedidos não pode ser bloqueada" : "Bloquear Mesa"}
-                                    >
-                                        {isBlocked ? <Lock size={20} /> : <Unlock size={20} />}
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Status Badge */}
-                            <div className="mb-2">
-                                {isBlocked ? (
-                                    <span className="w-full block text-center bg-[var(--surface-2)] text-[var(--text-muted)] text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider">{getTableStatusLabel('blocked')}</span>
-                                ) : isOccupied ? (
-                                    <span className={`w-full block text-center text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider ${table.status === 'waiting_bill' ? 'bg-[var(--warn)] text-white' : 'bg-[var(--info)] text-white'}`}>
-                                        {getTableStatusLabel(table.status)}
-                                    </span>
-                                ) : (
-                                    <span className="w-full block text-center bg-[var(--ok)]/10 text-[var(--ok)] text-xs font-bold py-1 rounded-[var(--r-sm)] uppercase tracking-wider">{getTableStatusLabel('available')}</span>
-                                )}
-                            </div>
-
-                            {/* Host Name */}
-                            <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] mb-3 px-1">
-                                <User size={12} />
-                                <span className="font-bold truncate max-w-[150px]">
-                                    {isOccupied ? (table.current_host_name || 'Lojista') : '—'}
-                                </span>
-                                {isOccupied && watchedTables.has(table.id) && (
-                                    <span className="flex items-center gap-1 text-[var(--info)]" title="Cliente acompanhando o pedido agora">
-                                        <Eye size={12} />
-                                    </span>
-                                )}
-                            </div>
-                            </>
                             )}
 
                             {/* Content Area: Items or Empty State */}
