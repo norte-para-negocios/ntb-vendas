@@ -1615,6 +1615,22 @@ const TablesView: React.FC<{
     const [areCardsCollapsed, setAreCardsCollapsed] = useState(false);
     const [pinBlockEnabled, setPinBlockEnabled] = useState(store.config?.require_pin_for_open || false);
 
+    // Avisos de tempo (pedido do dono, 2026-08-29) — 0 = desligado. Não
+    // existe timestamp de "mesa aberta desde" na tabela `tables`; usa o
+    // item mais ANTIGO dos pedidos ativos como aproximação de "ocupada
+    // desde" e o mais NOVO como "último pedido em" (mesmo `allItems`, já
+    // ordenado do mais novo pro mais antigo, que getTableSummary monta
+    // logo abaixo). `nowTick` força recálculo periódico sem refetch —
+    // mesmo princípio de lib/schedule.ts (categoria por horário).
+    const tableAlertOccupiedMin = store.config?.table_alert_occupied_minutes || 0;
+    const tableAlertNoOrderMin = store.config?.table_alert_no_order_minutes || 0;
+    const [nowTick, setNowTick] = useState(() => Date.now());
+    useEffect(() => {
+        if (!tableAlertOccupiedMin && !tableAlertNoOrderMin) return;
+        const id = window.setInterval(() => setNowTick(Date.now()), 30000);
+        return () => window.clearInterval(id);
+    }, [tableAlertOccupiedMin, tableAlertNoOrderMin]);
+
     const togglePin = (e: React.MouseEvent, tableId: string, inJurisdiction: boolean = true) => {
         e.stopPropagation();
         // Trava de jurisdicao (Task 3): `disabled` no <button> ja tira o
@@ -2188,7 +2204,7 @@ NOTIFY pgrst, 'reload schema';`;
         if (!table || summary.allItems.length === 0) return;
 
         try {
-            const printed = await printBillReceipt({
+            const receiptOpts = {
                 storeName: store.name,
                 cnpj: store.cnpj,
                 paperWidthMm: store.config?.printer_paper_width_mm,
@@ -2212,7 +2228,15 @@ NOTIFY pgrst, 'reload schema';`;
                     removedForTable: summary.isServiceFeeRemovedForTable,
                 },
                 total: summary.total,
-            });
+            };
+            const printed = await printBillReceipt(receiptOpts);
+            // Achado ao vivo (2026-08-28): esta é a "conferência da conta"
+            // impressa ANTES de pagar (dono pede pra ver o extrato na mesa) —
+            // faltava o mesmo enfileiramento pra impressora USB/rede do
+            // caixa que handleFinishPayment já tem, então só o comprovante
+            // PÓS-pagamento saía na impressora física; este nunca saía.
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+                .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             if (!printed) {
                 toast.error('A conferência da conta não imprimiu. Confira a impressora.');
             }
@@ -2722,6 +2746,19 @@ NOTIFY pgrst, 'reload schema';`;
                     // (ver isTableInJurisdiction).
                     const inJurisdiction = isTableInJurisdiction(loggedUser, table.id);
 
+                    // allItems vem ordenado do mais novo pro mais antigo
+                    // (getTableSummary acima) — [0] é o último pedido, o
+                    // último elemento é o mais antigo (aproximação de
+                    // "ocupada desde", ver comentário da declaração de
+                    // tableAlertOccupiedMin).
+                    const minutesSinceLastOrder = isOccupied && summary.allItems.length > 0
+                        ? Math.floor((nowTick - new Date(summary.allItems[0].created_at).getTime()) / 60000) : null;
+                    const minutesOccupied = isOccupied && summary.allItems.length > 0
+                        ? Math.floor((nowTick - new Date(summary.allItems[summary.allItems.length - 1].created_at).getTime()) / 60000) : null;
+                    const isOccupiedTooLong = tableAlertOccupiedMin > 0 && minutesOccupied !== null && minutesOccupied >= tableAlertOccupiedMin;
+                    const isNoOrderTooLong = tableAlertNoOrderMin > 0 && minutesSinceLastOrder !== null && minutesSinceLastOrder >= tableAlertNoOrderMin;
+                    const hasTimeAlert = isOccupiedTooLong || isNoOrderTooLong;
+
                     return (
                         <motion.div
                             key={table.id}
@@ -2735,11 +2772,12 @@ NOTIFY pgrst, 'reload schema';`;
                             hoverable={inJurisdiction}
                             onClick={() => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
                             className={`relative flex flex-col justify-between p-4 transition-[height,background-color,border-color,box-shadow] duration-300 border-2 group ${
-                                areCardsCollapsed ? (isWaiterRequested ? 'h-[220px]' : 'h-[160px]') : 'h-[340px]'
+                                areCardsCollapsed ? (isWaiterRequested ? 'h-[152px]' : 'h-[88px]') : 'h-[340px]'
                             } ${
                                 isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
-                                table.status === 'waiting_bill' ? 'bg-[var(--warn)]/5 border-[var(--warn)]/30 shadow-lg' :
                                 isWaiterRequested ? 'border-[var(--err)]/50 bg-[var(--err)]/5 shadow-xl animate-pulse' :
+                                table.status === 'waiting_bill' ? 'bg-[var(--warn)]/5 border-[var(--warn)]/30 shadow-lg' :
+                                hasTimeAlert ? 'bg-[var(--warn)]/10 border-[var(--warn)]/60 shadow-lg' :
                                 isOccupied ? 'bg-[var(--info)]/5 border-[var(--info)]/25 shadow-lg' :
                                 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30 hover:shadow-lg'
                             } ${!inJurisdiction ? 'opacity-50 pointer-events-none grayscale' : ''}`}
@@ -2766,6 +2804,82 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                             )}
 
+                            {/* Card recolhido (pedido do dono, 2026-08-29): tudo numa linha só
+                                — número, PIN, status, cliente — em vez dos 3 blocos empilhados
+                                do card expandido, que sobravam bastante espaço vazio já sem os
+                                itens do pedido. */}
+                            {areCardsCollapsed && (
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="flex items-baseline gap-1 shrink-0">
+                                        <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Mesa</span>
+                                        <span className="text-xl font-black text-[var(--text)]">{table.number}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-[var(--surface-2)] px-1.5 py-0.5 rounded-md shrink-0">
+                                        <span className="font-mono font-bold text-xs text-[var(--text)]">
+                                            {visiblePins.has(table.id) ? table.pin : '••••'}
+                                        </span>
+                                        <button
+                                            onClick={(e) => togglePin(e, table.id, inJurisdiction)}
+                                            disabled={!inJurisdiction}
+                                            className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
+                                            title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
+                                        >
+                                            {visiblePins.has(table.id) ? <EyeOff size={11} /> : <Eye size={11} />}
+                                        </button>
+                                    </div>
+                                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                        isBlocked ? 'bg-[var(--surface-2)] text-[var(--text-muted)]' :
+                                        isOccupied ? (table.status === 'waiting_bill' ? 'bg-[var(--warn)] text-white' : 'bg-[var(--info)] text-white') :
+                                        'bg-[var(--ok)]/10 text-[var(--ok)]'
+                                    }`}>
+                                        {getTableStatusLabel(isBlocked ? 'blocked' : isOccupied ? table.status : 'available')}
+                                    </span>
+                                    {isOccupied && (
+                                        <span className="flex items-center gap-1 text-xs text-[var(--text-muted)] min-w-0 flex-1">
+                                            <User size={11} className="shrink-0" />
+                                            <span className="font-bold truncate">{table.current_host_name || 'Lojista'}</span>
+                                            {watchedTables.has(table.id) && (
+                                                <span title="Cliente acompanhando o pedido agora" className="shrink-0 text-[var(--info)] flex items-center">
+                                                    <Eye size={11} />
+                                                </span>
+                                            )}
+                                        </span>
+                                    )}
+                                    {canManagePin && (
+                                        <button
+                                            onClick={(e) => {
+                                                if(!isBlocked && hasOrders) return;
+                                                handleBlockToggle(e, table, inJurisdiction);
+                                            }}
+                                            disabled={(!isBlocked && hasOrders) || !inJurisdiction}
+                                            className={`ml-auto p-1.5 rounded-lg u-motion u-press z-10 shrink-0 ${
+                                                isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
+                                                (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
+                                                'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
+                                            }`}
+                                            title={isBlocked ? "Desbloquear" : hasOrders ? "Mesa com pedidos não pode ser bloqueada" : "Bloquear Mesa"}
+                                        >
+                                            {isBlocked ? <Lock size={14} /> : <Unlock size={14} />}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Avisos de tempo (pedido do dono, 2026-08-29) — aparece nos dois
+                                modos (recolhido e expandido), já que é informação operacional,
+                                não estética. */}
+                            {hasTimeAlert && (
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-[var(--warn)] mt-1">
+                                    <Clock size={11} />
+                                    {[
+                                        isOccupiedTooLong ? `Ocupada há ${minutesOccupied}min` : null,
+                                        isNoOrderTooLong ? `Sem pedido há ${minutesSinceLastOrder}min` : null,
+                                    ].filter(Boolean).join(' · ')}
+                                </div>
+                            )}
+
+                            {!areCardsCollapsed && (
+                            <>
                             {/* Header: Number & Block Button */}
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex flex-col">
@@ -2835,6 +2949,8 @@ NOTIFY pgrst, 'reload schema';`;
                                     </span>
                                 )}
                             </div>
+                            </>
+                            )}
 
                             {/* Content Area: Items or Empty State */}
                             {!areCardsCollapsed && (
@@ -3986,7 +4102,7 @@ const CounterView: React.FC<{
         const total = items.reduce((a, b) => a + (b.quantity * b.price_at_time), 0);
 
         try {
-            const printed = await printBillReceipt({
+            const receiptOpts = {
                 storeName: store.name,
                 cnpj: store.cnpj,
                 paperWidthMm: store.config?.printer_paper_width_mm,
@@ -3999,7 +4115,10 @@ const CounterView: React.FC<{
                 })),
                 subtotal: total,
                 total,
-            });
+            };
+            const printed = await printBillReceipt(receiptOpts);
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+                .catch((e) => console.error('enqueueReceiptPrintJobs (conferência balcão) falhou:', e));
             if (!printed) {
                 toast.error('O comprovante não imprimiu. Confira a impressora.');
             }
@@ -5878,6 +5997,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // configuraram isso).
     const [paperWidthMm, setPaperWidthMm] = useState<48 | 58 | 80>(store.config?.printer_paper_width_mm ?? 48);
 
+    // Avisos de tempo na Gestão de Mesas (pedido do dono, 2026-08-29) —
+    // mesmo padrão jsonb de sempre (stores.config). 0/undefined = aviso
+    // desligado (comportamento atual, sem mudança pras lojas que nunca
+    // configurarem isso). Ver TablesView (tableAlertMinutesOccupied/
+    // tableAlertMinutesNoOrder) pra onde isso é lido e o card ganha o
+    // destaque visual.
+    const [tableAlertOccupiedMin, setTableAlertOccupiedMin] = useState<number>(store.config?.table_alert_occupied_minutes ?? 0);
+    const [tableAlertNoOrderMin, setTableAlertNoOrderMin] = useState<number>(store.config?.table_alert_no_order_minutes ?? 0);
+
     // Sugestoes de observacao rapida (migration 019, cardapio que vende) —
     // mesmo padrao/coluna jsonb ja usado pela taxa de servico
     // (stores.config), so' com uma chave nova (note_suggestions). Vazio =
@@ -5936,6 +6064,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
         setBlindCountEnabled(store.config?.cash_shift_blind_count ?? false);
         setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
+        setTableAlertOccupiedMin(store.config?.table_alert_occupied_minutes ?? 0);
+        setTableAlertNoOrderMin(store.config?.table_alert_no_order_minutes ?? 0);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
         setAccentColorDraft(store.config?.accent_color || ACCENT_COLOR_DEFAULT);
@@ -6035,6 +6165,24 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             console.error("Error updating printer paper width config", e);
             setPaperWidthMm(previous); // revert on error
             toast.error("Erro ao atualizar largura do papel da impressora.");
+        }
+    };
+
+    const handleChangeTableAlert = async (field: 'table_alert_occupied_minutes' | 'table_alert_no_order_minutes', newValue: number) => {
+        const setter = field === 'table_alert_occupied_minutes' ? setTableAlertOccupiedMin : setTableAlertNoOrderMin;
+        const previous = field === 'table_alert_occupied_minutes' ? tableAlertOccupiedMin : tableAlertNoOrderMin;
+        setter(newValue); // otimista, mesmo padrão dos outros campos desta seção
+        try {
+            const newConfig = { ...currentStoreConfig, [field]: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) {
+                onStoreUpdate({ ...store, config: newConfig });
+            }
+        } catch (e) {
+            console.error('Error updating table alert config', e);
+            setter(previous); // revert on error
+            toast.error('Erro ao atualizar o aviso de mesa.');
         }
     };
 
@@ -6227,6 +6375,41 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         <option value={58}>58mm</option>
                         <option value={80}>80mm</option>
                     </select>
+                </div>
+
+                {/* Avisos de tempo na Gestão de Mesas (pedido do dono, 2026-08-29) —
+                    0 = desligado. TablesView usa o item mais antigo/mais novo dos
+                    pedidos ativos da mesa como aproximação de "ocupada desde"/"último
+                    pedido em" (não existe timestamp de abertura de mesa dedicado). */}
+                <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] flex-wrap gap-3">
+                    <div>
+                        <h4 className="font-bold text-[var(--text)]">⏱️ Avisos de tempo na Gestão de Mesas</h4>
+                        <p className="text-sm text-[var(--text-muted)]">Destaca o card da mesa quando passar desse tempo. Deixe 0 pra desligar.</p>
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                            Ocupada há mais de
+                            <input
+                                type="number" min={0} step={5}
+                                value={tableAlertOccupiedMin}
+                                onChange={e => handleChangeTableAlert('table_alert_occupied_minutes', Math.max(0, Number(e.target.value) || 0))}
+                                aria-label="Avisar quando mesa estiver ocupada há mais de X minutos"
+                                className="w-16 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                            />
+                            min
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                            Sem pedido novo há mais de
+                            <input
+                                type="number" min={0} step={5}
+                                value={tableAlertNoOrderMin}
+                                onChange={e => handleChangeTableAlert('table_alert_no_order_minutes', Math.max(0, Number(e.target.value) || 0))}
+                                aria-label="Avisar quando mesa estiver sem pedido novo há mais de X minutos"
+                                className="w-16 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                            />
+                            min
+                        </label>
+                    </div>
                 </div>
 
                 {/* Cor de destaque por loja (Task 6, stores.config.accent_color) —
@@ -7836,7 +8019,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         const feeAmount = Number((total - itemsTotal).toFixed(2));
         const methods = order.payment_details?.methods;
         try {
-            const printed = await printBillReceipt({
+            const receiptOpts = {
                 storeName: store.name,
                 cnpj: store.cnpj,
                 paperWidthMm: store.config?.printer_paper_width_mm,
@@ -7859,7 +8042,10 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     methods: methods && methods.length > 0 ? methods : [{ method: order.payment_method || 'CASH', amount: total }],
                     changeDue: 0,
                 },
-            });
+            };
+            const printed = await printBillReceipt(receiptOpts);
+            enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+                .catch((e) => console.error('enqueueReceiptPrintJobs (reimpressão) falhou:', e));
             if (!printed) {
                 toast.error('O comprovante não imprimiu. Confira a impressora.');
             }

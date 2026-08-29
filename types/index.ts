@@ -81,6 +81,11 @@ export interface Store {
     // fechamento de turno: undefined/false = comportamento atual (esperado
     // sempre visível durante a contagem, sem mudança pras lojas reais).
     cash_shift_blind_count?: boolean;
+    // Avisos de tempo na Gestão de Mesas (pedido do dono, 2026-08-29) —
+    // 0/undefined = aviso desligado (comportamento atual). Ver TablesView
+    // em StoreModule.tsx.
+    table_alert_occupied_minutes?: number;
+    table_alert_no_order_minutes?: number;
   };
 }
 
