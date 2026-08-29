@@ -7450,58 +7450,63 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         setFilterMaxTotal('');
     };
 
+    // Menu lateral de Administração (Task 4, redesign 2026-08-29) — substitui
+    // a antiga barra de 8 abas soltas em linha por 4 categorias agrupadas.
+    // "Notas Fiscais" ganha destaque visual próprio dentro de "Loja"
+    // (separador + ícone de cadeado) por ser dado sensível, não trivial como
+    // "Meu Link / QR Code" ao lado.
+    const ADMIN_NAV_GROUPS: { label: string; icon: React.ReactNode; tabs: { id: string; label: string; sensitive?: boolean }[] }[] = [
+        { label: 'Visão Geral', icon: <LayoutDashboard size={16} />, tabs: [
+            { id: 'dashboard', label: 'Dashboard' },
+            { id: 'sales', label: 'Histórico de Vendas' },
+        ]},
+        { label: 'Operação', icon: <Wallet size={16} />, tabs: [
+            { id: 'shifts', label: 'Turnos' },
+            { id: 'impressao', label: 'Impressão' },
+        ]},
+        { label: 'Time', icon: <Users size={16} />, tabs: [
+            { id: 'users', label: 'Gestão de Usuários' },
+        ]},
+        { label: 'Loja', icon: <StoreIcon size={16} />, tabs: [
+            { id: 'link', label: 'Meu Link / QR Code' },
+            { id: 'settings', label: 'Configurações' },
+            { id: 'fiscal', label: 'Notas Fiscais', sensitive: true },
+        ]},
+    ];
+
     return (
         <div className="space-y-6">
-            <div className="flex space-x-4 border-b border-[var(--border)] pb-2">
-                <button
-                    onClick={() => setActiveTab('dashboard')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'dashboard' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Dashboard
-                </button>
-                <button
-                    onClick={() => setActiveTab('sales')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'sales' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Histórico de Vendas
-                </button>
-                <button
-                    onClick={() => setActiveTab('users')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'users' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Gestão de Usuários
-                </button>
-                <button
-                    onClick={() => setActiveTab('link')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'link' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Meu Link / QR Code
-                </button>
-                <button
-                    onClick={() => setActiveTab('fiscal')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'fiscal' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Notas Fiscais
-                </button>
-                <button
-                    onClick={() => setActiveTab('shifts')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'shifts' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Turnos
-                </button>
-                <button
-                    onClick={() => setActiveTab('impressao')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'impressao' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Impressão
-                </button>
-                <button
-                    onClick={() => setActiveTab('settings')}
-                    className={`pb-2 text-sm font-medium u-motion u-press-sm ${activeTab === 'settings' ? 'border-b-2 border-[var(--brand)] text-[var(--brand)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
-                >
-                    Configurações
-                </button>
-            </div>
+            <div className="flex gap-6">
+                <nav className="w-56 flex-shrink-0 space-y-5">
+                    {ADMIN_NAV_GROUPS.map((group) => (
+                        <div key={group.label}>
+                            <p className="px-3 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                {group.icon} {group.label}
+                            </p>
+                            <div className="space-y-0.5">
+                                {group.tabs.map((tab) => (
+                                    <React.Fragment key={tab.id}>
+                                        {tab.sensitive && <div className="my-1.5 border-t border-[var(--warn)]/30" />}
+                                        <button
+                                            onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium u-motion u-press-sm flex items-center gap-1.5 ${
+                                                activeTab === tab.id
+                                                    ? 'bg-[var(--brand)]/10 text-[var(--brand)] font-bold'
+                                                    : tab.sensitive
+                                                        ? 'text-[var(--warn)] hover:bg-[var(--warn)]/5'
+                                                        : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+                                            }`}
+                                        >
+                                            {tab.sensitive && <Lock size={12} />}
+                                            {tab.label}
+                                        </button>
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </nav>
+                <div className="flex-1 min-w-0">
 
             {activeTab === 'dashboard' && (
                 <StoreDashboardView
@@ -8228,6 +8233,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     </div>
                 )}
             </Modal>
+                </div>
+            </div>
         </div>
     );
 };
