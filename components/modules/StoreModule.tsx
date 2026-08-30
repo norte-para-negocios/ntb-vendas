@@ -4118,7 +4118,18 @@ const CounterView: React.FC<{
                                      Aguardando o caixa
                                  </span>
                              ) : (
-                                 <Button onClick={() => handleClose(order.id)} variant="primary" className="h-10 text-sm shrink-0">
+                                 <Button
+                                     onClick={() => handleClose(order.id)}
+                                     variant="primary"
+                                     className="h-10 text-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                     // Task 5 (varredura 2026-08-30): este botão só aparece pra
+                                     // status != PENDING (ramo tratado acima), então na prática
+                                     // trava ACCEPTED/PREPARING — libera só em READY. Nada impede
+                                     // marcar como entregue/receber pagamento um pedido que ainda
+                                     // está sendo preparado.
+                                     disabled={order.status !== OrderStatus.READY}
+                                     title={order.status === OrderStatus.PREPARING ? 'Aguarde o pedido ficar pronto' : undefined}
+                                 >
                                      <CheckCircle size={16} className="mr-1"/> Entregar
                                  </Button>
                              )}
