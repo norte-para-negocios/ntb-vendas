@@ -1346,7 +1346,10 @@ const PaymentCaptureFields: React.FC<{
                     <button
                         key={m.id}
                         onClick={async () => {
-                            if (await confirm(`Finalizar em ${m.label} — R$ ${formatBRL(total)}? Essa ação fecha a conta e não pode ser desfeita.`)) {
+                            // Task 4 (2026-08-30) + achado #9 da revisão final de branch: variant
+                            // 'danger' pra bater com o mesmo padrão já usado em toda ação
+                            // financeira irreversível deste arquivo (excluir produto/usuário etc.)
+                            if (await confirm({ message: `Finalizar em ${m.label} — R$ ${formatBRL(total)}? Essa ação fecha a conta e não pode ser desfeita.`, variant: 'danger' })) {
                                 onOneClickFinish(m.id);
                             }
                         }}
@@ -3053,6 +3056,12 @@ NOTIFY pgrst, 'reload schema';`;
                                 <h3 className="font-bold text-[var(--text)] flex items-center gap-2"><UtensilsCrossed size={18}/> Cardápio</h3>
                                 <Button variant="ghost" size="sm" onClick={() => setShowMenuMode(false)} className="underline">Voltar</Button>
                             </div>
+                            {/* Task 8 (2026-08-30): max-h sozinho não dá altura definida pro
+                                filho (StoreTableMenu usa h-full na raiz) sem flex — sem
+                                flex flex-col aqui, o scroll interno nunca ativa e um cardápio
+                                grande (ex.: Sertão, ~110 produtos) vazaria pra fora da caixa em
+                                vez de respeitar o teto de 70vh. overflow-hidden garante que,
+                                se algo escapar mesmo assim, fica contido, não vaza visualmente. */}
                             <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] max-h-[70vh] flex flex-col overflow-hidden">
                                 <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
                             </div>
@@ -5481,12 +5490,21 @@ const CaixaView: React.FC<{
 
             {/* Task 1 (varredura 2026-08-30): diferença acima da tolerância
                 configurada exige aprovação de supervisor antes de fechar. */}
-            <Modal isOpen={!!pendingApproval} onClose={() => setPendingApproval(null)} title="Diferença acima do limite — aprovação necessária">
+            <Modal isOpen={!!pendingApproval} onClose={() => { setPendingApproval(null); setSupervisorEmail(''); setSupervisorPassword(''); }} title="Diferença acima do limite — aprovação necessária">
                 {pendingApproval && (
                     <div className="space-y-4">
                         <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20">
                             <p className="text-sm text-[var(--warn)] font-semibold">
-                                Diferença de R$ {formatBRL(Math.abs(pendingApproval.difference))} ({pendingApproval.difference >= 0 ? 'sobra' : 'falta'}) — acima da tolerância configurada pra esta loja.
+                                {canSeeExpectedBeforeClosing
+                                    // Achado #5 (revisão final de branch, 2026-08-30): mostrar o valor
+                                    // aqui incondicionalmente furava a contagem cega — quem não devia
+                                    // ver o esperado aprendia a diferença exata ao tentar fechar,
+                                    // cancelava e ajustava a contagem pra caber na tolerância. O valor
+                                    // real ainda aparece pra quem tem permissão (canSeeExpectedBeforeClosing)
+                                    // e, pra todo mundo, no modal de resultado pós-fechamento (mesmo
+                                    // padrão já usado ali).
+                                    ? `Diferença de R$ ${formatBRL(Math.abs(pendingApproval.difference))} (${pendingApproval.difference >= 0 ? 'sobra' : 'falta'}) — acima da tolerância configurada pra esta loja.`
+                                    : 'Diferença acima da tolerância configurada pra esta loja — contagem cega ativa, o valor só aparece depois que um supervisor aprovar o fechamento.'}
                             </p>
                         </div>
                         <p className="text-sm text-[var(--text-muted)]">Peça pra um supervisor (dono, ou quem tiver a permissão "Supervisiona Caixa") digitar o login dele pra aprovar o fechamento mesmo assim.</p>
@@ -5494,7 +5512,7 @@ const CaixaView: React.FC<{
                         <Input label="Senha do supervisor" type="password" value={supervisorPassword} onChange={e => setSupervisorPassword(e.target.value)} />
                         <div className="flex gap-2">
                             <Button className="flex-1" onClick={handleApproveAndClose} isLoading={isVerifyingSupervisor}>Aprovar e Fechar</Button>
-                            <Button variant="ghost" onClick={() => setPendingApproval(null)}>Cancelar</Button>
+                            <Button variant="ghost" onClick={() => { setPendingApproval(null); setSupervisorEmail(''); setSupervisorPassword(''); }}>Cancelar</Button>
                         </div>
                     </div>
                 )}
