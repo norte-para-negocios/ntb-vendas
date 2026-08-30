@@ -3053,7 +3053,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <h3 className="font-bold text-[var(--text)] flex items-center gap-2"><UtensilsCrossed size={18}/> Cardápio</h3>
                                 <Button variant="ghost" size="sm" onClick={() => setShowMenuMode(false)} className="underline">Voltar</Button>
                             </div>
-                            <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] h-[70vh]">
+                            <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] max-h-[70vh]">
                                 <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
                             </div>
                         </div>
