@@ -7489,14 +7489,23 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         {tab.sensitive && <div className="my-1.5 border-t border-[var(--warn)]/30" />}
                                         <button
                                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium u-motion u-press-sm flex items-center gap-1.5 ${
+                                            className={`relative w-full text-left px-3 py-2 rounded-lg text-sm font-medium u-motion u-press-sm flex items-center gap-1.5 ${
                                                 activeTab === tab.id
-                                                    ? 'bg-[var(--brand)]/10 text-[var(--brand)] font-bold'
+                                                    ? 'text-[var(--brand)] font-bold'
                                                     : tab.sensitive
                                                         ? 'text-[var(--warn)] hover:bg-[var(--warn)]/5'
                                                         : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
                                             }`}
                                         >
+                                            {activeTab === tab.id && (
+                                                // layoutId por GRUPO (não compartilhado entre os 4 grupos do menu) —
+                                                // senão o indicador "voaria" de um grupo pro outro na tela toda.
+                                                <motion.div
+                                                    layoutId={`admin-nav-active-${group.label}`}
+                                                    className="absolute inset-0 rounded-lg bg-[var(--brand)]/10 -z-10"
+                                                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                                />
+                                            )}
                                             {tab.sensitive && <Lock size={12} />}
                                             {tab.label}
                                         </button>
@@ -7507,6 +7516,17 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     ))}
                 </nav>
                 <div className="flex-1 min-w-0">
+                    {/* Crossfade mínimo na troca de aba (Task 5, 2026-08-29) —
+                    120ms, sem y na saída (só opacity), sem bounce/stagger:
+                    painel usado 50x/dia, motion tem que ser quase invisível. */}
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.12, ease: 'easeOut' }}
+                        >
 
             {activeTab === 'dashboard' && (
                 <StoreDashboardView
@@ -8119,6 +8139,9 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     </Card>
                 </div>
             )}
+
+                        </motion.div>
+                    </AnimatePresence>
 
             {/* Modal de Detalhes da Venda */}
             <Modal isOpen={!!selectedOrderDetails} onClose={() => setSelectedOrderDetails(null)} title="Detalhes da Venda">
