@@ -567,7 +567,7 @@ export const StoreDashboardView: React.FC<{
                     {/* Faturamento */}
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={20} className="text-[var(--brand)]" /> Faturamento</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mb-4">
                             <StatCard title="Total no Período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
                             <StatCard title="Ticket Médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
                         </div>
@@ -751,7 +751,7 @@ export const StoreDashboardView: React.FC<{
                     {/* Avaliações */}
                     <div>
                         <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Star size={20} className="text-[var(--warn)]" /> Avaliações</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-1 gap-4 mb-4">
                             <StatCard title="Nota Média" value={periodRatings.length > 0 ? avgRating.toFixed(1) : '-'} subtitle={`${periodRatings.length} avaliação(ões) no período`} icon={Star} accentColor="var(--warn)" />
                         </div>
                         <Card className={cardCls}>
