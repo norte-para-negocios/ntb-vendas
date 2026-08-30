@@ -1345,7 +1345,11 @@ const PaymentCaptureFields: React.FC<{
                 ].map(m => (
                     <button
                         key={m.id}
-                        onClick={() => onOneClickFinish(m.id)}
+                        onClick={async () => {
+                            if (await confirm(`Finalizar em ${m.label} — R$ ${formatBRL(total)}? Essa ação fecha a conta e não pode ser desfeita.`)) {
+                                onOneClickFinish(m.id);
+                            }
+                        }}
                         className="flex-1 min-w-[calc(50%-0.25rem)] px-3 py-2 rounded-lg border-2 border-[var(--ok)]/30 bg-[var(--ok)]/5 text-[var(--ok)] text-xs font-bold u-motion u-press-sm hover:bg-[var(--ok)]/10"
                     >
                         {m.label} • R$ {formatBRL(total)} • Finalizar
