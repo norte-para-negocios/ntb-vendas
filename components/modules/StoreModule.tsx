@@ -883,7 +883,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
 
   return (
     <div>
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
             <AnimatePresence>
             {orders.map(item => {
                 const { client, observation } = parseItemNote(item.notes || '');
@@ -4054,7 +4054,7 @@ const CounterView: React.FC<{
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
             <AnimatePresence>
             {orders.map(order => {
                 const itemCount = order.order_items?.reduce((a,b) => a+b.quantity, 0) || 0;
@@ -6209,8 +6209,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         <h4 className="font-bold text-[var(--text-muted)] uppercase text-xs tracking-wider mb-2 ml-1">{cat.name}</h4>
                                         <Droppable droppableId={cat.id} type="product">
                                             {(provided) => (
-                                                <div 
-                                                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                                                <div
+                                                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start"
                                                     {...provided.droppableProps}
                                                     ref={provided.innerRef}
                                                 >
