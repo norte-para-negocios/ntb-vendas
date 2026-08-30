@@ -7476,8 +7476,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
 
     return (
         <div className="space-y-6">
-            <div className="flex gap-6">
-                <nav className="w-56 flex-shrink-0 space-y-5">
+            <div className="flex flex-col md:flex-row gap-6">
+                <nav className="w-full md:w-56 flex-shrink-0 space-y-5">
                     {ADMIN_NAV_GROUPS.map((group) => (
                         <div key={group.label}>
                             <p className="px-3 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -7489,7 +7489,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         {tab.sensitive && <div className="my-1.5 border-t border-[var(--warn)]/30" />}
                                         <button
                                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                                            className={`relative w-full text-left px-3 py-2 rounded-lg text-sm font-medium u-motion u-press-sm flex items-center gap-1.5 ${
+                                            aria-current={activeTab === tab.id ? 'page' : undefined}
+                                            className={`relative isolate w-full text-left px-3 py-2 rounded-lg text-sm font-medium u-motion u-press-sm flex items-center gap-1.5 ${
                                                 activeTab === tab.id
                                                     ? 'text-[var(--brand)] font-bold'
                                                     : tab.sensitive
