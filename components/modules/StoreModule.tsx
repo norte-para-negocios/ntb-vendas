@@ -6836,7 +6836,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 <Button onClick={() => openModal()}><Plus size={18} className="mr-1"/> Novo Usuário</Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
                 {users.map(user => (
                     <Card key={user.id} className="p-4 border border-[var(--border)] shadow-sm relative group">
                         <div className="flex justify-between items-start mb-2">
