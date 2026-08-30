@@ -86,6 +86,12 @@ export interface Store {
     // em StoreModule.tsx.
     table_alert_occupied_minutes?: number;
     table_alert_no_order_minutes?: number;
+    // Tolerância de fechamento de caixa (2026-08-30) — diferença acima
+    // deste valor exige aprovação de supervisor pra fechar o turno.
+    // 0/undefined = sem tolerância nenhuma configurada (comportamento
+    // atual: qualquer diferença fecha sem trava, mesmo com o achado da
+    // auditoria — a trava só liga quando a loja configurar um valor > 0).
+    cash_shift_max_tolerance?: number;
   };
 }
 

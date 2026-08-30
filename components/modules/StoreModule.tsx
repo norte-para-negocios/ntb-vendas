@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -4313,6 +4313,15 @@ const CaixaView: React.FC<{
     const [closingCashBreakdown, setClosingCashBreakdown] = useState<Record<string, string>>({});
     const [isClosingShift, setIsClosingShift] = useState(false);
 
+    // Task 1 (varredura 2026-08-30): diferença acima da tolerância
+    // configurada (stores.config.cash_shift_max_tolerance) exige aprovação
+    // de um supervisor antes de fechar o turno — a RPC já recusava sem
+    // isso, mas nada aqui nunca mandava a tolerância nem tratava a recusa.
+    const [pendingApproval, setPendingApproval] = useState<{ expected: number; counted: number; difference: number } | null>(null);
+    const [supervisorEmail, setSupervisorEmail] = useState('');
+    const [supervisorPassword, setSupervisorPassword] = useState('');
+    const [isVerifyingSupervisor, setIsVerifyingSupervisor] = useState(false);
+
     // Subprojeto 2 (2026-08-25): histórico de turnos passados, consultável a
     // qualquer momento — não só na hora de fechar (achado real: o número da
     // diferença sumia assim que o turno era fechado, sem jeito de conferir
@@ -4641,7 +4650,7 @@ const CaixaView: React.FC<{
         return closingCountedValue - closeSummary.expected_cash;
     }, [closingCountedValue, closeSummary]);
 
-    const handleConfirmCloseShift = async () => {
+    const handleConfirmCloseShift = async (approvedByUserId?: string) => {
         if (!shift) return;
         setIsClosingShift(true);
         try {
@@ -4650,7 +4659,8 @@ const CaixaView: React.FC<{
                 const count = parseInt(closingCashBreakdown[String(value)] || '0', 10);
                 if (count > 0) breakdownAsNumbers[String(value)] = count;
             });
-            const result = await closeCashShift(shift.id, closingCountedValue, breakdownAsNumbers);
+            const maxTolerance = store.config?.cash_shift_max_tolerance || undefined;
+            const result = await closeCashShift(shift.id, closingCountedValue, breakdownAsNumbers, maxTolerance, approvedByUserId);
             if (result.success) {
                 toast.success('Caixa fechado.');
                 // Contagem cega (Task 4): quem não viu o esperado durante a
@@ -4659,10 +4669,21 @@ const CaixaView: React.FC<{
                 if (!canSeeExpectedBeforeClosing && result.expected_cash !== undefined && result.difference !== undefined) {
                     setClosedResultDifference({ expected: result.expected_cash, counted: closingCountedValue, difference: result.difference });
                 }
+                setPendingApproval(null);
                 setShowCloseModal(false);
                 setCloseSummary(null);
                 // Volta ao estado "sem turno aberto" (mesma tela da Task 3).
                 setShift(null);
+            } else if (result.requires_approval) {
+                // Achado da varredura (2026-08-30): a RPC já recusava fechar com
+                // diferença acima da tolerância, mas nada aqui nunca tratava
+                // esse retorno -- ficava só o erro genérico. Abre o modal de
+                // aprovação em vez de exibir o texto de erro cru.
+                setPendingApproval({
+                    expected: result.expected_cash ?? 0,
+                    counted: closingCountedValue,
+                    difference: result.difference ?? 0,
+                });
             } else {
                 toast.error(result.message || 'Não foi possível fechar o caixa.');
                 await loadShift();
@@ -4671,6 +4692,26 @@ const CaixaView: React.FC<{
             toast.error('Erro ao fechar o caixa: ' + e.message);
         } finally {
             setIsClosingShift(false);
+        }
+    };
+
+    const handleApproveAndClose = async () => {
+        if (!supervisorEmail.trim() || !supervisorPassword) {
+            toast.error('Informe o e-mail e a senha do supervisor.');
+            return;
+        }
+        setIsVerifyingSupervisor(true);
+        try {
+            const verify = await verifyCashSupervisor(store.id, supervisorEmail.trim(), supervisorPassword);
+            if (!verify.success || !verify.user_id) {
+                toast.error(verify.message || 'Supervisor não encontrado ou sem permissão.');
+                return;
+            }
+            setSupervisorEmail('');
+            setSupervisorPassword('');
+            await handleConfirmCloseShift(verify.user_id);
+        } finally {
+            setIsVerifyingSupervisor(false);
         }
     };
 
@@ -5314,9 +5355,30 @@ const CaixaView: React.FC<{
                             <Button variant="outline" className="flex-1" disabled={isClosingShift} onClick={() => setShowCloseModal(false)}>
                                 Cancelar
                             </Button>
-                            <Button className="flex-1" isLoading={isClosingShift} onClick={handleConfirmCloseShift}>
+                            <Button className="flex-1" isLoading={isClosingShift} onClick={() => handleConfirmCloseShift()}>
                                 <Lock size={16} className="mr-2" /> Confirmar Fechamento
                             </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Task 1 (varredura 2026-08-30): diferença acima da tolerância
+                configurada exige aprovação de supervisor antes de fechar. */}
+            <Modal isOpen={!!pendingApproval} onClose={() => setPendingApproval(null)} title="Diferença acima do limite — aprovação necessária">
+                {pendingApproval && (
+                    <div className="space-y-4">
+                        <div className="bg-[var(--warn)]/10 p-4 rounded-xl border border-[var(--warn)]/20">
+                            <p className="text-sm text-[var(--warn)] font-semibold">
+                                Diferença de R$ {formatBRL(Math.abs(pendingApproval.difference))} ({pendingApproval.difference >= 0 ? 'sobra' : 'falta'}) — acima da tolerância configurada pra esta loja.
+                            </p>
+                        </div>
+                        <p className="text-sm text-[var(--text-muted)]">Peça pra um supervisor (dono, ou quem tiver a permissão "Supervisiona Caixa") digitar o login dele pra aprovar o fechamento mesmo assim.</p>
+                        <Input label="E-mail do supervisor" type="email" value={supervisorEmail} onChange={e => setSupervisorEmail(e.target.value)} />
+                        <Input label="Senha do supervisor" type="password" value={supervisorPassword} onChange={e => setSupervisorPassword(e.target.value)} />
+                        <div className="flex gap-2">
+                            <Button className="flex-1" onClick={handleApproveAndClose} isLoading={isVerifyingSupervisor}>Aprovar e Fechar</Button>
+                            <Button variant="ghost" onClick={() => setPendingApproval(null)}>Cancelar</Button>
                         </div>
                     </div>
                 )}

@@ -69,6 +69,11 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
     const [tableAlertOccupiedMin, setTableAlertOccupiedMin] = useState<number>(store.config?.table_alert_occupied_minutes ?? 0);
     const [tableAlertNoOrderMin, setTableAlertNoOrderMin] = useState<number>(store.config?.table_alert_no_order_minutes ?? 0);
 
+    // Tolerância de fechamento de caixa (2026-08-30) — mesmo padrão jsonb de
+    // sempre (stores.config). 0/undefined = trava desligada (comportamento
+    // atual). Ver CaixaView em StoreModule.tsx pra onde isso é consumido.
+    const [cashShiftMaxTolerance, setCashShiftMaxTolerance] = useState<number>(store.config?.cash_shift_max_tolerance ?? 0);
+
     // Sugestoes de observacao rapida (migration 019, cardapio que vende) —
     // mesmo padrao/coluna jsonb ja usado pela taxa de servico
     // (stores.config), so' com uma chave nova (note_suggestions). Vazio =
@@ -129,6 +134,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
         setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
         setTableAlertOccupiedMin(store.config?.table_alert_occupied_minutes ?? 0);
         setTableAlertNoOrderMin(store.config?.table_alert_no_order_minutes ?? 0);
+        setCashShiftMaxTolerance(store.config?.cash_shift_max_tolerance ?? 0);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
         setAccentColorDraft(store.config?.accent_color || ACCENT_COLOR_DEFAULT);
@@ -246,6 +252,21 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
             console.error('Error updating table alert config', e);
             setter(previous); // revert on error
             toast.error('Erro ao atualizar o aviso de mesa.');
+        }
+    };
+
+    const handleChangeCashShiftTolerance = async (newValue: number) => {
+        const previous = cashShiftMaxTolerance;
+        setCashShiftMaxTolerance(newValue);
+        try {
+            const newConfig = { ...currentStoreConfig, cash_shift_max_tolerance: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig });
+        } catch (e) {
+            console.error('Error updating cash shift tolerance', e);
+            setCashShiftMaxTolerance(previous);
+            toast.error('Erro ao atualizar a tolerância de fechamento de caixa.');
         }
     };
 
@@ -446,6 +467,27 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         min
                     </label>
                 </div>
+            </div>
+
+            {/* Tolerância de fechamento de caixa (2026-08-30) — 0 = trava
+                desligada. Diferença acima disso exige aprovação de supervisor
+                (dono, ou quem tiver a permissão "Supervisiona Caixa") pra
+                fechar o turno, ver CaixaView em StoreModule.tsx. */}
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                <div>
+                    <h4 className="font-bold text-[var(--text)]">🔒 Tolerância no fechamento de caixa</h4>
+                    <p className="text-sm text-[var(--text-muted)]">Diferença acima deste valor exige aprovação de um supervisor (dono ou quem tiver a permissão "Supervisiona Caixa") pra fechar o turno. Deixe 0 pra desligar.</p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] flex-shrink-0">
+                    R$
+                    <input
+                        type="number" min={0} step={5}
+                        value={cashShiftMaxTolerance}
+                        onChange={e => handleChangeCashShiftTolerance(Math.max(0, Number(e.target.value) || 0))}
+                        aria-label="Tolerância máxima de diferença de caixa em reais"
+                        className="w-20 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                    />
+                </label>
             </div>
 
             {/* Cor de destaque por loja (Task 6, stores.config.accent_color) —
