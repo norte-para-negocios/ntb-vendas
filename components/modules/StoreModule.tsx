@@ -8,12 +8,12 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -4334,6 +4334,26 @@ const CaixaView: React.FC<{
     const [historySummary, setHistorySummary] = useState<CashShiftSummary | null>(null);
     const [isLoadingHistorySummary, setIsLoadingHistorySummary] = useState(false);
 
+    // Task 3 (varredura 2026-08-30): Tasks 1/2 já gravam eventos em
+    // `cash_shift_audit_events` (sangria acima da tolerância + item
+    // cancelado) — sem esta tela, ninguém consegue VER esses eventos, só
+    // ficam no banco. `fetchCashShiftAudit(storeId, null, null, 50)` traz os
+    // últimos 50 eventos da LOJA inteira (não só do turno atual), já
+    // ordenados mais recentes primeiro pela própria RPC.
+    const [auditEvents, setAuditEvents] = useState<CashShiftAuditEvent[]>([]);
+    const [showAuditModal, setShowAuditModal] = useState(false);
+    const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+
+    const loadAuditEvents = async () => {
+        setIsLoadingAudit(true);
+        try {
+            const events = await fetchCashShiftAudit(storeId, null, null, 50);
+            setAuditEvents(events);
+        } finally {
+            setIsLoadingAudit(false);
+        }
+    };
+
     // Relógio "agora" só pra recalcular o "há quanto tempo espera" da fila
     // periodicamente sem precisar de novo fetch — mesmo padrão do `now` em
     // KdsView (indicador de atraso).
@@ -4644,6 +4664,38 @@ const CaixaView: React.FC<{
                                 </button>
                             ))
                         )}
+                    </div>
+                )}
+            </Modal>
+            <Modal
+                isOpen={showAuditModal}
+                onClose={() => setShowAuditModal(false)}
+                title="Trilha de Auditoria"
+                size="lg"
+            >
+                {isLoadingAudit ? (
+                    <div className="text-center py-10 text-[var(--text-muted)] text-sm">Carregando...</div>
+                ) : auditEvents.length === 0 ? (
+                    <p className="text-sm text-[var(--text-muted)] text-center py-6">Nenhum evento registrado ainda.</p>
+                ) : (
+                    <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                        {auditEvents.map(ev => (
+                            <div key={ev.id} className="flex items-center justify-between gap-3 bg-[var(--surface-2)] rounded-lg px-3 py-2">
+                                <div className="min-w-0">
+                                    <p className="text-sm text-[var(--text)]">
+                                        <span className="font-bold">{ev.operator_name}</span>
+                                        {' — '}
+                                        {ev.event_type === 'sangria_grande'
+                                            ? `Sangria de R$ ${formatBRL(Number(ev.details?.valor) || 0)} (${ev.details?.motivo || 'sem motivo'})`
+                                            : `Cancelou "${ev.details?.produto || 'item'}"`}
+                                    </p>
+                                    <p className="text-[11px] text-[var(--text-muted)]">{new Date(ev.created_at).toLocaleString('pt-BR')}</p>
+                                </div>
+                                <Badge color={ev.event_type === 'sangria_grande' ? 'bg-[var(--warn)]/10 text-[var(--warn)]' : 'bg-[var(--err)]/10 text-[var(--err)]'}>
+                                    {ev.event_type === 'sangria_grande' ? 'Sangria' : 'Cancelamento'}
+                                </Badge>
+                            </div>
+                        ))}
                     </div>
                 )}
             </Modal>
@@ -4990,13 +5042,22 @@ const CaixaView: React.FC<{
                         </Button>
                     </div>
                 </Card>
-                <button
-                    type="button"
-                    onClick={handleOpenHistory}
-                    className="w-full mt-3 text-center text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand)] u-motion py-2"
-                >
-                    Ver histórico de turnos
-                </button>
+                <div className="flex items-center justify-center gap-4 mt-3">
+                    <button
+                        type="button"
+                        onClick={handleOpenHistory}
+                        className="text-center text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand)] u-motion py-2"
+                    >
+                        Ver histórico de turnos
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setShowAuditModal(true); loadAuditEvents(); }}
+                        className="text-center text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand)] u-motion py-2"
+                    >
+                        Ver Auditoria
+                    </button>
+                </div>
                 {closedResultModal}
                 {historyModals}
             </div>
@@ -5032,6 +5093,9 @@ const CaixaView: React.FC<{
                     </Button>
                     <Button onClick={handleOpenHistory} variant="ghost" className="shrink-0" title="Ver histórico de turnos">
                         <History size={16} />
+                    </Button>
+                    <Button onClick={() => { setShowAuditModal(true); loadAuditEvents(); }} variant="ghost" className="shrink-0" title="Ver Auditoria">
+                        <Shield size={16} />
                     </Button>
                 </div>
             </Card>
