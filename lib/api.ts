@@ -1287,7 +1287,7 @@ export interface CashShiftAuditEvent {
   shift_id: string | null;
   operator_user_id: string | null;
   operator_name: string;
-  event_type: 'item_cancelado' | 'sangria_grande';
+  event_type: 'item_cancelado' | 'sangria_grande' | 'tolerancia_excedida';
   details: Record<string, any>;
   created_at: string;
 }

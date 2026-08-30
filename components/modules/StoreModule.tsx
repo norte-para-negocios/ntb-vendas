@@ -4741,12 +4741,22 @@ const CaixaView: React.FC<{
                                         {' — '}
                                         {ev.event_type === 'sangria_grande'
                                             ? `Sangria de R$ ${formatBRL(Number(ev.details?.valor) || 0)} (${ev.details?.motivo || 'sem motivo'})`
+                                            : ev.event_type === 'tolerancia_excedida'
+                                            // Achado #1 da revisão final de branch (2026-08-30): este
+                                            // event_type (migration 068) caía no branch de
+                                            // "Cancelou item" por engano — mostrava um operador como
+                                            // tendo cancelado algo que nunca existiu.
+                                            ? `Diferença de R$ ${formatBRL(Math.abs(Number(ev.details?.diferenca) || 0))} (${Number(ev.details?.diferenca) >= 0 ? 'sobra' : 'falta'}) acima da tolerância de R$ ${formatBRL(Number(ev.details?.tolerancia) || 0)} ao fechar o caixa`
                                             : `Cancelou "${ev.details?.produto || 'item'}"`}
                                     </p>
                                     <p className="text-[11px] text-[var(--text-muted)]">{new Date(ev.created_at).toLocaleString('pt-BR')}</p>
                                 </div>
-                                <Badge color={ev.event_type === 'sangria_grande' ? 'bg-[var(--warn)]/10 text-[var(--warn)]' : 'bg-[var(--err)]/10 text-[var(--err)]'}>
-                                    {ev.event_type === 'sangria_grande' ? 'Sangria' : 'Cancelamento'}
+                                <Badge color={
+                                    ev.event_type === 'sangria_grande' ? 'bg-[var(--warn)]/10 text-[var(--warn)]'
+                                    : ev.event_type === 'tolerancia_excedida' ? 'bg-[var(--warn)]/10 text-[var(--warn)]'
+                                    : 'bg-[var(--err)]/10 text-[var(--err)]'
+                                }>
+                                    {ev.event_type === 'sangria_grande' ? 'Sangria' : ev.event_type === 'tolerancia_excedida' ? 'Tolerância excedida' : 'Cancelamento'}
                                 </Badge>
                             </div>
                         ))}
