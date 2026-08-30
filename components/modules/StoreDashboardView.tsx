@@ -13,7 +13,11 @@ import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
 
-const COLORS = ['#484DB5', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#F43F5E'];
+// 4 cores por token semântico (--ok/--warn/--info/--brand) + 2 literais extras,
+// pois "Formas de Pagamento" pode ter até 6 fatias distintas (CREDIT/DEBIT/PIX/
+// CASH/COURTESY/MULTIPLE, ver lib/labels.ts PAYMENT_METHOD_LABELS) — mais que os
+// 4 tokens disponíveis.
+const COLORS = ['var(--ok)', 'var(--warn)', 'var(--info)', 'var(--brand)', '#8b5cf6', '#F43F5E'];
 
 // Pedidos/sessões acima disso são tratados como outlier (ex.: mesa esquecida aberta, pedido travado)
 // e excluídos da média para não distorcer o número exibido.
@@ -213,7 +217,7 @@ export const StoreDashboardView: React.FC<{
         const isUp = value >= 0;
         const Icon = isUp ? TrendingUp : TrendingDown;
         return (
-            <span className={`inline-flex items-center gap-1 text-xs font-bold ${isUp ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
+            <span className={`inline-flex items-center gap-1 text-xs font-bold num ${isUp ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
                 <Icon size={14} />
                 {isUp ? '+' : ''}{value.toFixed(1)}% {label}
             </span>
@@ -391,7 +395,7 @@ export const StoreDashboardView: React.FC<{
             <div className="flex items-center justify-between">
                 <div>
                     <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">{title}</p>
-                    <h3 className="text-xl font-black text-[var(--text)] mt-1">{value}</h3>
+                    <h3 className="text-xl font-black text-[var(--text)] mt-1 num">{value}</h3>
                     {subtitle && <p className="text-xs text-[var(--text-muted)] mt-1">{subtitle}</p>}
                 </div>
                 <div className="p-2 rounded-full bg-[var(--surface-2)]">
@@ -575,15 +579,17 @@ export const StoreDashboardView: React.FC<{
                             <Card className={`${cardCls} lg:col-span-2`}>
                                 <h4 className={h4Cls}>Evolução das Vendas</h4>
                                 <div className="h-64">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={salesByDay}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                                            <XAxis dataKey="date" tick={{fontSize: 12}} />
-                                            <YAxis tick={{fontSize: 12}} tickFormatter={(v) => `R$${v}`} />
-                                            <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} />
-                                            <Line type="monotone" dataKey="total" stroke="#484DB5" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                                    {salesByDay.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Sem dados</p> : (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={salesByDay}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                                <XAxis dataKey="date" tick={{fontSize: 12}} />
+                                                <YAxis tick={{fontSize: 12}} tickFormatter={(v) => `R$${v}`} />
+                                                <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+                                                <Line type="monotone" dataKey="total" stroke="var(--brand)" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    )}
                                 </div>
                             </Card>
                             <Card className={cardCls}>
@@ -596,7 +602,7 @@ export const StoreDashboardView: React.FC<{
                                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                 ))}
                                             </Pie>
-                                            <RechartsTooltip />
+                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
                                             <Legend />
                                         </PieChart>
                                     </ResponsiveContainer>
@@ -662,15 +668,17 @@ export const StoreDashboardView: React.FC<{
                         <Card className={cardCls}>
                             <h4 className={h4Cls}>Ocupação por Hora do Dia</h4>
                             <div className="h-64">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={tableOccupationsByHour}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                                        <XAxis dataKey="hour" tick={{fontSize: 12}} />
-                                        <YAxis tick={{fontSize: 12}} />
-                                        <RechartsTooltip />
-                                        <Bar dataKey="count" fill="#484DB5" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                                {tableOccupationsByHour.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Sem dados</p> : (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={tableOccupationsByHour}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                            <XAxis dataKey="hour" tick={{fontSize: 12}} />
+                                            <YAxis tick={{fontSize: 12}} />
+                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+                                            <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                )}
                             </div>
                         </Card>
 
@@ -718,18 +726,18 @@ export const StoreDashboardView: React.FC<{
                             <h4 className={h4Cls}>Funil de Conversão (Mesas)</h4>
                             <div className="grid grid-cols-3 gap-3 text-center">
                                 <div>
-                                    <p className="text-2xl font-black text-[var(--text)]">{funnelStats.opened}</p>
+                                    <p className="text-2xl font-black text-[var(--text)] num">{funnelStats.opened}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">Mesas abertas</p>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-black text-[var(--info)]">{funnelStats.withOrder}</p>
+                                    <p className="text-2xl font-black text-[var(--info)] num">{funnelStats.withOrder}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
                                         Com pedido
                                         {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.withOrder / funnelStats.opened * 100)}%)</span>}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-black text-[var(--ok)]">{funnelStats.closed}</p>
+                                    <p className="text-2xl font-black text-[var(--ok)] num">{funnelStats.closed}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
                                         Fechadas com pagamento
                                         {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.closed / funnelStats.opened * 100)}%)</span>}
