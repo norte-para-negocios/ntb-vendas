@@ -4060,6 +4060,14 @@ const CounterView: React.FC<{
                 const itemCount = order.order_items?.reduce((a,b) => a+b.quantity, 0) || 0;
                 const total = order.order_items?.reduce((a,b) => a+(b.quantity * b.price_at_time), 0) || 0;
                 const status = order.status;
+                // orders.status nunca chega a PREPARING/READY (só PENDING/ACCEPTED/DELIVERED
+                // via send_order_to_kitchen_secure/close_counter_order_secure) — quem avança
+                // de verdade é order_items.status, via KDS. "Pronto" tem que checar os itens,
+                // ignorando os cancelados (cancel_order_item_secure só marca 'canceled', o
+                // item continua na lista pra sempre — sem isso, cancelar 1 item travaria
+                // "Entregar" mesmo com todo o resto pronto).
+                const relevantItems = order.order_items?.filter(i => i.status !== OrderStatus.CANCELED) ?? [];
+                const allItemsReady = relevantItems.length > 0 && relevantItems.every(i => i.status === OrderStatus.READY);
 
                 return (
                     <motion.div
@@ -4121,14 +4129,15 @@ const CounterView: React.FC<{
                                  <Button
                                      onClick={() => handleClose(order.id)}
                                      variant="primary"
-                                     className="h-10 text-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                                     // Task 5 (varredura 2026-08-30): este botão só aparece pra
-                                     // status != PENDING (ramo tratado acima), então na prática
-                                     // trava ACCEPTED/PREPARING — libera só em READY. Nada impede
-                                     // marcar como entregue/receber pagamento um pedido que ainda
-                                     // está sendo preparado.
-                                     disabled={order.status !== OrderStatus.READY}
-                                     title={order.status === OrderStatus.PREPARING ? 'Aguarde o pedido ficar pronto' : undefined}
+                                     className="h-10 text-sm shrink-0"
+                                     // Task 5 (varredura 2026-08-30, corrigido apos achado do
+                                     // revisor): este botão só aparece pra status != PENDING (ramo
+                                     // tratado acima). Libera só quando todo item do pedido estiver
+                                     // READY (ver allItemsReady acima) — checar order.status aqui
+                                     // travaria pra sempre, porque essa coluna nunca chega a
+                                     // PREPARING/READY, só order_items.status avança via KDS.
+                                     disabled={!allItemsReady}
+                                     title={!allItemsReady ? 'Aguarde o pedido ficar pronto' : undefined}
                                  >
                                      <CheckCircle size={16} className="mr-1"/> Entregar
                                  </Button>
