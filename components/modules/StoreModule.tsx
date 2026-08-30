@@ -8672,6 +8672,16 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
 // um F5 (achado de bug #6). Nunca guarda senha nem dado sensível.
 const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
 
+// Achado ao vivo (2026-08-29): a sessão de login já sobrevivia a um F5
+// (bug #6, ver acima), mas a ABA em que a pessoa estava sempre voltava pro
+// padrão (`pickInitialStoreTab`) -- dar refresh no meio de uma tarefa em
+// Administração/Balcão/Cardápio jogava de volta pra Mesas sem aviso. Guarda
+// só o id da aba, nunca dado sensível; revalidado contra as permissões
+// atuais do usuário na restauração (ver useEffect de sessão abaixo) --
+// nunca aplicado cego, senão um admin trocado de módulo depois do último
+// login reabriria numa aba que não devia mais acessar.
+const STORE_LAST_TAB_STORAGE_KEY = 'ntb_store_last_tab';
+
 // Mesma regra de "primeira aba visível" usada tanto no login normal quanto na
 // restauração de sessão — extraída pra não duplicar a cascata de permissões.
 // Task 1 (perfil de módulos por loja): a cascata agora também pula módulo
@@ -8756,7 +8766,11 @@ export const StoreModule: React.FC = () => {
 
                 if (restoredUser) {
                     setUser(restoredUser);
-                    setTab(pickInitialStoreTab(restoredUser));
+                    const savedTab = localStorage.getItem(STORE_LAST_TAB_STORAGE_KEY);
+                    const modules = resolveStoreModules(restoredUser.store);
+                    const hasPermission = (t: string) => hasTabPermission(restoredUser, t, restoredUser.store);
+                    const accessible = computeAccessibleTabIds(modules, hasPermission);
+                    setTab(savedTab && accessible.has(savedTab) ? savedTab : pickInitialStoreTab(restoredUser));
                 } else {
                     localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
                 }
@@ -8768,6 +8782,14 @@ export const StoreModule: React.FC = () => {
         })();
     }, []);
 
+    // Persiste a aba atual a cada troca, pro F5 poder restaurar (ver
+    // STORE_LAST_TAB_STORAGE_KEY acima). Só grava com sessão ativa -- nunca
+    // quer dizer nada antes do login.
+    useEffect(() => {
+        if (!user) return;
+        localStorage.setItem(STORE_LAST_TAB_STORAGE_KEY, tab);
+    }, [tab, user]);
+
     const handleLogin = (u: StoreUser & { store: Store }) => {
         setUser(u);
         setTab(pickInitialStoreTab(u));
@@ -8776,6 +8798,7 @@ export const StoreModule: React.FC = () => {
 
     const handleLogout = () => {
         setUser(null);
+        localStorage.removeItem(STORE_LAST_TAB_STORAGE_KEY);
         localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
     };
 
