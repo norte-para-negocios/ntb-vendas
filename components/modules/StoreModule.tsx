@@ -4436,7 +4436,14 @@ const CaixaView: React.FC<{
         }
         setIsSubmittingMovement(true);
         try {
-            const result = await registerCashMovement(shift.id, movementType, value, movementReason.trim());
+            const result = await registerCashMovement(
+                shift.id,
+                movementType,
+                value,
+                movementReason.trim(),
+                loggedUser.name,
+                movementType === 'sangria' ? (store.config?.cash_shift_sangria_alert_threshold || undefined) : undefined,
+            );
             if (result.success) {
                 toast.success(movementType === 'sangria' ? 'Sangria registrada.' : 'Suprimento registrado.');
                 setShowMovementModal(false);

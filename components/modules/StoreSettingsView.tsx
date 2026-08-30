@@ -74,6 +74,12 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
     // atual). Ver CaixaView em StoreModule.tsx pra onde isso é consumido.
     const [cashShiftMaxTolerance, setCashShiftMaxTolerance] = useState<number>(store.config?.cash_shift_max_tolerance ?? 0);
 
+    // Alerta de auditoria em sangria grande (2026-08-30) — mesmo padrão jsonb
+    // de sempre (stores.config). 0/undefined = alerta desligado. Ver
+    // handleSubmitMovement em CaixaView (StoreModule.tsx) pra onde isso é
+    // consumido.
+    const [sangriaAlertThreshold, setSangriaAlertThreshold] = useState<number>(store.config?.cash_shift_sangria_alert_threshold ?? 0);
+
     // Sugestoes de observacao rapida (migration 019, cardapio que vende) —
     // mesmo padrao/coluna jsonb ja usado pela taxa de servico
     // (stores.config), so' com uma chave nova (note_suggestions). Vazio =
@@ -135,6 +141,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
         setTableAlertOccupiedMin(store.config?.table_alert_occupied_minutes ?? 0);
         setTableAlertNoOrderMin(store.config?.table_alert_no_order_minutes ?? 0);
         setCashShiftMaxTolerance(store.config?.cash_shift_max_tolerance ?? 0);
+        setSangriaAlertThreshold(store.config?.cash_shift_sangria_alert_threshold ?? 0);
         setCoverPreview(store.cover_url);
         setCoverFile(null);
         setAccentColorDraft(store.config?.accent_color || ACCENT_COLOR_DEFAULT);
@@ -267,6 +274,21 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
             console.error('Error updating cash shift tolerance', e);
             setCashShiftMaxTolerance(previous);
             toast.error('Erro ao atualizar a tolerância de fechamento de caixa.');
+        }
+    };
+
+    const handleChangeSangriaAlertThreshold = async (newValue: number) => {
+        const previous = sangriaAlertThreshold;
+        setSangriaAlertThreshold(newValue);
+        try {
+            const newConfig = { ...currentStoreConfig, cash_shift_sangria_alert_threshold: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig });
+        } catch (e) {
+            console.error('Error updating sangria alert threshold', e);
+            setSangriaAlertThreshold(previous);
+            toast.error('Erro ao atualizar o limiar de alerta de sangria.');
         }
     };
 
@@ -485,6 +507,27 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         value={cashShiftMaxTolerance}
                         onChange={e => handleChangeCashShiftTolerance(Math.max(0, Number(e.target.value) || 0))}
                         aria-label="Tolerância máxima de diferença de caixa em reais"
+                        className="w-20 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                    />
+                </label>
+            </div>
+
+            {/* Alerta de auditoria em sangria grande (2026-08-30) — 0 =
+                alerta desligado. Sangria com valor igual ou maior que este
+                limiar grava um evento em cash_shift_audit_events, ver
+                handleSubmitMovement em CaixaView (StoreModule.tsx). */}
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                <div>
+                    <h4 className="font-bold text-[var(--text)]">🚨 Alertar sangria acima de</h4>
+                    <p className="text-sm text-[var(--text-muted)]">Sangria com valor igual ou maior que este limiar gera um registro de auditoria. Deixe 0 pra desligar.</p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] flex-shrink-0">
+                    R$
+                    <input
+                        type="number" min={0} step={5}
+                        value={sangriaAlertThreshold}
+                        onChange={e => handleChangeSangriaAlertThreshold(Math.max(0, Number(e.target.value) || 0))}
+                        aria-label="Alertar sangria acima deste valor em reais"
                         className="w-20 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
                     />
                 </label>

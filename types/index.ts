@@ -92,6 +92,10 @@ export interface Store {
     // atual: qualquer diferença fecha sem trava, mesmo com o achado da
     // auditoria — a trava só liga quando a loja configurar um valor > 0).
     cash_shift_max_tolerance?: number;
+    // Limiar de alerta de sangria grande (2026-08-30) — sangria com valor
+    // igual ou maior que isso gera evento em cash_shift_audit_events.
+    // 0/undefined = alerta desligado.
+    cash_shift_sangria_alert_threshold?: number;
   };
 }
 
