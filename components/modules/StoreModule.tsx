@@ -3684,6 +3684,7 @@ const CounterView: React.FC<{
     onAutoOpenOrderHandled?: () => void;
 }> = ({ store, loggedUser, autoOpenOrderId, onAutoOpenOrderHandled }) => {
     const storeId = store.id;
+    const orderFlow = resolveOrderFlow(store);
     const [orders, setOrders] = useState<Order[]>([]);
 
     // Destinatário da NF-e (Task 17) — mesma lógica de TablesView: config
@@ -3774,7 +3775,31 @@ const CounterView: React.FC<{
         }
     };
 
+    // Achado na revisão final de branch (2026-08-30): antes vivia só como
+    // `disabled` do botão "Entregar" no render — mas handleClose também é
+    // chamado direto pelo efeito de autoOpenOrderId (fila "Aguardando
+    // pagamento" do CaixaView), que contorna o botão inteiramente. Extraído
+    // pra um helper único, usado tanto aqui (no handler, defesa real) quanto
+    // no render (só UX — desabilitar/explicar o botão antes do clique).
+    // orderFlow === 'direct_print' pula a checagem pelo mesmo motivo já
+    // documentado no gate equivalente de TablesView.handleFinishPayment
+    // (loja sem KDS nenhum, item nasce 'accepted' e nunca avança sozinho) —
+    // READY e DELIVERED contam como pronto porque o cozinheiro pode marcar
+    // "Entregar" no próprio KdsView antes do caixa fechar o pagamento aqui.
+    const isOrderReadyForClose = (order: Order) => {
+        if (orderFlow === 'direct_print') return true;
+        const relevantItems = order.order_items?.filter(i => i.status !== OrderStatus.CANCELED) ?? [];
+        return relevantItems.length > 0 && relevantItems.every(
+            i => i.status === OrderStatus.READY || i.status === OrderStatus.DELIVERED
+        );
+    };
+
     const handleClose = async (orderId: string) => {
+        const orderForGate = orders.find((o) => o.id === orderId) || null;
+        if (orderForGate && !isOrderReadyForClose(orderForGate)) {
+            toast.error('Pedido ainda não está pronto — aguarde a cozinha/bar finalizar antes de entregar.');
+            return;
+        }
         // Módulo Caixa ligado (Task 5): ENTREGAR abre a captura de
         // pagamento (mesmo modal/UI que TablesView usa pra mesa) em vez do
         // confirm() simples de sempre — nunca os dois juntos.
@@ -3784,7 +3809,7 @@ const CounterView: React.FC<{
             // travar aqui também garante que nenhum outro caminho futuro
             // abra a captura de pagamento pra quem só pode VER o balcão.
             if (!canFinalize) return;
-            const order = orders.find((o) => o.id === orderId) || null;
+            const order = orderForGate;
             if (!order) return;
             setPaymentOrder(order);
             setPaymentMethods([]);
@@ -3803,8 +3828,7 @@ const CounterView: React.FC<{
         // fechando o pedido normalmente (nota cai 'pendente', não impede o
         // fechamento).
         if (nfeModeloAtivo) {
-            const order = orders.find((o) => o.id === orderId) || null;
-            setClosingOrder(order);
+            setClosingOrder(orderForGate);
             setDestCpfCnpj('');
             setDestNome('');
             return;
@@ -4060,14 +4084,11 @@ const CounterView: React.FC<{
                 const itemCount = order.order_items?.reduce((a,b) => a+b.quantity, 0) || 0;
                 const total = order.order_items?.reduce((a,b) => a+(b.quantity * b.price_at_time), 0) || 0;
                 const status = order.status;
-                // orders.status nunca chega a PREPARING/READY (só PENDING/ACCEPTED/DELIVERED
-                // via send_order_to_kitchen_secure/close_counter_order_secure) — quem avança
-                // de verdade é order_items.status, via KDS. "Pronto" tem que checar os itens,
-                // ignorando os cancelados (cancel_order_item_secure só marca 'canceled', o
-                // item continua na lista pra sempre — sem isso, cancelar 1 item travaria
-                // "Entregar" mesmo com todo o resto pronto).
-                const relevantItems = order.order_items?.filter(i => i.status !== OrderStatus.CANCELED) ?? [];
-                const allItemsReady = relevantItems.length > 0 && relevantItems.every(i => i.status === OrderStatus.READY);
+                // Checagem de "pronto pra entregar" centralizada em isOrderReadyForClose
+                // (definida acima, perto de handleClose) — usada aqui só pra UX (desabilitar
+                // o botão antes do clique); a defesa real vive no handler, que também é
+                // chamado por fora deste botão (fila do CaixaView via autoOpenOrderId).
+                const allItemsReady = isOrderReadyForClose(order);
 
                 return (
                     <motion.div
