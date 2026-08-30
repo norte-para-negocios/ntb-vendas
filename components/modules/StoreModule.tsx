@@ -915,7 +915,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                     </>
                                 )}
                                 {late && (
-                                    <span className="flex items-center gap-1 text-[10px] font-bold text-white bg-[var(--err)] px-2 py-0.5 rounded-full">
+                                    <span className="flex items-center gap-1 text-xs font-bold text-white bg-[var(--err)] px-2 py-0.5 rounded-full">
                                         <AlertCircle size={11}/> Atrasado
                                     </span>
                                 )}
@@ -944,7 +944,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                     <Printer size={18} />
                                 </button>
                                 <div
-                                    className={`flex items-center gap-1 text-xs font-mono bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)] ${timerColorClass}`}
+                                    className={`flex items-center gap-1 text-sm font-mono bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)] ${timerColorClass}`}
                                     title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
                                 >
                                     <Clock size={12}/>
