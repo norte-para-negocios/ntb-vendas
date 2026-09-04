@@ -1476,7 +1476,17 @@ const PaymentCaptureFields: React.FC<{
                 )}
             </div>
             <Button
-                onClick={onFinish}
+                // Bug real do cliente (Ramon, 2026-09-03): onClick={onFinish} direto
+                // repassa o SyntheticEvent do clique como 1º argumento pra
+                // handleFinishPayment/handleFinishCounterPayment — desde que essas
+                // funções ganharam o parâmetro opcional `methodsOverride` (2026-08-27,
+                // atalho de 1 toque), o evento (sempre truthy) vira `methods` no lugar
+                // de `paymentMethods`, e `methods.reduce` quebra em TODO clique manual
+                // deste botão (mesa e balcão) — só o atalho de 1 toque (que chama a
+                // função direto com um array de verdade, sem passar por este botão)
+                // funcionava. `() => onFinish()` garante que nenhum argumento é
+                // repassado, sempre caindo no fallback correto (`paymentMethods`).
+                onClick={() => onFinish()}
                 className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20"
                 disabled={finishDisabled}
             >
