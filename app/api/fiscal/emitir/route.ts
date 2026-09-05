@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { createHash } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { extrairCertificado } from '@/lib/fiscal/certificado';
 import { montarXmlNota, ItemNota, PagamentoNota } from '@/lib/fiscal/xml';
@@ -6,6 +7,7 @@ import { assinarXmlNota } from '@/lib/fiscal/assinatura';
 import { montarQrCode, inserirSuplNoXmlAssinado } from '@/lib/fiscal/qrcode';
 import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
 import { gerarPdfNota, montarNfeProc } from '@/lib/fiscal/pdf';
+import { montarPayloadIncluirNfce, incluirNfceDireto } from '@/lib/omie/nota-fiscal';
 
 // O pipeline completo (download+parse de certificado, XML, assinatura,
 // SOAP até 30s pra SEFAZ, geração de PDF) pode passar do limite padrão de
@@ -450,6 +452,10 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // como fallback só pro caso raríssimo de falhar ANTES da montagem do XML
   // (nem chega a ter um vNF calculado).
   let valorTotalComTaxa: number = valorTotal;
+  // Hoisted pra ficar acessível no bloco de envio pra Omie (after(), pós
+  // cStat=100, ver mais abaixo) — mesmos itens já usados pra montar o XML
+  // desta nota, nunca recalculados.
+  let itensXml: ItemNota[];
 
   try {
     // 5. Numeração atômica.
@@ -461,7 +467,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     numero = numeroGerado as number;
 
     // 6. Monta itens do XML.
-    const itensXml: ItemNota[] = itensValidos.map((i) => {
+    itensXml = itensValidos.map((i) => {
       const produto = (i as any).product;
       // Descrição do item precisa incluir a variação/adicional escolhido
       // (ex.: "Pizza Calabresa (Grande)") — sem isso, duas linhas de pedido
@@ -704,6 +710,72 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         marcarErr,
       );
     }
+  }
+
+  // Envio pra Omie (2026-09-05) — só NFC-e (modelo 65) por enquanto,
+  // ver Global Constraints do plano/spec pro porquê do modelo 55 ficar
+  // de fora. Fire-and-forget: falha aqui nunca muda o status da nota
+  // já autorizada, só loga (mesmo princípio do resto desta rota a
+  // partir do cStat=100).
+  if (modelo === '65') {
+    after(async () => {
+      try {
+        // itensXml (ItemNota[]) e paymentDetailsAncora já foram montados
+        // mais acima nesta mesma rota, pra construir o XML da própria nota
+        // (ver "6. Monta itens do XML" e a chamada a montarXmlNota) —
+        // reaproveitados aqui tal qual, nunca recalculados.
+        const nfeProcXml = montarNfeProc(xmlAssinado, resposta.xmlBruto.match(/<protNFe[\s\S]*?<\/protNFe>/)?.[0] ?? '');
+        const payload = montarPayloadIncluirNfce({
+          chave,
+          numero,
+          serie,
+          dataEmissao: new Date(),
+          ambiente: config.ambiente,
+          itens: itensXml,
+          pagamentos: Array.isArray((paymentDetailsAncora as any)?.methods)
+            ? ((paymentDetailsAncora as any).methods as PagamentoNota[])
+            : [{ method: 'CASH', amount: valorTotalComTaxa }],
+          nfeProcXml,
+          nfceMd5: createHash('md5').update(nfeProcXml).digest('hex'),
+          // Sempre não-nulo aqui: só chegamos neste bloco depois de
+          // cStat==='100' (nota AUTORIZADA), que sempre traz protocolo —
+          // o tipo em soap.ts é string|null por cobrir também as
+          // respostas de rejeição/erro, que nunca chegam até aqui.
+          protocolo: resposta.protocolo ?? '',
+          valorTotal: valorTotalComTaxa,
+        });
+
+        // Caminho A: loja com ntb-estoque configurado e ativo.
+        const { data: ntbEstoqueSecret } = await admin
+          .from('store_ntb_estoque_secrets')
+          .select('ntb_estoque_url, ntb_estoque_api_key, ativo')
+          .eq('store_id', storeId)
+          .maybeSingle();
+
+        if (ntbEstoqueSecret?.ativo) {
+          await fetch(`${ntbEstoqueSecret.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/nota-fiscal`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ntbEstoqueSecret.ntb_estoque_api_key}` },
+            body: JSON.stringify(payload),
+          });
+          return;
+        }
+
+        // Caminho B: loja só com ntb-vendas, chave Omie direta.
+        const { data: omieSecret } = await admin
+          .from('store_omie_secrets')
+          .select('omie_app_key, omie_app_secret')
+          .eq('store_id', storeId)
+          .maybeSingle();
+
+        if (omieSecret) {
+          await incluirNfceDireto({ appKey: omieSecret.omie_app_key, appSecret: omieSecret.omie_app_secret }, payload);
+        }
+        // Nem A nem B configurado: no-op silencioso, loja não quer Omie.
+      } catch (e) {
+        console.error('Envio de NFC-e pra Omie falhou (nota já autorizada, sem impacto no status):', e);
+      }
+    });
   }
 
   return NextResponse.json({
