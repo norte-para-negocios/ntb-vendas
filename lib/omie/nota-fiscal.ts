@@ -31,6 +31,24 @@ function tPagDoMetodo(method: string): string {
   }
 }
 
+// dEmi/hEmi precisam refletir o horário LOCAL (America/Sao_Paulo) da
+// emissão, o mesmo que está gravado em <ide><dhEmi> no XML já assinado
+// pela SEFAZ — toISOString() é sempre UTC (achado de review: perto da
+// meia-noite local isso gera dEmi com a data ERRADA, e hEmi sempre 3h
+// adiantado em relação ao horário real da nota).
+function formatarDataHoraBR(data: Date): { dEmi: string; hEmi: string } {
+  const partes = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(data);
+  const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+  const dEmi = `${get('year')}-${get('month')}-${get('day')}`;
+  const hEmi = `${get('hour')}:${get('minute')}:${get('second')}`;
+  return { dEmi, hEmi };
+}
+
 // Monta o payload a partir dos MESMOS dados já usados pra montar o XML
 // da nota (ItemNota[]/PagamentoNota[], lib/fiscal/xml.ts) — nunca
 // recalcula preço/imposto, só reformata pro shape que a Omie espera.
@@ -47,8 +65,7 @@ export function montarPayloadIncluirNfce(args: {
   protocolo: string;
   valorTotal: number;
 }): IncluirNfcePayload {
-  const dEmi = args.dataEmissao.toISOString().slice(0, 10);
-  const hEmi = args.dataEmissao.toISOString().slice(11, 19);
+  const { dEmi, hEmi } = formatarDataHoraBR(args.dataEmissao);
 
   return {
     chNFe: args.chave,
