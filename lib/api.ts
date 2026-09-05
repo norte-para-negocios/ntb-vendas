@@ -1489,6 +1489,38 @@ export const saveNtbEstoqueIntegracaoConfig = async (
   }
 };
 
+// Chave direta da Omie (store_omie_secrets, migration 071) — pra lojas
+// que NÃO usam ntb-estoque, registra a NFC-e autorizada direto na Omie
+// (ver app/api/fiscal/emitir/route.ts). Mesmo princípio write-only já
+// usado em fetchNtbEstoqueIntegracaoStatus/saveNtbEstoqueIntegracaoConfig
+// logo acima: status via RPC (nunca expõe a chave), escrita via rota
+// própria (service role).
+export interface OmieDiretoStatus {
+  configurado: boolean;
+}
+
+export const fetchOmieDiretoStatus = async (storeId: string): Promise<OmieDiretoStatus> => {
+  const { data, error } = await supabase.rpc('fetch_omie_direto_status_secure', { p_store_id: storeId });
+  if (error || !data) return { configurado: false };
+  return data as OmieDiretoStatus;
+};
+
+export const saveOmieDiretoConfig = async (
+  storeId: string,
+  params: { omieAppKey: string; omieAppSecret: string }
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const res = await fetch('/api/integracao/omie-direto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, ...params }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+};
+
 // Bootstrap cross-sistema (2026-08-16): cria a loja correspondente no
 // ntb-estoque e já grava a integração aqui, tudo num clique só ("Criar no
 // NTB Estoque também" na criação de loja) — sem o operador ver/copiar
