@@ -1501,7 +1501,11 @@ export interface OmieDiretoStatus {
 
 export const fetchOmieDiretoStatus = async (storeId: string): Promise<OmieDiretoStatus> => {
   const { data, error } = await supabase.rpc('fetch_omie_direto_status_secure', { p_store_id: storeId });
-  if (error || !data) return { configurado: false };
+  if (error) {
+    console.error('fetchOmieDiretoStatus: falha ao chamar fetch_omie_direto_status_secure (RPC pode não ter sido recarregada pelo PostgREST — ver NOTIFY pgrst, "reload schema" após aplicar a migration):', error);
+    return { configurado: false };
+  }
+  if (!data) return { configurado: false };
   return data as OmieDiretoStatus;
 };
 

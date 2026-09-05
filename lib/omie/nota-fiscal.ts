@@ -95,6 +95,7 @@ export async function incluirNfceDireto(
   payload: IncluirNfcePayload
 ): Promise<{ status: string }> {
   const vProdTotal = payload.itens.reduce((acc, i) => acc + Number((i.qCom * i.vUnCom).toFixed(2)), 0);
+  const vTaxa = Math.max(0, Number((payload.vNF - vProdTotal).toFixed(2)));
 
   return omieRequest<{ status: string }>(
     'v1/produtos/cupomfiscalincluir',
@@ -127,7 +128,7 @@ export async function incluirNfceDireto(
             vAcresc: 0,
           },
         })),
-        total: { vItem: vProdTotal, vProd: vProdTotal, vDesc: 0, vAcresc: 0, vICMS: 0, vCF: 0, vTaxa: 0, vTotTrib: 0 },
+        total: { vItem: vProdTotal, vProd: vProdTotal, vDesc: 0, vAcresc: 0, vICMS: 0, vCF: 0, vTaxa, vTotTrib: 0 },
       },
       formasPag: payload.pagamentos.map((p, idx) => ({
         seqPag: idx + 1,
