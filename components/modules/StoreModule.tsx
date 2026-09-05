@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -7203,6 +7203,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     const [certStatus, setCertStatus] = useState<StoreFiscalCertificateStatus | null>(null);
     const [isSavingCert, setIsSavingCert] = useState(false);
 
+    // Integração direta com a Omie (2026-09-05) State
+    const [omieDiretoConfigurado, setOmieDiretoConfigurado] = useState(false);
+    const [omieAppKeyInput, setOmieAppKeyInput] = useState('');
+    const [omieAppSecretInput, setOmieAppSecretInput] = useState('');
+    const [isSavingOmieDireto, setIsSavingOmieDireto] = useState(false);
+
     // Configuração do Emissor Fiscal State (store_fiscal_config, migration
     // 024 + 025) — campos numéricos ficam como string pra bind de <input>
     // controlado, convertidos com Number(...) só na hora de montar o
@@ -7296,6 +7302,9 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             setFiscalCscProducao('');
             setFiscalCscidProducao('');
         }
+
+        const omieStatus = await fetchOmieDiretoStatus(storeId);
+        setOmieDiretoConfigurado(omieStatus.configurado);
     };
 
     useEffect(() => { loadFiscalData(); }, [storeId]);
@@ -7303,6 +7312,25 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     const handleCertFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) setCertFile(file);
+    };
+
+    const handleSaveOmieDireto = async () => {
+        if (!omieAppKeyInput || !omieAppSecretInput) {
+            return toast.error('Preencha App Key e App Secret da Omie.');
+        }
+        setIsSavingOmieDireto(true);
+        try {
+            const result = await saveOmieDiretoConfig(storeId, { omieAppKey: omieAppKeyInput, omieAppSecret: omieAppSecretInput });
+            if (!result.success) throw new Error(result.message);
+            toast.success('Integração direta com a Omie salva!');
+            setOmieAppKeyInput('');
+            setOmieAppSecretInput('');
+            setOmieDiretoConfigurado(true);
+        } catch (e: any) {
+            toast.error('Erro ao salvar integração Omie: ' + e.message);
+        } finally {
+            setIsSavingOmieDireto(false);
+        }
     };
 
     const handleSaveCertificate = async () => {
@@ -7945,6 +7973,41 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         </div>
                         <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
                             Salvar Certificado
+                        </Button>
+                    </div>
+                </Collapsible>
+
+                {/* Integração direta com a Omie (2026-09-05) — só pra loja que NÃO usa
+                    ntb-estoque; se a loja tiver ntb-estoque configurado E ativo, esse
+                    caminho nunca é usado (ver app/api/fiscal/emitir/route.ts). */}
+                <Collapsible
+                    title="Integração direta com a Omie"
+                    defaultOpen={false}
+                    badge={omieDiretoConfigurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}
+                >
+                    <div className="space-y-3">
+                        <p className="text-sm text-[var(--text-muted)]">
+                            Pra lojas que não usam o NTB Estoque: registra a NFC-e autorizada direto na Omie, sem passar por outra integração.
+                            Se a loja tiver integração com o NTB Estoque ativa, ela sempre tem prioridade sobre esta.
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input
+                                label="App Key da Omie"
+                                placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Key da conta Omie da loja'}
+                                value={omieAppKeyInput}
+                                onChange={e => setOmieAppKeyInput(e.target.value)}
+                            />
+                            <Input
+                                label="App Secret da Omie"
+                                type="password"
+                                placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Secret da conta Omie da loja'}
+                                value={omieAppSecretInput}
+                                onChange={e => setOmieAppSecretInput(e.target.value)}
+                            />
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
+                        <Button variant="secondary" className="w-full" onClick={handleSaveOmieDireto} isLoading={isSavingOmieDireto}>
+                            Salvar Integração Direta com a Omie
                         </Button>
                     </div>
                 </Collapsible>
