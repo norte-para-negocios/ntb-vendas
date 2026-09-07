@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* Fonte explícita de conteúdo pro scanner de classes do Tailwind v4.
+   Sem isso, o build do app desktop (`next build desktop/webapp`, ver
+   desktop/webapp/) só varre arquivos dentro de desktop/webapp/ — que são
+   só reexports vazios — e nenhuma classe utilitária real (px-6, flex,
+   rounded-2xl etc.) entra no CSS final, deixando a interface toda sem
+   estilo dentro do app Electron. `@source` é resolvido relativo a este
+   arquivo, então funciona igual nos dois builds (site normal e desktop). */
+@source "../app";
+@source "../components";
+@source "../context";
+@source "../lib";
+
 @theme inline {
   --font-sans: var(--font-sans-src);
   --font-mono: var(--font-mono-src);

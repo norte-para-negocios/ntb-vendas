@@ -39,5 +39,8 @@
       "provider": "generic",
       "url": "https://updates.norteparanegocios.com.br/ntb-vendas-desktop/"
     }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
   }
 }
