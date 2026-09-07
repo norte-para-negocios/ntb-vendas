@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+/desktop/webapp/.next/
+/desktop/webapp/out/
 
 # production
 /build
@@ -39,6 +41,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# desktop/webapp/next-env.d.ts é commitado de propósito (o alias @/* dele
+# aponta pra raiz do repo, então precisa existir mesmo sem npm install
+# próprio nessa sub-pasta — ver desktop/webapp/tsconfig.json).
+!/desktop/webapp/next-env.d.ts
 
 # scripts cache
 scripts/.pooler-host
