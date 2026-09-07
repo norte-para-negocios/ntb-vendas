@@ -1276,12 +1276,6 @@ const PaymentCaptureFields: React.FC<{
     onFinish: () => void;
     finishDisabled: boolean;
     finishLabel: string;
-    // Fase 2, Task 5 (plano "Fora do Cardápio"): fechar uma conta com 1 método
-    // só e valor exato ainda levava 3 toques (escolher método → lançar →
-    // finalizar). Só aparece com a lista de pagamentos vazia (`methods.length
-    // === 0`) — não faz sentido em split, onde o valor nunca é o total
-    // inteiro. Cada botão já finaliza direto, sem passar pela lista.
-    onOneClickFinish?: (method: string) => void;
     // Task 4 (2026-08-23, resolução backlog pendente): opt-out por venda,
     // em cima do default por loja (`modelo_emissao_automatica`) que já
     // existe. Só aparece quando o CALLER já confirmou que a loja tem
@@ -1298,7 +1292,7 @@ const PaymentCaptureFields: React.FC<{
     total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
     currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
     changeDue, onFinish, finishDisabled, finishLabel,
-    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, onOneClickFinish, children,
+    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, children,
 }) => (
     <div className="space-y-6 pt-2">
         <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
@@ -1329,37 +1323,6 @@ const PaymentCaptureFields: React.FC<{
                 </button>
             ))}
         </div>
-
-        {/* Achado real ao vivo (2026-08-28): o atalho de 1 toque abaixo
-            finaliza direto sem passar pela lista (ver comentário de
-            handleFinishPayment) — pra CREDIT/DEBIT isso pulava a bandeira
-            do cartão inteiramente, quebrando a conferência por bandeira no
-            fechamento de caixa. Removido daqui: cartão sempre passa pelo
-            fluxo normal (lançar → bandeira obrigatória → finalizar).
-            CASH/PIX não têm bandeira, continuam com o atalho. */}
-        {onOneClickFinish && methods.length === 0 && total > 0 && (
-            <div className="flex flex-wrap gap-2">
-                {[
-                    { id: 'CASH', label: 'Dinheiro' },
-                    { id: 'PIX', label: 'PIX' },
-                ].map(m => (
-                    <button
-                        key={m.id}
-                        onClick={async () => {
-                            // Task 4 (2026-08-30) + achado #9 da revisão final de branch: variant
-                            // 'danger' pra bater com o mesmo padrão já usado em toda ação
-                            // financeira irreversível deste arquivo (excluir produto/usuário etc.)
-                            if (await confirm({ message: `Finalizar em ${m.label} — R$ ${formatBRL(total)}? Essa ação fecha a conta e não pode ser desfeita.`, variant: 'danger' })) {
-                                onOneClickFinish(m.id);
-                            }
-                        }}
-                        className="flex-1 min-w-[calc(50%-0.25rem)] px-3 py-2 rounded-lg border-2 border-[var(--ok)]/30 bg-[var(--ok)]/5 text-[var(--ok)] text-xs font-bold u-motion u-press-sm hover:bg-[var(--ok)]/10"
-                    >
-                        {m.label} • R$ {formatBRL(total)} • Finalizar
-                    </button>
-                ))}
-            </div>
-        )}
 
         {/* Bandeira do cartão — só faz sentido pra CREDIT/DEBIT. Catálogo
             fechado (lib/labels.ts CARD_BRAND_LABELS), nunca texto livre.
@@ -3304,7 +3267,6 @@ NOTIFY pgrst, 'reload schema';`;
                                 onFinish={handleFinishPayment}
                                 finishDisabled={remainingToPay > 0.01}
                                 finishLabel="FINALIZAR MESA"
-                                onOneClickFinish={(method) => handleFinishPayment([{ method, amount: remainingToPay }])}
                                 showEmitirNotaToggle={emissaoFiscalConfigurada}
                                 emitirNota={emitirNotaFiscal}
                                 onEmitirNotaChange={setEmitirNotaFiscal}
@@ -4257,7 +4219,6 @@ const CounterView: React.FC<{
                     onFinish={handleFinishCounterPayment}
                     finishDisabled={remainingToPay > 0.01}
                     finishLabel="FINALIZAR VENDA"
-                    onOneClickFinish={(method) => handleFinishCounterPayment([{ method, amount: remainingToPay }])}
                     showEmitirNotaToggle={emissaoFiscalConfigurada}
                     emitirNota={emitirNotaFiscal}
                     onEmitirNotaChange={setEmitirNotaFiscal}
