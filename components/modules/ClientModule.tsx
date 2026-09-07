@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallba
 import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation, resolverUrlApi } from '@/lib/api';
 import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
@@ -416,7 +416,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
             });
-            await fetch('/api/push/subscribe', {
+            await fetch(resolverUrlApi('/api/push/subscribe'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ orderId, subscription: sub.toJSON() }),

@@ -17,7 +17,7 @@ declare global {
   }
 }
 
-function resolverUrlApi(caminho: string): string {
+export function resolverUrlApi(caminho: string): string {
   if (typeof window !== 'undefined' && window.electronApp?.isElectron) {
     return `${window.electronApp.apiBaseUrl}${caminho}`;
   }

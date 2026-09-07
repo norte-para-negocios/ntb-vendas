@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LayoutDashboard, Store, UtensilsCrossed, ArrowRight } from 'lucide-react';
 import { stagger } from '@/components/Skeleton';
@@ -17,6 +17,13 @@ const ACCENT = '#F43F5E';
 export default function HomePage() {
   const cloudBackRef = useRef<HTMLDivElement>(null);
   const cloudFrontRef = useRef<HTMLDivElement>(null);
+  // O link de cardápio de demonstração (/c/bistro) não existe no bundle
+  // desktop (Electron) — lá não há barra de navegação/botão voltar, então
+  // um link morto prenderia o usuário. Detectado via window.electronApp
+  // (setado pelo preload.js só dentro do app desktop, ver lib/api.ts).
+  // useState+useEffect evita mismatch de hidratação (SSR sempre renderiza
+  // o link; só depois de montar no client é que pode sumir).
+  const [isElectronApp, setIsElectronApp] = useState(false);
 
   // Paralaxe suave das nuvens seguindo o mouse — mesma ideia do hero do site institucional.
   useEffect(() => {
@@ -27,6 +34,10 @@ export default function HomePage() {
     };
     window.addEventListener('mousemove', onMove);
     return () => window.removeEventListener('mousemove', onMove);
+  }, []);
+
+  useEffect(() => {
+    setIsElectronApp(Boolean(window.electronApp?.isElectron));
   }, []);
 
   return (
@@ -86,14 +97,16 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <Link
-          href="/c/bistro"
-          className="u-stagger u-motion group inline-flex items-center gap-1.5 text-sm font-medium text-white/70 hover:text-white border-b border-transparent hover:border-white/60 pb-0.5"
-          style={stagger(240)}
-        >
-          Ver cardápio de demonstração
-          <ArrowRight size={14} className="u-motion group-hover:translate-x-1" />
-        </Link>
+        {!isElectronApp && (
+          <Link
+            href="/c/bistro"
+            className="u-stagger u-motion group inline-flex items-center gap-1.5 text-sm font-medium text-white/70 hover:text-white border-b border-transparent hover:border-white/60 pb-0.5"
+            style={stagger(240)}
+          >
+            Ver cardápio de demonstração
+            <ArrowRight size={14} className="u-motion group-hover:translate-x-1" />
+          </Link>
+        )}
       </div>
 
       {/* Nuvens no rodapé, paths reais do site institucional — camada de trás (cinza, translúcida).

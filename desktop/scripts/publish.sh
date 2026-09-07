@@ -14,6 +14,23 @@ if [ ! -f "$DIST_DIR/latest.yml" ]; then
   exit 1
 fi
 
-scp -i ~/.ssh/notebook_contabo_key "$DIST_DIR"/*.exe "$DIST_DIR/latest.yml" "$REMOTE:$REMOTE_PATH/"
+# Nunca publicar um *.exe às cegas (glob): se sobrar mais de um instalador em
+# dist/ (ex.: resíduo de um bump de versão manual anterior), um glob
+# publicaria todos, e o electron-updater dos clientes já instalados passaria
+# a ver um arquivo que não bate com o que latest.yml descreve. Em vez disso,
+# lê o nome exato do instalador direto do campo `path:` do latest.yml —
+# a mesma fonte de verdade que o autoUpdater dos clientes usa — e publica
+# só esse arquivo.
+EXE_NAME="$(grep '^path:' "$DIST_DIR/latest.yml" | awk '{print $2}')"
+if [ -z "$EXE_NAME" ]; then
+  echo "Não foi possível ler o campo 'path:' de $DIST_DIR/latest.yml."
+  exit 1
+fi
+if [ ! -f "$DIST_DIR/$EXE_NAME" ]; then
+  echo "Instalador referenciado por latest.yml não encontrado: $DIST_DIR/$EXE_NAME"
+  exit 1
+fi
+
+scp -i ~/.ssh/notebook_contabo_key "$DIST_DIR/$EXE_NAME" "$DIST_DIR/latest.yml" "$REMOTE:$REMOTE_PATH/"
 ssh -i ~/.ssh/notebook_contabo_key "$REMOTE" "chown -R ntb:ntb '$REMOTE_PATH'"
 echo "Publicado em https://updates.norteparanegocios.com.br/ntb-vendas-desktop/"
