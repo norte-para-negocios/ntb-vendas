@@ -21,7 +21,7 @@ fi
 # lê o nome exato do instalador direto do campo `path:` do latest.yml —
 # a mesma fonte de verdade que o autoUpdater dos clientes usa — e publica
 # só esse arquivo.
-EXE_NAME="$(grep '^path:' "$DIST_DIR/latest.yml" | awk '{print $2}')"
+EXE_NAME="$(sed -n 's/^path: //p' "$DIST_DIR/latest.yml")"
 if [ -z "$EXE_NAME" ]; then
   echo "Não foi possível ler o campo 'path:' de $DIST_DIR/latest.yml."
   exit 1
