@@ -3,6 +3,27 @@ import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, C
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 
+// App desktop (Electron, ver docs/superpowers/specs/2026-09-07-desktop-app-
+// electron-design.md): a interface roda embutida no instalador, mas as
+// rotas /api/* (têm a service role key) continuam só no servidor de
+// produção — nunca podem ir pro .exe. `window.electronApp` só existe
+// quando o código roda dentro do app desktop (setado pelo preload.js,
+// ver desktop/electron/preload.js); no navegador normal, `resolverUrlApi`
+// devolve o caminho relativo de sempre, sem nenhuma mudança de
+// comportamento.
+declare global {
+  interface Window {
+    electronApp?: { isElectron: boolean; apiBaseUrl: string };
+  }
+}
+
+function resolverUrlApi(caminho: string): string {
+  if (typeof window !== 'undefined' && window.electronApp?.isElectron) {
+    return `${window.electronApp.apiBaseUrl}${caminho}`;
+  }
+  return caminho;
+}
+
 // Autentica via function Postgres security definer (nunca compara senha no
 // client) — ver supabase/migrations/008_seguranca_login.sql. A function já
 // cobre rate-limit (5 tentativas / 5min de bloqueio); o client não precisa
@@ -535,7 +556,7 @@ export const criarProdutoNoEstoque = async (
   ncm?: string | null
 ): Promise<{ success: boolean; message?: string }> => {
   try {
-    const res = await fetch('/api/integracao/criar-produto-estoque', {
+    const res = await fetch(resolverUrlApi('/api/integracao/criar-produto-estoque'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId, productId, nome, preco, ncm }),
@@ -886,7 +907,7 @@ export const closeCounterOrder = async (
 ) => {
   if (paymentData) {
     const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
-    const res = await fetch('/api/orders/pagamento-balcao', {
+    const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
@@ -909,7 +930,7 @@ export const closeCounterOrder = async (
 // { skipped: true } e não acontece nada. Fire-and-forget de propósito: um
 // erro aqui nunca pode impedir o fechamento do pedido, que já aconteceu.
 const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
-  fetch('/api/integracao/ordem-producao', {
+  fetch(resolverUrlApi('/api/integracao/ordem-producao'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -924,7 +945,7 @@ const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
 // seguro sempre repassar o que a UI capturou (ou undefined), sem checar o
 // modelo aqui de novo.
 const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
-  fetch('/api/fiscal/emitir', {
+  fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -938,7 +959,7 @@ const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destin
 // ambiente sem VAPID configurado responde `{ok:false}` sem erro nenhum — ver
 // app/api/push/send/route.ts.
 export const triggerPushForOrder = (orderId: string, title: string, body: string) => {
-  fetch('/api/push/send', {
+  fetch(resolverUrlApi('/api/push/send'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ orderId, title, body }),
@@ -1360,7 +1381,7 @@ const postCertificado = async (fields: Record<string, string | File>): Promise<{
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
   try {
-    const res = await fetch('/api/certificado', { method: 'POST', body: form });
+    const res = await fetch(resolverUrlApi('/api/certificado'), { method: 'POST', body: form });
     return await res.json();
   } catch (error: any) {
     return { success: false, message: error.message };
@@ -1478,7 +1499,7 @@ export const saveNtbEstoqueIntegracaoConfig = async (
   params: { url?: string; apiKey?: string; ativo?: boolean }
 ): Promise<{ success: boolean; message?: string }> => {
   try {
-    const res = await fetch('/api/integracao/configurar', {
+    const res = await fetch(resolverUrlApi('/api/integracao/configurar'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId, ...params }),
@@ -1514,7 +1535,7 @@ export const saveOmieDiretoConfig = async (
   params: { omieAppKey: string; omieAppSecret: string }
 ): Promise<{ success: boolean; message?: string }> => {
   try {
-    const res = await fetch('/api/integracao/omie-direto', {
+    const res = await fetch(resolverUrlApi('/api/integracao/omie-direto'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId, ...params }),
@@ -1535,7 +1556,7 @@ export const criarLojaNoEstoque = async (
   cnpj?: string
 ): Promise<{ success: boolean; message?: string }> => {
   try {
-    const res = await fetch('/api/integracao/criar-loja-estoque', {
+    const res = await fetch(resolverUrlApi('/api/integracao/criar-loja-estoque'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId, nome, cnpj }),
@@ -1573,7 +1594,7 @@ export const fetchFiscalNotas = async (storeId: string): Promise<FiscalNota[]> =
 // linha exata (defesa em profundidade — ver comentário em
 // app/api/fiscal/pdf-url/route.ts).
 export const fetchFiscalNotaPdfUrl = async (noteId: string, pdfPath: string): Promise<string> => {
-  const res = await fetch('/api/fiscal/pdf-url', {
+  const res = await fetch(resolverUrlApi('/api/fiscal/pdf-url'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ noteId, pdfPath }),
@@ -1602,7 +1623,7 @@ export const reemitirFiscalNota = async (params: {
   tableId?: string;
   destinatario?: { cpfCnpj: string; nome: string };
 }): Promise<any> => {
-  const res = await fetch('/api/fiscal/emitir', {
+  const res = await fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1810,7 +1831,7 @@ export const deleteStore = async (id: string): Promise<{ success: boolean; messa
     // motivo do uploadStoreCertificate acima): listar o que existe no
     // bucket exige a mesma leitura que não pode ser liberada pra `anon`.
     try {
-      const res = await fetch('/api/certificado', {
+      const res = await fetch(resolverUrlApi('/api/certificado'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeId: id }),
