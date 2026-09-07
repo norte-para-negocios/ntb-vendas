@@ -61,3 +61,8 @@ scripts/.pooler-host
 # localmente na loja via npm install, não versionado).
 /print-agent/config.json
 /print-agent/node_modules
+
+# App desktop Electron (desktop/) — artefatos de build regenerados a
+# cada `npm run dist`, nunca versionados (binário grande).
+/desktop/dist
+/desktop/node_modules

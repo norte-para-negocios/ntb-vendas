@@ -7,7 +7,7 @@
   "scripts": {
     "build:web": "cd .. && npx next build desktop/webapp",
     "dev": "npm run build:web && electron .",
-    "dist": "npm run build:web && electron-builder"
+    "dist": "npm run build:web && electron-builder --win --x64"
   },
   "devDependencies": {
     "electron": "^33.0.0",
