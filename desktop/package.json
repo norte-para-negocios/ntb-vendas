@@ -1,0 +1,43 @@
+{
+  "name": "ntb-vendas-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Norte Vendas — app desktop (Windows)",
+  "main": "electron/main.js",
+  "scripts": {
+    "build:web": "cd .. && npx next build desktop/webapp",
+    "dev": "npm run build:web && electron .",
+    "dist": "npm run build:web && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "build": {
+    "appId": "com.norteparanegocios.ntbvendas",
+    "productName": "Norte Vendas",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "webapp/out/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://updates.norteparanegocios.com.br/ntb-vendas-desktop/"
+    }
+  }
+}
