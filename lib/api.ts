@@ -1239,14 +1239,27 @@ export const openCashShift = async (
   openingFloat: number,
   notes?: string,
 ): Promise<{ success: boolean; id?: string; message?: string }> => {
-  const { data, error } = await supabase.rpc('open_cash_shift_secure', {
-    p_store_id: storeId,
-    p_operator_user_id: operatorUserId,
-    p_opening_float: openingFloat,
-    p_notes: notes ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; id?: string; message?: string };
+  try {
+    const { data, error } = await supabase.rpc('open_cash_shift_secure', {
+      p_store_id: storeId,
+      p_operator_user_id: operatorUserId,
+      p_opening_float: openingFloat,
+      p_notes: notes ?? null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; id?: string; message?: string };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message };
+    }
+    await enqueue('open_cash_shift', {
+      p_store_id: storeId,
+      p_operator_user_id: operatorUserId,
+      p_opening_float: openingFloat,
+      p_notes: notes ?? null,
+    });
+    return { success: true };
+  }
 };
 
 // Task 4 (frente-de-caixa): sangria/suprimento — `register_cash_movement_secure`
@@ -1260,16 +1273,31 @@ export const registerCashMovement = async (
   operatorName?: string,
   alertThreshold?: number,
 ): Promise<{ success: boolean; id?: string; message?: string }> => {
-  const { data, error } = await supabase.rpc('register_cash_movement_secure', {
-    p_shift_id: shiftId,
-    p_type: type,
-    p_amount: amount,
-    p_reason: reason,
-    p_operator_name: operatorName ?? null,
-    p_alert_threshold: alertThreshold ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; id?: string; message?: string };
+  try {
+    const { data, error } = await supabase.rpc('register_cash_movement_secure', {
+      p_shift_id: shiftId,
+      p_type: type,
+      p_amount: amount,
+      p_reason: reason,
+      p_operator_name: operatorName ?? null,
+      p_alert_threshold: alertThreshold ?? null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; id?: string; message?: string };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message };
+    }
+    await enqueue('register_cash_movement', {
+      p_shift_id: shiftId,
+      p_type: type,
+      p_amount: amount,
+      p_reason: reason,
+      p_operator_name: operatorName ?? null,
+      p_alert_threshold: alertThreshold ?? null,
+    });
+    return { success: true };
+  }
 };
 
 // Task 4: resumo do turno pra tela de fechamento — total por forma de
@@ -1331,15 +1359,29 @@ export const closeCashShift = async (
   maxTolerance?: number | null,
   approvedByUserId?: string | null,
 ): Promise<{ success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string }> => {
-  const { data, error } = await supabase.rpc('close_cash_shift_secure', {
-    p_shift_id: shiftId,
-    p_closing_counted_cash: closingCountedCash,
-    p_closing_cash_breakdown: closingCashBreakdown ?? null,
-    p_max_tolerance: maxTolerance ?? null,
-    p_approved_by_user_id: approvedByUserId ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+  try {
+    const { data, error } = await supabase.rpc('close_cash_shift_secure', {
+      p_shift_id: shiftId,
+      p_closing_counted_cash: closingCountedCash,
+      p_closing_cash_breakdown: closingCashBreakdown ?? null,
+      p_max_tolerance: maxTolerance ?? null,
+      p_approved_by_user_id: approvedByUserId ?? null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message };
+    }
+    await enqueue('close_cash_shift', {
+      p_shift_id: shiftId,
+      p_closing_counted_cash: closingCountedCash,
+      p_closing_cash_breakdown: closingCashBreakdown ?? null,
+      p_max_tolerance: maxTolerance ?? null,
+      p_approved_by_user_id: approvedByUserId ?? null,
+    });
+    return { success: true };
+  }
 };
 
 export const verifyCashSupervisor = async (
