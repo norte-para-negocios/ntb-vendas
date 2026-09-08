@@ -3,6 +3,32 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
 
+// Achado real (QA, 2026-09-08): lojas com "envia pedido direto pra
+// impressão" (order_flow: 'direct_print', ver AGENTS.md/CaixaPrintStation)
+// disparam window.print() a cada pedido novo — no navegador normal isso já
+// funciona sem fricção (impressora padrão memorizada), mas dentro do
+// Electron abre o diálogo NATIVO de impressão do sistema operacional e
+// TRAVA a janela até alguém clicar manualmente, quebrando exatamente o
+// "imprime sozinho" que é a razão do PDV físico existir. `kiosk-printing`
+// é um switch documentado do Chromium/Electron: com ele, window.print()
+// imprime direto na impressora padrão do SO, sem diálogo nenhum — mesmo
+// princípio já usado por apps de PDV/kiosk em produção. Precisa ser
+// setado ANTES de app.whenReady().
+//
+// ⚠️ Ressalva verificada nesta sessão (testado no Mac de desenvolvimento,
+// NÃO num Windows real — o único alvo de build deste app, ver package.json
+// build.win): mesmo com uma impressora padrão configurada, o diálogo NATIVO
+// do macOS continuou aparecendo com este switch ligado. Pesquisa confirma
+// que esse é um limite conhecido do Chromium/Electron: no Windows/Linux, o
+// diálogo que kiosk-printing suprime é o do PRÓPRIO Chromium; no macOS, a
+// impressão passa pelo painel nativo da Apple, que o switch não controla.
+// Como este app só builda pra Windows, o comportamento esperado lá é
+// diferente do observado aqui — mas isso continua sendo uma pendência real
+// de verificação numa máquina Windows física (mesma categoria de "só
+// confirma num Windows de verdade" já registrada no plano do app desktop),
+// não uma confirmação de que funciona.
+app.commandLine.appendSwitch('kiosk-printing');
+
 // Sem isso, rodar via `electron .` (modo dev, sem empacotar) mostra
 // "Electron" no menu/dock/taskbar em vez do nome real — o .exe empacotado
 // (electron-builder já usa `productName` do package.json pra isso) não tem
