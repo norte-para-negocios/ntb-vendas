@@ -2241,6 +2241,19 @@ NOTIFY pgrst, 'reload schema';`;
         // opera sobre `selectedTable`.
         const table = tableOverride || selectedTable;
         if (!table) return;
+        // Achado real (Ramon, WhatsApp 2026-09-08): a lista "Mesas ocupadas"
+        // do Caixa (CaixaView) chama isto via `tableOverride` (autoOpenTableId,
+        // ver o useEffect abaixo) SEM passar pelo mesmo clique de card que a
+        // Gestão de Mesas usa — e só o clique de card em TablesView checava
+        // `isTableInJurisdiction` (linha ~2722). Resultado: um garçom sem
+        // jurisdição sobre a mesa (ex. mesa 12, fora da área 1-10 dele)
+        // conseguia abrir o modal completo (Ver Comanda/Adicionar Pedido)
+        // dessa mesa navegando via Caixa em vez de Gestão de Mesas — a
+        // jurisdição nunca é sobre O BOTÃO que abre o modal, é sobre A MESA
+        // em si, então o choque tem que estar aqui, no único ponto que os
+        // dois caminhos (clique manual e auto-abertura do Caixa) atravessam
+        // antes de `setSelectedTable`.
+        if (!isTableInJurisdiction(loggedUser, table.id)) return;
         // Task 4 (módulo Caixa): defesa em profundidade — o botão que chama
         // isto já não renderiza pra quem não pode finalizar (ver JSX
         // abaixo), mas travar aqui também garante que nenhum outro caminho
