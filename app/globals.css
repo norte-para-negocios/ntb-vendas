@@ -306,6 +306,10 @@
 @keyframes u-shimmer {
   100% { transform: translateX(100%); }
 }
+@keyframes u-late-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--err); }
+  50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--err) 30%, transparent); }
+}
 @keyframes u-pulse-ring {
   0% { transform: scale(1); opacity: 0.4; }
   70%, 100% { transform: scale(2.6); opacity: 0; }

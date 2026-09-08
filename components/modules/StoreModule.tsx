@@ -597,7 +597,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={`flex items-center w-full px-3 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium u-motion group relative
-                ${currentTab === item.id ? 'bg-white/12 text-white' : 'text-white/45 hover:bg-white/8 hover:text-white/75'}
+                ${currentTab === item.id ? 'bg-white/12 text-white border-l-[3px] border-l-[var(--brand)] pl-[9px]' : 'text-white/45 hover:bg-white/8 hover:text-white/75'}
                 ${isCollapsed ? 'justify-center' : 'gap-3'}
               `}
               title={isCollapsed ? item.label : ''}
@@ -700,7 +700,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
     {/* Main Content Area */}
     <main className="p-4 md:p-8 pt-4 md:pt-6 pb-24 md:pb-8 max-w-7xl mx-auto">
-      <header className="mb-6 hidden md:flex justify-between items-center">
+      <header className="relative mb-6 hidden md:flex justify-between items-center before:content-[''] before:absolute before:-top-4 before:md:-top-6 before:left-0 before:right-0 before:h-1 before:bg-[var(--brand)] before:rounded-full">
         <div>
           <h2 className="text-xl font-semibold text-[var(--text)]">{title}</h2>
           <p className="text-[var(--text-muted)] text-sm mt-0.5">Gerencie seu estabelecimento</p>
@@ -900,7 +900,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                         exit={{ opacity: 0, scale: 0.92 }}
                         transition={SPRING_TAP}
                     >
-                    <Card className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md ${late ? 'border-[var(--err)] ring-2 ring-[var(--err)]/30' : ''}`}>
+                    <Card className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md ${late ? 'border-[var(--err)] ring-2 ring-[var(--err)]/30' : ''}`} style={late ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
                         <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
                             <span className="font-bold text-[var(--text)] flex items-center gap-2">
                                 {item.order?.order_type === 'counter' ? (
@@ -991,7 +991,9 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
             </AnimatePresence>
             {orders.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
-                    <CheckCircle className="mb-4 h-20 w-20 opacity-20 text-[var(--ok)]" />
+                    {destination === 'kitchen'
+                        ? <ChefHat className="mb-4 h-20 w-20 opacity-20" />
+                        : <Wine className="mb-4 h-20 w-20 opacity-20" />}
                     <p className="text-xl font-medium">{destination === 'kitchen' ? 'Tudo tranquilo na cozinha!' : 'Tudo tranquilo no bar!'}</p>
                     <p className="text-sm">Aguardando novos pedidos...</p>
                 </div>
@@ -2731,6 +2733,12 @@ NOTIFY pgrst, 'reload schema';`;
                     const isOccupiedTooLong = tableAlertOccupiedMin > 0 && minutesOccupied !== null && minutesOccupied >= tableAlertOccupiedMin;
                     const isNoOrderTooLong = tableAlertNoOrderMin > 0 && minutesSinceLastOrder !== null && minutesSinceLastOrder >= tableAlertNoOrderMin;
                     const hasTimeAlert = isOccupiedTooLong || isNoOrderTooLong;
+                    // Task 3 (refresh visual, 2026-09-08): terceiro nível de urgência —
+                    // "crítico" quando o atraso é o DOBRO do limiar configurado pela
+                    // loja (mesmo tableAlertOccupiedMin que já dispara o nível
+                    // "atenção" em hasTimeAlert). Sem limiar configurado, nunca escala
+                    // pra crítico — mesma regra de "recurso desligado" de isOccupiedTooLong.
+                    const isOccupiedCritical = tableAlertOccupiedMin > 0 && minutesOccupied !== null && minutesOccupied >= tableAlertOccupiedMin * 2;
 
                     return (
                         <motion.div
@@ -2748,6 +2756,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
                                 isWaiterRequested ? 'border-[var(--err)]/50 bg-[var(--err)]/5 shadow-xl animate-pulse' :
                                 table.status === 'waiting_bill' ? 'bg-[var(--warn)]/5 border-[var(--warn)]/30 shadow-lg' :
+                                isOccupiedCritical ? 'bg-[var(--err)]/10 border-[var(--err)]/60 shadow-lg' :
                                 hasTimeAlert ? 'bg-[var(--warn)]/10 border-[var(--warn)]/60 shadow-lg' :
                                 isOccupied ? 'bg-[var(--info)]/5 border-[var(--info)]/25 shadow-lg' :
                                 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30 hover:shadow-lg'
@@ -5221,7 +5230,7 @@ const CaixaView: React.FC<{
                 </h3>
                 {queueItems.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
-                        <CheckCircle className="mb-3 h-14 w-14 opacity-20" />
+                        <Wallet className="mb-3 h-14 w-14 opacity-20" />
                         <p className="text-base font-medium">Nenhum recebível pendente</p>
                         <p className="text-xs">Mesas que pedirem a conta e vendas de balcão aparecem aqui.</p>
                     </div>

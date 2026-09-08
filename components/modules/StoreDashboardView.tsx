@@ -24,6 +24,34 @@ const COLORS = ['var(--ok)', 'var(--warn)', 'var(--info)', 'var(--brand)', '#8b5
 const MAX_REASONABLE_DELIVERY_MINUTES = 240;
 const MAX_REASONABLE_TABLE_MINUTES = 480;
 
+// SVG inline decorativo — não usa Recharts de propósito (Recharts já é
+// usado no resto do arquivo, mas é pesado demais pra um sparkline de
+// 7 pontos sem eixo/tooltip/legenda; um polyline puro é mais barato e
+// mais simples de posicionar atrás do número do card).
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const range = max - min || 1;
+    const width = 100;
+    const height = 32;
+    const points = values
+        .map((v, i) => {
+            const x = (i / (values.length - 1)) * width;
+            const y = height - ((v - min) / range) * height;
+            return `${x},${y}`;
+        })
+        .join(' ');
+    return (
+        <svg
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="none"
+            className="absolute bottom-0 right-0 w-24 h-8 opacity-20 pointer-events-none"
+        >
+            <polyline points={points} fill="none" stroke={color} strokeWidth="2" />
+        </svg>
+    );
+}
+
 export const StoreDashboardView: React.FC<{
     sales: Order[];
     tableSessions: TableSession[];
@@ -156,6 +184,27 @@ export const StoreDashboardView: React.FC<{
     const dailyStats = calcStats(dailySales);
     const weeklyStats = calcStats(weeklySales);
     const monthlyStats = calcStats(monthlySales);
+
+    // Task 2 (refresh visual, 2026-09-08): série diária pros últimos 7 dias,
+    // só pra desenhar a sparkline decorativa no card "Hoje" — mesma fonte de
+    // dado (`sales`) já carregada, nenhuma busca nova. Um dia sem venda vira
+    // 0 (não é omitido), senão a linha da sparkline distorceria a posição
+    // dos outros pontos.
+    const last7DaysTotals = useMemo(() => {
+        const days: number[] = [];
+        for (let i = 6; i >= 0; i--) {
+            const day = subDays(now, i);
+            const dayTotal = sales
+                .filter(s => isSameDay(new Date(s.created_at), day))
+                .reduce((sum, o) => sum + getOrderDisplayTotal(o), 0);
+            days.push(dayTotal);
+        }
+        return days;
+    }, [sales, now]);
+
+    // Sparkline só faz sentido com pelo menos 2 dias com venda de verdade —
+    // com 0 ou 1, uma "linha" não comunica tendência nenhuma.
+    const hasEnoughDataForSparkline = last7DaysTotals.filter(v => v > 0).length >= 2;
 
     // Comparação dos 3 blocos fixos do topo com o período anterior
     // equivalente (ontem / semana passada / mês passado) — mesma base de
@@ -509,6 +558,9 @@ export const StoreDashboardView: React.FC<{
                         { label: 'Este Mês', stats: monthlyStats, prev: prevMonthlyStats, prevLabel: 'vs. mês passado', accent: 'var(--ok)' },
                     ].map(({ label, stats, prev, prevLabel, accent }, i) => (
                         <Card key={label} accentColor={accent} className={`${cardCls} u-grow-in u-card pl-5`} style={{ animationDelay: `${i * 60}ms` }}>
+                            {label === 'Hoje' && hasEnoughDataForSparkline && (
+                                <Sparkline values={last7DaysTotals} color={accent} />
+                            )}
                             <div className="flex items-center justify-between mb-2">
                                 <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</h3>
                                 <div className="p-1.5 rounded-full bg-[var(--surface-2)]">
