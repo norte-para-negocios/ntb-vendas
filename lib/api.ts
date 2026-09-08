@@ -1086,12 +1086,18 @@ export const fetchOrderItemsById = async (orderId: string): Promise<OrderItem[]>
 };
 
 export const updateOrderItemStatus = async (itemId: string, status: OrderStatus): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.rpc('update_order_item_status_secure', { p_item_id: itemId, p_status: status });
-  if (error) {
-    console.error('Update Order Item Status Error:', error);
-    return { success: false, message: error.message };
+  try {
+    const { error } = await supabase.rpc('update_order_item_status_secure', { p_item_id: itemId, p_status: status });
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      console.error('Update Order Item Status Error:', error);
+      return { success: false, message: (error as Error).message };
+    }
+    await enqueue('update_order_item_status', { p_item_id: itemId, p_status: status });
+    return { success: true };
   }
-  return { success: true };
 };
 
 export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string) => {
