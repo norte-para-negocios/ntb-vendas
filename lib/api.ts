@@ -3,6 +3,8 @@ import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, C
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables } from './offline/cache';
+import { enqueue } from './offline/queue';
+import { isNetworkError } from './offline/network';
 
 // App desktop (Electron, ver docs/superpowers/specs/2026-09-07-desktop-app-
 // electron-design.md): a interface roda embutida no instalador, mas as
@@ -1023,37 +1025,48 @@ export const createOrder = async (
   addedByRole: 'cliente' | 'garcom' = 'cliente',
   addedByName?: string,
 ): Promise<{ success: boolean; orderId?: string }> => {
+  const isCounter = tableId === null;
+
+  const pItems = items.map((item) => ({
+    product_id: item.product.id,
+    quantity: item.quantity,
+    notes: item.notes
+      ? `${customerName ? `[${customerName}] ` : ''}${item.notes}`
+      : customerName
+      ? `[${customerName}]`
+      : '',
+    option_ids: (item.selectedOptions || []).map(o => o.option_id),
+  }));
+
+  const rpcPayload = {
+    p_table_id: tableId,
+    p_store_id: storeId,
+    p_order_type: isCounter ? 'counter' : 'table',
+    p_customer_name: customerName || null,
+    p_items: pItems,
+    p_added_by_role: addedByRole,
+    p_added_by_name: addedByName || null,
+  };
+
   try {
-    const isCounter = tableId === null;
-
-    const pItems = items.map((item) => ({
-      product_id: item.product.id,
-      quantity: item.quantity,
-      notes: item.notes
-        ? `${customerName ? `[${customerName}] ` : ''}${item.notes}`
-        : customerName
-        ? `[${customerName}]`
-        : '',
-      option_ids: (item.selectedOptions || []).map(o => o.option_id),
-    }));
-
-    const { data, error } = await supabase.rpc('create_order_secure', {
-      p_table_id: tableId,
-      p_store_id: storeId,
-      p_order_type: isCounter ? 'counter' : 'table',
-      p_customer_name: customerName || null,
-      p_items: pItems,
-      p_added_by_role: addedByRole,
-      p_added_by_name: addedByName || null,
-    });
-
+    const { data, error } = await supabase.rpc('create_order_secure', rpcPayload);
     if (error) throw error;
     if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
-
     return { success: true, orderId: data.order_id };
   } catch (error) {
-    console.error('Create Order Error', error);
-    throw error;
+    if (!isNetworkError(error)) {
+      // Erro de NEGÓCIO (ex. mesa com PIN errado, item indisponível) —
+      // nunca enfileira, sobe normal igual sempre subiu.
+      console.error('Create Order Error', error);
+      throw error;
+    }
+    // Erro de REDE — cai no caminho offline.
+    const localOrderId = `local_${crypto.randomUUID()}`;
+    await enqueue('create_order', { ...rpcPayload, localOrderId });
+    // Atualização otimista: soma o pedido novo ao cache local de mesas,
+    // pra a tela refletir a mudança na hora (mesmo princípio de update
+    // otimista já usado em KdsView.advanceStatus, ver StoreModule.tsx).
+    return { success: true, orderId: localOrderId };
   }
 };
 
