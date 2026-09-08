@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, protocol, net, shell } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net, shell, Notification } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
@@ -80,14 +80,31 @@ app.whenReady().then(() => {
 
   // Confere atualização ao abrir; baixa em background se houver, aplica
   // no próximo reinício (comportamento padrão do electron-updater, não
-  // interrompe quem está no meio de uma venda).
+  // interrompe quem está no meio de uma venda). Pedido do dono
+  // (2026-09-08): sempre dar um retorno rápido e visível de que o app
+  // conferiu — "atualizado" quando já está na última versão, ou avisando
+  // que baixou uma nova. `checkForUpdates()` (não `checkForUpdatesAndNotify`)
+  // pra controlar a notificação nós mesmos, com as duas mensagens —
+  // `checkForUpdatesAndNotify` só notifica no caso de update baixado.
   autoUpdater.on('error', (err) => {
     // Rede instável/DNS fora do ar não pode derrubar o app — sem esse
     // listener, um erro do autoUpdater (um EventEmitter) sem handler
     // registrado lança e mata o processo principal.
     console.error('Falha ao verificar atualização:', err);
   });
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.on('update-not-available', () => {
+    new Notification({
+      title: 'Norte Vendas',
+      body: `Atualizado (v${app.getVersion()})`,
+    }).show();
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    new Notification({
+      title: 'Norte Vendas',
+      body: `Nova versão baixada (v${info.version}) — será aplicada ao reabrir o app.`,
+    }).show();
+  });
+  autoUpdater.checkForUpdates();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
