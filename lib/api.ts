@@ -678,10 +678,7 @@ export const fetchTables = async (storeId: string): Promise<Table[]> => {
     return [];
   }
   const tables = (data as any) || [];
-  (async () => {
-    const cached = await getCachedTables(storeId);
-    await setCachedTables(storeId, tables, cached?.activeOrders ?? []);
-  })().catch(() => {});
+  setCachedTables(storeId, { tables }).catch(() => {});
   return tables;
 };
 
@@ -732,10 +729,7 @@ export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order
   orders.forEach((order: any) => {
     if (order.order_items) order.order_items = order.order_items.filter((item: any) => item.product);
   });
-  (async () => {
-    const cached = await getCachedTables(storeId);
-    await setCachedTables(storeId, cached?.tables ?? [], orders);
-  })().catch(() => {});
+  setCachedTables(storeId, { activeOrders: orders }).catch(() => {});
   return orders;
 };
 
