@@ -17,6 +17,7 @@ import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateSto
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
+import { startOfflineSync } from '@/lib/offline/sync';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -461,6 +462,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // lojas reais (sem `order_flow: 'direct_print'`) — nesse caso o hook não
   // liga nenhum efeito, e o indicador abaixo não renderiza nada.
   const caixaPrintStatus = useCaixaPrintStation(user.store, user);
+
+  // Modo offline (Task 8) — inicia o motor de sincronização uma vez, no
+  // mount do painel. `startOfflineSync()` é idempotente (guarda `started`
+  // interna), então é seguro chamar de novo se StoreLayout remontar (ex.
+  // troca de loja pela conta universal).
+  useEffect(() => {
+    startOfflineSync();
+  }, []);
 
   const allTabs = [
     // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,

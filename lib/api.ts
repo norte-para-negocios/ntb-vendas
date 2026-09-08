@@ -960,7 +960,7 @@ export const closeCounterOrder = async (
 // com store_ntb_estoque_secrets configurado participam — as demais recebem
 // { skipped: true } e não acontece nada. Fire-and-forget de propósito: um
 // erro aqui nunca pode impedir o fechamento do pedido, que já aconteceu.
-const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
+export const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
   fetch(resolverUrlApi('/api/integracao/ordem-producao'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -975,7 +975,7 @@ const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
 // pra loja em modelo NF-e — a rota ignora o campo pra NFC-e/nenhuma, então é
 // seguro sempre repassar o que a UI capturou (ou undefined), sem checar o
 // modelo aqui de novo.
-const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
+export const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
   fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
