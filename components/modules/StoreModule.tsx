@@ -17,7 +17,7 @@ import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateSto
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
-import { startOfflineSync } from '@/lib/offline/sync';
+import { startOfflineSync, getSyncStatus, onSyncStatusChange } from '@/lib/offline/sync';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -471,6 +471,15 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     startOfflineSync();
   }, []);
 
+  // Indicador visual de status offline/sincronização (Task 9) — mesma
+  // justificativa do efeito acima: StoreLayout sobrevive à troca de aba, é o
+  // único lugar que faz sentido manter essa assinatura viva o tempo todo.
+  const [syncStatus, setSyncStatus] = useState(getSyncStatus());
+  useEffect(() => {
+    const unsubscribe = onSyncStatusChange(setSyncStatus);
+    return unsubscribe;
+  }, []);
+
   const allTabs = [
     // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,
     // mesmo raciocínio do TAB_IDS em lib/storeModules.ts.
@@ -516,6 +525,15 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
           <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
+          {syncStatus.failed > 0 ? (
+            <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30">
+              🔴 {syncStatus.failed} falha(s) — verificar
+            </span>
+          ) : syncStatus.pending > 0 ? (
+            <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
+              🟡 Offline — {syncStatus.pending} pendente(s)
+            </span>
+          ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
           <ThemeToggle />
       </header>
 
@@ -716,6 +734,15 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         </div>
         <div className="flex items-center gap-3">
            <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
+           {syncStatus.failed > 0 ? (
+             <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30">
+               🔴 {syncStatus.failed} falha(s) — verificar
+             </span>
+           ) : syncStatus.pending > 0 ? (
+             <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
+               🟡 Offline — {syncStatus.pending} pendente(s)
+             </span>
+           ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
            <div className="h-8 w-8 rounded-[var(--r-sm)] bg-[var(--brand)] flex items-center justify-center text-white font-semibold text-[12px]">
               {storeName.slice(0,2).toUpperCase()}
            </div>
