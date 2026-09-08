@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
+import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables } from './offline/cache';
 
 // App desktop (Electron, ver docs/superpowers/specs/2026-09-07-desktop-app-
 // electron-design.md): a interface roda embutida no instalador, mas as
@@ -415,19 +416,29 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
       const fallbackProds = await fallbackQuery;
       if (fallbackProds.error || cats.error) {
         console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
+        const cached = await getCachedMenu(storeId);
+        if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
         return { categories: cats.data || [], products: fallbackProds.data || [], error: 'network' };
       }
-      return { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)) };
+      const fallbackResult = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)) };
+      setCachedMenu(storeId, fallbackResult.categories, fallbackResult.products).catch(() => {});
+      return fallbackResult;
     }
 
     if (cats.error || prods.error) {
       console.error('Error fetching menu:', cats.error || prods.error);
+      const cached = await getCachedMenu(storeId);
+      if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
       return { categories: cats.data || [], products: prods.data || [], error: 'network' };
     }
 
-    return { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)) };
+    const result = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)) };
+    setCachedMenu(storeId, result.categories, result.products).catch(() => {});
+    return result;
   } catch (error) {
     console.error('Error fetching menu:', error);
+    const cached = await getCachedMenu(storeId);
+    if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
     return { categories: [], products: [], error: 'network' };
   }
 };
@@ -660,8 +671,18 @@ export const deleteProduct = async (id: string, storeId: string) => {
 
 export const fetchTables = async (storeId: string): Promise<Table[]> => {
   const { data, error } = await supabase.rpc('get_tables_secure', { p_store_id: storeId });
-  if (error) { console.error(error); return []; }
-  return (data as any) || [];
+  if (error) {
+    console.error(error);
+    const cached = await getCachedTables(storeId);
+    if (cached) return cached.tables as Table[];
+    return [];
+  }
+  const tables = (data as any) || [];
+  (async () => {
+    const cached = await getCachedTables(storeId);
+    await setCachedTables(storeId, tables, cached?.activeOrders ?? []);
+  })().catch(() => {});
+  return tables;
 };
 
 // Igual a fetchTables, mas sem a coluna `pin` — usada pelo cardápio do cliente
@@ -700,12 +721,21 @@ export const openTableSession = async (
 // docs/plans/2026-07-07-fecha-rls-orders-products-plan.md.
 export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order[]> => {
   const { data, error } = await supabase.rpc('fetch_active_table_orders_secure', { p_store_id: storeId });
-  if (error) { console.error('Fetch Active Table Orders Error', error); return []; }
+  if (error) {
+    console.error('Fetch Active Table Orders Error', error);
+    const cached = await getCachedTables(storeId);
+    if (cached) return cached.activeOrders as Order[];
+    return [];
+  }
 
   const orders = (data as any) || [];
   orders.forEach((order: any) => {
     if (order.order_items) order.order_items = order.order_items.filter((item: any) => item.product);
   });
+  (async () => {
+    const cached = await getCachedTables(storeId);
+    await setCachedTables(storeId, cached?.tables ?? [], orders);
+  })().catch(() => {});
   return orders;
 };
 
