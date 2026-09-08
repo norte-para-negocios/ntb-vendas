@@ -3,6 +3,17 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
 
+// Sem isso, rodar via `electron .` (modo dev, sem empacotar) mostra
+// "Electron" no menu/dock/taskbar em vez do nome real — o .exe empacotado
+// (electron-builder já usa `productName` do package.json pra isso) não tem
+// esse problema, mas forçar aqui também deixa o app correto em qualquer
+// cenário, sem depender de lembrar que só o build empacotado "conserta".
+app.setName('Norte Vendas');
+// Windows agrupa/rotula a janela na barra de tarefas pelo AppUserModelId,
+// não pelo nome do processo — sem isso, builds sem instalador (portable/
+// dev) podem aparecer como "electron.exe" na barra de tarefas do Windows.
+app.setAppUserModelId('com.norteparanegocios.ntbvendas');
+
 // Sem menu de navegador — "cara de PDV", não de app genérico.
 Menu.setApplicationMenu(null);
 
@@ -22,6 +33,7 @@ protocol.registerSchemesAsPrivileged([
 
 function createWindow() {
   const win = new BrowserWindow({
+    title: 'Norte Vendas',
     width: 1280,
     height: 800,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
