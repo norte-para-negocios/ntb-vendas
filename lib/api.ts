@@ -931,22 +931,27 @@ export const closeCounterOrder = async (
   paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
-  if (paymentData) {
-    const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
-    const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+  try {
+    if (paymentData) {
+      const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
+      const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+      }
     }
+    const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
+    if (error) throw error;
+    triggerOrdemProducao({ orderId });
+    triggerEmissaoFiscal({ orderId, destinatario });
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue('close_counter_order', { orderId, paymentData: paymentData || null, destinatario });
   }
-  const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
-  if (error) throw error;
-  triggerOrdemProducao({ orderId });
-  triggerEmissaoFiscal({ orderId, destinatario });
 };
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
@@ -1139,27 +1144,33 @@ export const closeTableSession = async (
   paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
-  try {
-    const paymentMethod = paymentData
-      ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
-      : null;
+  const paymentMethod = paymentData
+    ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
+    : null;
 
+  try {
     const { error: closeErr } = await supabase.rpc('close_table_orders_secure', {
       p_table_id: tableId,
       p_payment_method: paymentMethod,
       p_payment_details: paymentData || null,
     });
-    if (closeErr) return { success: false, message: 'Falha ao fechar pedidos da mesa: ' + closeErr.message };
+    if (closeErr) throw closeErr;
 
     const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: tableId });
-    if (finalizeErr) return { success: false, message: finalizeErr.message };
+    if (finalizeErr) throw finalizeErr;
 
     triggerOrdemProducao({ tableId });
     triggerEmissaoFiscal({ tableId, destinatario });
-
     return { success: true };
-  } catch (e: any) {
-    return { success: false, message: e.message || 'Erro desconhecido.' };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message || 'Erro desconhecido.' };
+    }
+    // As duas RPCs (close + finalize) E os dois triggers fire-and-forget
+    // (Ordem de Produção, emissão fiscal) ficam pra rodar juntos quando
+    // a ação sincronizar de verdade (ver Task 8) — nunca no clique offline.
+    await enqueue('close_table_session', { tableId, paymentMethod, paymentData: paymentData || null, destinatario });
+    return { success: true };
   }
 };
 
