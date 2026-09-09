@@ -17,6 +17,8 @@ import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateSto
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
+import { startOfflineSync, getSyncStatus, onSyncStatusChange } from '@/lib/offline/sync';
+import { checkRealConnectivity } from '@/lib/offline/network';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -462,6 +464,23 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // liga nenhum efeito, e o indicador abaixo não renderiza nada.
   const caixaPrintStatus = useCaixaPrintStation(user.store, user);
 
+  // Modo offline (Task 8) — inicia o motor de sincronização uma vez, no
+  // mount do painel. `startOfflineSync()` é idempotente (guarda `started`
+  // interna), então é seguro chamar de novo se StoreLayout remontar (ex.
+  // troca de loja pela conta universal).
+  useEffect(() => {
+    startOfflineSync();
+  }, []);
+
+  // Indicador visual de status offline/sincronização (Task 9) — mesma
+  // justificativa do efeito acima: StoreLayout sobrevive à troca de aba, é o
+  // único lugar que faz sentido manter essa assinatura viva o tempo todo.
+  const [syncStatus, setSyncStatus] = useState(getSyncStatus());
+  useEffect(() => {
+    const unsubscribe = onSyncStatusChange(setSyncStatus);
+    return unsubscribe;
+  }, []);
+
   const allTabs = [
     // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,
     // mesmo raciocínio do TAB_IDS em lib/storeModules.ts.
@@ -507,6 +526,15 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
           <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
+          {syncStatus.failed > 0 ? (
+            <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30">
+              🔴 {syncStatus.failed} falha(s) — verificar
+            </span>
+          ) : syncStatus.pending > 0 ? (
+            <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
+              🟡 Offline — {syncStatus.pending} pendente(s)
+            </span>
+          ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
           <ThemeToggle />
       </header>
 
@@ -707,6 +735,15 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         </div>
         <div className="flex items-center gap-3">
            <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
+           {syncStatus.failed > 0 ? (
+             <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30">
+               🔴 {syncStatus.failed} falha(s) — verificar
+             </span>
+           ) : syncStatus.pending > 0 ? (
+             <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
+               🟡 Offline — {syncStatus.pending} pendente(s)
+             </span>
+           ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
            <div className="h-8 w-8 rounded-[var(--r-sm)] bg-[var(--brand)] flex items-center justify-center text-white font-semibold text-[12px]">
               {storeName.slice(0,2).toUpperCase()}
            </div>
@@ -5359,78 +5396,93 @@ const CaixaView: React.FC<{
                     <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
                         <RefreshCw size={24} className="animate-spin" />
                     </div>
-                ) : !closeSummary ? (
-                    <div className="py-8 text-center text-sm text-[var(--text-muted)]">
-                        Não foi possível carregar o resumo do turno.
-                    </div>
                 ) : (
                     <div className="space-y-5">
-                        {/* Aviso de fila cheia (subprojeto 2, 2026-08-25) — não bloqueia
-                            o fechamento (mesas/pedidos continuam lá depois, é um estado
-                            válido), só evita fechar sem querer no meio do movimento. */}
-                        {queueItems.length > 0 && (
+                        {/* Task 13 (fix offline): sem resumo (offline, sem cache
+                            aproveitável, ou turno aberto direto offline) o
+                            fechamento não pode mais travar num beco sem saída —
+                            a contagem de gaveta e o botão de confirmar sempre
+                            renderizam abaixo, mesmo sem os blocos dependentes de
+                            closeSummary. */}
+                        {!closeSummary && (
                             <div className="rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
                                 <AlertCircle size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
                                 <p className="text-sm text-[var(--warn)] font-semibold">
-                                    Ainda há {queueItems.length} {queueItems.length === 1 ? 'recebível pendente' : 'recebíveis pendentes'} na fila. Eles continuam lá depois do fechamento.
+                                    Sem conexão — não foi possível carregar o resumo do turno (formas de pagamento, sangria/suprimento, esperado em dinheiro). Você ainda pode fechar o caixa normalmente: o fechamento fica registrado e sincroniza quando a internet voltar.
                                 </p>
                             </div>
                         )}
-                        <div className="space-y-1.5">
-                            <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
-                                Total por forma de pagamento
-                            </h4>
-                            {Object.keys(closeSummary.totals_by_method).length === 0 ? (
-                                <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
-                            ) : (
-                                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                    {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
-                                        <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
-                                            <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
-                                            <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+
+                        {closeSummary && (
+                            <>
+                                {/* Aviso de fila cheia (subprojeto 2, 2026-08-25) — não bloqueia
+                                    o fechamento (mesas/pedidos continuam lá depois, é um estado
+                                    válido), só evita fechar sem querer no meio do movimento. */}
+                                {queueItems.length > 0 && (
+                                    <div className="rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
+                                        <AlertCircle size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                                        <p className="text-sm text-[var(--warn)] font-semibold">
+                                            Ainda há {queueItems.length} {queueItems.length === 1 ? 'recebível pendente' : 'recebíveis pendentes'} na fila. Eles continuam lá depois do fechamento.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="space-y-1.5">
+                                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                        Total por forma de pagamento
+                                    </h4>
+                                    {Object.keys(closeSummary.totals_by_method).length === 0 ? (
+                                        <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
+                                    ) : (
+                                        <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                            {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
+                                                <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
+                                                    <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
+                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
-                            )}
-                        </div>
 
-                        {/* Achado real (auditoria "o que falta", 2026-08-27 —
-                            item B11 da reunião): conferência por bandeira
-                            (Mastercard, Alelo etc.) contra a maquineta física,
-                            não só por método. Pagamento sem bandeira escolhida
-                            (campo opcional) não aparece aqui de propósito. */}
-                        {Object.keys(closeSummary.totals_by_brand).length > 0 && (
-                            <div className="space-y-1.5">
-                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
-                                    Total por bandeira
-                                </h4>
-                                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                    {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
-                                        <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
-                                            <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
-                                            <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                {/* Achado real (auditoria "o que falta", 2026-08-27 —
+                                    item B11 da reunião): conferência por bandeira
+                                    (Mastercard, Alelo etc.) contra a maquineta física,
+                                    não só por método. Pagamento sem bandeira escolhida
+                                    (campo opcional) não aparece aqui de propósito. */}
+                                {Object.keys(closeSummary.totals_by_brand).length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                            Total por bandeira
+                                        </h4>
+                                        <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                            {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
+                                                <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
+                                                    <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
+                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                        <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
+                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                        <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
+                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
 
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div className="rounded-xl border border-[var(--border)] px-3 py-2">
-                                <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
-                                <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
-                            </div>
-                            <div className="rounded-xl border border-[var(--border)] px-3 py-2">
-                                <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
-                                <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
-                            </div>
-                        </div>
-
-                        {canSeeExpectedBeforeClosing && (
-                            <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
-                                <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
-                                <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
-                            </div>
+                                {canSeeExpectedBeforeClosing && (
+                                    <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                                        <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
+                                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
+                                    </div>
+                                )}
+                            </>
                         )}
 
                         <div>
@@ -9147,7 +9199,26 @@ export const StoreModule: React.FC = () => {
                     const accessible = computeAccessibleTabIds(modules, hasPermission);
                     setTab(savedTab && accessible.has(savedTab) ? savedTab : pickInitialStoreTab(restoredUser));
                 } else {
-                    localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+                    // Fix round final (C4, ver task-12-report.md): fetchStoreUserById/
+                    // fetchUniversalUserById/fetchStoreById (lib/api.ts) já caem pro
+                    // último valor cacheado numa falha de REDE (mesmo padrão de
+                    // fetchOpenCashShift) — se chegamos aqui com `restoredUser` nulo,
+                    // ou a sessão salva é mesmo inválida (usuário removido, loja
+                    // desativada), ou é a primeira restauração offline desta sessão
+                    // sem nenhum cache prévio (nunca logou com sucesso neste
+                    // navegador). Só apagar a sessão salva no primeiro caso —
+                    // confirmando com uma checagem de conectividade real (mesma
+                    // usada pelo motor de sync) antes de deslogar, senão uma queda de
+                    // rede sem cache travaria o operador fora do app PARA SEMPRE (a
+                    // sessão salva não voltaria nem quando a internet voltasse).
+                    const online = await checkRealConnectivity();
+                    if (online) {
+                        localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+                    }
+                    // Offline sem cache: mantém a sessão salva (cai na tela de login
+                    // normalmente por não ter como reconstruir o usuário agora — login
+                    // offline é fora de escopo — mas tenta de novo sozinha no próximo
+                    // reload/retomada de rede, sem exigir novo login).
                 }
             } catch {
                 localStorage.removeItem(STORE_SESSION_STORAGE_KEY);

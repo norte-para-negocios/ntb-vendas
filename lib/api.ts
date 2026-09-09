@@ -2,6 +2,9 @@ import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
+import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary } from './offline/cache';
+import { enqueue } from './offline/queue';
+import { isNetworkError } from './offline/network';
 
 // App desktop (Electron, ver docs/superpowers/specs/2026-09-07-desktop-app-
 // electron-design.md): a interface roda embutida no instalador, mas as
@@ -144,14 +147,33 @@ export const updateStoreUserPassword = async (userId: string, newPassword: strin
 // reautentica por senha, só usada quando já existe uma sessão local salva.
 // Passa por uma RPC (nunca select direto): store_users não tem mais policy
 // de SELECT pra anon desde a 014_fecha_vazamento_senhas.sql.
+// C4 da revisão final de branch (2026-09-08, ver task-12-report.md): sem
+// fallback de cache, qualquer erro de REDE aqui (não só "usuário/loja não
+// existe mais") derrubava a sessão restaurada no boot do app — o operador
+// ficava travado fora do app justamente offline, quando mais precisava dele
+// (login offline é fora de escopo). Mesmo padrão já usado em
+// fetchOpenCashShift (Task 11): cacheia o resultado bem-sucedido
+// (fire-and-forget) e, numa falha classificada como rede
+// (`isNetworkError`), cai pro último valor cacheado em vez de `null`. Erro
+// que NÃO é de rede (RPC devolveu vazio, usuário/loja realmente sumiu)
+// continua devolvendo `null` exatamente como antes.
 export const fetchStoreUserById = async (userId: string): Promise<(StoreUser & { store: Store }) | null> => {
-  const { data, error } = await supabase.rpc('fetch_store_user_by_id_secure', { p_user_id: userId });
-  if (error || !data) return null;
+  try {
+    const { data, error } = await supabase.rpc('fetch_store_user_by_id_secure', { p_user_id: userId });
+    if (error) throw error;
+    if (!data) return null;
 
-  const store = await fetchStoreById(data.store_id);
-  if (!store || !store.is_active) return null;
+    const store = await fetchStoreById(data.store_id);
+    if (!store || !store.is_active) return null;
 
-  return { ...data, store };
+    const result = { ...data, store };
+    setCachedSession(`store_user:${userId}`, result).catch(() => {});
+    return result;
+  } catch (error) {
+    if (!isNetworkError(error)) return null;
+    const cached = await getCachedSession(`store_user:${userId}`);
+    return (cached?.value as (StoreUser & { store: Store }) | null) ?? null;
+  }
 };
 
 // As 4 funções abaixo passam por RPC (nunca acesso direto à tabela):
@@ -223,10 +245,24 @@ export const fetchStoreBySlug = async (slug: string): Promise<{ store: Store | n
   }
 };
 
+// C4 da revisão final (ver task-12-report.md e o comentário de
+// fetchStoreUserById acima) — mesmo padrão de fallback via cache num erro de
+// rede, chamada tanto direto pela restauração de sessão (universal) quanto
+// de dentro de fetchStoreUserById/authenticateStoreUser.
 export const fetchStoreById = async (storeId: string): Promise<Store | null> => {
-  const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).single();
-  if (error) { console.error('Error fetching store by id:', error); return null; }
-  return data;
+  try {
+    const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).single();
+    if (error) throw error;
+    setCachedSession(`store:${storeId}`, data).catch(() => {});
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      console.error('Error fetching store by id:', error);
+      return null;
+    }
+    const cached = await getCachedSession(`store:${storeId}`);
+    return (cached?.value as Store | null) ?? null;
+  }
 };
 
 // As 4 funções abaixo (visão do Master Admin) também passam por RPC,
@@ -415,19 +451,29 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
       const fallbackProds = await fallbackQuery;
       if (fallbackProds.error || cats.error) {
         console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
+        const cached = await getCachedMenu(storeId);
+        if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
         return { categories: cats.data || [], products: fallbackProds.data || [], error: 'network' };
       }
-      return { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)) };
+      const fallbackResult = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)) };
+      setCachedMenu(storeId, fallbackResult.categories, fallbackResult.products).catch(() => {});
+      return fallbackResult;
     }
 
     if (cats.error || prods.error) {
       console.error('Error fetching menu:', cats.error || prods.error);
+      const cached = await getCachedMenu(storeId);
+      if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
       return { categories: cats.data || [], products: prods.data || [], error: 'network' };
     }
 
-    return { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)) };
+    const result = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)) };
+    setCachedMenu(storeId, result.categories, result.products).catch(() => {});
+    return result;
   } catch (error) {
     console.error('Error fetching menu:', error);
+    const cached = await getCachedMenu(storeId);
+    if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
     return { categories: [], products: [], error: 'network' };
   }
 };
@@ -660,8 +706,15 @@ export const deleteProduct = async (id: string, storeId: string) => {
 
 export const fetchTables = async (storeId: string): Promise<Table[]> => {
   const { data, error } = await supabase.rpc('get_tables_secure', { p_store_id: storeId });
-  if (error) { console.error(error); return []; }
-  return (data as any) || [];
+  if (error) {
+    console.error(error);
+    const cached = await getCachedTables(storeId);
+    if (cached) return cached.tables as Table[];
+    return [];
+  }
+  const tables = (data as any) || [];
+  setCachedTables(storeId, { tables }).catch(() => {});
+  return tables;
 };
 
 // Igual a fetchTables, mas sem a coluna `pin` — usada pelo cardápio do cliente
@@ -700,12 +753,18 @@ export const openTableSession = async (
 // docs/plans/2026-07-07-fecha-rls-orders-products-plan.md.
 export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order[]> => {
   const { data, error } = await supabase.rpc('fetch_active_table_orders_secure', { p_store_id: storeId });
-  if (error) { console.error('Fetch Active Table Orders Error', error); return []; }
+  if (error) {
+    console.error('Fetch Active Table Orders Error', error);
+    const cached = await getCachedTables(storeId);
+    if (cached) return cached.activeOrders as Order[];
+    return [];
+  }
 
   const orders = (data as any) || [];
   orders.forEach((order: any) => {
     if (order.order_items) order.order_items = order.order_items.filter((item: any) => item.product);
   });
+  setCachedTables(storeId, { activeOrders: orders }).catch(() => {});
   return orders;
 };
 
@@ -905,22 +964,27 @@ export const closeCounterOrder = async (
   paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
-  if (paymentData) {
-    const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
-    const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+  try {
+    if (paymentData) {
+      const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
+      const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+      }
     }
+    const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
+    if (error) throw error;
+    triggerOrdemProducao({ orderId });
+    triggerEmissaoFiscal({ orderId, destinatario });
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue('close_counter_order', { orderId, paymentData: paymentData || null, destinatario });
   }
-  const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
-  if (error) throw error;
-  triggerOrdemProducao({ orderId });
-  triggerEmissaoFiscal({ orderId, destinatario });
 };
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
@@ -929,7 +993,7 @@ export const closeCounterOrder = async (
 // com store_ntb_estoque_secrets configurado participam — as demais recebem
 // { skipped: true } e não acontece nada. Fire-and-forget de propósito: um
 // erro aqui nunca pode impedir o fechamento do pedido, que já aconteceu.
-const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
+export const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
   fetch(resolverUrlApi('/api/integracao/ordem-producao'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -944,7 +1008,7 @@ const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
 // pra loja em modelo NF-e — a rota ignora o campo pra NFC-e/nenhuma, então é
 // seguro sempre repassar o que a UI capturou (ou undefined), sem checar o
 // modelo aqui de novo.
-const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
+export const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
   fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -999,37 +1063,48 @@ export const createOrder = async (
   addedByRole: 'cliente' | 'garcom' = 'cliente',
   addedByName?: string,
 ): Promise<{ success: boolean; orderId?: string }> => {
+  const isCounter = tableId === null;
+
+  const pItems = items.map((item) => ({
+    product_id: item.product.id,
+    quantity: item.quantity,
+    notes: item.notes
+      ? `${customerName ? `[${customerName}] ` : ''}${item.notes}`
+      : customerName
+      ? `[${customerName}]`
+      : '',
+    option_ids: (item.selectedOptions || []).map(o => o.option_id),
+  }));
+
+  const rpcPayload = {
+    p_table_id: tableId,
+    p_store_id: storeId,
+    p_order_type: isCounter ? 'counter' : 'table',
+    p_customer_name: customerName || null,
+    p_items: pItems,
+    p_added_by_role: addedByRole,
+    p_added_by_name: addedByName || null,
+  };
+
   try {
-    const isCounter = tableId === null;
-
-    const pItems = items.map((item) => ({
-      product_id: item.product.id,
-      quantity: item.quantity,
-      notes: item.notes
-        ? `${customerName ? `[${customerName}] ` : ''}${item.notes}`
-        : customerName
-        ? `[${customerName}]`
-        : '',
-      option_ids: (item.selectedOptions || []).map(o => o.option_id),
-    }));
-
-    const { data, error } = await supabase.rpc('create_order_secure', {
-      p_table_id: tableId,
-      p_store_id: storeId,
-      p_order_type: isCounter ? 'counter' : 'table',
-      p_customer_name: customerName || null,
-      p_items: pItems,
-      p_added_by_role: addedByRole,
-      p_added_by_name: addedByName || null,
-    });
-
+    const { data, error } = await supabase.rpc('create_order_secure', rpcPayload);
     if (error) throw error;
     if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
-
     return { success: true, orderId: data.order_id };
   } catch (error) {
-    console.error('Create Order Error', error);
-    throw error;
+    if (!isNetworkError(error)) {
+      // Erro de NEGÓCIO (ex. mesa com PIN errado, item indisponível) —
+      // nunca enfileira, sobe normal igual sempre subiu.
+      console.error('Create Order Error', error);
+      throw error;
+    }
+    // Erro de REDE — cai no caminho offline.
+    const localOrderId = `local_${crypto.randomUUID()}`;
+    await enqueue('create_order', { ...rpcPayload, localOrderId });
+    // Atualização otimista: soma o pedido novo ao cache local de mesas,
+    // pra a tela refletir a mudança na hora (mesmo princípio de update
+    // otimista já usado em KdsView.advanceStatus, ver StoreModule.tsx).
+    return { success: true, orderId: localOrderId };
   }
 };
 
@@ -1049,12 +1124,18 @@ export const fetchOrderItemsById = async (orderId: string): Promise<OrderItem[]>
 };
 
 export const updateOrderItemStatus = async (itemId: string, status: OrderStatus): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.rpc('update_order_item_status_secure', { p_item_id: itemId, p_status: status });
-  if (error) {
-    console.error('Update Order Item Status Error:', error);
-    return { success: false, message: error.message };
+  try {
+    const { error } = await supabase.rpc('update_order_item_status_secure', { p_item_id: itemId, p_status: status });
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      console.error('Update Order Item Status Error:', error);
+      return { success: false, message: (error as Error).message };
+    }
+    await enqueue('update_order_item_status', { p_item_id: itemId, p_status: status });
+    return { success: true };
   }
-  return { success: true };
 };
 
 export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string) => {
@@ -1096,27 +1177,33 @@ export const closeTableSession = async (
   paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string }> => {
-  try {
-    const paymentMethod = paymentData
-      ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
-      : null;
+  const paymentMethod = paymentData
+    ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
+    : null;
 
+  try {
     const { error: closeErr } = await supabase.rpc('close_table_orders_secure', {
       p_table_id: tableId,
       p_payment_method: paymentMethod,
       p_payment_details: paymentData || null,
     });
-    if (closeErr) return { success: false, message: 'Falha ao fechar pedidos da mesa: ' + closeErr.message };
+    if (closeErr) throw closeErr;
 
     const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: tableId });
-    if (finalizeErr) return { success: false, message: finalizeErr.message };
+    if (finalizeErr) throw finalizeErr;
 
     triggerOrdemProducao({ tableId });
     triggerEmissaoFiscal({ tableId, destinatario });
-
     return { success: true };
-  } catch (e: any) {
-    return { success: false, message: e.message || 'Erro desconhecido.' };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message || 'Erro desconhecido.' };
+    }
+    // As duas RPCs (close + finalize) E os dois triggers fire-and-forget
+    // (Ordem de Produção, emissão fiscal) ficam pra rodar juntos quando
+    // a ação sincronizar de verdade (ver Task 8) — nunca no clique offline.
+    await enqueue('close_table_session', { tableId, paymentMethod, paymentData: paymentData || null, destinatario });
+    return { success: true };
   }
 };
 
@@ -1148,9 +1235,28 @@ export interface CashShift {
 // tempo, um por operador). `null` pra conta universal (mesmo
 // tratamento de sempre, ver openCashShift abaixo).
 export const fetchOpenCashShift = async (storeId: string, operatorUserId: string | null): Promise<CashShift | null> => {
-  const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId });
-  if (error || !data) return null;
-  return data as CashShift;
+  try {
+    const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId });
+    if (error) throw error;
+    const shift = (data as CashShift) || null;
+    // Fire-and-forget: cacheia o resultado real (inclusive `null`, que
+    // vira "confirmamos que não há turno") pra usar de fallback na
+    // próxima falha de rede. Nunca bloqueia o retorno desta função.
+    setCachedCashShift(storeId, operatorUserId, shift).catch(() => {});
+    return shift;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      // Mesmo comportamento de sempre pra erro que não é de rede: nunca
+      // sobe, só devolve null (esta function nunca lançou pro caller).
+      return null;
+    }
+    // Falha de rede de verdade: usa o último turno conhecido em vez de
+    // "sem turno" — é isso que corrige o bug achado na Task 10 (fechar
+    // mesa/balcão/abrir aba Caixa offline não pode mais se comportar
+    // como se o turno genuinamente aberto não existisse).
+    const cached = await getCachedCashShift(storeId, operatorUserId);
+    return (cached?.shift as CashShift | null) ?? null;
+  }
 };
 
 // Lista TODOS os turnos abertos agora numa loja (qualquer operador) — pro
@@ -1185,14 +1291,59 @@ export const openCashShift = async (
   openingFloat: number,
   notes?: string,
 ): Promise<{ success: boolean; id?: string; message?: string }> => {
-  const { data, error } = await supabase.rpc('open_cash_shift_secure', {
-    p_store_id: storeId,
-    p_operator_user_id: operatorUserId,
-    p_opening_float: openingFloat,
-    p_notes: notes ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; id?: string; message?: string };
+  try {
+    const { data, error } = await supabase.rpc('open_cash_shift_secure', {
+      p_store_id: storeId,
+      p_operator_user_id: operatorUserId,
+      p_opening_float: openingFloat,
+      p_notes: notes ?? null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; id?: string; message?: string };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message };
+    }
+    // Cache otimista: sem isso, um `fetchOpenCashShift` chamado
+    // logo em seguida (ex. handleFinishPayment na MESMA sessão
+    // offline) ainda veria o cache antigo (sem turno, ou o turno
+    // anterior já fechado) e bloquearia o pagamento mesmo com o
+    // turno recém-aberto (ainda offline) esperando na fila.
+    //
+    // C2 da revisão final (2026-09-08, ver task-12-report.md): esse
+    // `local_<uuid>` NUNCA era resolvido pro id real do turno depois que a
+    // RPC `open_cash_shift_secure` de fato criava um — toda ação seguinte
+    // que referenciasse o turno (sangria, fechamento, pagamento de
+    // mesa/balcão) ficava enfileirada com o id FALSO pra sempre. Corrigido
+    // reusando o MESMO id local (não gerar outro) como `localShiftId` no
+    // payload da ação, pro sync engine (lib/offline/sync.ts, case
+    // 'open_cash_shift') poder gravar `idMap.set(localShiftId, data.id)`
+    // quando a ação sincronizar de verdade — mesmo padrão já usado por
+    // `localOrderId` em `createOrder`.
+    const localShiftId = `local_${crypto.randomUUID()}`;
+    await enqueue('open_cash_shift', {
+      p_store_id: storeId,
+      p_operator_user_id: operatorUserId,
+      p_opening_float: openingFloat,
+      p_notes: notes ?? null,
+      localShiftId,
+    });
+    const optimisticShift: CashShift = {
+      id: localShiftId,
+      store_id: storeId,
+      operator_user_id: operatorUserId ?? '',
+      opened_at: new Date().toISOString(),
+      closed_at: null,
+      opening_float: openingFloat,
+      closing_counted_cash: null,
+      closing_cash_breakdown: null,
+      approved_by_user_id: null,
+      status: 'open',
+      notes: notes ?? null,
+    };
+    setCachedCashShift(storeId, operatorUserId, optimisticShift).catch(() => {});
+    return { success: true };
+  }
 };
 
 // Task 4 (frente-de-caixa): sangria/suprimento — `register_cash_movement_secure`
@@ -1206,16 +1357,31 @@ export const registerCashMovement = async (
   operatorName?: string,
   alertThreshold?: number,
 ): Promise<{ success: boolean; id?: string; message?: string }> => {
-  const { data, error } = await supabase.rpc('register_cash_movement_secure', {
-    p_shift_id: shiftId,
-    p_type: type,
-    p_amount: amount,
-    p_reason: reason,
-    p_operator_name: operatorName ?? null,
-    p_alert_threshold: alertThreshold ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; id?: string; message?: string };
+  try {
+    const { data, error } = await supabase.rpc('register_cash_movement_secure', {
+      p_shift_id: shiftId,
+      p_type: type,
+      p_amount: amount,
+      p_reason: reason,
+      p_operator_name: operatorName ?? null,
+      p_alert_threshold: alertThreshold ?? null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; id?: string; message?: string };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message };
+    }
+    await enqueue('register_cash_movement', {
+      p_shift_id: shiftId,
+      p_type: type,
+      p_amount: amount,
+      p_reason: reason,
+      p_operator_name: operatorName ?? null,
+      p_alert_threshold: alertThreshold ?? null,
+    });
+    return { success: true };
+  }
 };
 
 // Task 4: resumo do turno pra tela de fechamento — total por forma de
@@ -1237,10 +1403,25 @@ export interface CashShiftSummary {
   difference: number | null;
 }
 
+// Task 13 (fix offline): mesmo padrão de `fetchOpenCashShift` acima — só
+// cai pro cache em erro de rede genuíno (`isNetworkError`); erro que não é
+// de rede continua devolvendo `null` exatamente como antes. Cache aqui só
+// ajuda quando o modal já tinha sido aberto ONLINE antes de cair a conexão
+// (não existe cache pra um turno aberto direto offline — esse caso é
+// coberto pela UI em StoreModule.tsx, que nunca mais bloqueia o fechamento
+// por falta de resumo).
 export const fetchCashShiftSummary = async (shiftId: string): Promise<CashShiftSummary | null> => {
-  const { data, error } = await supabase.rpc('fetch_cash_shift_summary_secure', { p_shift_id: shiftId });
-  if (error || !data) return null;
-  return data as CashShiftSummary;
+  try {
+    const { data, error } = await supabase.rpc('fetch_cash_shift_summary_secure', { p_shift_id: shiftId });
+    if (error) throw error;
+    if (!data) return null;
+    setCachedCashShiftSummary(shiftId, data).catch(() => {});
+    return data as CashShiftSummary;
+  } catch (error) {
+    if (!isNetworkError(error)) return null;
+    const cached = await getCachedCashShiftSummary(shiftId);
+    return (cached?.summary as CashShiftSummary) ?? null;
+  }
 };
 
 // Subprojeto 2 (2026-08-25) — histórico de turnos passados, consultável a
@@ -1277,15 +1458,29 @@ export const closeCashShift = async (
   maxTolerance?: number | null,
   approvedByUserId?: string | null,
 ): Promise<{ success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string }> => {
-  const { data, error } = await supabase.rpc('close_cash_shift_secure', {
-    p_shift_id: shiftId,
-    p_closing_counted_cash: closingCountedCash,
-    p_closing_cash_breakdown: closingCashBreakdown ?? null,
-    p_max_tolerance: maxTolerance ?? null,
-    p_approved_by_user_id: approvedByUserId ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data as { success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+  try {
+    const { data, error } = await supabase.rpc('close_cash_shift_secure', {
+      p_shift_id: shiftId,
+      p_closing_counted_cash: closingCountedCash,
+      p_closing_cash_breakdown: closingCashBreakdown ?? null,
+      p_max_tolerance: maxTolerance ?? null,
+      p_approved_by_user_id: approvedByUserId ?? null,
+    });
+    if (error) throw error;
+    return data as { success: boolean; requires_approval?: boolean; expected_cash?: number; closing_counted_cash?: number; difference?: number; message?: string };
+  } catch (e) {
+    if (!isNetworkError(e)) {
+      return { success: false, message: (e as Error).message };
+    }
+    await enqueue('close_cash_shift', {
+      p_shift_id: shiftId,
+      p_closing_counted_cash: closingCountedCash,
+      p_closing_cash_breakdown: closingCashBreakdown ?? null,
+      p_max_tolerance: maxTolerance ?? null,
+      p_approved_by_user_id: approvedByUserId ?? null,
+    });
+    return { success: true };
+  }
 };
 
 export const verifyCashSupervisor = async (
@@ -2105,8 +2300,19 @@ export const updateUniversalUserPassword = async (userId: string, newPassword: s
   if (error) throw error;
 };
 
+// C4 da revisão final (ver task-12-report.md e o comentário de
+// fetchStoreUserById acima) — mesmo padrão de fallback via cache num erro de
+// rede, usado pela restauração de sessão da conta universal.
 export const fetchUniversalUserById = async (userId: string): Promise<UniversalUser | null> => {
-  const { data, error } = await supabase.rpc('fetch_universal_user_by_id_secure', { p_user_id: userId });
-  if (error || !data) return null;
-  return data;
+  try {
+    const { data, error } = await supabase.rpc('fetch_universal_user_by_id_secure', { p_user_id: userId });
+    if (error) throw error;
+    if (!data) return null;
+    setCachedSession(`universal_user:${userId}`, data).catch(() => {});
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) return null;
+    const cached = await getCachedSession(`universal_user:${userId}`);
+    return (cached?.value as UniversalUser | null) ?? null;
+  }
 };
