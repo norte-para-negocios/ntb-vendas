@@ -1,5 +1,5 @@
 import { getOfflineDb } from './db';
-import type { CachedMenu, CachedTables, CachedCashShift } from './types';
+import type { CachedMenu, CachedTables, CachedCashShift, CachedSession } from './types';
 
 export async function setCachedMenu(storeId: string, categories: unknown[], products: unknown[]): Promise<void> {
   const db = await getOfflineDb();
@@ -68,4 +68,19 @@ export async function setCachedCashShift(storeId: string, operatorUserId: string
 export async function getCachedCashShift(storeId: string, operatorUserId: string | null): Promise<CachedCashShift | undefined> {
   const db = await getOfflineDb();
   return db.get('cash_shift_cache', cashShiftCacheKey(storeId, operatorUserId));
+}
+
+// C4 da revisão final (ver task-12-report.md): fallback de restauração de
+// sessão no boot do app — mesmo padrão de setCachedCashShift/getCachedCashShift
+// acima, genérico o bastante pra guardar StoreUser+Store, UniversalUser ou
+// Store isolada sob uma chave própria por entidade (ver fetchStoreUserById/
+// fetchUniversalUserById/fetchStoreById em lib/api.ts).
+export async function setCachedSession(key: string, value: unknown): Promise<void> {
+  const db = await getOfflineDb();
+  await db.put('session_cache', { key, value, updatedAt: Date.now() });
+}
+
+export async function getCachedSession(key: string): Promise<CachedSession | undefined> {
+  const db = await getOfflineDb();
+  return db.get('session_cache', key);
 }

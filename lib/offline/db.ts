@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { QueuedAction, CachedMenu, CachedTables, CachedCashShift } from './types';
+import type { QueuedAction, CachedMenu, CachedTables, CachedCashShift, CachedSession } from './types';
 
 interface OfflineDbSchema extends DBSchema {
   queue: {
@@ -19,6 +19,10 @@ interface OfflineDbSchema extends DBSchema {
     key: string; // CachedCashShift.key
     value: CachedCashShift;
   };
+  session_cache: {
+    key: string; // CachedSession.key
+    value: CachedSession;
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<OfflineDbSchema>> | null = null;
@@ -28,7 +32,7 @@ let dbPromise: Promise<IDBPDatabase<OfflineDbSchema>> | null = null;
 // mas não há motivo pra isso aqui e complica versionamento de schema.
 export function getOfflineDb(): Promise<IDBPDatabase<OfflineDbSchema>> {
   if (!dbPromise) {
-    dbPromise = openDB<OfflineDbSchema>('ntb-vendas-offline', 2, {
+    dbPromise = openDB<OfflineDbSchema>('ntb-vendas-offline', 3, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1) {
           const queueStore = db.createObjectStore('queue', { keyPath: 'id' });
@@ -38,6 +42,9 @@ export function getOfflineDb(): Promise<IDBPDatabase<OfflineDbSchema>> {
         }
         if (oldVersion < 2) {
           db.createObjectStore('cash_shift_cache', { keyPath: 'key' });
+        }
+        if (oldVersion < 3) {
+          db.createObjectStore('session_cache', { keyPath: 'key' });
         }
       },
     });

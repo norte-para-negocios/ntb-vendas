@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
-import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift } from './offline/cache';
+import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession } from './offline/cache';
 import { enqueue } from './offline/queue';
 import { isNetworkError } from './offline/network';
 
@@ -147,14 +147,33 @@ export const updateStoreUserPassword = async (userId: string, newPassword: strin
 // reautentica por senha, só usada quando já existe uma sessão local salva.
 // Passa por uma RPC (nunca select direto): store_users não tem mais policy
 // de SELECT pra anon desde a 014_fecha_vazamento_senhas.sql.
+// C4 da revisão final de branch (2026-09-08, ver task-12-report.md): sem
+// fallback de cache, qualquer erro de REDE aqui (não só "usuário/loja não
+// existe mais") derrubava a sessão restaurada no boot do app — o operador
+// ficava travado fora do app justamente offline, quando mais precisava dele
+// (login offline é fora de escopo). Mesmo padrão já usado em
+// fetchOpenCashShift (Task 11): cacheia o resultado bem-sucedido
+// (fire-and-forget) e, numa falha classificada como rede
+// (`isNetworkError`), cai pro último valor cacheado em vez de `null`. Erro
+// que NÃO é de rede (RPC devolveu vazio, usuário/loja realmente sumiu)
+// continua devolvendo `null` exatamente como antes.
 export const fetchStoreUserById = async (userId: string): Promise<(StoreUser & { store: Store }) | null> => {
-  const { data, error } = await supabase.rpc('fetch_store_user_by_id_secure', { p_user_id: userId });
-  if (error || !data) return null;
+  try {
+    const { data, error } = await supabase.rpc('fetch_store_user_by_id_secure', { p_user_id: userId });
+    if (error) throw error;
+    if (!data) return null;
 
-  const store = await fetchStoreById(data.store_id);
-  if (!store || !store.is_active) return null;
+    const store = await fetchStoreById(data.store_id);
+    if (!store || !store.is_active) return null;
 
-  return { ...data, store };
+    const result = { ...data, store };
+    setCachedSession(`store_user:${userId}`, result).catch(() => {});
+    return result;
+  } catch (error) {
+    if (!isNetworkError(error)) return null;
+    const cached = await getCachedSession(`store_user:${userId}`);
+    return (cached?.value as (StoreUser & { store: Store }) | null) ?? null;
+  }
 };
 
 // As 4 funções abaixo passam por RPC (nunca acesso direto à tabela):
@@ -226,10 +245,24 @@ export const fetchStoreBySlug = async (slug: string): Promise<{ store: Store | n
   }
 };
 
+// C4 da revisão final (ver task-12-report.md e o comentário de
+// fetchStoreUserById acima) — mesmo padrão de fallback via cache num erro de
+// rede, chamada tanto direto pela restauração de sessão (universal) quanto
+// de dentro de fetchStoreUserById/authenticateStoreUser.
 export const fetchStoreById = async (storeId: string): Promise<Store | null> => {
-  const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).single();
-  if (error) { console.error('Error fetching store by id:', error); return null; }
-  return data;
+  try {
+    const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).single();
+    if (error) throw error;
+    setCachedSession(`store:${storeId}`, data).catch(() => {});
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      console.error('Error fetching store by id:', error);
+      return null;
+    }
+    const cached = await getCachedSession(`store:${storeId}`);
+    return (cached?.value as Store | null) ?? null;
+  }
 };
 
 // As 4 funções abaixo (visão do Master Admin) também passam por RPC,
@@ -1271,19 +1304,32 @@ export const openCashShift = async (
     if (!isNetworkError(e)) {
       return { success: false, message: (e as Error).message };
     }
-    await enqueue('open_cash_shift', {
-      p_store_id: storeId,
-      p_operator_user_id: operatorUserId,
-      p_opening_float: openingFloat,
-      p_notes: notes ?? null,
-    });
     // Cache otimista: sem isso, um `fetchOpenCashShift` chamado
     // logo em seguida (ex. handleFinishPayment na MESMA sessão
     // offline) ainda veria o cache antigo (sem turno, ou o turno
     // anterior já fechado) e bloquearia o pagamento mesmo com o
     // turno recém-aberto (ainda offline) esperando na fila.
+    //
+    // C2 da revisão final (2026-09-08, ver task-12-report.md): esse
+    // `local_<uuid>` NUNCA era resolvido pro id real do turno depois que a
+    // RPC `open_cash_shift_secure` de fato criava um — toda ação seguinte
+    // que referenciasse o turno (sangria, fechamento, pagamento de
+    // mesa/balcão) ficava enfileirada com o id FALSO pra sempre. Corrigido
+    // reusando o MESMO id local (não gerar outro) como `localShiftId` no
+    // payload da ação, pro sync engine (lib/offline/sync.ts, case
+    // 'open_cash_shift') poder gravar `idMap.set(localShiftId, data.id)`
+    // quando a ação sincronizar de verdade — mesmo padrão já usado por
+    // `localOrderId` em `createOrder`.
+    const localShiftId = `local_${crypto.randomUUID()}`;
+    await enqueue('open_cash_shift', {
+      p_store_id: storeId,
+      p_operator_user_id: operatorUserId,
+      p_opening_float: openingFloat,
+      p_notes: notes ?? null,
+      localShiftId,
+    });
     const optimisticShift: CashShift = {
-      id: `local_${crypto.randomUUID()}`,
+      id: localShiftId,
       store_id: storeId,
       operator_user_id: operatorUserId ?? '',
       opened_at: new Date().toISOString(),
@@ -2239,8 +2285,19 @@ export const updateUniversalUserPassword = async (userId: string, newPassword: s
   if (error) throw error;
 };
 
+// C4 da revisão final (ver task-12-report.md e o comentário de
+// fetchStoreUserById acima) — mesmo padrão de fallback via cache num erro de
+// rede, usado pela restauração de sessão da conta universal.
 export const fetchUniversalUserById = async (userId: string): Promise<UniversalUser | null> => {
-  const { data, error } = await supabase.rpc('fetch_universal_user_by_id_secure', { p_user_id: userId });
-  if (error || !data) return null;
-  return data;
+  try {
+    const { data, error } = await supabase.rpc('fetch_universal_user_by_id_secure', { p_user_id: userId });
+    if (error) throw error;
+    if (!data) return null;
+    setCachedSession(`universal_user:${userId}`, data).catch(() => {});
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) return null;
+    const cached = await getCachedSession(`universal_user:${userId}`);
+    return (cached?.value as UniversalUser | null) ?? null;
+  }
 };

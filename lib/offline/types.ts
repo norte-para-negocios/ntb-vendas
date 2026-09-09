@@ -43,3 +43,15 @@ export interface CachedCashShift {
   shift: unknown | null; // CashShift | null — null = confirmado "sem turno aberto"
   updatedAt: number;
 }
+
+// Cache genérico de fallback pra restauração de sessão no boot do app (C4 da
+// revisão final, ver task-12-report.md) — StoreUser+Store, UniversalUser ou
+// Store isolada, uma chave por entidade (ex. `store_user:<userId>`,
+// `universal_user:<userId>`, `store:<storeId>`). `value` é `unknown` de
+// propósito, mesmo motivo de CachedMenu/CachedTables acima (evitar import
+// circular com @/types).
+export interface CachedSession {
+  key: string;
+  value: unknown;
+  updatedAt: number;
+}

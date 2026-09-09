@@ -18,6 +18,7 @@ import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermiss
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
 import { startOfflineSync, getSyncStatus, onSyncStatusChange } from '@/lib/offline/sync';
+import { checkRealConnectivity } from '@/lib/offline/network';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -9170,7 +9171,26 @@ export const StoreModule: React.FC = () => {
                     const accessible = computeAccessibleTabIds(modules, hasPermission);
                     setTab(savedTab && accessible.has(savedTab) ? savedTab : pickInitialStoreTab(restoredUser));
                 } else {
-                    localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+                    // Fix round final (C4, ver task-12-report.md): fetchStoreUserById/
+                    // fetchUniversalUserById/fetchStoreById (lib/api.ts) já caem pro
+                    // último valor cacheado numa falha de REDE (mesmo padrão de
+                    // fetchOpenCashShift) — se chegamos aqui com `restoredUser` nulo,
+                    // ou a sessão salva é mesmo inválida (usuário removido, loja
+                    // desativada), ou é a primeira restauração offline desta sessão
+                    // sem nenhum cache prévio (nunca logou com sucesso neste
+                    // navegador). Só apagar a sessão salva no primeiro caso —
+                    // confirmando com uma checagem de conectividade real (mesma
+                    // usada pelo motor de sync) antes de deslogar, senão uma queda de
+                    // rede sem cache travaria o operador fora do app PARA SEMPRE (a
+                    // sessão salva não voltaria nem quando a internet voltasse).
+                    const online = await checkRealConnectivity();
+                    if (online) {
+                        localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
+                    }
+                    // Offline sem cache: mantém a sessão salva (cai na tela de login
+                    // normalmente por não ter como reconstruir o usuário agora — login
+                    // offline é fora de escopo — mas tenta de novo sozinha no próximo
+                    // reload/retomada de rede, sem exigir novo login).
                 }
             } catch {
                 localStorage.removeItem(STORE_SESSION_STORAGE_KEY);
