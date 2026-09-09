@@ -2600,6 +2600,14 @@ NOTIFY pgrst, 'reload schema';`;
     
     const handleAddItem = async (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => {
         if (!selectedTable) return;
+        // Defesa em profundidade (achado real do Ramon, WhatsApp 2026-09-08,
+        // mesmo espírito do comentário em handleOpenPayment acima): hoje não
+        // existe caminho pra abrir este modal pra uma mesa fora da
+        // jurisdição (handleOpenPayment já barra `setSelectedTable`), mas
+        // repetir a checagem aqui garante que um bug futuro em QUALQUER
+        // outro lugar que chame `setSelectedTable` sem passar pelo gate não
+        // reabra esse buraco silenciosamente.
+        if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         // Fix round 1 (Task 2 review, Minor #3): mesmo padrão de guarda
         // síncrona que handleFinishPayment já usa (isFinishingRef) — sem
         // isso, um duplo toque rápido em "Lançar Pedido" (antes do primeiro
@@ -2653,6 +2661,8 @@ NOTIFY pgrst, 'reload schema';`;
     };
 
     const handleDeleteItem = async (itemId: string) => {
+        // Defesa em profundidade — mesmo motivo do handleAddItem acima.
+        if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         if(await confirm("Deseja cancelar este item da comanda?")) {
             try {
                 await cancelSpecificOrderItem(itemId);
