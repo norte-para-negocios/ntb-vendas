@@ -55,3 +55,13 @@ export interface CachedSession {
   value: unknown;
   updatedAt: number;
 }
+
+// Task 13 — fallback pra fetchCashShiftSummary (lib/api.ts), mesmo estilo dos
+// outros Cached* acima. shiftId é a chave (1 resumo cacheado por turno; um
+// turno fechado não precisa mais de resumo novo, então não há necessidade de
+// versionar por timestamp de leitura).
+export interface CachedCashShiftSummary {
+  shiftId: string;
+  summary: unknown; // CashShiftSummary — any de propósito, mesmo motivo dos outros Cached*
+  updatedAt: number;
+}

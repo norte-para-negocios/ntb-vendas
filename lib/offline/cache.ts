@@ -1,5 +1,5 @@
 import { getOfflineDb } from './db';
-import type { CachedMenu, CachedTables, CachedCashShift, CachedSession } from './types';
+import type { CachedMenu, CachedTables, CachedCashShift, CachedSession, CachedCashShiftSummary } from './types';
 
 export async function setCachedMenu(storeId: string, categories: unknown[], products: unknown[]): Promise<void> {
   const db = await getOfflineDb();
@@ -83,4 +83,20 @@ export async function setCachedSession(key: string, value: unknown): Promise<voi
 export async function getCachedSession(key: string): Promise<CachedSession | undefined> {
   const db = await getOfflineDb();
   return db.get('session_cache', key);
+}
+
+// Task 13 — cache de fallback pra fetchCashShiftSummary (lib/api.ts). Mesmo
+// motivo do resto: se o operador já tinha aberto o modal "Fechar Caixa"
+// enquanto online, o resumo real (desatualizado, mas melhor que nada) fica
+// disponível offline. Um turno aberto direto offline nunca terá cache aqui
+// (nunca existiu leitura online) — esse caso é resolvido separadamente na UI
+// (StoreModule.tsx), não aqui.
+export async function setCachedCashShiftSummary(shiftId: string, summary: unknown): Promise<void> {
+  const db = await getOfflineDb();
+  await db.put('cash_shift_summary_cache', { shiftId, summary, updatedAt: Date.now() });
+}
+
+export async function getCachedCashShiftSummary(shiftId: string): Promise<CachedCashShiftSummary | undefined> {
+  const db = await getOfflineDb();
+  return db.get('cash_shift_summary_cache', shiftId);
 }

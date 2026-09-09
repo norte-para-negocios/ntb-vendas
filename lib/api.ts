@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
-import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession } from './offline/cache';
+import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary } from './offline/cache';
 import { enqueue } from './offline/queue';
 import { isNetworkError } from './offline/network';
 
@@ -1403,10 +1403,25 @@ export interface CashShiftSummary {
   difference: number | null;
 }
 
+// Task 13 (fix offline): mesmo padrão de `fetchOpenCashShift` acima — só
+// cai pro cache em erro de rede genuíno (`isNetworkError`); erro que não é
+// de rede continua devolvendo `null` exatamente como antes. Cache aqui só
+// ajuda quando o modal já tinha sido aberto ONLINE antes de cair a conexão
+// (não existe cache pra um turno aberto direto offline — esse caso é
+// coberto pela UI em StoreModule.tsx, que nunca mais bloqueia o fechamento
+// por falta de resumo).
 export const fetchCashShiftSummary = async (shiftId: string): Promise<CashShiftSummary | null> => {
-  const { data, error } = await supabase.rpc('fetch_cash_shift_summary_secure', { p_shift_id: shiftId });
-  if (error || !data) return null;
-  return data as CashShiftSummary;
+  try {
+    const { data, error } = await supabase.rpc('fetch_cash_shift_summary_secure', { p_shift_id: shiftId });
+    if (error) throw error;
+    if (!data) return null;
+    setCachedCashShiftSummary(shiftId, data).catch(() => {});
+    return data as CashShiftSummary;
+  } catch (error) {
+    if (!isNetworkError(error)) return null;
+    const cached = await getCachedCashShiftSummary(shiftId);
+    return (cached?.summary as CashShiftSummary) ?? null;
+  }
 };
 
 // Subprojeto 2 (2026-08-25) — histórico de turnos passados, consultável a

@@ -5383,78 +5383,93 @@ const CaixaView: React.FC<{
                     <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
                         <RefreshCw size={24} className="animate-spin" />
                     </div>
-                ) : !closeSummary ? (
-                    <div className="py-8 text-center text-sm text-[var(--text-muted)]">
-                        Não foi possível carregar o resumo do turno.
-                    </div>
                 ) : (
                     <div className="space-y-5">
-                        {/* Aviso de fila cheia (subprojeto 2, 2026-08-25) — não bloqueia
-                            o fechamento (mesas/pedidos continuam lá depois, é um estado
-                            válido), só evita fechar sem querer no meio do movimento. */}
-                        {queueItems.length > 0 && (
+                        {/* Task 13 (fix offline): sem resumo (offline, sem cache
+                            aproveitável, ou turno aberto direto offline) o
+                            fechamento não pode mais travar num beco sem saída —
+                            a contagem de gaveta e o botão de confirmar sempre
+                            renderizam abaixo, mesmo sem os blocos dependentes de
+                            closeSummary. */}
+                        {!closeSummary && (
                             <div className="rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
                                 <AlertCircle size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
                                 <p className="text-sm text-[var(--warn)] font-semibold">
-                                    Ainda há {queueItems.length} {queueItems.length === 1 ? 'recebível pendente' : 'recebíveis pendentes'} na fila. Eles continuam lá depois do fechamento.
+                                    Sem conexão — não foi possível carregar o resumo do turno (formas de pagamento, sangria/suprimento, esperado em dinheiro). Você ainda pode fechar o caixa normalmente: o fechamento fica registrado e sincroniza quando a internet voltar.
                                 </p>
                             </div>
                         )}
-                        <div className="space-y-1.5">
-                            <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
-                                Total por forma de pagamento
-                            </h4>
-                            {Object.keys(closeSummary.totals_by_method).length === 0 ? (
-                                <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
-                            ) : (
-                                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                    {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
-                                        <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
-                                            <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
-                                            <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+
+                        {closeSummary && (
+                            <>
+                                {/* Aviso de fila cheia (subprojeto 2, 2026-08-25) — não bloqueia
+                                    o fechamento (mesas/pedidos continuam lá depois, é um estado
+                                    válido), só evita fechar sem querer no meio do movimento. */}
+                                {queueItems.length > 0 && (
+                                    <div className="rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
+                                        <AlertCircle size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                                        <p className="text-sm text-[var(--warn)] font-semibold">
+                                            Ainda há {queueItems.length} {queueItems.length === 1 ? 'recebível pendente' : 'recebíveis pendentes'} na fila. Eles continuam lá depois do fechamento.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="space-y-1.5">
+                                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                        Total por forma de pagamento
+                                    </h4>
+                                    {Object.keys(closeSummary.totals_by_method).length === 0 ? (
+                                        <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
+                                    ) : (
+                                        <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                            {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
+                                                <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
+                                                    <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
+                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
-                            )}
-                        </div>
 
-                        {/* Achado real (auditoria "o que falta", 2026-08-27 —
-                            item B11 da reunião): conferência por bandeira
-                            (Mastercard, Alelo etc.) contra a maquineta física,
-                            não só por método. Pagamento sem bandeira escolhida
-                            (campo opcional) não aparece aqui de propósito. */}
-                        {Object.keys(closeSummary.totals_by_brand).length > 0 && (
-                            <div className="space-y-1.5">
-                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
-                                    Total por bandeira
-                                </h4>
-                                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                    {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
-                                        <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
-                                            <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
-                                            <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                {/* Achado real (auditoria "o que falta", 2026-08-27 —
+                                    item B11 da reunião): conferência por bandeira
+                                    (Mastercard, Alelo etc.) contra a maquineta física,
+                                    não só por método. Pagamento sem bandeira escolhida
+                                    (campo opcional) não aparece aqui de propósito. */}
+                                {Object.keys(closeSummary.totals_by_brand).length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                            Total por bandeira
+                                        </h4>
+                                        <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+                                            {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
+                                                <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
+                                                    <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
+                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                        <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
+                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                        <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
+                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
 
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div className="rounded-xl border border-[var(--border)] px-3 py-2">
-                                <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
-                                <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
-                            </div>
-                            <div className="rounded-xl border border-[var(--border)] px-3 py-2">
-                                <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
-                                <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
-                            </div>
-                        </div>
-
-                        {canSeeExpectedBeforeClosing && (
-                            <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
-                                <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
-                                <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
-                            </div>
+                                {canSeeExpectedBeforeClosing && (
+                                    <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
+                                        <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
+                                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
+                                    </div>
+                                )}
+                            </>
                         )}
 
                         <div>
