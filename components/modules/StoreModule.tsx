@@ -3070,19 +3070,34 @@ NOTIFY pgrst, 'reload schema';`;
                                     if(selectedTable) {
                                         const previousTable = selectedTable;
 
-                                        // 1. UPDATE LOCAL STATE IMMEDIATELY (Visual Feedback)
-                                        setSelectedTable({ ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: loggedUser.name });
+                                        // 1. UPDATE LOCAL STATE IMMEDIATELY (Visual Feedback) — atualiza o
+                                        // modal E o card na grade (`tables`), senão só o modal muda e o
+                                        // card por trás continua mostrando "Disponível" até sincronizar de
+                                        // verdade (achado real, WhatsApp 2026-09-09: offline, parecia que o
+                                        // clique não tinha feito nada).
+                                        const optimisticTable = { ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: loggedUser.name };
+                                        setSelectedTable(optimisticTable);
+                                        setTables(prev => prev.map(t => t.id === optimisticTable.id ? optimisticTable : t));
 
                                         try {
                                             // 2. CALL API (grava a sessão de ocupação também, senão mesas abertas
                                             // pelo lojista nunca entram na métrica de tempo médio)
                                             await openTableManually(selectedTable.id, store.id, loggedUser.name);
 
-                                            // 3. REFRESH DATA (Optional, but good practice)
-                                            loadData();
+                                            // 3. REFRESH DATA — só quando online. Offline, `loadData()` cai no
+                                            // cache local (desatualizado) e SOBRESCREVE o update otimista acima
+                                            // com o estado antigo — o mesmo achado do WhatsApp: a mesa fica
+                                            // com o pedido enfileirado corretamente (confirmado no IndexedDB),
+                                            // mas a tela volta a mostrar "Disponível", como se nada tivesse
+                                            // acontecido. O Realtime (`table_change_pings`) já atualiza sozinho
+                                            // assim que o dado real mudar — na hora, se online; depois da
+                                            // sincronização, se offline — então este refresh manual é só
+                                            // atalho pro caso online, nunca necessário pro caso offline.
+                                            if (navigator.onLine) loadData();
                                         } catch (e) {
                                             // Reverte o update otimista em caso de falha
                                             setSelectedTable(previousTable);
+                                            setTables(prev => prev.map(t => t.id === previousTable.id ? previousTable : t));
                                             toast.error("Erro ao abrir mesa. Tente novamente.");
                                         }
                                     }
