@@ -148,6 +148,16 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       if (!data?.success) throw new Error(data?.message || 'Erro ao sincronizar.');
       break;
     }
+    case 'open_table_manually': {
+      // open_table_manually_secure retorna `void` (não `jsonb`, ver
+      // supabase/migrations/030_fecha_rls_tables.sql) — mesmo caso de
+      // close_counter_order_secure acima: sem `data.success` pra checar,
+      // C1 não se aplica aqui (confirmado lendo a migration antes de mexer).
+      const payload = action.payload as any;
+      const { error } = await supabase.rpc('open_table_manually_secure', payload);
+      if (error) throw error;
+      break;
+    }
   }
 }
 

@@ -9,7 +9,8 @@ export type QueuedActionType =
   | 'close_counter_order'
   | 'open_cash_shift'
   | 'close_cash_shift'
-  | 'register_cash_movement';
+  | 'register_cash_movement'
+  | 'open_table_manually';
 
 export interface QueuedAction {
   id: string; // uuid gerado no client — idempotency key, e também serve

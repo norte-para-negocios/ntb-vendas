@@ -1149,8 +1149,13 @@ export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: s
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
 // mas ainda grava a sessão para entrar na métrica de tempo médio de ocupação.
 export const openTableManually = async (tableId: string, storeId: string, hostName: string) => {
-  const { error } = await supabase.rpc('open_table_manually_secure', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
-  if (error) throw error;
+  try {
+    const { error } = await supabase.rpc('open_table_manually_secure', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
+    if (error) throw error;
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue('open_table_manually', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
+  }
 };
 
 export const requestTableBill = async (tableId: string) => {
