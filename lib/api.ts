@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
-import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables } from './offline/cache';
+import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift } from './offline/cache';
 import { enqueue } from './offline/queue';
 import { isNetworkError } from './offline/network';
 
@@ -1202,9 +1202,28 @@ export interface CashShift {
 // tempo, um por operador). `null` pra conta universal (mesmo
 // tratamento de sempre, ver openCashShift abaixo).
 export const fetchOpenCashShift = async (storeId: string, operatorUserId: string | null): Promise<CashShift | null> => {
-  const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId });
-  if (error || !data) return null;
-  return data as CashShift;
+  try {
+    const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId });
+    if (error) throw error;
+    const shift = (data as CashShift) || null;
+    // Fire-and-forget: cacheia o resultado real (inclusive `null`, que
+    // vira "confirmamos que não há turno") pra usar de fallback na
+    // próxima falha de rede. Nunca bloqueia o retorno desta função.
+    setCachedCashShift(storeId, operatorUserId, shift).catch(() => {});
+    return shift;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      // Mesmo comportamento de sempre pra erro que não é de rede: nunca
+      // sobe, só devolve null (esta function nunca lançou pro caller).
+      return null;
+    }
+    // Falha de rede de verdade: usa o último turno conhecido em vez de
+    // "sem turno" — é isso que corrige o bug achado na Task 10 (fechar
+    // mesa/balcão/abrir aba Caixa offline não pode mais se comportar
+    // como se o turno genuinamente aberto não existisse).
+    const cached = await getCachedCashShift(storeId, operatorUserId);
+    return (cached?.shift as CashShift | null) ?? null;
+  }
 };
 
 // Lista TODOS os turnos abertos agora numa loja (qualquer operador) — pro
@@ -1258,6 +1277,25 @@ export const openCashShift = async (
       p_opening_float: openingFloat,
       p_notes: notes ?? null,
     });
+    // Cache otimista: sem isso, um `fetchOpenCashShift` chamado
+    // logo em seguida (ex. handleFinishPayment na MESMA sessão
+    // offline) ainda veria o cache antigo (sem turno, ou o turno
+    // anterior já fechado) e bloquearia o pagamento mesmo com o
+    // turno recém-aberto (ainda offline) esperando na fila.
+    const optimisticShift: CashShift = {
+      id: `local_${crypto.randomUUID()}`,
+      store_id: storeId,
+      operator_user_id: operatorUserId ?? '',
+      opened_at: new Date().toISOString(),
+      closed_at: null,
+      opening_float: openingFloat,
+      closing_counted_cash: null,
+      closing_cash_breakdown: null,
+      approved_by_user_id: null,
+      status: 'open',
+      notes: notes ?? null,
+    };
+    setCachedCashShift(storeId, operatorUserId, optimisticShift).catch(() => {});
     return { success: true };
   }
 };

@@ -37,3 +37,9 @@ export interface CachedTables {
   activeOrders: unknown[]; // Order[]
   updatedAt: number;
 }
+
+export interface CachedCashShift {
+  key: string; // `${storeId}::${operatorUserId ?? 'universal'}`
+  shift: unknown | null; // CashShift | null — null = confirmado "sem turno aberto"
+  updatedAt: number;
+}

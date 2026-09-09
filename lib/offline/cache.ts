@@ -1,5 +1,5 @@
 import { getOfflineDb } from './db';
-import type { CachedMenu, CachedTables } from './types';
+import type { CachedMenu, CachedTables, CachedCashShift } from './types';
 
 export async function setCachedMenu(storeId: string, categories: unknown[], products: unknown[]): Promise<void> {
   const db = await getOfflineDb();
@@ -49,4 +49,23 @@ export async function setCachedTables(
 export async function getCachedTables(storeId: string): Promise<CachedTables | undefined> {
   const db = await getOfflineDb();
   return db.get('tables_cache', storeId);
+}
+
+function cashShiftCacheKey(storeId: string, operatorUserId: string | null): string {
+  return `${storeId}::${operatorUserId ?? 'universal'}`;
+}
+
+export async function setCachedCashShift(storeId: string, operatorUserId: string | null, shift: unknown | null): Promise<void> {
+  const db = await getOfflineDb();
+  await db.put('cash_shift_cache', { key: cashShiftCacheKey(storeId, operatorUserId), shift, updatedAt: Date.now() });
+}
+
+// `undefined` = nunca cacheado nada pra essa loja/operador (estado
+// desconhecido — quem chama decide o que fazer). `null` dentro do valor
+// (`.shift`) = já confirmamos (online, alguma vez) que não há turno
+// aberto. Distinção importante: não confundir "nunca perguntamos" com
+// "perguntamos e a resposta foi não".
+export async function getCachedCashShift(storeId: string, operatorUserId: string | null): Promise<CachedCashShift | undefined> {
+  const db = await getOfflineDb();
+  return db.get('cash_shift_cache', cashShiftCacheKey(storeId, operatorUserId));
 }
