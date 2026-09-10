@@ -4272,7 +4272,17 @@ const CounterView: React.FC<{
                              >
                                  <Printer size={18} />
                              </button>
-                             {status === OrderStatus.PENDING ? (
+                             {/* Achado ao vivo (2026-09-10): loja `direct_print` (sem tela de
+                                 acompanhamento/KDS) forçava o mesmo "Enviar p/ Cozinha" das
+                                 lojas com KDS antes de liberar Receber/Entregar — mas nessa
+                                 loja a impressão automática já roda sozinha via
+                                 CaixaPrintStation (reconciliação por order_items, nunca por
+                                 order.status, ver comentário no topo daquele arquivo) e
+                                 isOrderReadyForClose() já retorna true incondicionalmente pra
+                                 direct_print. O clique não fazia nada além de atrapalhar —
+                                 pedido devia ir direto de "novo" pra "pode receber e
+                                 finalizar". */}
+                             {status === OrderStatus.PENDING && orderFlow !== 'direct_print' ? (
                                  <Button onClick={() => handleSendToKitchen(order.id)} variant="primary" className="h-10 text-sm shrink-0">
                                      <ChefHat size={16} className="mr-1"/> Enviar p/ Cozinha
                                  </Button>
@@ -4291,11 +4301,15 @@ const CounterView: React.FC<{
                                      variant="primary"
                                      className="h-10 text-sm shrink-0"
                                      // Task 5 (varredura 2026-08-30, corrigido apos achado do
-                                     // revisor): este botão só aparece pra status != PENDING (ramo
-                                     // tratado acima). Libera só quando todo item do pedido estiver
-                                     // READY (ver allItemsReady acima) — checar order.status aqui
-                                     // travaria pra sempre, porque essa coluna nunca chega a
-                                     // PREPARING/READY, só order_items.status avança via KDS.
+                                     // revisor): este botão aparece pra status != PENDING (ramo
+                                     // tratado acima) OU pra qualquer status em loja direct_print
+                                     // (2026-09-10, ver comentário acima). Libera só quando todo
+                                     // item do pedido estiver READY (ver allItemsReady acima) —
+                                     // checar order.status aqui travaria pra sempre numa loja com
+                                     // KDS, porque essa coluna nunca chega a PREPARING/READY, só
+                                     // order_items.status avança via KDS; isOrderReadyForClose já
+                                     // retorna true sempre pra direct_print, então allItemsReady
+                                     // nunca bloqueia esse caso.
                                      disabled={!allItemsReady}
                                      title={!allItemsReady ? 'Aguarde o pedido ficar pronto' : undefined}
                                  >
