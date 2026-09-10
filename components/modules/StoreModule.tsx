@@ -27,7 +27,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
@@ -2621,12 +2621,58 @@ NOTIFY pgrst, 'reload schema';`;
 
         try {
             // Reuses createOrder logic which handles adding to existing orders.
-            // `orderId` do retorno não é mais usado aqui (era só pro print
-            // imediato removido abaixo) — a reconciliação do Caixa resolve o
-            // pedido/item sozinha via fetch_kitchen_orders_secure.
-            await createOrder(selectedTable.id, storeId, [{
+            // `orderId` do retorno era ignorado antes (só era usado pro print
+            // imediato, removido no redesign de 2026-08-23) — a reconciliação
+            // do Caixa continua resolvendo o pedido/item sozinha via
+            // fetch_kitchen_orders_secure. Agora capturado de novo (Fix round
+            // de acompanhamento, 2026-09-09) só pra alimentar a atualização
+            // otimista abaixo, não pra print.
+            const result = await createOrder(selectedTable.id, storeId, [{
                 product, quantity: qty, notes: finalNotes, selectedOptions
             }], loggedUser.name, 'garcom', loggedUser.name);
+
+            // Atualização otimista da comanda — sem isso, "Ver Comanda" e o
+            // total do card da mesa (os dois vêm de getTableSummary, que só
+            // lê `activeOrders`) continuam com o valor antigo até a próxima
+            // sincronização real. `loadData`/Realtime eventualmente
+            // substituem este item sintético pelo real (setActiveOrders
+            // troca o array inteiro, nunca faz merge) — não sobra duplicata.
+            if (result.orderId) {
+                const unitPrice = calculateCartItemUnitPrice({ product, selectedOptions });
+                const optimisticItem: OrderItem = {
+                    id: `local_item_${crypto.randomUUID()}`,
+                    order_id: result.orderId,
+                    product_id: product.id,
+                    product,
+                    quantity: qty,
+                    status: OrderStatus.PENDING,
+                    notes: finalNotes,
+                    created_at: new Date().toISOString(),
+                    price_at_time: unitPrice,
+                    selected_options: selectedOptions.map(o => ({ name: o.name, price_delta: o.price_delta })),
+                    added_by_role: 'garcom',
+                    added_by_name: loggedUser.name,
+                };
+                setActiveOrders(prev => {
+                    const existing = prev.find(o => o.table_id === selectedTable.id && o.status === OrderStatus.PENDING);
+                    if (existing) {
+                        return prev.map(o => o.id === existing.id
+                            ? { ...o, order_items: [...(o.order_items || []), optimisticItem] }
+                            : o);
+                    }
+                    const optimisticOrder: Order = {
+                        id: result.orderId!,
+                        table_id: selectedTable.id,
+                        store_id: storeId,
+                        status: OrderStatus.PENDING,
+                        order_type: 'table',
+                        total: 0,
+                        created_at: new Date().toISOString(),
+                        order_items: [optimisticItem],
+                    };
+                    return [...prev, optimisticOrder];
+                });
+            }
 
             toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
 
