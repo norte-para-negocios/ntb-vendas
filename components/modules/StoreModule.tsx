@@ -597,6 +597,9 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 py-2.5 text-[var(--err)]/80 hover:text-[var(--err)] hover:bg-white/8 rounded-[var(--r-md)] u-motion text-[14px]">
                         <LogOut size={18}/> Sair
                     </button>
+                    {typeof window !== 'undefined' && window.electronApp?.version && (
+                        <p className="text-center text-[11px] text-white/25 pt-2 select-text">App v{window.electronApp.version}</p>
+                    )}
                 </div>
             </div>
         </div>
@@ -700,6 +703,9 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             {!isCollapsed && <span>Sair</span>}
           </button>
         </div>
+        {!isCollapsed && typeof window !== 'undefined' && window.electronApp?.version && (
+          <p className="text-center text-[11px] text-white/25 pb-2 select-text">App v{window.electronApp.version}</p>
+        )}
       </aside>
 
     {/* Mobile Bottom Nav */}
