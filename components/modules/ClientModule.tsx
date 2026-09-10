@@ -3928,13 +3928,24 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     onClick={() => handleTabClick(cat.id)}
                                     aria-current={isActive ? 'true' : undefined}
                                     // Sublinhado da aba ativa: AÇÃO na paleta iFood (correção
-                                    // 2026-08-21) — vermelho via style, não classe (a cor depende
-                                    // do estado isActive, Tailwind não referencia var JS).
-                                    className={`flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap border-b-2 u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)] border-transparent'}`}
-                                    style={isActive ? { borderColor: IFOOD_RED } : undefined}
+                                    // 2026-08-21). Virou um `motion.div` com `layoutId`
+                                    // compartilhado (2026-09-10) em vez de border-b estático —
+                                    // desliza de uma aba pra outra (padrão iFood/Uber Eats de
+                                    // verdade) em vez de sumir e reaparecer na aba nova. Mesmo
+                                    // SPRING_TAP já validado com o usuário (lib/motion.ts) —
+                                    // não é preset novo.
+                                    className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
                                 >
                                     {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
                                     {cat.name}
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="categoryTabUnderline"
+                                            className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
+                                            style={{ backgroundColor: IFOOD_RED }}
+                                            transition={SPRING_TAP}
+                                        />
+                                    )}
                                 </button>
                             );
                         })}
