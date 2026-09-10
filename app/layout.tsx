@@ -5,6 +5,7 @@ import { ToastViewport } from '@/components/Toast';
 import { ConfirmDialogRoot } from '@/components/ConfirmDialog';
 import { AlertDialogRoot } from '@/components/AlertDialog';
 import { THEME_INIT_SCRIPT } from '@/components/ThemeToggle';
+import { DesktopUpdateBanner } from '@/components/DesktopUpdateBanner';
 
 export const metadata: Metadata = {
   title: 'Cardápio Digital',
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastViewport />
         <ConfirmDialogRoot />
         <AlertDialogRoot />
+        <DesktopUpdateBanner />
       </body>
     </html>
   );

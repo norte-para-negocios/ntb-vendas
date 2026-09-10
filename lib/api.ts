@@ -16,7 +16,13 @@ import { isNetworkError } from './offline/network';
 // comportamento.
 declare global {
   interface Window {
-    electronApp?: { isElectron: boolean; apiBaseUrl: string; version?: string };
+    electronApp?: {
+      isElectron: boolean;
+      apiBaseUrl: string;
+      version?: string;
+      onUpdateDownloaded?: (callback: (info: { version: string }) => void) => void;
+      installUpdate?: () => Promise<void>;
+    };
   }
 }
 

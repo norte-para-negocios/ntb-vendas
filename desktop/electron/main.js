@@ -1,7 +1,31 @@
-const { app, BrowserWindow, Menu, protocol, net, shell, Notification } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net, shell, Notification, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
+
+// Achado real (2026-09-10, pedido do dono: "a atualização não está
+// funcionando"): antes disso, o único jeito de saber o que o
+// autoUpdater fez numa loja era a Notification passageira (some sozinha,
+// ninguém tira print às 7h da manhã) — sem log nenhum em disco, um
+// problema real (rede, servidor de update fora do ar, instalador
+// rejeitado) e um "não aconteceu nada porque já tá atualizado" eram
+// indistinguíveis à distância. Log simples (sem dependência nova tipo
+// electron-log) em texto, truncado se passar de 1MB pra nunca crescer
+// sem limite — dá pra pedir pro dono da loja abrir esse arquivo (ou
+// mandar print) quando desconfiar que não atualizou.
+const UPDATE_LOG_PATH = path.join(app.getPath('userData'), 'update.log');
+function logUpdate(msg) {
+  try {
+    if (fs.existsSync(UPDATE_LOG_PATH) && fs.statSync(UPDATE_LOG_PATH).size > 1_000_000) {
+      fs.truncateSync(UPDATE_LOG_PATH, 0);
+    }
+    fs.appendFileSync(UPDATE_LOG_PATH, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {
+    // Nunca deixar uma falha de log (disco cheio, permissão) derrubar a
+    // atualização em si — o log é diagnóstico, não é crítico.
+  }
+}
 
 // Achado real (QA, 2026-09-08): lojas com "envia pedido direto pra
 // impressão" (order_flow: 'direct_print', ver AGENTS.md/CaixaPrintStation)
@@ -125,11 +149,28 @@ app.whenReady().then(() => {
   // que baixou uma nova. `checkForUpdates()` (não `checkForUpdatesAndNotify`)
   // pra controlar a notificação nós mesmos, com as duas mensagens —
   // `checkForUpdatesAndNotify` só notifica no caso de update baixado.
+  // electron-updater loga sozinho (checando/baixando/progresso/erro) em
+  // qualquer objeto com .info/.warn/.error/.debug — plugado aqui pra
+  // tudo cair no update.log, sem precisar instrumentar cada evento à mão.
+  autoUpdater.logger = {
+    info: (m) => logUpdate(`INFO ${m}`),
+    warn: (m) => logUpdate(`WARN ${m}`),
+    error: (m) => logUpdate(`ERROR ${m}`),
+    debug: (m) => logUpdate(`DEBUG ${m}`),
+  };
+  // Explícitos mesmo sendo o default do electron-updater — clareza de
+  // intenção: baixa sozinho ao achar update, aplica sozinho quando o app
+  // fechar (nunca interrompe o app rodando, nunca precisa clique manual).
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
   autoUpdater.on('error', (err) => {
     // Rede instável/DNS fora do ar não pode derrubar o app — sem esse
     // listener, um erro do autoUpdater (um EventEmitter) sem handler
-    // registrado lança e mata o processo principal.
-    console.error('Falha ao verificar atualização:', err);
+    // registrado lança e mata o processo principal. Sem Notification aqui
+    // de propósito: rede de loja cai e volta o tempo todo, e um popup a
+    // cada tentativa falha seria só ruído — fica só no log.
+    logUpdate(`ERROR (evento) ${err?.stack || err}`);
   });
   autoUpdater.on('update-not-available', () => {
     new Notification({
@@ -142,8 +183,39 @@ app.whenReady().then(() => {
       title: 'Norte Vendas',
       body: `Nova versão baixada (v${info.version}) — será aplicada ao reabrir o app.`,
     }).show();
+    // Pedido direto do dono (2026-09-10): a Notification acima é
+    // passageira e macOS/Windows podem suprimi-la (foco ocupado,
+    // "não perturbe") — sem nenhum jeito de saber, de olho na tela, que
+    // tem atualização esperando. Manda pra TODAS as janelas abertas um
+    // aviso que fica na tela até alguém agir (ver
+    // components/DesktopUpdateBanner.tsx): "Atualizar agora" chama
+    // `quitAndInstall()` na hora (o app fecha e reabre já atualizado);
+    // "Depois" só esconde o banner até o próximo reinício — a instalação
+    // automática ao fechar (autoInstallOnAppQuit) continua garantida de
+    // qualquer forma, o botão só existe pra quem quer atualizar JÁ, sem
+    // esperar sozinho fechar o app sem saber se vai mesmo aplicar.
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('ntb-update-downloaded', { version: info.version });
+    }
   });
   autoUpdater.checkForUpdates();
+
+  // Chamado pelo botão "Atualizar agora" do banner (ver preload.js/
+  // DesktopUpdateBanner.tsx). `quitAndInstall()` fecha o app e roda o
+  // instalador NSIS silenciosamente — reabre sozinho na versão nova.
+  ipcMain.handle('ntb-install-update', () => {
+    logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora"');
+    autoUpdater.quitAndInstall();
+  });
+
+  // Achado real: um PDV de restaurante fica ligado o turno inteiro (às
+  // vezes dias, se ninguém desliga o PC) — checar só uma vez ao abrir o
+  // app significa que uma loja que raramente reinicia o app pode nunca
+  // perceber que existe atualização nova. Recheca a cada 4h enquanto o
+  // app estiver aberto; `autoInstallOnAppQuit` continua garantindo que a
+  // instalação em si só acontece quando o app fechar, nunca no meio do
+  // expediente.
+  setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

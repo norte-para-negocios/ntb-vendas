@@ -1,4 +1,4 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Preload roda sandboxed (Electron 20+) — `require('../package.json')`
 // (arquivo local) não resolve aqui, só módulos nativos como 'electron'.
@@ -18,4 +18,12 @@ contextBridge.exposeInMainWorld('electronApp', {
   // jeito de conferir na hora qual build está rodando numa loja
   // específica, sem precisar abrir o instalador ou perguntar pro suporte.
   version,
+  // Ver DesktopUpdateBanner.tsx: `onUpdateDownloaded` assina o evento que
+  // main.js manda quando uma atualização termina de baixar sozinha;
+  // `installUpdate` chama `quitAndInstall()` do lado do processo
+  // principal (não dá pra chamar autoUpdater direto do renderer).
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.on('ntb-update-downloaded', (_event, info) => callback(info));
+  },
+  installUpdate: () => ipcRenderer.invoke('ntb-install-update'),
 });
