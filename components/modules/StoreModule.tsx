@@ -5000,6 +5000,10 @@ const CaixaView: React.FC<{
                     sublabel: t.current_host_name || undefined,
                     total,
                     waitingSince,
+                    // Ver comentário equivalente em occupiedTables — mesma
+                    // jurisdição, não se aplica a balcão (counterItems abaixo),
+                    // que nunca teve conceito de jurisdição por mesa.
+                    inJurisdiction: isTableInJurisdiction(loggedUser, t.id),
                 };
             });
 
@@ -5016,12 +5020,13 @@ const CaixaView: React.FC<{
                     label: `Balcão · ${o.customer_name || 'Cliente'}`,
                     sublabel: `#${o.id.slice(0, 4)}`,
                     total,
+                    inJurisdiction: true,
                     waitingSince: new Date(o.created_at).getTime(),
                 };
             });
 
         return [...tableItems, ...counterItems].sort((a, b) => a.waitingSince - b.waitingSince);
-    }, [tables, activeOrders, counterOrders, store, serviceFeeRate]);
+    }, [tables, activeOrders, counterOrders, store, serviceFeeRate, loggedUser]);
 
     // Fase 2, Task 4 (plano "Fora do Cardápio"): achado real da auditoria —
     // a fila acima só mostra mesa em WAITING_BILL. Numa loja sem
@@ -5077,11 +5082,20 @@ const CaixaView: React.FC<{
                     minutesOccupied,
                     isWaitingBill: t.status === TableStatus.WAITING_BILL,
                     pendingPrintItems,
+                    // Jurisdição de mesas por garçom (migration 049) já existia e
+                    // era aplicada em TablesView, mas CaixaView (módulo mais
+                    // novo, "frente de caixa") nunca checava isso — achado real
+                    // (2026-09-10): garçom com jurisdição restrita via Caixa
+                    // continuava vendo/finalizando pagamento de QUALQUER mesa da
+                    // loja. Mesmo critério exato de TablesView: mesa fora da
+                    // jurisdição continua visível (nunca "desaparece", pra não
+                    // parecer que a mesa sumiu), só fica não-clicável aqui.
+                    inJurisdiction: isTableInJurisdiction(loggedUser, t.id),
                 };
             })
             .sort((a, b) => b.minutesOccupied - a.minutesOccupied);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- printedRefreshNonce só existe pra forçar recálculo (wasKitchenTicketPrinted lê localStorage, não é reativo sozinho).
-    }, [tables, activeOrders, store, serviceFeeRate, now, orderFlow, printedRefreshNonce]);
+    }, [tables, activeOrders, store, serviceFeeRate, now, orderFlow, printedRefreshNonce, loggedUser]);
 
     const rushMode = rushModeManual ?? (occupiedTables.length >= RUSH_THRESHOLD);
 
@@ -5322,8 +5336,9 @@ const CaixaView: React.FC<{
                                 return (
                                     <button
                                         key={t.id}
-                                        onClick={() => onOpenTablePayment(t.id)}
-                                        className={`text-center p-2 rounded-xl border u-motion u-press-sm ${colorClass}`}
+                                        onClick={() => { if (t.inJurisdiction) onOpenTablePayment(t.id); }}
+                                        title={t.inJurisdiction ? undefined : 'Fora da sua jurisdição'}
+                                        className={`text-center p-2 rounded-xl border u-motion u-press-sm ${colorClass} ${t.inJurisdiction ? '' : 'opacity-40 pointer-events-none'}`}
                                     >
                                         <span className="block font-bold text-[var(--text)]">Mesa {t.number}</span>
                                         <span className="block text-xs font-bold text-[var(--text)]">R$ {formatBRL(t.total)}</span>
@@ -5331,10 +5346,11 @@ const CaixaView: React.FC<{
                                 );
                             }
                             return (
-                                <div key={t.id} className={`rounded-xl border overflow-hidden ${colorClass}`}>
+                                <div key={t.id} className={`rounded-xl border overflow-hidden ${colorClass} ${t.inJurisdiction ? '' : 'opacity-40'}`}>
                                     <button
-                                        onClick={() => onOpenTablePayment(t.id)}
-                                        className="w-full text-left p-3 u-motion u-press-sm"
+                                        onClick={() => { if (t.inJurisdiction) onOpenTablePayment(t.id); }}
+                                        title={t.inJurisdiction ? undefined : 'Fora da sua jurisdição'}
+                                        className={`w-full text-left p-3 u-motion u-press-sm ${t.inJurisdiction ? '' : 'pointer-events-none'}`}
                                     >
                                         <div className="flex items-center justify-between">
                                             <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
@@ -5398,8 +5414,9 @@ const CaixaView: React.FC<{
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
                                 transition={SPRING_TAP}
-                                onClick={() => item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id)}
-                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] hover:border-[var(--brand)] u-motion u-press-sm text-left"
+                                onClick={() => { if (!item.inJurisdiction) return; item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id); }}
+                                title={item.inJurisdiction ? undefined : 'Fora da sua jurisdição'}
+                                className={`w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] hover:border-[var(--brand)] u-motion u-press-sm text-left ${item.inJurisdiction ? '' : 'opacity-40 pointer-events-none'}`}
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="h-9 w-9 rounded-full bg-[var(--warn)]/10 flex items-center justify-center text-[var(--warn)] shrink-0">
