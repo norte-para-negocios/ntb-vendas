@@ -8,7 +8,7 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield, WifiOff } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
@@ -18,7 +18,7 @@ import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermiss
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
 import { startOfflineSync, getSyncStatus, onSyncStatusChange } from '@/lib/offline/sync';
-import { checkRealConnectivity } from '@/lib/offline/network';
+import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -7558,6 +7558,15 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     const [checkins, setCheckins] = useState<OperatorCheckin[]>([]);
     const [isLoadingCheckins, setIsLoadingCheckins] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    // Achado real (WhatsApp, 2026-09-10): offline, `fetchSalesHistory`
+    // engole o erro de rede e devolve `[]` (comportamento antigo, correto
+    // pra não quebrar a tela) — mas o Dashboard/Histórico então renderiza
+    // "R$ 0,00"/"Sem dados" em tudo, indistinguível de "perdi o dia
+    // inteiro de vendas". Sem nenhuma tela de Administração ter ganhado
+    // cache offline (fora de escopo — não faz sentido cachear
+    // relatório/gestão, só o fluxo operacional), a correção certa aqui é
+    // avisar explicitamente que é falta de conexão, não perda de dado.
+    const [salesDataUnavailableOffline, setSalesDataUnavailableOffline] = useState(false);
     const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
 
     // Filters
@@ -7583,10 +7592,16 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
 
     const loadSales = async (opts?: { silent?: boolean }) => {
         if (!opts?.silent) setIsLoading(true);
-        const [data, sessions, ratingsData] = await Promise.all([fetchSalesHistory(storeId), fetchTableSessions(storeId), fetchOrderRatings(storeId)]);
+        let wasNetworkError = false;
+        const [data, sessions, ratingsData] = await Promise.all([
+            fetchSalesHistory(storeId, undefined, undefined, (e) => { if (isNetworkError(e)) wasNetworkError = true; }),
+            fetchTableSessions(storeId),
+            fetchOrderRatings(storeId),
+        ]);
         setSales(data);
         setTableSessions(sessions);
         setRatings(ratingsData);
+        setSalesDataUnavailableOffline(wasNetworkError);
         setIsLoading(false);
     };
 
@@ -7997,6 +8012,15 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.12, ease: 'easeOut' }}
                         >
+
+            {salesDataUnavailableOffline && (activeTab === 'dashboard' || activeTab === 'sales') && (
+                <div className="mb-4 rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
+                    <WifiOff size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                    <p className="text-sm text-[var(--warn)] font-semibold">
+                        Sem conexão — não deu pra carregar os números reais agora (os valores abaixo NÃO refletem o dia). Isso não apaga nenhuma venda: assim que a internet voltar, é só recarregar esta tela.
+                    </p>
+                </div>
+            )}
 
             {activeTab === 'dashboard' && (
                 <StoreDashboardView
