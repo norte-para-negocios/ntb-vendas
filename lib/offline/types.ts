@@ -66,3 +66,21 @@ export interface CachedCashShiftSummary {
   summary: unknown; // CashShiftSummary — any de propósito, mesmo motivo dos outros Cached*
   updatedAt: number;
 }
+
+// Fix round de acompanhamento (2026-09-09) — fetchKitchenOrders/
+// fetchCounterOrders nunca ganharam cache de leitura junto com
+// fetchTables/fetchActiveOrdersForTables acima; offline, trocar de aba e
+// voltar pro KDS/Balcão deixava a tela vazia até a próxima sincronização
+// real. Mesmo padrão dos Cached* acima (chave composta pra kitchen/bar
+// serem caches separados, já que são fetches independentes).
+export interface CachedKitchenOrders {
+  key: string; // `${storeId}::${destination}` — kitchen e bar são caches separados
+  items: unknown[]; // OrderItem[]
+  updatedAt: number;
+}
+
+export interface CachedCounterOrders {
+  storeId: string;
+  orders: unknown[]; // Order[]
+  updatedAt: number;
+}

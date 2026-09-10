@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
-import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary } from './offline/cache';
+import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
 import { enqueue } from './offline/queue';
 import { isNetworkError } from './offline/network';
 
@@ -798,8 +798,18 @@ export const fetchKitchenOrders = async (
   onError?: (error: unknown) => void,
 ): Promise<OrderItem[]> => {
   const { data, error } = await supabase.rpc('fetch_kitchen_orders_secure', { p_store_id: storeId, p_destination: destination });
-  if (error) { console.error('Kitchen fetch error:', error); onError?.(error); return []; }
-  return (data as any) || [];
+  if (error) {
+    console.error('Kitchen fetch error:', error);
+    onError?.(error);
+    if (isNetworkError(error)) {
+      const cached = await getCachedKitchenOrders(storeId, destination);
+      if (cached) return cached.items as OrderItem[];
+    }
+    return [];
+  }
+  const items = (data as any) || [];
+  setCachedKitchenOrders(storeId, destination, items).catch(() => {});
+  return items;
 };
 
 // Originalmente Task 3 (2026-08-22, Estação de Impressão dedicada) — mesmo
@@ -868,8 +878,17 @@ export const subscribeToStoreOrderChanges = (
 
 export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
   const { data, error } = await supabase.rpc('fetch_counter_orders_secure', { p_store_id: storeId });
-  if (error) { console.error('Fetch Counter Orders Error', error); return []; }
-  return (data as any) || [];
+  if (error) {
+    console.error('Fetch Counter Orders Error', error);
+    if (isNetworkError(error)) {
+      const cached = await getCachedCounterOrders(storeId);
+      if (cached) return cached.orders as Order[];
+    }
+    return [];
+  }
+  const orders = (data as any) || [];
+  setCachedCounterOrders(storeId, orders).catch(() => {});
+  return orders;
 };
 
 // Fix round 2 (Group B1): mesmo princípio do `onError` opcional em

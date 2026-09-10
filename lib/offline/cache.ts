@@ -1,5 +1,5 @@
 import { getOfflineDb } from './db';
-import type { CachedMenu, CachedTables, CachedCashShift, CachedSession, CachedCashShiftSummary } from './types';
+import type { CachedMenu, CachedTables, CachedCashShift, CachedSession, CachedCashShiftSummary, CachedKitchenOrders, CachedCounterOrders } from './types';
 
 export async function setCachedMenu(storeId: string, categories: unknown[], products: unknown[]): Promise<void> {
   const db = await getOfflineDb();
@@ -99,4 +99,32 @@ export async function setCachedCashShiftSummary(shiftId: string, summary: unknow
 export async function getCachedCashShiftSummary(shiftId: string): Promise<CachedCashShiftSummary | undefined> {
   const db = await getOfflineDb();
   return db.get('cash_shift_summary_cache', shiftId);
+}
+
+// Fix round de acompanhamento (2026-09-09) — cache de leitura pra
+// fetchKitchenOrders/fetchCounterOrders (lib/api.ts), mesmo padrão de
+// setCachedTables/getCachedTables acima. kitchen e bar são caches
+// separados (chave composta), já que são fetches independentes.
+function kitchenCacheKey(storeId: string, destination: 'kitchen' | 'bar'): string {
+  return `${storeId}::${destination}`;
+}
+
+export async function setCachedKitchenOrders(storeId: string, destination: 'kitchen' | 'bar', items: unknown[]): Promise<void> {
+  const db = await getOfflineDb();
+  await db.put('kitchen_cache', { key: kitchenCacheKey(storeId, destination), items, updatedAt: Date.now() });
+}
+
+export async function getCachedKitchenOrders(storeId: string, destination: 'kitchen' | 'bar'): Promise<CachedKitchenOrders | undefined> {
+  const db = await getOfflineDb();
+  return db.get('kitchen_cache', kitchenCacheKey(storeId, destination));
+}
+
+export async function setCachedCounterOrders(storeId: string, orders: unknown[]): Promise<void> {
+  const db = await getOfflineDb();
+  await db.put('counter_cache', { storeId, orders, updatedAt: Date.now() });
+}
+
+export async function getCachedCounterOrders(storeId: string): Promise<CachedCounterOrders | undefined> {
+  const db = await getOfflineDb();
+  return db.get('counter_cache', storeId);
 }
