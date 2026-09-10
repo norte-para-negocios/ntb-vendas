@@ -1117,12 +1117,22 @@ export const createOrder = async (
       console.error('Create Order Error', error);
       throw error;
     }
-    // Erro de REDE — cai no caminho offline.
+    // Achado real e GRAVE (WhatsApp, 2026-09-10): `addedByRole === 'cliente'`
+    // roda dentro de `ClientModule.tsx` — o CELULAR DO PRÓPRIO CLIENTE, não
+    // um equipamento da loja. Esse app nunca chama `startOfflineSync()`
+    // (só `StoreLayout`, do painel do lojista, chama), então um pedido
+    // enfileirado aqui NUNCA sincroniza sozinho: o cliente vê "Pedido
+    // enviado!" (sucesso falso), fecha a aba/guarda o celular, e o pedido
+    // fica preso pra sempre no IndexedDB daquele navegador específico —
+    // pior que o comportamento de antes do modo offline existir (que pelo
+    // menos mostrava erro na hora e deixava o cliente tentar de novo com
+    // internet). Pra garçom (`'garcom'`, equipamento fixo da loja, com
+    // `startOfflineSync()` rodando) o enfileiramento continua correto e
+    // necessário — só o caminho do cliente final precisa continuar
+    // falhando alto, do jeito já testado em produção há meses.
+    if (addedByRole === 'cliente') throw error;
     const localOrderId = `local_${crypto.randomUUID()}`;
     await enqueue('create_order', { ...rpcPayload, localOrderId });
-    // Atualização otimista: soma o pedido novo ao cache local de mesas,
-    // pra a tela refletir a mudança na hora (mesmo princípio de update
-    // otimista já usado em KdsView.advanceStatus, ver StoreModule.tsx).
     return { success: true, orderId: localOrderId };
   }
 };
