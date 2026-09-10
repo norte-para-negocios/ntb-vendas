@@ -68,6 +68,19 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Preload roda sandboxed por padrão (Electron 20+, mesmo com
+      // contextIsolation:true) — nesse modo `require()` só resolve um
+      // punhado de módulos nativos (ex. 'electron'), NUNCA um arquivo
+      // local por caminho relativo. `require('../package.json')` direto
+      // no preload.js quebrava o script inteiro silenciosamente (sem
+      // erro visível na tela), derrubando com ele o `contextBridge.
+      // exposeInMainWorld` — não só a versão nova ficava faltando, a
+      // MESMA falha também zerava `apiBaseUrl`, fazendo o app parecer
+      // "funcionando" só porque caía direto no cache offline. Repassar a
+      // versão como `additionalArguments` evita `require` de arquivo
+      // local: preload.js lê de `process.argv`, que continua disponível
+      // mesmo sandboxed.
+      additionalArguments: [`--ntb-app-version=${app.getVersion()}`],
     },
   });
 
