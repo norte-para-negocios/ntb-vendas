@@ -1148,13 +1148,24 @@ export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: s
 
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
 // mas ainda grava a sessão para entrar na métrica de tempo médio de ocupação.
-export const openTableManually = async (tableId: string, storeId: string, hostName: string) => {
+// Devolve `{queued}` pra quem chama saber se a mesa realmente abriu no
+// servidor agora ou só ficou na fila offline — achado real (WhatsApp
+// 2026-09-09): o call-site usava `navigator.onLine` pra decidir se valia
+// a pena recarregar os dados depois, mas esse flag pode ficar `true` com
+// wifi conectado sem internet de verdade (mesmo problema documentado em
+// `lib/offline/network.ts`), causando o mesmo sintoma de novo em rede
+// "falsamente online". Como só existe um call-site hoje
+// (`StoreModule.tsx`), mudar o retorno de `void` pra `{queued: boolean}`
+// é seguro — nenhum outro lugar depende do formato antigo.
+export const openTableManually = async (tableId: string, storeId: string, hostName: string): Promise<{ queued: boolean }> => {
   try {
     const { error } = await supabase.rpc('open_table_manually_secure', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
     if (error) throw error;
+    return { queued: false };
   } catch (e) {
     if (!isNetworkError(e)) throw e;
     await enqueue('open_table_manually', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
+    return { queued: true };
   }
 };
 

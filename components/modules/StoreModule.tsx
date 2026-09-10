@@ -3082,18 +3082,24 @@ NOTIFY pgrst, 'reload schema';`;
                                         try {
                                             // 2. CALL API (grava a sessão de ocupação também, senão mesas abertas
                                             // pelo lojista nunca entram na métrica de tempo médio)
-                                            await openTableManually(selectedTable.id, store.id, loggedUser.name);
+                                            const { queued } = await openTableManually(selectedTable.id, store.id, loggedUser.name);
 
-                                            // 3. REFRESH DATA — só quando online. Offline, `loadData()` cai no
-                                            // cache local (desatualizado) e SOBRESCREVE o update otimista acima
-                                            // com o estado antigo — o mesmo achado do WhatsApp: a mesa fica
-                                            // com o pedido enfileirado corretamente (confirmado no IndexedDB),
-                                            // mas a tela volta a mostrar "Disponível", como se nada tivesse
-                                            // acontecido. O Realtime (`table_change_pings`) já atualiza sozinho
-                                            // assim que o dado real mudar — na hora, se online; depois da
-                                            // sincronização, se offline — então este refresh manual é só
-                                            // atalho pro caso online, nunca necessário pro caso offline.
-                                            if (navigator.onLine) loadData();
+                                            // 3. REFRESH DATA — só quando a mesa abriu de verdade no servidor
+                                            // agora (`!queued`). Se caiu na fila offline, `loadData()` cairia no
+                                            // cache local (desatualizado) e SOBRESCREVERIA o update otimista
+                                            // acima com o estado antigo — o mesmo achado do WhatsApp: a mesa
+                                            // fica com o pedido enfileirado corretamente (confirmado no
+                                            // IndexedDB), mas a tela volta a mostrar "Disponível", como se nada
+                                            // tivesse acontecido. Usar `queued` (não `navigator.onLine`) evita a
+                                            // mesma falha numa rede "falsamente online" (wifi conectado sem
+                                            // internet de verdade — ver `lib/offline/network.ts`), já que
+                                            // `openTableManually` só marca `queued=true` depois de uma falha de
+                                            // rede REAL na própria chamada, nunca por adivinhação. O Realtime
+                                            // (`table_change_pings`) já atualiza sozinho assim que o dado real
+                                            // mudar — na hora, se online; depois da sincronização, se ficou na
+                                            // fila — então este refresh manual é só atalho pro caso online,
+                                            // nunca necessário pro caso enfileirado.
+                                            if (!queued) loadData();
                                         } catch (e) {
                                             // Reverte o update otimista em caso de falha
                                             setSelectedTable(previousTable);
