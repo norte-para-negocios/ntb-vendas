@@ -19,6 +19,7 @@ import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenomina
 import { supabase } from '@/lib/supabaseClient';
 import { startOfflineSync, getSyncStatus, onSyncStatusChange } from '@/lib/offline/sync';
 import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
+import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -2086,12 +2087,18 @@ NOTIFY pgrst, 'reload schema';`;
         // atualizada via prop `store` (StoreModule mantem `user.store` em
         // sincronia sempre que algo em `stores` muda de fato, ex.:
         // MenuManagementView.handleToggleServiceFee → onStoreUpdate).
-        const [t, o] = await Promise.all([
+        const [t, o, pendingOrders] = await Promise.all([
             fetchTables(storeId),
             fetchActiveOrdersForTables(storeId),
+            buildPendingOrdersForStore(storeId),
         ]);
         setTables(t);
-        setActiveOrders(o);
+        // Mescla pedidos ainda só na fila offline (nunca sincronizados) —
+        // sem isso, remontar este componente (ex. trocar de aba e voltar)
+        // faz a comanda "esquecer" um pedido lançado offline até
+        // sincronizar de verdade (achado real, WhatsApp 2026-09-10; ver
+        // comentário completo em lib/offline/pendingOrders.ts).
+        setActiveOrders([...o, ...(pendingOrders as Order[])]);
 
         // "Pedidos do Dia" (mesas fechadas hoje) NÃO é mais buscado aqui —
         // ver o efeito de `showSentHistory` abaixo (Important #I3, revisão
@@ -4536,13 +4543,17 @@ const CaixaView: React.FC<{
     };
 
     const loadQueue = async () => {
-        const [t, o, c] = await Promise.all([
+        const [t, o, c, pendingOrders] = await Promise.all([
             fetchTables(storeId),
             fetchActiveOrdersForTables(storeId),
             fetchCounterOrders(storeId),
+            buildPendingOrdersForStore(storeId),
         ]);
         setTables(t);
-        setActiveOrders(o);
+        // Mesmo achado/fix de TablesView.loadData — sem isso, a lista
+        // "Mesas ocupadas" do Caixa também "esquece" um pedido lançado
+        // offline sempre que este componente remonta.
+        setActiveOrders([...o, ...(pendingOrders as Order[])]);
         setCounterOrders(c);
     };
 
