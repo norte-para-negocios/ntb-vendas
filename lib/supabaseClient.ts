@@ -5,5 +5,12 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Exportados pra `lib/offline/network.ts` montar o próprio ping de
+// conectividade contra o gateway do Supabase (que já responde com CORS
+// liberado pra qualquer origem, ao contrário da raiz do site) — nunca
+// hardcodar essa URL/key de novo em outro arquivo.
+export const supabaseUrlForConnectivityCheck = supabaseUrl;
+export const supabaseKeyForConnectivityCheck = supabaseKey;
+
 export const isSupabaseConfigured = () =>
   supabaseUrl !== '' && supabaseKey !== '';
