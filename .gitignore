@@ -61,6 +61,9 @@ scripts/.pooler-host
 # localmente na loja via npm install, não versionado).
 /print-agent/config.json
 /print-agent/node_modules
+# Binário gerado por `npm run build:exe` (pkg) — ~60MB, sempre reconstruído
+# na hora de distribuir pra uma loja, nunca precisa ficar versionado.
+/print-agent/ntb-print-agent.exe
 
 # App desktop Electron (desktop/) — artefatos de build regenerados a
 # cada `npm run dist`, nunca versionados (binário grande).

@@ -5,9 +5,13 @@
   "private": true,
   "main": "agent.js",
   "scripts": {
-    "start": "node agent.js"
+    "start": "node agent.js",
+    "build:exe": "pkg agent.js --target node18-win-x64 --output ntb-print-agent.exe"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
   }
 }
