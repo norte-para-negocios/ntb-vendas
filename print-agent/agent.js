@@ -23,6 +23,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const net = require('net');
+const readline = require('readline');
 const { execFile } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -31,19 +32,56 @@ const { createClient } = require('@supabase/supabase-js');
 // perto do .exe real (process.execPath), não de dentro dele.
 const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
 
-function loadConfig() {
+// Mesma chave anônima pública já hardcoded em lib/supabaseClient.ts do
+// app principal (não é segredo -- RLS é quem protege o dado real, ver
+// AGENTS.md) -- só `storeSlug` varia de instalação pra instalação.
+// Achado real (2026-09-10, reclamação direta do dono: "o agente já tem
+// que ser automático, não precisa baixar arquivo separado nenhum"):
+// antes disso, instalar exigia baixar config.example.json À PARTE,
+// renomear pra config.json e editar o slug à mão -- 3 arquivos, 3
+// downloads, uma pasta pra montar igual. Agora é só o .exe: se não
+// encontra config.json, PERGUNTA o slug uma vez no terminal e grava o
+// arquivo sozinho, com esses defaults -- ninguém mais precisa saber que
+// config.json existe.
+const DEFAULT_SERVIDOR_URL = 'https://testvendase.norteparanegocios.com.br';
+const DEFAULT_CHAVE_DE_ACESSO = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg0ODQ3MjYwLCJleHAiOjE5NDI1MjcyNjB9.YmlPFysJDamnhjkRwwNDOqNhzPIVtmrIjlucfDKPOv4';
+
+function askQuestion(question) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); }));
+}
+
+async function loadConfig() {
   const configPath = path.join(baseDir, 'config.json');
-  if (!fs.existsSync(configPath)) {
-    console.error('\n[ERRO] Nao encontrei config.json nesta pasta.');
-    console.error('Copie config.example.json para config.json e preencha o slug da loja antes de rodar.\n');
-    process.exit(1);
+  let config = null;
+
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch {
+      console.error('\n[AVISO] config.json existente está corrompido -- vou pedir o slug de novo.\n');
+      config = null;
+    }
   }
-  const raw = fs.readFileSync(configPath, 'utf8');
-  const config = JSON.parse(raw);
-  if (!config.storeSlug || config.storeSlug.includes('coloque-aqui')) {
-    console.error('\n[ERRO] Preencha "storeSlug" no config.json com o slug real da loja.\n');
-    process.exit(1);
+
+  if (!config || !config.storeSlug || config.storeSlug.includes('coloque-aqui')) {
+    console.log('\nPrimeira vez rodando neste computador -- preciso saber qual loja.');
+    console.log('(é a parte final do link do cardápio, ex: se o link é ".../c/sertao-vai-virar-mar", o slug é "sertao-vai-virar-mar")\n');
+    let slug = '';
+    while (!slug) {
+      slug = await askQuestion('Slug da loja: ');
+      if (!slug) console.log('Não pode ficar em branco.');
+    }
+    config = {
+      storeSlug: slug,
+      servidorUrl: DEFAULT_SERVIDOR_URL,
+      chaveDeAcesso: DEFAULT_CHAVE_DE_ACESSO,
+      pollIntervalMs: 3000,
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    console.log(`\nSalvo em config.json -- da próxima vez não vou perguntar de novo.\n`);
   }
+
   return config;
 }
 
@@ -190,16 +228,24 @@ async function printJob(printer, content) {
 }
 
 async function main() {
-  const config = loadConfig();
-  const supabase = createClient(config.servidorUrl, config.chaveDeAcesso);
+  let config = await loadConfig();
+  let supabase = createClient(config.servidorUrl, config.chaveDeAcesso);
   const pollIntervalMs = config.pollIntervalMs || 3000;
 
   console.log(`Agente de impressao NTB Vendas iniciado. Loja: ${config.storeSlug}`);
 
-  const { data: store, error: storeError } = await supabase.from('stores').select('id, name').eq('slug', config.storeSlug).single();
-  if (storeError || !store) {
-    console.error(`\n[ERRO] Nao encontrei nenhuma loja com o slug "${config.storeSlug}". Confira o config.json.\n`);
-    process.exit(1);
+  let store = null;
+  // Loop de recuperação: slug digitado errado no primeiro uso não deve
+  // exigir achar e apagar config.json manualmente -- pergunta nome de
+  // novo na hora e regrava, até achar uma loja de verdade.
+  while (!store) {
+    const { data, error: storeError } = await supabase.from('stores').select('id, name').eq('slug', config.storeSlug).single();
+    if (data) { store = data; break; }
+    console.error(`\n[ERRO] Nao encontrei nenhuma loja com o slug "${config.storeSlug}".\n`);
+    const slug = await askQuestion('Digite o slug de novo (ou Ctrl+C pra sair): ');
+    if (!slug) continue;
+    config = { ...config, storeSlug: slug };
+    fs.writeFileSync(path.join(baseDir, 'config.json'), JSON.stringify(config, null, 2), 'utf8');
   }
   console.log(`Loja encontrada: ${store.name}`);
 
