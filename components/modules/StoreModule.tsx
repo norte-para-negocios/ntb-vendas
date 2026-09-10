@@ -3851,8 +3851,17 @@ const CounterView: React.FC<{
     const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
 
     const load = async () => {
-        const data = await fetchCounterOrders(storeId);
-        setOrders(data);
+        const [data, pendingOrders] = await Promise.all([
+            fetchCounterOrders(storeId),
+            buildPendingOrdersForStore(storeId),
+        ]);
+        // Mesmo achado/fix de TablesView.loadData/CaixaView.loadQueue — um
+        // pedido de balcão lançado offline (createOrder com tableId nulo
+        // também enfileira do mesmo jeito) "sumia" da lista sempre que
+        // este componente remontava. Filtra só `order_type === 'counter'`
+        // — pedido de mesa pendente na fila não pertence a esta tela.
+        const pendingCounterOrders = (pendingOrders as Order[]).filter(o => o.order_type === 'counter');
+        setOrders([...data, ...pendingCounterOrders]);
     };
 
     useEffect(() => {
