@@ -660,12 +660,25 @@ const CONNECTING_GRACE_MS = 4000;
 // != 'connected' mas ainda online), que já tem o próprio indicador
 // discreto e se resolve sozinho na maioria das vezes sem precisar de
 // alarme de tela cheia.
+// Correção real (WhatsApp, 2026-09-10): este banner foi escrito em
+// 2026-08-25, ANTES do modo offline existir (plano de 2026-09-08) —
+// "anote os pedidos no papel até reconectar" já não é verdade desde que
+// `lib/offline/` foi implementado: pedido/KDS/fechar conta/caixa
+// continuam funcionando pelo app, enfileirados, e sincronizam sozinhos
+// ao reconectar (ver `lib/offline/sync.ts`). A mensagem antiga sobrevivia
+// dando a entender que o app parava de servir pra qualquer coisa assim
+// que a internet caía — o oposto do que o modo offline promete, e
+// exatamente o que o dono reportou como "mensagem que não devia mais
+// aparecer assim". Só a impressão automática É de fato pausada offline
+// (não faz parte da fila — corre à parte, em `CaixaPrintStation.tsx`,
+// e depende de reconciliação em tempo real), então isso continua na
+// mensagem; o resto foi reescrito pra refletir a realidade atual.
 export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStationState }> = ({ status }) => {
   if (!status.active || status.online) return null;
   return (
-    <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--err)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+    <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--warn)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
       <WifiOff size={14} className="shrink-0" />
-      Sem conexão com a internet — anote os pedidos no papel até reconectar. A impressão automática está pausada.
+      Sem conexão com a internet — pedidos, mesas e caixa continuam funcionando normalmente e sincronizam sozinhos quando a conexão voltar. Só a impressão automática fica pausada até reconectar.
     </div>
   );
 };
