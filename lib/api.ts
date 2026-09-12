@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
 import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
@@ -22,9 +22,42 @@ declare global {
       version?: string;
       onUpdateDownloaded?: (callback: (info: { version: string }) => void) => void;
       installUpdate?: () => Promise<void>;
+      startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
+      stopPrintEngine?: () => Promise<{ ok: boolean }>;
     };
   }
 }
+
+// Liga a impressão de rede (IP) / USB embutida no app desktop (ver
+// desktop/electron/print-engine.js). No navegador não faz nada — lá essa
+// impressão continua dependendo do print-agent separado, porque página
+// web não abre socket cru nem chama o spooler do sistema.
+//
+// Quem chama é o painel do lojista logo depois do login: a loja logada só
+// existe do lado do renderer, e passar URL/chave daqui garante que o
+// processo principal use exatamente o mesmo banco que o resto do app (em
+// vez de repetir esses valores num segundo lugar, que sairia de sincronia
+// no primeiro deploy que trocasse de servidor).
+export const iniciarMotorImpressaoDesktop = async (storeId: string) => {
+  if (typeof window === 'undefined' || !window.electronApp?.startPrintEngine) return;
+  try {
+    await window.electronApp.startPrintEngine({
+      storeId,
+      supabaseUrl: supabaseUrlForConnectivityCheck,
+      supabaseAnonKey: supabaseKeyForConnectivityCheck,
+    });
+  } catch (e) {
+    // Impressão de rede/USB é um caminho ADITIVO (ver AGENTS.md, aba
+    // "Impressão"): falhar aqui nunca pode derrubar o login nem o
+    // window.print() que as 6 lojas reais já usam.
+    console.error('Falha ao iniciar o motor de impressão do app desktop:', e);
+  }
+};
+
+export const pararMotorImpressaoDesktop = () => {
+  if (typeof window === 'undefined' || !window.electronApp?.stopPrintEngine) return;
+  window.electronApp.stopPrintEngine().catch(() => {});
+};
 
 export function resolverUrlApi(caminho: string): string {
   if (typeof window !== 'undefined' && window.electronApp?.isElectron) {
@@ -1012,6 +1045,60 @@ export const closeCounterOrder = async (
   }
 };
 
+// "Balcão paga primeiro" (pedido do André, 2026-09-11) — as duas metades de
+// `closeCounterOrder` separadas, pra poderem acontecer em momentos
+// diferentes. Não é refatoração gratuita: no fluxo novo o cliente paga na
+// ENTRADA e o pedido só fecha quando é entregue, minutos depois.
+//
+// Isso já era possível sem nenhuma mudança de schema porque as duas
+// operações sempre foram independentes no banco: `/api/orders/
+// pagamento-balcao` grava payment_method/payment_details e NUNCA toca em
+// status; `close_counter_order_secure` (migration 021) só mexe em status.
+// Elas eram chamadas juntas por hábito, não por acoplamento real.
+//
+// `closeCounterOrder` acima continua intacta pro fluxo de sempre (cobra no
+// fim) — nenhuma loja que não ligar a chave muda de comportamento.
+
+// Passo 1 do fluxo "paga primeiro": registra o pagamento (e emite a nota)
+// SEM fechar o pedido — ele segue vivo até ser entregue.
+export const registrarPagamentoBalcao = async (
+  orderId: string,
+  paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
+  destinatario?: { cpfCnpj: string; nome: string },
+) => {
+  try {
+    const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
+    const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+    }
+    // A venda se consumou aqui (o dinheiro entrou), então é aqui que a nota
+    // sai — não na entrega. A Ordem de Produção (baixa de estoque) continua
+    // no fechamento, junto da entrega, que é quando a comida de fato saiu.
+    triggerEmissaoFiscal({ orderId, destinatario });
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue('registrar_pagamento_balcao', { orderId, paymentData, destinatario });
+  }
+};
+
+// Passo final do fluxo "paga primeiro": entrega o pedido já pago.
+export const entregarPedidoBalcao = async (orderId: string) => {
+  try {
+    const { error } = await supabase.rpc('close_counter_order_secure', { p_order_id: orderId });
+    if (error) throw error;
+    triggerOrdemProducao({ orderId });
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue('close_counter_order', { orderId, paymentData: null, destinatario: undefined });
+  }
+};
+
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
 // rota interna (service role, nunca vê chave nem RLS do lado do browser) que
 // cria+conclui a Ordem de Produção correspondente no ntb-estoque. Só lojas
@@ -1945,6 +2032,9 @@ export interface CreateStoreParams {
   // loja criada/editada sem tocar nesta seção nunca ganha essas chaves.
   modules?: StoreModules;
   orderFlow?: OrderFlow;
+  // "Balcão paga primeiro" (pedido do André, 2026-09-11) — ver
+  // applyModulesConfigFields e lib/storeModules.ts:isCounterPaymentFirst.
+  counterPaymentFirst?: boolean;
 }
 
 // Perfil de módulos por loja (Task 1): decide se `params.modules`/
@@ -1959,7 +2049,7 @@ export interface CreateStoreParams {
 // que a function realmente usa, pra não obrigar quem chama de fora de
 // createStore/updateStore a montar um CreateStoreParams inteiro só pra
 // mudar módulos/fluxo.
-export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow }): Record<string, any> => {
+export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow; counterPaymentFirst?: boolean }): Record<string, any> => {
   const next = { ...config };
   if (params.modules && !isDefaultStoreModules(params.modules)) {
     next.modules = params.modules;
@@ -1970,6 +2060,14 @@ export const applyModulesConfigFields = (config: Record<string, any>, params: { 
     next.order_flow = 'direct_print';
   } else {
     delete next.order_flow;
+  }
+  // "Balcão paga primeiro" (pedido do André, 2026-09-11) — mesma regra das
+  // chaves acima: só grava quando difere do default, pra loja que não mexe
+  // nisso manter o config byte-idêntico ao de antes da feature.
+  if (params.counterPaymentFirst === true) {
+    next.counter_payment_first = true;
+  } else {
+    delete next.counter_payment_first;
   }
   // Removido (redesign 2026-08-23): `print_target` deixou de existir (ver
   // lib/storeModules.ts) — apagado incondicionalmente daqui em diante pra

@@ -60,6 +60,15 @@ export interface Store {
     // direto, sempre por essas funções.
     modules?: Partial<StoreModules>;
     order_flow?: OrderFlow;
+    // Pedido do André (2026-09-11, depois da reunião de desenvolvimento do
+    // dia 10): "balcão paga primeiro" — inverte a ordem do fluxo de balcão
+    // pra 1) receber pagamento, 2) enviar pra cozinha, 3) pronto,
+    // 4) entregue, "mas seria legal ter uma configuração pro ADM definir
+    // essa ordem se pgto antes ou depois do envio a cozinha". Daí ser uma
+    // chave e não uma mudança dura de comportamento.
+    // Ausente/false = ordem de sempre (cobra no fim), byte-idêntico ao que
+    // toda loja real faz hoje — nada muda pra quem não ligar isso.
+    counter_payment_first?: boolean;
     // Cor de destaque por loja (Task 6). Hex '#RRGGBB', opcional. Ausente/null
     // = WINE_GOLD padrão em ClientModule.tsx, byte-idêntico ao comportamento
     // anterior a esta feature. Validada contra um piso de contraste (WCAG

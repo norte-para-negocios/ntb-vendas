@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
+const printEngine = require('./print-engine');
 
 // Achado real (2026-09-10, pedido do dono: "a atualização não está
 // funcionando"): antes disso, o único jeito de saber o que o
@@ -14,18 +15,24 @@ const { autoUpdater } = require('electron-updater');
 // electron-log) em texto, truncado se passar de 1MB pra nunca crescer
 // sem limite — dá pra pedir pro dono da loja abrir esse arquivo (ou
 // mandar print) quando desconfiar que não atualizou.
-const UPDATE_LOG_PATH = path.join(app.getPath('userData'), 'update.log');
-function logUpdate(msg) {
+function appendLog(fileName, msg) {
   try {
-    if (fs.existsSync(UPDATE_LOG_PATH) && fs.statSync(UPDATE_LOG_PATH).size > 1_000_000) {
-      fs.truncateSync(UPDATE_LOG_PATH, 0);
+    const filePath = path.join(app.getPath('userData'), fileName);
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 1_000_000) {
+      fs.truncateSync(filePath, 0);
     }
-    fs.appendFileSync(UPDATE_LOG_PATH, `[${new Date().toISOString()}] ${msg}\n`);
+    fs.appendFileSync(filePath, `[${new Date().toISOString()}] ${msg}\n`);
   } catch {
     // Nunca deixar uma falha de log (disco cheio, permissão) derrubar a
-    // atualização em si — o log é diagnóstico, não é crítico.
+    // atualização nem a impressão em si — o log é diagnóstico, não é
+    // crítico.
   }
 }
+const logUpdate = (msg) => appendLog('update.log', msg);
+// Mesmo raciocínio do update.log, agora pra impressão: quando a loja diz
+// "não imprimiu", o único jeito de saber de longe se o app tentou (e o
+// que a impressora respondeu) é ter isso em disco.
+const logPrint = (msg) => appendLog('print.log', msg);
 
 // Achado real (QA, 2026-09-08): lojas com "envia pedido direto pra
 // impressão" (order_flow: 'direct_print', ver AGENTS.md/CaixaPrintStation)
@@ -206,6 +213,30 @@ app.whenReady().then(() => {
   ipcMain.handle('ntb-install-update', () => {
     logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora"');
     autoUpdater.quitAndInstall();
+  });
+
+  // Impressão de rede/USB embutida (ver print-engine.js). Chamado pelo
+  // renderer logo depois do login, com a loja e as credenciais do próprio
+  // bundle — nada fica hardcoded aqui, nem em arquivo de config.
+  ipcMain.handle('ntb-start-print-engine', (_event, params) => {
+    const { storeId, supabaseUrl, supabaseAnonKey } = params || {};
+    if (!storeId || !supabaseUrl || !supabaseAnonKey) {
+      logPrint('WARN pedido de início sem storeId/credenciais — ignorado');
+      return { ok: false, reason: 'parâmetros ausentes' };
+    }
+    return printEngine.start(storeId, {
+      baseUrl: supabaseUrl,
+      anonKey: supabaseAnonKey,
+      log: logPrint,
+    });
+  });
+  // Logout / troca de loja: para de imprimir da loja anterior na hora.
+  // Sem isso, um PDV que troca de loja no mesmo app continuaria puxando
+  // a fila da loja antiga.
+  ipcMain.handle('ntb-stop-print-engine', () => {
+    logPrint('INFO motor de impressão parado (logout/troca de loja)');
+    printEngine.stop();
+    return { ok: true };
   });
 
   // Achado real: um PDV de restaurante fica ligado o turno inteiro (às

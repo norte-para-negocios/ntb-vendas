@@ -199,7 +199,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         title: `Teste (${testPaperWidth}mm) — ${printer.name}`,
         content,
       });
-      if (result.success) toast.success('Job de teste enfileirado. Se o agente local estiver rodando, imprime em segundos.');
+      if (result.success) toast.success('Teste enfileirado. Com o app aberto no computador da impressora, sai em segundos.');
       else toast.error(result.message || 'Erro ao enfileirar o teste.');
       load();
     } finally {
@@ -244,11 +244,17 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         return (
           <Card className={`p-3 flex items-center gap-2 text-xs font-medium ${online ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--err)]/10 text-[var(--err)]'}`}>
             {online ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            {/* Desde 2026-09-12 quem manda esse heartbeat normalmente é o
+                próprio app desktop (desktop/electron/print-engine.js), não
+                mais um programa à parte — por isso a mensagem fala em
+                "impressão ligada", e o texto de quando NÃO está ligada diz
+                o que resolve na prática (abrir o app no PC da loja) em vez
+                de mandar procurar um agente pra instalar. */}
             {online
-              ? `Agente local conectado — ${agentStatus!.printersLoaded} impressora(s) carregada(s).`
+              ? `Impressão ligada — ${agentStatus!.printersLoaded} impressora(s) carregada(s).`
               : agentStatus
-                ? `Agente local offline há ${Math.round((ageMs as number) / 60000)} min — impressoras USB/rede não vão imprimir sozinhas até ele voltar.`
-                : 'Agente local nunca conectou nesta loja — impressoras USB/rede não imprimem sem ele rodando no computador da loja.'}
+                ? `Impressão offline há ${Math.round((ageMs as number) / 60000)} min — impressoras USB/rede não vão imprimir sozinhas até o app da loja voltar a abrir.`
+                : 'Impressão nunca ligou nesta loja — abra o app Norte Vendas no computador onde a impressora está conectada e faça login nesta loja.'}
           </Card>
         );
       })()}
@@ -342,7 +348,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
 
           {(connectionType === 'network' || connectionType === 'usb') && (
             <p className="text-xs text-[var(--warn)] bg-[var(--warn)]/10 rounded-[var(--r-md)] p-3">
-              Precisa do agente local rodando no computador da loja pra imprimir de verdade (ver instruções entregues com o sistema). Sem o agente, os jobs ficam "na fila" e nunca saem do papel.
+              Impressora de rede/USB só sai no papel com o app Norte Vendas aberto e logado nesta loja, no computador onde a impressora está ligada — ele imprime sozinho, sem instalar mais nada. Com o app fechado (ou usando só o navegador), os jobs ficam "na fila".
             </p>
           )}
 

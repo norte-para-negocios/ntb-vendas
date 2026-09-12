@@ -46,6 +46,17 @@ export const resolveStoreModules = (store?: { config?: any } | null): StoreModul
 export const resolveOrderFlow = (store?: { config?: any } | null): OrderFlow =>
   store?.config?.order_flow === 'direct_print' ? 'direct_print' : 'kds';
 
+// Pedido do André (2026-09-11): no balcão o cliente paga ANTES do pedido ir
+// pra cozinha — "balcão paga primeiro". Configurável de propósito (o próprio
+// pedido pediu a chave), porque nem toda loja cobra na entrada.
+//
+// Comparação estrita com `true`, nunca o fallback permissivo: ausência PRECISA
+// significar "cobra no fim" (o que toda loja real faz hoje), senão ligar esta
+// feature mudaria o fluxo de caixa de todo mundo sem ninguém ter pedido —
+// mesmo critério já usado em `permissions.caixa` (ver types/index.ts).
+export const isCounterPaymentFirst = (store?: { config?: any } | null): boolean =>
+  store?.config?.counter_payment_first === true;
+
 // Removido (redesign 2026-08-23, "caixa como estação de impressão"): existia
 // um `print_target: 'device' | 'station'` aqui, decidindo entre imprimir no
 // aparelho de quem lança o pedido (garçom) ou numa "Estação de Impressão"

@@ -102,6 +102,32 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       triggerEmissaoFiscal({ orderId: payload.orderId, destinatario: payload.destinatario });
       break;
     }
+    // "Balcão paga primeiro" (pedido do André, 2026-09-11): igual ao case
+    // acima na parte do pagamento, mas de propósito SEM
+    // close_counter_order_secure e SEM triggerOrdemProducao — neste fluxo o
+    // pedido continua aberto depois de pago, e só fecha (com a baixa de
+    // estoque) quando alguém entrega. Fechar aqui entregaria sozinho um
+    // pedido que talvez nem tenha ido pra cozinha ainda.
+    case 'registrar_pagamento_balcao': {
+      const payload = action.payload as any;
+      let paymentData = payload.paymentData;
+      if (paymentData?.cash_shift_id) {
+        const realShiftId = idMap.get(paymentData.cash_shift_id) ?? paymentData.cash_shift_id;
+        paymentData = { ...paymentData, cash_shift_id: realShiftId };
+      }
+      const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
+      const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: payload.orderId, paymentMethod, paymentDetails: paymentData }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Falha ao registrar o pagamento do pedido de balcão.');
+      }
+      triggerEmissaoFiscal({ orderId: payload.orderId, destinatario: payload.destinatario });
+      break;
+    }
     case 'open_cash_shift': {
       // C1/C2 da revisão final (ver task-12-report.md): `open_cash_shift_secure`
       // recusa com `{success:false, message}` de NEGÓCIO (ex. "você já tem um

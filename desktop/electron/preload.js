@@ -26,4 +26,13 @@ contextBridge.exposeInMainWorld('electronApp', {
     ipcRenderer.on('ntb-update-downloaded', (_event, info) => callback(info));
   },
   installUpdate: () => ipcRenderer.invoke('ntb-install-update'),
+  // Impressão de rede (IP) / USB direto pelo app, sem programa separado
+  // (ver print-engine.js). Quem sabe QUAL loja está logada é o renderer
+  // (a sessão vive no localStorage dele), e a URL/chave do Supabase são
+  // as do próprio bundle — por isso quem inicia é o renderer, passando
+  // as três coisas; o processo principal nunca precisa adivinhar loja
+  // nem guardar config em arquivo, que era exatamente o config.json/slug
+  // digitado à mão do agente separado.
+  startPrintEngine: (params) => ipcRenderer.invoke('ntb-start-print-engine', params),
+  stopPrintEngine: () => ipcRenderer.invoke('ntb-stop-print-engine'),
 });

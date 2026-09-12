@@ -7,6 +7,11 @@ export type QueuedActionType =
   | 'update_order_item_status'
   | 'close_table_session'
   | 'close_counter_order'
+  // "Balcão paga primeiro" (pedido do André, 2026-09-11): registra o
+  // pagamento sem fechar o pedido — ver registrarPagamentoBalcao em
+  // lib/api.ts. Precisa de tipo próprio porque, ao contrário de
+  // 'close_counter_order', NÃO pode avançar o status pra 'delivered'.
+  | 'registrar_pagamento_balcao'
   | 'open_cash_shift'
   | 'close_cash_shift'
   | 'register_cash_movement'

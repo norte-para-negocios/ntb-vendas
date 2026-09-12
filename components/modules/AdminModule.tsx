@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { ALL_ON, resolveStoreModules, resolveOrderFlow, isDefaultStoreModules, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
+import { ALL_ON, resolveStoreModules, resolveOrderFlow, isCounterPaymentFirst, isDefaultStoreModules, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -204,6 +204,9 @@ export const AdminModule: React.FC = () => {
   const [modMenu, setModMenu] = useState(ALL_ON.menu);
   const [modAdmin, setModAdmin] = useState(ALL_ON.admin);
   const [orderFlow, setOrderFlow] = useState<OrderFlow>('kds');
+  // "Balcão paga primeiro" (pedido do André, 2026-09-11) — default false:
+  // ordem de sempre, nada muda pra quem não ligar.
+  const [counterPaymentFirst, setCounterPaymentFirst] = useState(false);
   // Subprojeto 4 (2026-08-25) — checklist de onboarding pra loja em
   // direct_print: `null` = ainda não checou (loja nova, editingId ainda
   // não existe) ou não se aplica; número = quantos membros da equipe já
@@ -405,6 +408,7 @@ export const AdminModule: React.FC = () => {
       setModMenu(ALL_ON.menu);
       setModAdmin(ALL_ON.admin);
       setOrderFlow('kds');
+      setCounterPaymentFirst(false);
       setLogoFile(null);
       setLogoPreview(null);
       setCoverFile(null);
@@ -504,6 +508,7 @@ export const AdminModule: React.FC = () => {
       setModMenu(storeModules.menu);
       setModAdmin(storeModules.admin);
       setOrderFlow(resolveOrderFlow(store));
+      setCounterPaymentFirst(isCounterPaymentFirst(store));
 
       setLogoPreview(store.logo_url);
       setLogoFile(null);
@@ -808,6 +813,7 @@ export const AdminModule: React.FC = () => {
               // config idêntico ao de antes desta feature.
               modules,
               orderFlow,
+              counterPaymentFirst,
           };
 
           let result;
@@ -1398,6 +1404,29 @@ export const AdminModule: React.FC = () => {
                               Envia direto para impressão
                           </button>
                       </div>
+                      {/* Pedido do André (2026-09-11): "seria legal ter uma configuração
+                          pro ADM definir essa ordem, se pgto antes ou depois do envio a
+                          cozinha". Fica aqui (Master Admin) e não no painel do lojista
+                          pelo mesmo motivo já documentado no AGENTS.md: configurar a
+                          operação da loja é decisão comercial, exclusiva do Master Admin. */}
+                      <label className="flex items-start gap-2 pt-2 cursor-pointer">
+                          <input
+                              type="checkbox"
+                              checked={counterPaymentFirst}
+                              onChange={(e) => setCounterPaymentFirst(e.target.checked)}
+                              className="mt-0.5 rounded text-[var(--brand)] focus:ring-[var(--brand)]"
+                          />
+                          <span>
+                              <span className="block text-xs font-semibold text-[var(--text)]">Balcão cobra antes de mandar pra cozinha</span>
+                              <span className="block text-[11px] text-[var(--text-muted)]">
+                                  {counterPaymentFirst
+                                      ? (orderFlow === 'direct_print'
+                                          ? 'Balcão: 1) recebe o pagamento (o pedido imprime), 2) entrega.'
+                                          : 'Balcão: 1) recebe o pagamento, 2) envia pra cozinha, 3) fica pronto, 4) entrega.')
+                                      : 'Balcão cobra no fim, na entrega (ordem de sempre).'}
+                              </span>
+                          </span>
+                      </label>
                       <p className="text-[11px] text-[var(--text-muted)]">
                           {orderFlow === 'direct_print'
                               ? 'Ao enviar, o pedido vai direto pra impressão — sem tela de acompanhamento de cozinha/bar.'
