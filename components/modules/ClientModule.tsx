@@ -3762,14 +3762,21 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Pedido no balcão</span>
                             </div>
                         ) : (
+                            /* Reunião 2026-09-10 (min 25:12): "pra eu entrar, eu preciso
+                               escolher o produto... se eu quiser entrar no cardápio, entrar
+                               na loja, poderia ter um acesso aqui também". Confirmado ao
+                               vivo que esta entrada SEMPRE funcionou sem escolher produto —
+                               o problema era só visual: com ícone de "info" e texto cinza,
+                               lia como aviso informativo, não como o botão de entrar. Mesmo
+                               destino, mesma ação, agora com cara de chamada pra ação. */
                             <button
                                 type="button"
                                 onClick={() => setIsLoginModalOpen(true)}
-                                className="flex w-full items-center gap-2 text-left u-motion"
+                                className="flex w-full items-center justify-center gap-2 rounded-[var(--r-md)] py-2.5 text-center u-motion u-press-sm"
+                                style={{ backgroundColor: IFOOD_RED }}
                             >
-                                <Info size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
-                                <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Toque para abrir sua mesa ou comanda</span>
-                                <ChevronRight size={16} className="flex-shrink-0 text-[var(--text-muted)]" />
+                                <LogIn size={16} className="flex-shrink-0 text-white" />
+                                <span className="text-[13px] font-bold text-white">Abrir minha mesa ou comanda</span>
                             </button>
                         )}
                     </div>
