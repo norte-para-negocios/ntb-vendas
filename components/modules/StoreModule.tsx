@@ -4993,6 +4993,12 @@ const CaixaView: React.FC<{
     const queueItems = useMemo(() => {
         const tableItems = tables
             .filter(t => t.status === TableStatus.WAITING_BILL)
+            // Pedido direto do dono (reunião 2026-09-10, min 18:00): na aba
+            // Caixa, mesa fora da jurisdição não deve nem APARECER — "ele não
+            // precisa nem ver isso aqui". Diferente de TablesView, onde
+            // continua visível de propósito (lá o garçom precisa enxergar o
+            // salão inteiro pra saber o que está ocupado).
+            .filter(t => isTableInJurisdiction(loggedUser, t.id))
             .map(t => {
                 const tableOrders = activeOrders.filter(o => o.table_id === t.id);
                 const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
@@ -5014,10 +5020,6 @@ const CaixaView: React.FC<{
                     sublabel: t.current_host_name || undefined,
                     total,
                     waitingSince,
-                    // Ver comentário equivalente em occupiedTables — mesma
-                    // jurisdição, não se aplica a balcão (counterItems abaixo),
-                    // que nunca teve conceito de jurisdição por mesa.
-                    inJurisdiction: isTableInJurisdiction(loggedUser, t.id),
                 };
             });
 
@@ -5034,7 +5036,6 @@ const CaixaView: React.FC<{
                     label: `Balcão · ${o.customer_name || 'Cliente'}`,
                     sublabel: `#${o.id.slice(0, 4)}`,
                     total,
-                    inJurisdiction: true,
                     waitingSince: new Date(o.created_at).getTime(),
                 };
             });
@@ -5051,6 +5052,10 @@ const CaixaView: React.FC<{
     const occupiedTables = useMemo(() => {
         return tables
             .filter(t => t.status === TableStatus.OCCUPIED || t.status === TableStatus.WAITING_BILL)
+            // Mesmo motivo do filtro em queueItems (reunião 2026-09-10,
+            // min 18:10): "essas mesas que estão ocupadas, isso aqui ele não
+            // precisa ver".
+            .filter(t => isTableInJurisdiction(loggedUser, t.id))
             .map(t => {
                 const tableOrders = activeOrders.filter(o => o.table_id === t.id);
                 const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
@@ -5096,15 +5101,6 @@ const CaixaView: React.FC<{
                     minutesOccupied,
                     isWaitingBill: t.status === TableStatus.WAITING_BILL,
                     pendingPrintItems,
-                    // Jurisdição de mesas por garçom (migration 049) já existia e
-                    // era aplicada em TablesView, mas CaixaView (módulo mais
-                    // novo, "frente de caixa") nunca checava isso — achado real
-                    // (2026-09-10): garçom com jurisdição restrita via Caixa
-                    // continuava vendo/finalizando pagamento de QUALQUER mesa da
-                    // loja. Mesmo critério exato de TablesView: mesa fora da
-                    // jurisdição continua visível (nunca "desaparece", pra não
-                    // parecer que a mesa sumiu), só fica não-clicável aqui.
-                    inJurisdiction: isTableInJurisdiction(loggedUser, t.id),
                 };
             })
             .sort((a, b) => b.minutesOccupied - a.minutesOccupied);
@@ -5350,9 +5346,8 @@ const CaixaView: React.FC<{
                                 return (
                                     <button
                                         key={t.id}
-                                        onClick={() => { if (t.inJurisdiction) onOpenTablePayment(t.id); }}
-                                        title={t.inJurisdiction ? undefined : 'Fora da sua jurisdição'}
-                                        className={`text-center p-2 rounded-xl border u-motion u-press-sm ${colorClass} ${t.inJurisdiction ? '' : 'opacity-40 pointer-events-none'}`}
+                                        onClick={() => onOpenTablePayment(t.id)}
+                                        className={`text-center p-2 rounded-xl border u-motion u-press-sm ${colorClass}`}
                                     >
                                         <span className="block font-bold text-[var(--text)]">Mesa {t.number}</span>
                                         <span className="block text-xs font-bold text-[var(--text)]">R$ {formatBRL(t.total)}</span>
@@ -5360,11 +5355,10 @@ const CaixaView: React.FC<{
                                 );
                             }
                             return (
-                                <div key={t.id} className={`rounded-xl border overflow-hidden ${colorClass} ${t.inJurisdiction ? '' : 'opacity-40'}`}>
+                                <div key={t.id} className={`rounded-xl border overflow-hidden ${colorClass}`}>
                                     <button
-                                        onClick={() => { if (t.inJurisdiction) onOpenTablePayment(t.id); }}
-                                        title={t.inJurisdiction ? undefined : 'Fora da sua jurisdição'}
-                                        className={`w-full text-left p-3 u-motion u-press-sm ${t.inJurisdiction ? '' : 'pointer-events-none'}`}
+                                        onClick={() => onOpenTablePayment(t.id)}
+                                        className="w-full text-left p-3 u-motion u-press-sm"
                                     >
                                         <div className="flex items-center justify-between">
                                             <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
@@ -5428,9 +5422,8 @@ const CaixaView: React.FC<{
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
                                 transition={SPRING_TAP}
-                                onClick={() => { if (!item.inJurisdiction) return; item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id); }}
-                                title={item.inJurisdiction ? undefined : 'Fora da sua jurisdição'}
-                                className={`w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] hover:border-[var(--brand)] u-motion u-press-sm text-left ${item.inJurisdiction ? '' : 'opacity-40 pointer-events-none'}`}
+                                onClick={() => item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id)}
+                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] hover:border-[var(--brand)] u-motion u-press-sm text-left"
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="h-9 w-9 rounded-full bg-[var(--warn)]/10 flex items-center justify-center text-[var(--warn)] shrink-0">
