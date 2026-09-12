@@ -3388,10 +3388,15 @@ NOTIFY pgrst, 'reload schema';`;
                             <Wallet size={14}/> Pagamento
                         </button>
                         <button onClick={() => setPaymentTab('split')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
-                            <Users size={14}/> Divisão
+                            <Users size={14}/> Dividir igual
                         </button>
+                        {/* Reunião 2026-09-10 (min 32:14): pediram "emitir nota fiscal
+                            diferente para cada pessoa" — recurso que já existia AQUI
+                            (migration 055), mas com o rótulo "Por Cliente" ninguém
+                            associou, e quem estava dividindo a conta ficou na aba ao
+                            lado achando que não existia ("não entendi nada disso aqui"). */}
                         <button onClick={() => setPaymentTab('users')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
-                            <List size={14}/> Por Cliente
+                            <List size={14}/> Por pessoa
                         </button>
                         <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Calculator size={14}/> Calculadora
@@ -3452,6 +3457,23 @@ NOTIFY pgrst, 'reload schema';`;
 
                         {paymentTab === 'split' && currentTableSummary && (
                             <div className="space-y-6 pt-2 animate-fade-in">
+                                {/* Reunião 2026-09-10 (min 32:14): o recurso de nota fiscal
+                                    por pessoa (migration 055) já existia na aba ao lado, mas
+                                    quem estava dividindo a conta nunca chegou lá — "não
+                                    entendi nada disso aqui". Esta ponte é o fix real: o
+                                    problema era descoberta, não falta de funcionalidade. */}
+                                {Object.keys(usersBreakdown).length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentTab('users')}
+                                        className="w-full flex items-center justify-between gap-2 p-3 rounded-[var(--r-md)] bg-[var(--brand)]/10 border border-[var(--brand)]/30 text-left u-motion u-press-sm"
+                                    >
+                                        <span className="text-[12px] font-bold text-[var(--brand)]">
+                                            Esta mesa tem {Object.keys(usersBreakdown).length} pessoas identificadas — dá pra cobrar e emitir nota fiscal separada pra cada uma.
+                                        </span>
+                                        <ArrowRight size={16} className="text-[var(--brand)] shrink-0" />
+                                    </button>
+                                )}
                                 <div className="bg-[var(--brand)]/5 p-4 rounded-xl border border-[var(--brand)]/10 text-center">
                                     <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
                                     <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {formatBRL(currentTableSummary.total)}</p>
@@ -3490,6 +3512,12 @@ NOTIFY pgrst, 'reload schema';`;
 
                         {paymentTab === 'users' && (
                             <div className="space-y-4 pt-2 animate-fade-in">
+                                {/* Reunião 2026-09-10 (min 33:06): ao chegar nesta aba, a
+                                    reação foi "não entendi nada disso aqui" — os botões
+                                    existiam mas nada dizia o que faziam. */}
+                                <p className="text-[11px] text-[var(--text-muted)] px-1">
+                                    Cobre cada pessoa separadamente. "Emitir nota" gera uma nota fiscal só com os itens daquela pessoa — o que já foi faturado aqui não entra de novo na nota do fechamento da mesa.
+                                </p>
                                 {/* Task 3: uma nota só (não por cartão de pessoa) quando a
                                     taxa não está sendo cobrada nesta comanda. */}
                                 {currentTableSummary && !currentTableSummary.isServiceFeeEnabled && currentTableSummary.allItems.length > 0 && (
