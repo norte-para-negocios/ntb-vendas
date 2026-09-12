@@ -33,6 +33,15 @@ interface FiscalNotaRow {
   status: string;
   xml_path: string | null;
   created_at: string;
+  // Reunião 2026-09-10 (min 37:28): "ele tá me dando um CSV que tá dando
+  // número de documento, a chave autorizada... poderia dar uma melhorada
+  // no relatório, pra gente passar pra contabilidade". Campos abaixo já
+  // existiam em `fiscal_notas`, só nunca tinham sido incluídos no export.
+  modelo: number | string | null;
+  ambiente: string | null;
+  protocolo: string | null;
+  motivo_erro: string | null;
+  pessoa_identificador: string | null;
 }
 
 // Defesa contra CSV injection (Excel/Sheets interpretam célula começando
@@ -79,7 +88,7 @@ export async function GET(req: NextRequest) {
   // data é opcional (exportar o histórico inteiro da loja se nenhuma vier).
   let query = admin
     .from('fiscal_notas')
-    .select('chave_acesso, numero, serie, valor_total, status, xml_path, created_at')
+    .select('chave_acesso, numero, serie, valor_total, status, xml_path, created_at, modelo, ambiente, protocolo, motivo_erro, pessoa_identificador')
     .eq('store_id', storeId)
     .order('created_at', { ascending: true });
 
@@ -100,17 +109,36 @@ export async function GET(req: NextRequest) {
   const zip = new JSZip();
   const xmlFolder = zip.folder('xmls');
 
-  const csvHeader = 'data,numero,serie,chave_acesso,valor_total,status';
+  // Reunião 2026-09-10 (min 37:28): o contador recebia só número + chave,
+  // sem contexto nenhum da venda ("poderia dar uma melhorada no relatório").
+  // `modelo` vira nome legível (55 = NF-e, 65 = NFC-e) em vez do código
+  // cru — quem lê é o escritório de contabilidade, não o sistema.
+  // `pessoa_identificador` explica por que uma mesma venda pode ter mais de
+  // uma nota (nota individual por pessoa, migration 055), e `motivo_erro`
+  // evita que uma nota com status 'erro' apareça sem explicação.
+  const csvHeader = 'data,modelo,ambiente,numero,serie,chave_acesso,protocolo,valor_total,status,pessoa,motivo_erro';
   const csvLines = [csvHeader];
+
+  const nomeModelo = (modelo: FiscalNotaRow['modelo']): string => {
+    const n = String(modelo ?? '');
+    if (n === '55') return 'NF-e';
+    if (n === '65') return 'NFC-e';
+    return n;
+  };
 
   for (const nota of rows) {
     csvLines.push([
       csvEscape(formatDateForCsv(nota.created_at)),
+      csvEscape(nomeModelo(nota.modelo)),
+      csvEscape(nota.ambiente ?? ''),
       csvEscape(String(nota.numero ?? '')),
       csvEscape(String(nota.serie ?? '')),
       csvEscape(nota.chave_acesso ?? ''),
+      csvEscape(nota.protocolo ?? ''),
       csvEscape(nota.valor_total != null ? nota.valor_total.toFixed(2) : ''),
       csvEscape(nota.status),
+      csvEscape(nota.pessoa_identificador ?? ''),
+      csvEscape(nota.motivo_erro ?? ''),
     ].join(','));
 
     // Nem toda nota tem XML (ex.: 'pendente'/'erro' antes de autorizar) —
