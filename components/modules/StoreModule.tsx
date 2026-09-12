@@ -1333,17 +1333,23 @@ const PaymentCaptureFields: React.FC<{
     showEmitirNotaToggle?: boolean;
     emitirNota?: boolean;
     onEmitirNotaChange?: (value: boolean) => void;
+    // Reunião 2026-09-10 (min 34:44): "cadê a seleção dos 10%? Eu tenho que
+    // vir aqui na comanda e tirar" — o controle da taxa só existia uma tela
+    // antes. Opcional de propósito: só mesa tem taxa de serviço por comanda,
+    // o balcão (CounterView, mesmo componente) não passa nada aqui.
+    serviceFeeToggle?: React.ReactNode;
     children?: React.ReactNode;
 }> = ({
     total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
     currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
     changeDue, onFinish, finishDisabled, finishLabel,
-    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, children,
+    showEmitirNotaToggle, emitirNota, onEmitirNotaChange, serviceFeeToggle, children,
 }) => (
     <div className="space-y-6 pt-2">
         <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
             <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total a Receber</p>
             <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {formatBRL(total)}</p>
+            {serviceFeeToggle}
         </div>
 
         {/* Payment Methods */}
@@ -1790,6 +1796,38 @@ const TablesView: React.FC<{
     const [currentPaymentMethod, setCurrentPaymentMethod] = useState('CREDIT');
     const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
 
+    // Achado real (2026-09-11, ao atender o pedido da reunião de 10/09 de
+    // "tirar os 10% mais fácil"): existiam DUAS fontes de verdade pra taxa
+    // removida que nunca conversavam. O botão de lixeira da comanda só
+    // mexia no Set local `removedServiceFees` — `toggleTableServiceFee`
+    // (lib/api.ts) estava importado mas NUNCA era chamado, e a coluna
+    // persistida `tables.service_fee_removed` (que CaixaView lê pra montar
+    // o total da mesma mesa) nunca era escrita por ninguém. Consequências
+    // reais: (1) remover a taxa não sobrevivia a um F5; (2) a aba Caixa
+    // mostrava um total DIFERENTE da comanda pra mesma mesa; (3) outro
+    // aparelho/operador nunca via a remoção.
+    //
+    // Agora é uma fonte só: o Set local é só cache otimista do que está no
+    // banco — hidratado de `service_fee_removed` a cada loadData (ver
+    // abaixo) e escrito via RPC aqui, com revert se o servidor recusar.
+    const handleToggleServiceFee = async (tableId: string, remove: boolean) => {
+        setRemovedServiceFees(prev => {
+            const next = new Set(prev);
+            if (remove) next.add(tableId); else next.delete(tableId);
+            return next;
+        });
+        try {
+            await toggleTableServiceFee(tableId, remove);
+        } catch (e: any) {
+            setRemovedServiceFees(prev => {
+                const next = new Set(prev);
+                if (remove) next.delete(tableId); else next.add(tableId);
+                return next;
+            });
+            toast.error('Não foi possível alterar a taxa de serviço: ' + (e?.message || 'tente de novo.'));
+        }
+    };
+
     // StorePaymentModal Tabs & Calculators
     const [paymentTab, setPaymentTab] = useState<'payment' | 'split' | 'users' | 'calculator'>('payment');
     const [paymentPeople, setPaymentPeople] = useState(1);
@@ -2115,6 +2153,14 @@ NOTIFY pgrst, 'reload schema';`;
         // Rodar essa RPC toda vez era trabalho pago pra uma tela que, na
         // prática, fica fechada quase sempre.
 
+        // Hidrata o cache local de taxa removida a partir do banco (ver
+        // handleToggleServiceFee): antes disso `removedServiceFees` nascia
+        // vazio a cada montagem, então a remoção não sobrevivia a um F5 nem
+        // aparecia pra outro operador. Como fonte de verdade é a coluna,
+        // uma remoção feita em outro aparelho também chega aqui pelo mesmo
+        // ping de Realtime que já dispara loadData.
+        setRemovedServiceFees(new Set(t.filter(table => table.service_fee_removed).map(table => table.id)));
+
         // Update selected table if open to reflect latest service_fee_removed state
         setSelectedTable(prev => {
             if (!prev) return null;
@@ -2325,6 +2371,18 @@ NOTIFY pgrst, 'reload schema';`;
         setEmitirNotaFiscal(true);
         setShowPaymentModal(true);
     };
+
+    // Reunião 2026-09-10: com o botão de tirar/cobrar a taxa dentro do
+    // próprio modal de pagamento, o valor já preenchido precisa acompanhar —
+    // senão o caixa tira a taxa e continua cobrando o valor velho sem
+    // perceber. Só mexe enquanto NENHUM pagamento foi lançado ainda: depois
+    // do primeiro lançamento, quem manda no campo é o restante a pagar
+    // (handleAddPayment), e sobrescrever aqui apagaria o troco em andamento.
+    useEffect(() => {
+        if (!showPaymentModal || !currentTableSummary) return;
+        if (paymentMethods.length > 0) return;
+        setCurrentPaymentAmount(currentTableSummary.total.toFixed(2));
+    }, [currentTableSummary?.total, showPaymentModal, paymentMethods.length]);
 
     // Task 3 (frente-de-caixa): consome autoOpenTableId — assim que a lista
     // de mesas estiver carregada (tables.length > 0), acha a mesa pedida
@@ -3274,13 +3332,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                         <div className="flex items-center gap-3">
                                                             <span className="font-medium text-[var(--text)]">R$ {formatBRL(summary.serviceFee)}</span>
                                                             <button
-                                                                onClick={() => {
-                                                                    setRemovedServiceFees(prev => {
-                                                                        const next = new Set(prev);
-                                                                        next.add(selectedTable!.id);
-                                                                        return next;
-                                                                    });
-                                                                }}
+                                                                onClick={() => handleToggleServiceFee(selectedTable!.id, true)}
                                                                 className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
                                                                 title="Remover Taxa"
                                                             >
@@ -3424,6 +3476,17 @@ NOTIFY pgrst, 'reload schema';`;
                                 showEmitirNotaToggle={emissaoFiscalConfigurada}
                                 emitirNota={emitirNotaFiscal}
                                 onEmitirNotaChange={setEmitirNotaFiscal}
+                                serviceFeeToggle={selectedTable && !!store.config?.charge_service_fee ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleToggleServiceFee(selectedTable.id, !currentTableSummary?.isServiceFeeRemovedForTable)}
+                                        className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-[var(--r-md)] border border-dashed border-[var(--border)] text-[12px] font-bold text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--brand)] u-motion u-press-sm"
+                                    >
+                                        {currentTableSummary?.isServiceFeeRemovedForTable
+                                            ? <><Plus size={14} /> Cobrar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>
+                                            : <><Trash2 size={14} /> Tirar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>}
+                                    </button>
+                                ) : undefined}
                             >
                                 {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
                                     automaticamente; NFC-e não tem <dest>, não mostra nada aqui. */}
