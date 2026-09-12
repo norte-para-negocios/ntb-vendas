@@ -33,6 +33,10 @@ const logUpdate = (msg) => appendLog('update.log', msg);
 // "não imprimiu", o único jeito de saber de longe se o app tentou (e o
 // que a impressora respondeu) é ter isso em disco.
 const logPrint = (msg) => appendLog('print.log', msg);
+// Diagnóstico de tela branca/travamento (ver os handlers em createWindow).
+// Arquivo próprio pra poder pedir "manda o renderer.log" sem vir junto o
+// barulho de atualização e impressão.
+const logRenderer = (msg) => appendLog('renderer.log', msg);
 
 // Achado real (QA, 2026-09-08): lojas com "envia pedido direto pra
 // impressão" (order_flow: 'direct_print', ver AGENTS.md/CaixaPrintStation)
@@ -116,6 +120,64 @@ function createWindow() {
   });
 
   win.loadURL('app://bundle/index.html');
+
+  // TELA BRANCA (o sintoma relatado na loja em 2026-09-11: "voltando para
+  // telas tá dando tela branca"). Quando o processo do RENDERER morre —
+  // falta de memória num PC fraco de loja, crash do Chromium, o SO matando
+  // o processo — a janela não fecha nem mostra erro: ela simplesmente fica
+  // branca pra sempre. Reproduzido nesta máquina em 2026-09-12: janela
+  // branca, processo principal vivo, ZERO renderer, e nem o depurador
+  // conseguia parar a página (não tinha JS rodando pra parar).
+  //
+  // Sem este handler não existe nem recuperação nem rastro: pra quem está
+  // no caixa, "o sistema sumiu" no meio do expediente e a única saída é
+  // fechar e abrir o app. Aqui o app se recarrega sozinho e deixa registrado
+  // o motivo no log (`details.reason` diz se foi memória, crash ou morte
+  // forçada).
+  //
+  // Trava contra loop: se recarregar não resolve (ex. bundle corrompido),
+  // 3 tentativas em 1 minuto param as recargas — melhor a tela branca
+  // parada do que um pisca-pisca infinito impossível de usar.
+  let recargas = [];
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logRenderer(`ERROR renderer morreu (motivo=${details.reason}, exitCode=${details.exitCode})`);
+    const agora = Date.now();
+    recargas = recargas.filter((t) => agora - t < 60_000);
+    if (recargas.length >= 3) {
+      logRenderer('ERROR 3 recargas em 1 min sem resolver — parando de recarregar sozinho');
+      return;
+    }
+    recargas.push(agora);
+    logRenderer('INFO recarregando a janela sozinho');
+    win.webContents.reload();
+  });
+
+  // Não é a mesma coisa que morrer: aqui o renderer está VIVO mas travado
+  // (laço infinito, uma renderização pesada demais). A tela congela em vez
+  // de ficar branca. Só registra — matar/recarregar por conta própria
+  // poderia interromper uma venda que ia destravar sozinha.
+  win.webContents.on('unresponsive', () => {
+    logRenderer('WARN janela sem resposta (renderer travado)');
+  });
+  win.webContents.on('responsive', () => {
+    logRenderer('INFO janela voltou a responder');
+  });
+
+  // Terceira origem possível de tela branca, diferente das duas acima: o
+  // arquivo não carregou (protocolo app:// falhando, bundle incompleto).
+  // Também vira janela branca silenciosa. Uma tentativa extra depois de 2s
+  // resolve o caso transitório sem arriscar loop.
+  let jaTentouRecarregar = false;
+  win.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    logRenderer(`ERROR falhou ao carregar ${validatedURL} (${errorCode} ${errorDescription})`);
+    if (jaTentouRecarregar) return;
+    jaTentouRecarregar = true;
+    setTimeout(() => {
+      logRenderer('INFO tentando carregar de novo');
+      win.loadURL('app://bundle/index.html');
+    }, 2000);
+  });
 
   // Nunca abrir popup dentro do app (sem barra de navegação pra fechar) —
   // qualquer window.open/target=_blank vira uma aba no navegador padrão do
