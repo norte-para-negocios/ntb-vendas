@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, resolverUrlApi, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -3993,6 +3993,20 @@ const CounterView: React.FC<{
     const canFinalize = canFinalizeBill(loggedUser, store);
     const isFinishingRef = useRef(false);
 
+    // "Paga primeiro" (pedido do André, reunião 2026-09-10): inverte a ordem
+    // do balcão — recebe o pagamento ANTES de mandar pra cozinha, em vez de
+    // cobrar na entrega. É a lógica de lanchonete/fast food: ninguém prepara
+    // antes de o dinheiro entrar. Ligado por loja pelo Master Admin
+    // (`counter_payment_first`), desligado por padrão — todas as lojas de
+    // hoje continuam exatamente como sempre foram.
+    //
+    // Exige o módulo Caixa: sem ele não existe captura de pagamento nenhuma
+    // nesta tela (o fluxo antigo só faz um confirm() de "entrega e
+    // pagamento"), então um botão "Receber pagamento" ali não receberia
+    // nada de verdade — seria só um clique a mais fingindo que recebeu.
+    // Sertão, a loja que pediu, tem Caixa ligado.
+    const paymentFirst = isCounterPaymentFirst(store) && caixaModuleOn;
+
     // Captura de pagamento (Task 5) — só usada quando caixaModuleOn. Mesmo
     // shape de estado que TablesView usa pro pagamento de mesa
     // (paymentMethods/currentPaymentAmount/currentPaymentMethod/
@@ -4080,6 +4094,50 @@ const CounterView: React.FC<{
         );
     };
 
+    // Abre a captura de pagamento (o mesmo modal nos dois fluxos — no
+    // "paga primeiro" ele é o PRIMEIRO passo, no fluxo de sempre é o
+    // último). Extraído porque agora tem dois pontos de entrada.
+    const abrirCapturaDePagamento = (order: Order) => {
+        setPaymentOrder(order);
+        setPaymentMethods([]);
+        setCurrentPaymentAmount(getOrderTotal(order).toFixed(2));
+        setCurrentPaymentMethod('CREDIT');
+        setCurrentPaymentBrand('');
+        setDestCpfCnpj('');
+        setDestNome('');
+        // Task 4: sempre nasce ligado, mesmo motivo de TablesView.
+        setEmitirNotaFiscal(true);
+    };
+
+    // Passo 1 do "paga primeiro". Sem a checagem de "pedido pronto" de
+    // propósito: aqui o pedido ACABOU de ser lançado e nem foi pra cozinha
+    // ainda — esperar ficar pronto pra poder cobrar seria exatamente o
+    // contrário do que a loja pediu.
+    const handleReceberPrimeiro = (orderId: string) => {
+        if (!canFinalize) return;
+        const order = orders.find((o) => o.id === orderId);
+        if (!order) return;
+        abrirCapturaDePagamento(order);
+    };
+
+    // Passo final do "paga primeiro": o pedido já está pago, só falta sair
+    // pro cliente. Não reabre pagamento nenhum — só fecha e dispara a baixa
+    // de estoque (Ordem de Produção), que é o que de fato acontece quando a
+    // comida sai.
+    const handleEntregarPago = async (orderId: string) => {
+        const order = orders.find((o) => o.id === orderId);
+        if (order && !isOrderReadyForClose(order)) {
+            toast.error('Pedido ainda não está pronto — aguarde a cozinha/bar finalizar antes de entregar.');
+            return;
+        }
+        try {
+            await entregarPedidoBalcao(orderId);
+            load();
+        } catch (e: any) {
+            toast.error('Erro ao entregar o pedido: ' + e.message);
+        }
+    };
+
     const handleClose = async (orderId: string) => {
         const orderForGate = orders.find((o) => o.id === orderId) || null;
         if (orderForGate && !isOrderReadyForClose(orderForGate)) {
@@ -4097,15 +4155,7 @@ const CounterView: React.FC<{
             if (!canFinalize) return;
             const order = orderForGate;
             if (!order) return;
-            setPaymentOrder(order);
-            setPaymentMethods([]);
-            setCurrentPaymentAmount(getOrderTotal(order).toFixed(2));
-            setCurrentPaymentMethod('CREDIT');
-            setCurrentPaymentBrand('');
-            setDestCpfCnpj('');
-            setDestNome('');
-            // Task 4: sempre nasce ligado, mesmo motivo de TablesView.
-            setEmitirNotaFiscal(true);
+            abrirCapturaDePagamento(order);
             return;
         }
         // Loja SEM o módulo Caixa — comportamento de hoje, intocado. Em
@@ -4136,7 +4186,11 @@ const CounterView: React.FC<{
     useEffect(() => {
         if (!autoOpenOrderId || orders.length === 0) return;
         const order = orders.find(o => o.id === autoOpenOrderId);
-        if (order) handleClose(order.id);
+        // No "paga primeiro", a fila do Caixa manda pedido AINDA NÃO PRONTO
+        // (é esse o ponto do fluxo) — handleClose barraria no gate de
+        // "aguarde a cozinha". Vai direto pra captura de pagamento.
+        if (order && paymentFirst && !order.payment_details) handleReceberPrimeiro(order.id);
+        else if (order) handleClose(order.id);
         onAutoOpenOrderHandled?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoOpenOrderId, orders]);
@@ -4242,7 +4296,15 @@ const CounterView: React.FC<{
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
             const destinatario = buildDestinatario(destCpfCnpj, destNome);
-            await closeOrderNow(paymentOrder.id, paymentData, destinatario);
+            // "Paga primeiro": registra o pagamento e emite a nota (o
+            // dinheiro entrou), mas NÃO fecha o pedido — ele ainda vai pra
+            // cozinha e só é entregue depois. No fluxo de sempre, receber e
+            // fechar continuam sendo a mesma ação, como sempre foram.
+            if (paymentFirst) {
+                await registrarPagamentoBalcao(paymentOrder.id, paymentData, destinatario);
+            } else {
+                await closeOrderNow(paymentOrder.id, paymentData, destinatario);
+            }
 
             // Comprovante com forma de pagamento — só quando quem fechou é
             // de fato um CAIXA (mesma distinção de
@@ -4288,6 +4350,10 @@ const CounterView: React.FC<{
             }
 
             setPaymentOrder(null);
+            // No "paga primeiro" o pedido CONTINUA na tela (só mudou pra
+            // pago) — sem recarregar, o card seguiria oferecendo "Receber
+            // pagamento" de novo até o próximo evento de realtime.
+            if (paymentFirst) load();
         } catch {
             // já reportado via toast em closeOrderNow
         } finally {
@@ -4400,9 +4466,20 @@ const CounterView: React.FC<{
                                  </h3>
                                  <span className="text-xs text-[var(--text-muted)]">#{order.id.slice(0,4)} • {new Date(order.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                              </div>
-                             <span className={`px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border ${getStatusColor(status)}`}>
-                                 {getStatusLabel(status)}
-                             </span>
+                             <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                 {/* No "paga primeiro" o pedido fica na tela DEPOIS de
+                                     pago, esperando sair — sem esse selo, dois pedidos
+                                     em estados bem diferentes (pago e não pago) ficariam
+                                     visualmente idênticos. */}
+                                 {paymentFirst && !!order.payment_details && (
+                                     <span className="px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]">
+                                         Pago
+                                     </span>
+                                 )}
+                                 <span className={`px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border ${getStatusColor(status)}`}>
+                                     {getStatusLabel(status)}
+                                 </span>
+                             </div>
                          </div>
 
                          <div className="flex-1 overflow-y-auto max-h-[150px] space-y-1 mb-3 bg-[var(--surface-2)] p-2 rounded-[var(--r-md)] border border-[var(--border)]">
@@ -4436,7 +4513,39 @@ const CounterView: React.FC<{
                                  direct_print. O clique não fazia nada além de atrapalhar —
                                  pedido devia ir direto de "novo" pra "pode receber e
                                  finalizar". */}
-                             {status === OrderStatus.PENDING && orderFlow !== 'direct_print' ? (
+                             {/* "Paga primeiro" (André, 2026-09-10): a ordem vira
+                                 1) receber pagamento, 2) enviar pra cozinha,
+                                 3) pronto, 4) entregar. Numa loja sem KDS (Sertão,
+                                 `direct_print`) o passo 2/3 não existe — a impressão
+                                 sai sozinha —, então são só 2 passos: pagar → entregar.
+                                 `payment_details` é o que diz se já pagou: quem grava é
+                                 /api/orders/pagamento-balcao, e fetch_counter_orders_secure
+                                 devolve a coluna (select o.*). */}
+                             {paymentFirst ? (
+                                 caixaModuleOn && !canFinalize ? (
+                                     <span className="h-10 px-3 flex items-center text-xs font-bold text-[var(--text-muted)] bg-[var(--surface-2)] rounded-[var(--r-md)] border border-[var(--border)] shrink-0">
+                                         Aguardando o caixa
+                                     </span>
+                                 ) : !order.payment_details ? (
+                                     <Button onClick={() => handleReceberPrimeiro(order.id)} variant="primary" className="h-10 text-sm shrink-0">
+                                         <Wallet size={16} className="mr-1"/> Receber pagamento
+                                     </Button>
+                                 ) : status === OrderStatus.PENDING && orderFlow !== 'direct_print' ? (
+                                     <Button onClick={() => handleSendToKitchen(order.id)} variant="primary" className="h-10 text-sm shrink-0">
+                                         <ChefHat size={16} className="mr-1"/> Enviar p/ Cozinha
+                                     </Button>
+                                 ) : (
+                                     <Button
+                                         onClick={() => handleEntregarPago(order.id)}
+                                         variant="primary"
+                                         className="h-10 text-sm shrink-0"
+                                         disabled={!allItemsReady}
+                                         title={!allItemsReady ? 'Aguarde o pedido ficar pronto' : undefined}
+                                     >
+                                         <CheckCircle size={16} className="mr-1"/> Entregar
+                                     </Button>
+                                 )
+                             ) : status === OrderStatus.PENDING && orderFlow !== 'direct_print' ? (
                                  <Button onClick={() => handleSendToKitchen(order.id)} variant="primary" className="h-10 text-sm shrink-0">
                                      <ChefHat size={16} className="mr-1"/> Enviar p/ Cozinha
                                  </Button>
@@ -4544,7 +4653,9 @@ const CounterView: React.FC<{
                     changeDue={changeDue}
                     onFinish={handleFinishCounterPayment}
                     finishDisabled={remainingToPay > 0.01}
-                    finishLabel="FINALIZAR VENDA"
+                    // No "paga primeiro" este botão NÃO finaliza a venda —
+                    // o pedido ainda vai ser preparado e entregue depois.
+                    finishLabel={paymentFirst ? "RECEBER PAGAMENTO" : "FINALIZAR VENDA"}
                     showEmitirNotaToggle={emissaoFiscalConfigurada}
                     emitirNota={emitirNotaFiscal}
                     onEmitirNotaChange={setEmitirNotaFiscal}

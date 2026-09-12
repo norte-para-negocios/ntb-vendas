@@ -1427,6 +1427,15 @@ export const AdminModule: React.FC = () => {
                               </span>
                           </span>
                       </label>
+                      {/* Sem o módulo Caixa não existe captura de pagamento no
+                          balcão (o fluxo antigo é um confirm() de "entrega e
+                          pagamento") — marcar aqui não mudaria nada na tela.
+                          Avisa em vez de deixar o dono achar que ligou. */}
+                      {counterPaymentFirst && !modCaixa && (
+                          <p className="text-[11px] font-semibold text-[var(--warn)] bg-[var(--warn)]/10 rounded-[var(--r-md)] p-2">
+                              Precisa do módulo Caixa ligado pra funcionar — é ele que tem a tela de receber pagamento. Sem ele, o balcão continua cobrando na entrega.
+                          </p>
+                      )}
                       <p className="text-[11px] text-[var(--text-muted)]">
                           {orderFlow === 'direct_print'
                               ? 'Ao enviar, o pedido vai direto pra impressão — sem tela de acompanhamento de cozinha/bar.'
