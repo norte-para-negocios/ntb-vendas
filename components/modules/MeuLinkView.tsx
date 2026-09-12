@@ -13,7 +13,23 @@ export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
 
     useEffect(() => {
         if (!store.slug) return;
-        setUrl(`${window.location.origin}/c/${store.slug}`);
+        // Achado real na reunião de 2026-09-10 (min 21:50) — passou batido na
+        // primeira leitura da transcrição porque o texto tinha saído
+        // corrompido; a frase é "tem que estar errado no aplicativo... é
+        // porque tá BUNDLED". Dentro do app desktop a página é servida pelo
+        // protocolo próprio `app://bundle/` (ver desktop/electron/main.js),
+        // então `window.location.origin` ali é literalmente "app://bundle" —
+        // o lojista via/copiava `app://bundle/c/<slug>` e o QR code gerava um
+        // link quebrado, que só funcionava quando alguém abria no navegador
+        // ("joga lá no navegador" na mesma passagem).
+        //
+        // `apiBaseUrl` é a URL pública real, já exposta pelo preload e usada
+        // pelo mesmo motivo em lib/api.ts:resolverUrlApi. No navegador comum
+        // `window.electronApp` não existe e nada muda.
+        const base = (typeof window !== 'undefined' && window.electronApp?.isElectron)
+            ? window.electronApp.apiBaseUrl
+            : window.location.origin;
+        setUrl(`${base}/c/${store.slug}`);
     }, [store.slug]);
 
     useEffect(() => {
