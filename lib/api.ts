@@ -1831,6 +1831,55 @@ export const fetchFiscalNotas = async (storeId: string): Promise<FiscalNota[]> =
   return (data ?? []) as FiscalNota[];
 };
 
+// Reunião 2026-09-10 (min 14:34): ao fechar a venda o app só imprimia o
+// comprovante SEM valor fiscal — a nota autorizada ficava só em
+// Administração → Notas Fiscais, e quem quisesse o cupom tinha que pedir
+// pra alguém com acesso administrativo. "Mas ele deveria imprimir a nota
+// fiscal automaticamente quando encerra, certo?" — "Deveria."
+//
+// A emissão é assíncrona (triggerEmissaoFiscal é fire-and-forget e passa
+// pela SEFAZ), então no instante do fechamento a nota ainda não existe.
+// Esta função espera em poll curto, com teto: estourou o tempo ou a nota
+// voltou rejeitada, devolve null e quem chamou segue com o comprovante
+// normal — NUNCA trava o caixa.
+//
+// Lê via `fetch_fiscal_notas_secure` (não `.from('fiscal_notas')`): essa
+// tabela não tem policy de SELECT pro anon — confirmado ao vivo, o select
+// direto devolve [] sem erro, o mesmo jeito silencioso já documentado no
+// AGENTS.md pra `tables`.
+export const aguardarNotaFiscalDaVenda = async (
+  storeId: string,
+  alvo: { orderId?: string; tableId?: string },
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<{ pdfUrl: string } | null> => {
+  const timeoutMs = opts.timeoutMs ?? 12000;
+  const intervalMs = opts.intervalMs ?? 1500;
+  const limite = Date.now() + timeoutMs;
+
+  while (Date.now() < limite) {
+    try {
+      const notas = await fetchFiscalNotas(storeId);
+      const daVenda = notas
+        // Só a nota do fechamento inteiro: nota individual por pessoa
+        // (migration 055) já é tratada no próprio fluxo "Por pessoa".
+        .filter((n: any) => !n.pessoa_identificador)
+        .filter((n: any) => (alvo.orderId ? n.order_id === alvo.orderId : n.table_id === alvo.tableId))
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] as any;
+
+      if (daVenda?.status === 'autorizada' && daVenda.pdf_path) {
+        const pdfUrl = await fetchFiscalNotaPdfUrl(daVenda.id, daVenda.pdf_path);
+        if (pdfUrl) return { pdfUrl };
+      }
+      // Rejeitada: não adianta continuar esperando.
+      if (daVenda?.status === 'erro') return null;
+    } catch {
+      // Rede instável não pode travar o fechamento — tenta de novo até o teto.
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return null;
+};
+
 // Signed URL sob demanda pro XML/PDF de uma nota — o bucket
 // fiscal-documentos é privado (sem policy de select/insert pra anon, ver
 // migration 034), então isso precisa passar pela rota de servidor (service

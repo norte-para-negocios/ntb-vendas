@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, resolverUrlApi } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, resolverUrlApi } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -424,6 +424,47 @@ function useWatchedTables(storeId: string | undefined): Set<string> {
 
     return watched;
 }
+
+// Reunião 2026-09-10 (min 14:34): ao fechar a venda só saía o comprovante
+// SEM valor fiscal; a nota autorizada ficava só em Administração → Notas
+// Fiscais. "Deveria imprimir a nota fiscal automaticamente quando encerra."
+//
+// Detalhe que faz a diferença entre funcionar e falhar em silêncio: a nota
+// leva segundos pra voltar da SEFAZ, e `window.open()` chamado DEPOIS de um
+// await perde o vínculo com o gesto do usuário — todo navegador bloqueia
+// como popup, e a feature ficaria silenciosamente inútil (a mesma classe de
+// falha silenciosa já documentada neste projeto: Peça Também, tables sem
+// policy de SELECT, dual-write na Vercel). Por isso a janela é aberta JÁ no
+// clique (enquanto o gesto ainda vale), mostrando "Gerando cupom fiscal...",
+// e só troca de endereço quando o PDF existe. Se ainda assim vier bloqueada,
+// cai num aviso claro em vez de não fazer nada.
+const abrirCupomFiscalQuandoSair = (
+    storeId: string,
+    alvo: { orderId?: string; tableId?: string },
+) => {
+    const janela = window.open('', '_blank');
+    if (janela) {
+        janela.document.write('<!doctype html><meta charset="utf-8"><title>Cupom fiscal</title><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#444">Gerando cupom fiscal...</body>');
+        janela.document.close();
+    }
+    aguardarNotaFiscalDaVenda(storeId, alvo)
+        .then((nota) => {
+            if (nota && janela && !janela.closed) {
+                janela.location.href = nota.pdfUrl;
+            } else if (nota) {
+                // Popup bloqueado (ou fechado na mão): não abre nada à força,
+                // avisa onde está.
+                toast.error('O cupom fiscal saiu, mas o navegador bloqueou a janela. Abra por Administração → Notas Fiscais.');
+            } else {
+                if (janela && !janela.closed) janela.close();
+                toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
+            }
+        })
+        .catch((e) => {
+            if (janela && !janela.closed) janela.close();
+            console.error('abrirCupomFiscalQuandoSair falhou:', e);
+        });
+};
 
 const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store } }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -2587,6 +2628,21 @@ NOTIFY pgrst, 'reload schema';`;
                         .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
                 }
 
+                // Reunião 2026-09-10 (min 15:06): com nota emitida, o que o
+                // cliente leva também tem que ser o CUPOM FISCAL — até aqui
+                // só saía o comprovante acima (sem valor fiscal) e a nota
+                // ficava só em Administração → Notas Fiscais. Venda sem nota
+                // continua exatamente como era: nada disso roda.
+                //
+                // Nunca bloqueia o fechamento: a mesa JÁ foi fechada neste
+                // ponto, e `aguardarNotaFiscalDaVenda` tem teto de 12s. Se a
+                // SEFAZ demorar mais que isso ou rejeitar, o caixa recebe um
+                // aviso claro em vez de ficar esperando uma janela que não vem.
+                if (emissaoFiscalConfigurada && emitirNotaFiscal) {
+                    const tableIdParaNota = selectedTable.id;
+                    abrirCupomFiscalQuandoSair(store.id, { tableId: tableIdParaNota });
+                }
+
                 setRemovedServiceFees(prev => {
                     const next = new Set(prev);
                     next.delete(selectedTable.id);
@@ -4222,6 +4278,13 @@ const CounterView: React.FC<{
                 // TablesView.handleFinishPayment.
                 enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
                     .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
+            }
+
+            // Cupom fiscal ao fechar — mesmo bloco e mesmo racional de
+            // TablesView.handleFinishPayment (reunião 2026-09-10, min 15:06).
+            if (emissaoFiscalConfigurada && emitirNotaFiscal) {
+                const orderIdParaNota = paymentOrder.id;
+                abrirCupomFiscalQuandoSair(store.id, { orderId: orderIdParaNota });
             }
 
             setPaymentOrder(null);
