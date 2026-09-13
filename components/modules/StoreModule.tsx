@@ -5293,10 +5293,9 @@ const CaixaView: React.FC<{
     };
 
     // Fila consolidada — mesas `waiting_bill` + pedidos de balcão aguardando
-    // pagamento (mesmo critério que CounterView já usa pra oferecer o botão
-    // "Entregar"/"Aguardando o caixa": qualquer pedido de balcão que não
-    // esteja mais PENDING já pode ser recebido). Ordenada por tempo de
-    // espera, mais antigo primeiro.
+    // pagamento. O critério do balcão depende do fluxo da loja (ver o filtro
+    // comentado abaixo): o que entra aqui é sempre "o que o caixa ainda tem
+    // pra receber". Ordenada por tempo de espera, mais antigo primeiro.
     const queueItems = useMemo(() => {
         const tableItems = tables
             .filter(t => t.status === TableStatus.WAITING_BILL)
@@ -5331,7 +5330,22 @@ const CaixaView: React.FC<{
             });
 
         const counterItems = counterOrders
-            .filter(o => o.status !== OrderStatus.PENDING)
+            // Achado ao vivo (2026-09-13, testando o balcão "paga primeiro"):
+            // a regra era só "não pendente", e pedido de balcão NASCE
+            // pendente. Numa loja `direct_print` (Sertão) nada nunca é
+            // enviado pra cozinha, então ele nunca deixa de ser pendente —
+            // ou seja, venda de balcão jamais aparecia na fila do Caixa
+            // daquela loja. É a mesma razão pela qual isOrderReadyForClose
+            // devolve true direto pra direct_print: ali o pedido já nasce
+            // pronto pra receber.
+            // No "paga primeiro" a fila muda de sentido: mostra o que falta
+            // RECEBER. Pedido já pago some daqui (está esperando a entrega,
+            // não o caixa) — senão o caixa cobraria duas vezes.
+            .filter(o => {
+                if (isCounterPaymentFirst(store)) return !o.payment_details;
+                if (orderFlow === 'direct_print') return true;
+                return o.status !== OrderStatus.PENDING;
+            })
             .map(o => {
                 const total = (o.order_items || [])
                     .filter(i => i.status !== 'canceled')
