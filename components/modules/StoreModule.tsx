@@ -471,6 +471,34 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const notifications = useStoreNotifications(user.store.id);
 
+  // "Procurar atualização" (2026-09-13, cobrança direta do dono: "nem
+  // aparece o botão de atualizar"). A checagem automática só roda ao abrir
+  // o app e de 4 em 4h — num PDV que fica ligado o dia inteiro, isso quer
+  // dizer horas sem saber que já existe versão nova, e nenhum jeito de
+  // forçar nem de saber se o app chegou a checar. Este botão responde as
+  // duas coisas na hora, com a resposta na tela e não num log.
+  const [procurandoUpdate, setProcurandoUpdate] = useState(false);
+  const handleProcurarAtualizacao = async () => {
+    if (!window.electronApp?.checkForUpdate) return;
+    setProcurandoUpdate(true);
+    try {
+      const r = await window.electronApp.checkForUpdate();
+      if (!r.empacotado) {
+        toast.error('Esta janela está rodando em modo de desenvolvimento — atualização automática só existe no app instalado.');
+      } else if (!r.ok) {
+        toast.error('Não foi possível checar agora: ' + (r.erro || 'sem conexão com o servidor de atualização.'));
+      } else if (r.versaoDisponivel && r.versaoDisponivel !== window.electronApp.version) {
+        toast.success(`Versão ${r.versaoDisponivel} encontrada — baixando. O aviso pra atualizar aparece assim que terminar.`);
+      } else {
+        toast.success(`Você já está na versão mais recente (v${window.electronApp.version}).`);
+      }
+    } catch {
+      toast.error('Não foi possível checar a atualização agora.');
+    } finally {
+      setProcurandoUpdate(false);
+    }
+  };
+
   // "Bater ponto" (migration 056) — turno pessoal do operador, sem relação
   // com cash_shifts (turno do caixa físico, um só por loja). Carregado uma
   // vez ao entrar no painel; sobrevive à troca de aba porque StoreLayout não
@@ -639,7 +667,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                         <LogOut size={18}/> Sair
                     </button>
                     {typeof window !== 'undefined' && window.electronApp?.version && (
-                        <p className="text-center text-[11px] text-white/25 pt-2 select-text">App v{window.electronApp.version}</p>
+                        <button
+                            onClick={handleProcurarAtualizacao}
+                            disabled={procurandoUpdate}
+                            className="w-full text-center text-[11px] text-white/25 hover:text-white/60 pt-2 u-motion disabled:opacity-50"
+                            title="Procurar atualização"
+                        >
+                            App v{window.electronApp.version} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
+                        </button>
                     )}
                 </div>
             </div>
@@ -745,7 +780,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           </button>
         </div>
         {!isCollapsed && typeof window !== 'undefined' && window.electronApp?.version && (
-          <p className="text-center text-[11px] text-white/25 pb-2 select-text">App v{window.electronApp.version}</p>
+          <button
+            onClick={handleProcurarAtualizacao}
+            disabled={procurandoUpdate}
+            className="w-full text-center text-[11px] text-white/25 hover:text-white/60 pb-2 u-motion disabled:opacity-50"
+            title="Procurar atualização"
+          >
+            App v{window.electronApp.version} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
+          </button>
         )}
       </aside>
 

@@ -24,6 +24,16 @@ export function DesktopUpdateBanner() {
   useEffect(() => {
     if (typeof window === 'undefined' || !window.electronApp?.isElectron) return;
     window.electronApp.onUpdateDownloaded?.((info) => setUpdateVersion(info.version));
+    // Pergunta o estado assim que a tela monta, em vez de só esperar o
+    // evento acima. Achado real (2026-09-13): o evento é disparado UMA vez,
+    // no instante em que o download termina — se a tela ainda não existia
+    // (app recém-aberto) ou se a janela recarregou depois (inclusive pela
+    // recuperação automática de tela branca), o aviso se perdia e a
+    // atualização já baixada ficava invisível. Era exatamente o "nem
+    // aparece o botão de atualizar".
+    window.electronApp.getUpdateStatus?.()
+      .then((s) => { if (s?.versaoBaixada) setUpdateVersion(s.versaoBaixada); })
+      .catch(() => {});
   }, []);
 
   if (!updateVersion || dismissed) return null;

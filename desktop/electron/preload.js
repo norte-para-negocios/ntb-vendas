@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('electronApp', {
     ipcRenderer.on('ntb-update-downloaded', (_event, info) => callback(info));
   },
   installUpdate: () => ipcRenderer.invoke('ntb-install-update'),
+  // Pergunta o estado da atualização em vez de depender de ter ouvido o
+  // evento acima na hora exata (ver main.js) — e permite procurar
+  // atualização na hora, sem esperar a checagem automática de 4 em 4h.
+  getUpdateStatus: () => ipcRenderer.invoke('ntb-update-status'),
+  checkForUpdate: () => ipcRenderer.invoke('ntb-check-update'),
   // Impressão de rede (IP) / USB direto pelo app, sem programa separado
   // (ver print-engine.js). Quem sabe QUAL loja está logada é o renderer
   // (a sessão vive no localStorage dele), e a URL/chave do Supabase são

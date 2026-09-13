@@ -38,6 +38,18 @@ const logPrint = (msg) => appendLog('print.log', msg);
 // barulho de atualização e impressão.
 const logRenderer = (msg) => appendLog('renderer.log', msg);
 
+// Estado da atualização, no processo principal — a tela PERGUNTA por ele em
+// vez de depender só de ter ouvido o evento na hora certa (ver o handler de
+// 'update-downloaded'). `situacao` é o que a tela mostra quando alguém
+// clica em "Procurar atualização": até existir esse botão, uma loja não
+// tinha NENHUM jeito de saber se o app checou, se está atualizado ou se a
+// checagem falhou — só dava pra esperar e torcer.
+const estadoUpdate = {
+  versaoBaixada: null,
+  situacao: 'nao-checado',
+  detalhe: null,
+};
+
 // Achado real (QA, 2026-09-08): lojas com "envia pedido direto pra
 // impressão" (order_flow: 'direct_print', ver AGENTS.md/CaixaPrintStation)
 // disparam window.print() a cada pedido novo — no navegador normal isso já
@@ -240,14 +252,36 @@ app.whenReady().then(() => {
     // de propósito: rede de loja cai e volta o tempo todo, e um popup a
     // cada tentativa falha seria só ruído — fica só no log.
     logUpdate(`ERROR (evento) ${err?.stack || err}`);
+    estadoUpdate.situacao = 'erro';
+    estadoUpdate.detalhe = String(err?.message || err);
+  });
+  autoUpdater.on('checking-for-update', () => {
+    estadoUpdate.situacao = 'checando';
+    estadoUpdate.detalhe = null;
+  });
+  autoUpdater.on('update-available', (info) => {
+    estadoUpdate.situacao = 'baixando';
+    estadoUpdate.detalhe = info?.version || null;
   });
   autoUpdater.on('update-not-available', () => {
+    estadoUpdate.situacao = 'atualizado';
+    estadoUpdate.detalhe = app.getVersion();
     new Notification({
       title: 'Norte Vendas',
       body: `Atualizado (v${app.getVersion()})`,
     }).show();
   });
   autoUpdater.on('update-downloaded', (info) => {
+    // Guardado pra quem perguntar DEPOIS (ver ipcMain 'ntb-update-status').
+    // Achado real (2026-09-13, cobrando "nem aparece o botão de atualizar"):
+    // o banner só sabia da atualização pelo evento ao vivo abaixo — se o
+    // download terminasse antes da tela montar, ou se a janela recarregasse
+    // depois (inclusive pela recuperação automática de tela branca que
+    // acabou de entrar), o aviso se perdia PRA SEMPRE e a atualização
+    // baixada ficava invisível até alguém fechar o app por outro motivo.
+    estadoUpdate.versaoBaixada = info.version;
+    estadoUpdate.situacao = 'baixada';
+    estadoUpdate.detalhe = info.version;
     new Notification({
       title: 'Norte Vendas',
       body: `Nova versão baixada (v${info.version}) — será aplicada ao reabrir o app.`,
@@ -272,6 +306,41 @@ app.whenReady().then(() => {
   // Chamado pelo botão "Atualizar agora" do banner (ver preload.js/
   // DesktopUpdateBanner.tsx). `quitAndInstall()` fecha o app e roda o
   // instalador NSIS silenciosamente — reabre sozinho na versão nova.
+  // A tela pergunta "e aí, como está a atualização?" — resolve tanto o
+  // banner perdido (quando o download termina antes da tela existir) quanto
+  // o botão manual de procurar atualização na barra lateral.
+  ipcMain.handle('ntb-update-status', () => ({
+    versaoAtual: app.getVersion(),
+    versaoBaixada: estadoUpdate.versaoBaixada,
+    situacao: estadoUpdate.situacao,
+    detalhe: estadoUpdate.detalhe,
+    // Em desenvolvimento (`electron .`, sem instalador) o electron-updater
+    // NUNCA checa nada — ele registra "Skip checkForUpdates because
+    // application is not packed" e sai. Sem dizer isso pra tela, procurar
+    // atualização no Mac de desenvolvimento parece um app quebrado, quando
+    // na verdade é o comportamento esperado fora do app instalado.
+    empacotado: app.isPackaged,
+  }));
+
+  // Botão "Procurar atualização" (barra lateral do painel do lojista).
+  // Existe porque a checagem automática só roda ao abrir o app e a cada 4h:
+  // uma loja que deixa o PDV ligado o dia inteiro podia ficar horas sem
+  // saber que já existe versão nova, sem nenhum jeito de forçar.
+  ipcMain.handle('ntb-check-update', async () => {
+    if (!app.isPackaged) {
+      logUpdate('INFO checagem manual ignorada — app rodando sem instalador (modo desenvolvimento)');
+      return { ok: false, empacotado: false };
+    }
+    logUpdate('INFO checagem manual solicitada pelo botão "Procurar atualização"');
+    try {
+      const r = await autoUpdater.checkForUpdates();
+      return { ok: true, empacotado: true, versaoDisponivel: r?.updateInfo?.version || null };
+    } catch (e) {
+      logUpdate(`ERROR checagem manual falhou: ${e?.message || e}`);
+      return { ok: false, empacotado: true, erro: String(e?.message || e) };
+    }
+  });
+
   ipcMain.handle('ntb-install-update', () => {
     logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora"');
     autoUpdater.quitAndInstall();

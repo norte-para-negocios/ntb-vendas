@@ -22,6 +22,8 @@ declare global {
       version?: string;
       onUpdateDownloaded?: (callback: (info: { version: string }) => void) => void;
       installUpdate?: () => Promise<void>;
+      getUpdateStatus?: () => Promise<{ versaoAtual: string; versaoBaixada: string | null; situacao: string; detalhe: string | null; empacotado: boolean }>;
+      checkForUpdate?: () => Promise<{ ok: boolean; empacotado: boolean; versaoDisponivel?: string | null; erro?: string }>;
       startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
     };
