@@ -32,14 +32,31 @@ const { execFile } = require('child_process');
 const POLL_INTERVAL_MS = 3000;
 const HEARTBEAT_INTERVAL_MS = 30000;
 const DISCOVER_INTERVAL_MS = 60000;
+// Comanda antiga não pode sair. Achado na revisão independente (2026-09-13):
+// a fila é do SERVIDOR e continua enchendo com o app fechado (o PDV no
+// navegador e os outros terminais seguem enfileirando). Sem corte de idade,
+// abrir o app de manhã cuspiria na cozinha o lote inteiro da noite anterior.
+// Job mais velho que isso é descartado como obsoleto, nunca impresso.
+const IDADE_MAXIMA_JOB_MS = 30 * 60 * 1000;
 
 let timers = [];
 let currentStoreId = null;
 let log = () => {};
 let cfg = { baseUrl: '', anonKey: '' };
+// Incrementado a cada start()/stop(). Um ciclo de impressão que já estava em
+// VOO quando a loja mudou (logout, "Trocar de Loja") compara sua geração com
+// esta antes de cada passo e desiste — senão ele continuaria imprimindo e
+// escrevendo em nome da loja anterior, e ainda poderia rodar em paralelo com
+// o ciclo da loja nova (duas impressões simultâneas derrubam as duas no
+// Windows, ver o comentário do tick).
+let geracao = 0;
+// Impressoras que ESTA máquina publicou na última varredura. Usado pra nunca
+// apagar de `discovered_printers` uma impressora de OUTRO computador da mesma
+// loja (o caixa e a cozinha têm impressoras USB diferentes).
+let publicadasPorEstaMaquina = new Set();
 
-function rest(pathAndQuery, init = {}) {
-  return fetch(`${cfg.baseUrl}/rest/v1/${pathAndQuery}`, {
+async function rest(pathAndQuery, init = {}) {
+  const res = await fetch(`${cfg.baseUrl}/rest/v1/${pathAndQuery}`, {
     ...init,
     headers: {
       apikey: cfg.anonKey,
@@ -48,23 +65,56 @@ function rest(pathAndQuery, init = {}) {
       ...(init.headers || {}),
     },
   });
+  // `fetch` NÃO lança em 4xx/5xx. Sem esta checagem, uma chave expirada ou um
+  // erro de schema do PostgREST devolvia um objeto de erro que simplesmente
+  // não era array — a fila ficava vazia PRA SEMPRE, em silêncio, enquanto o
+  // heartbeat seguia dizendo "conectado" (achado da revisão independente).
+  if (!res.ok) {
+    const corpo = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} em ${pathAndQuery.split('?')[0]} ${corpo.slice(0, 200)}`);
+  }
+  return res;
 }
 
 function printViaNetwork(ip, port, content) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
+    // Depois que os bytes saíram, o papel JÁ ESTÁ SAINDO — um erro de socket
+    // a partir daí (impressora térmica barata que corta a conexão em vez de
+    // fechar direito é comum) não pode virar "falhou" e disparar
+    // reimpressão, senão a comanda sai duas vezes. Achado da revisão
+    // independente. Antes disso, qualquer erro rejeitava.
+    let jaEscreveu = false;
     const timeout = setTimeout(() => {
       socket.destroy();
-      reject(new Error(`Timeout conectando em ${ip}:${port}`));
+      const e = new Error(`Timeout conectando em ${ip}:${port}`);
+      e.podeRepetir = true; // nada foi impresso ainda — repetir é seguro
+      reject(e);
     }, 5000);
     socket.connect(port, ip, () => {
       socket.write(Buffer.from(content, 'utf8'), (err) => {
-        if (err) { clearTimeout(timeout); socket.destroy(); reject(err); return; }
+        if (err) {
+          clearTimeout(timeout);
+          socket.destroy();
+          err.podeRepetir = true;
+          reject(err);
+          return;
+        }
+        jaEscreveu = true;
         socket.end();
       });
     });
     socket.on('close', () => { clearTimeout(timeout); resolve(); });
-    socket.on('error', (err) => { clearTimeout(timeout); reject(err); });
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      if (jaEscreveu) {
+        log(`WARN erro no socket DEPOIS de mandar o texto (${err.message}) — tratando como impresso, pra não sair duas vezes`);
+        resolve();
+        return;
+      }
+      err.podeRepetir = true;
+      reject(err);
+    });
   });
 }
 
@@ -135,10 +185,16 @@ async function syncDiscoveredPrinters(storeId) {
       body: JSON.stringify(names.map((name) => ({ store_id: storeId, name, updated_at: new Date().toISOString() }))),
     });
   }
-  const existing = await rest(`discovered_printers?select=id,name&store_id=eq.${storeId}`).then((r) => r.json()).catch(() => []);
-  const stale = (Array.isArray(existing) ? existing : []).filter((row) => !names.includes(row.name));
-  for (const row of stale) {
-    await rest(`discovered_printers?id=eq.${row.id}`, { method: 'DELETE' }).catch(() => {});
+  // Só apaga o que ESTA máquina publicou antes e não tem mais (impressora
+  // desinstalada/desconectada aqui). Achado da revisão independente: a versão
+  // anterior apagava tudo que não estivesse na lista local — com dois PCs na
+  // mesma loja, cada um apagava as impressoras do outro a cada 60s, e um PC
+  // sem impressora nenhuma limpava a lista inteira da loja.
+  const sumiram = [...publicadasPorEstaMaquina].filter((n) => !names.includes(n));
+  publicadasPorEstaMaquina = new Set(names);
+  for (const nome of sumiram) {
+    await rest(`discovered_printers?store_id=eq.${storeId}&name=eq.${encodeURIComponent(nome)}`, { method: 'DELETE' })
+      .catch((e) => log(`WARN nao consegui remover a impressora sumida "${nome}": ${e.message}`));
   }
 }
 
@@ -175,10 +231,16 @@ async function printOnce(printer, content) {
 // 1 retentativa: InvalidPrinterException do Windows aparece sobretudo logo
 // depois da impressora ser reconfigurada e some sozinha em segundos. Sem
 // isso virava 'error' permanente na fila (achado do agente original).
+//
+// Mas só repete quando é SEGURO repetir: erro de rede antes de mandar os
+// bytes (`podeRepetir`) ou falha do comando de impressão USB, que não chega
+// a enfileirar no spooler. Erro depois do texto já ter saído nunca chega
+// aqui — printViaNetwork resolve nesse caso (ver lá).
 async function printJob(printer, content) {
   try {
     await printOnce(printer, content);
   } catch (firstErr) {
+    if (printer.connection_type === 'network' && !firstErr.podeRepetir) throw firstErr;
     log(`WARN 1a tentativa falhou (${firstErr.message}), tentando de novo em 2s`);
     await new Promise((r) => setTimeout(r, 2000));
     await printOnce(printer, content);
@@ -189,6 +251,49 @@ function stop() {
   timers.forEach(clearInterval);
   timers = [];
   currentStoreId = null;
+  // Invalida qualquer ciclo de impressão em voo (ver `geracao`).
+  geracao += 1;
+  publicadasPorEstaMaquina = new Set();
+}
+
+// Reserva o job para ESTA máquina. O `status=eq.pending` na condição é o que
+// faz a reserva ser atômica: o PostgREST vira um `UPDATE ... WHERE id = ? AND
+// status = 'pending'`, e o Postgres serializa as duas tentativas — a segunda
+// não encontra mais nada pra atualizar e volta lista vazia.
+//
+// Sem isso (achado da revisão independente), dois computadores com o app
+// aberto na mesma loja liam a mesma fila na mesma janela de 3s, os DOIS
+// marcavam "printing" e os DOIS imprimiam: comanda dobrada na cozinha. Não
+// era hipótese remota — com a impressão embutida no app, ter o app aberto em
+// mais de um terminal é o caso normal, não a exceção.
+// Marca o resultado da impressão, com 2 tentativas. Achado da revisão
+// independente: se o PATCH de "done" falhasse DEPOIS do papel ter saído, o
+// job voltava a ser lido como pendente 3s depois e era reimpresso pra
+// sempre — impressora térmica cuspindo a mesma comanda em loop. Se nem
+// assim gravar, deixa em `printing` (que ninguém reprocessa) em vez de
+// arriscar o loop.
+async function marcarJob(jobId, campos) {
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      await rest(`print_jobs?id=eq.${jobId}`, { method: 'PATCH', body: JSON.stringify(campos) });
+      return true;
+    } catch (e) {
+      log(`WARN nao consegui gravar o resultado do job (tentativa ${tentativa}): ${e.message}`);
+      if (tentativa === 1) await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  log(`ERROR job ${jobId} impresso mas sem conseguir gravar o status — fica como "imprimindo" pra NAO reimprimir sozinho`);
+  return false;
+}
+
+async function reservarJob(jobId) {
+  const res = await rest(`print_jobs?id=eq.${jobId}&status=eq.pending`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ status: 'printing' }),
+  });
+  const linhas = await res.json().catch(() => []);
+  return Array.isArray(linhas) && linhas.length === 1;
 }
 
 // Chamado pelo renderer assim que se sabe QUAL loja está logada (ver
@@ -217,37 +322,48 @@ function start(storeId, options) {
     }
   };
 
+  const minhaGeracao = geracao;
   let tickRunning = false;
   const tick = async () => {
     // Garante no máximo 1 tick por vez: dois Out-Printer simultâneos logo
     // depois de reconfigurar impressora derrubam os dois no Windows (achado
-    // ao vivo do agente original, 2026-08-28).
-    if (tickRunning || printersById.size === 0) return;
+    // ao vivo do agente original, 2026-08-28). A checagem de geração impede
+    // o outro caso do mesmo problema: um ciclo da loja ANTERIOR (logout /
+    // troca de loja) continuar rodando junto com o da loja nova.
+    if (tickRunning || printersById.size === 0 || minhaGeracao !== geracao) return;
     tickRunning = true;
     try {
       const ids = Array.from(printersById.keys()).join(',');
+      const limiteIdade = new Date(Date.now() - IDADE_MAXIMA_JOB_MS).toISOString();
       const jobs = await rest(
-        `print_jobs?select=*&store_id=eq.${storeId}&status=eq.pending&printer_config_id=in.(${ids})&order=created_at.asc&limit=20`
+        `print_jobs?select=*&store_id=eq.${storeId}&status=eq.pending&printer_config_id=in.(${ids})&created_at=gte.${limiteIdade}&order=created_at.asc&limit=20`
       ).then((r) => r.json());
 
       for (const job of Array.isArray(jobs) ? jobs : []) {
+        if (minhaGeracao !== geracao) return; // trocou de loja no meio da fila
         const printer = printersById.get(job.printer_config_id);
         if (!printer) continue;
-        await rest(`print_jobs?id=eq.${job.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'printing' }) });
+        // Impressora USB só imprime na máquina onde ela está pendurada. Sem
+        // isso (achado da revisão independente), o PC da cozinha pegava o job
+        // da impressora USB do caixa, o `Out-Printer` falhava porque aquele
+        // nome não existe ali, e o job virava "erro" — a comanda NUNCA saía,
+        // mesmo com a máquina certa disponível pra imprimir.
+        if (printer.connection_type === 'usb' && publicadasPorEstaMaquina.size > 0
+            && !publicadasPorEstaMaquina.has(printer.usb_system_name)) {
+          continue;
+        }
+        if (!(await reservarJob(job.id))) {
+          log(`INFO "${job.title}" já foi pego por outro computador — ignorando`);
+          continue;
+        }
         log(`INFO imprimindo "${job.title}" em "${printer.name}"`);
         try {
           await printJob(printer, job.content);
-          await rest(`print_jobs?id=eq.${job.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status: 'done', printed_at: new Date().toISOString() }),
-          });
+          await marcarJob(job.id, { status: 'done', printed_at: new Date().toISOString() });
           log('INFO impresso OK');
         } catch (printErr) {
           log(`ERROR falhou: ${printErr.message}`);
-          await rest(`print_jobs?id=eq.${job.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status: 'error', error_message: String(printErr.message || printErr) }),
-          });
+          await marcarJob(job.id, { status: 'error', error_message: String(printErr.message || printErr) });
         }
       }
     } catch (e) {

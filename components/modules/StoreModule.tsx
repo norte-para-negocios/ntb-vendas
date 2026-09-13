@@ -4049,6 +4049,16 @@ const CounterView: React.FC<{
     // Sertão, a loja que pediu, tem Caixa ligado.
     const paymentFirst = isCounterPaymentFirst(store) && caixaModuleOn;
 
+    // "Já pago" é um FATO do pedido, não um modo de exibição. Achado de
+    // revisão independente (2026-09-13): isto estava amarrado a
+    // `paymentFirst`, então desligar a chave (ou o módulo Caixa) com pedidos
+    // pagos esperando entrega fazia esses pedidos voltarem pro fluxo antigo
+    // — o botão virava "Entregar", que reabre a captura de pagamento, SEM
+    // nenhum indício de que já tinham sido pagos. Cobrança em dobro no
+    // cliente. Agora qualquer pedido de balcão com pagamento gravado é
+    // tratado como pago em qualquer configuração da loja.
+    const pedidoJaPago = (order: Order) => !!order.payment_details;
+
     // Captura de pagamento (Task 5) — só usada quando caixaModuleOn. Mesmo
     // shape de estado que TablesView usa pro pagamento de mesa
     // (paymentMethods/currentPaymentAmount/currentPaymentMethod/
@@ -4131,6 +4141,11 @@ const CounterView: React.FC<{
     const isOrderReadyForClose = (order: Order) => {
         if (orderFlow === 'direct_print') return true;
         const relevantItems = order.order_items?.filter(i => i.status !== OrderStatus.CANCELED) ?? [];
+        // Pedido JÁ PAGO com todos os itens cancelados não pode ficar preso
+        // na tela pra sempre (achado de revisão independente): sem esta
+        // saída, "Entregar" ficava desabilitado e nenhum caminho fechava o
+        // pedido — o dinheiro já entrou e o card nunca sumia.
+        if (relevantItems.length === 0 && pedidoJaPago(order)) return true;
         return relevantItems.length > 0 && relevantItems.every(
             i => i.status === OrderStatus.READY || i.status === OrderStatus.DELIVERED
         );
@@ -4159,6 +4174,14 @@ const CounterView: React.FC<{
         if (!canFinalize) return;
         const order = orders.find((o) => o.id === orderId);
         if (!order) return;
+        // Trava de cobrança em dobro no momento do clique: entre a tela ter
+        // carregado e o clique, outro caixa (ou a fila do Caixa, ou outra
+        // aba) pode ter recebido este mesmo pedido.
+        if (pedidoJaPago(order)) {
+            toast.error('Este pedido já foi pago — falta só entregar.');
+            load();
+            return;
+        }
         abrirCapturaDePagamento(order);
     };
 
@@ -4182,6 +4205,14 @@ const CounterView: React.FC<{
 
     const handleClose = async (orderId: string) => {
         const orderForGate = orders.find((o) => o.id === orderId) || null;
+        // Pedido já pago nunca passa pela captura de pagamento de novo —
+        // entregar é só fechar. Vale inclusive no fluxo antigo, pra cobrir
+        // o pedido que foi pago com a chave ligada e ficou em aberto quando
+        // ela foi desligada (ver `pedidoJaPago`).
+        if (orderForGate && pedidoJaPago(orderForGate)) {
+            await handleEntregarPago(orderId);
+            return;
+        }
         if (orderForGate && !isOrderReadyForClose(orderForGate)) {
             toast.error('Pedido ainda não está pronto — aguarde a cozinha/bar finalizar antes de entregar.');
             return;
@@ -4231,7 +4262,7 @@ const CounterView: React.FC<{
         // No "paga primeiro", a fila do Caixa manda pedido AINDA NÃO PRONTO
         // (é esse o ponto do fluxo) — handleClose barraria no gate de
         // "aguarde a cozinha". Vai direto pra captura de pagamento.
-        if (order && paymentFirst && !order.payment_details) handleReceberPrimeiro(order.id);
+        if (order && paymentFirst && !pedidoJaPago(order)) handleReceberPrimeiro(order.id);
         else if (order) handleClose(order.id);
         onAutoOpenOrderHandled?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4343,7 +4374,7 @@ const CounterView: React.FC<{
             // cozinha e só é entregue depois. No fluxo de sempre, receber e
             // fechar continuam sendo a mesma ação, como sempre foram.
             if (paymentFirst) {
-                await registrarPagamentoBalcao(paymentOrder.id, paymentData, destinatario);
+                await registrarPagamentoBalcao(paymentOrder.id, paymentData, destinatario, store.id);
             } else {
                 await closeOrderNow(paymentOrder.id, paymentData, destinatario);
             }
@@ -4396,8 +4427,15 @@ const CounterView: React.FC<{
             // pago) — sem recarregar, o card seguiria oferecendo "Receber
             // pagamento" de novo até o próximo evento de realtime.
             if (paymentFirst) load();
-        } catch {
-            // já reportado via toast em closeOrderNow
+        } catch (e: any) {
+            // closeOrderNow já avisa por toast, mas registrarPagamentoBalcao
+            // não — e este catch vazio engolia a falha: o operador clicava em
+            // "RECEBER PAGAMENTO" com o dinheiro já na mão, NADA acontecia na
+            // tela, e ele clicava de novo (achado de revisão independente).
+            if (paymentFirst) {
+                toast.error(e?.message || 'Não consegui registrar o pagamento. Confira antes de cobrar de novo.');
+                load();
+            }
         } finally {
             isFinishingRef.current = false;
         }
@@ -4513,7 +4551,7 @@ const CounterView: React.FC<{
                                      pago, esperando sair — sem esse selo, dois pedidos
                                      em estados bem diferentes (pago e não pago) ficariam
                                      visualmente idênticos. */}
-                                 {paymentFirst && !!order.payment_details && (
+                                 {pedidoJaPago(order) && (
                                      <span className="px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]">
                                          Pago
                                      </span>
@@ -4568,7 +4606,7 @@ const CounterView: React.FC<{
                                      <span className="h-10 px-3 flex items-center text-xs font-bold text-[var(--text-muted)] bg-[var(--surface-2)] rounded-[var(--r-md)] border border-[var(--border)] shrink-0">
                                          Aguardando o caixa
                                      </span>
-                                 ) : !order.payment_details ? (
+                                 ) : !pedidoJaPago(order) ? (
                                      <Button onClick={() => handleReceberPrimeiro(order.id)} variant="primary" className="h-10 text-sm shrink-0">
                                          <Wallet size={16} className="mr-1"/> Receber pagamento
                                      </Button>
@@ -5342,7 +5380,12 @@ const CaixaView: React.FC<{
             // RECEBER. Pedido já pago some daqui (está esperando a entrega,
             // não o caixa) — senão o caixa cobraria duas vezes.
             .filter(o => {
-                if (isCounterPaymentFirst(store)) return !o.payment_details;
+                // MESMA condição que o Balcão usa (isCounterPaymentFirst +
+                // módulo Caixa) — escrever isso de dois jeitos fazia as duas
+                // telas discordarem numa loja com a chave ligada e o Caixa
+                // desligado. Pago nunca aparece: está esperando entrega, não
+                // o caixa.
+                if (isCounterPaymentFirst(store) && resolveStoreModules(store).caixa) return !o.payment_details;
                 if (orderFlow === 'direct_print') return true;
                 return o.status !== OrderStatus.PENDING;
             })

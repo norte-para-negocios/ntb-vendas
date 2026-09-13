@@ -1067,6 +1067,8 @@ export const registrarPagamentoBalcao = async (
   orderId: string,
   paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
+  // Só usado no caminho OFFLINE, pra achar o cache certo (ver abaixo).
+  storeId?: string,
 ) => {
   try {
     const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
@@ -1086,7 +1088,33 @@ export const registrarPagamentoBalcao = async (
   } catch (e) {
     if (!isNetworkError(e)) throw e;
     await enqueue('registrar_pagamento_balcao', { orderId, paymentData, destinatario });
+    // Marca como pago TAMBÉM no cache local. Sem isto (achado de revisão
+    // independente, 2026-09-13), offline o pedido voltava pra tela ainda
+    // como "Receber pagamento": o `load()` seguinte relê do cache, onde o
+    // pagamento não existia. O operador, com o dinheiro já no caixa, não
+    // tinha como entregar (o botão "Entregar" nunca aparecia) e cobrava de
+    // novo achando que não tinha pego — e a fila offline não deduplica, ou
+    // seja, N pagamentos enfileirados pro mesmo pedido.
+    if (storeId) await marcarPedidoBalcaoPagoNoCache(storeId, orderId, paymentData).catch(() => {});
   }
+};
+
+// Espelha no cache offline o pagamento que ficou só na fila de sincronização
+// (ver acima). Mesmo shape que `/api/orders/pagamento-balcao` grava, pra tela
+// enxergar exatamente o que enxergaria online.
+const marcarPedidoBalcaoPagoNoCache = async (
+  storeId: string,
+  orderId: string,
+  paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
+) => {
+  const cached = await getCachedCounterOrders(storeId);
+  if (!cached?.orders) return;
+  const atualizados = (cached.orders as Order[]).map((o) =>
+    o.id === orderId
+      ? { ...o, payment_method: paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE', payment_details: paymentData as any }
+      : o,
+  );
+  await setCachedCounterOrders(storeId, atualizados);
 };
 
 // Passo final do fluxo "paga primeiro": entrega o pedido já pago.

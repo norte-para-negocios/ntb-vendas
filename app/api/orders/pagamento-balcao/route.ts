@@ -152,6 +152,16 @@ export async function POST(request: NextRequest) {
     .eq('order_type', 'counter')
     .neq('status', 'delivered')
     .neq('status', 'canceled')
+    // Nunca sobrescrever um pagamento já registrado (achado de revisão
+    // independente, 2026-09-13). Isto é um UPDATE, não um append: gravar de
+    // novo APAGA o pagamento anterior — some do `payment_details`, some do
+    // esperado em dinheiro do turno (migration 051) e some do resumo de
+    // fechamento de caixa. Resultado: dois pagamentos recebidos de verdade,
+    // um só registrado, e o caixa fecha com sobra sem explicação.
+    // Era inofensivo enquanto pagar e fechar eram o MESMO clique (janela de
+    // milissegundos); com o fluxo "paga primeiro" o pedido fica minutos
+    // pago e aberto, e a segunda cobrança vira um caminho real.
+    .is('payment_details', null)
     .select('id')
     .maybeSingle();
 
@@ -166,6 +176,22 @@ export async function POST(request: NextRequest) {
     );
   }
   if (!data) {
+    // Sem isto, "já foi pago" e "não existe" davam a MESMA mensagem — e a
+    // primeira é a que o operador precisa entender na hora, porque o
+    // dinheiro dele já entrou uma vez. Consulta só pra explicar o motivo
+    // certo (o UPDATE acima já não gravou nada de qualquer forma).
+    const { data: existente } = await admin
+      .from('orders')
+      .select('payment_details')
+      .eq('id', body.orderId)
+      .eq('order_type', 'counter')
+      .maybeSingle();
+    if (existente?.payment_details) {
+      return NextResponse.json(
+        { success: false, jaPago: true, message: 'Este pedido já tem pagamento registrado.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { success: false, message: 'Pedido de balcão não encontrado ou já estava fechado.' },
       { status: 404 }
