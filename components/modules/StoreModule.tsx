@@ -4582,6 +4582,20 @@ const CounterView: React.FC<{
                                          Pago
                                      </span>
                                  )}
+                                 {/* Pedido pago que não sai do balcão é dinheiro parado no
+                                     turno sem aparecer no Histórico de Vendas (que só conta
+                                     'delivered') — o aviso de idade é o que faz o operador
+                                     perceber que tem venda pendurada antes de fechar o caixa. */}
+                                 {pedidoJaPago(order) && (() => {
+                                     const minutosPago = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
+                                     if (minutosPago <= 30) return null;
+                                     const horasPago = Math.round(minutosPago / 60);
+                                     return (
+                                         <span className="text-xs font-bold text-[var(--warn)]">
+                                             Pago há {horasPago}h
+                                         </span>
+                                     );
+                                 })()}
                                  <span className={`px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border ${getStatusColor(status)}`}>
                                      {getStatusLabel(status)}
                                  </span>
@@ -5908,6 +5922,31 @@ const CaixaView: React.FC<{
                     </div>
                 )}
             </div>
+
+            {(() => {
+                // Pedido pago e não entregue é um buraco de conferência: o
+                // dinheiro já está no turno e a nota já saiu, mas a venda
+                // NÃO aparece no Histórico de Vendas (que só conta
+                // 'delivered'). Sem este aviso, o caixa fecha o turno sem
+                // saber que existe venda pendurada — e o relatório do
+                // contador não bate com o do dia.
+                const pagosNaoEntregues = counterOrders.filter(o => !!o.payment_details);
+                if (pagosNaoEntregues.length === 0) return null;
+                const total = pagosNaoEntregues.reduce((s, o) =>
+                    s + (o.order_items || []).filter(i => i.status !== 'canceled')
+                        .reduce((a, i) => a + i.price_at_time * i.quantity, 0), 0);
+                return (
+                    <Card className="p-3 bg-[var(--warn)]/10 border-[var(--warn)]/30">
+                        <p className="text-xs font-bold text-[var(--warn)] uppercase tracking-wide mb-1">
+                            Pago e ainda não entregue ({pagosNaoEntregues.length})
+                        </p>
+                        <p className="text-[12px] text-[var(--text-muted)]">
+                            R$ {formatBRL(total)} já recebido, esperando entrega no Balcão. Esse valor está no seu
+                            caixa, mas só entra no histórico de vendas depois que o pedido for entregue.
+                        </p>
+                    </Card>
+                );
+            })()}
 
             {/* Task 4, Passo 1: sangria/suprimento — formulário simples num modal. */}
             <Modal
