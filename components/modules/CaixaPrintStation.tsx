@@ -75,8 +75,10 @@
 // pedidos que entraram enquanto a tela estava morta. O corte passou a ser
 // PERSISTIDO por loja (`loadOrCreateActivationCutoff`): reload retoma o
 // corte antigo e alcança o backlog; só uma sessão de fato nova (outro
-// aparelho, localStorage limpo, ou corte com mais de 12h) cria corte novo,
-// que é o caso que o corte existe pra proteger. Mesmo raciocínio se aplicou
+// aparelho, localStorage limpo, ou estação que ficou sem dar sinal de vida
+// por mais de ACTIVATION_IDLE_MAX_MS) cria corte novo, que é o caso que o
+// corte existe pra proteger. Corte salvo ADIANTADO em relação ao relógio de
+// agora também é descartado — ver o Critical #1 comentado lá. Mesmo raciocínio se aplicou
 // ao alarme de falha persistente (`falhaPersistenteKey`), que também se
 // calava sozinho no reload com a impressão ainda quebrada.
 //
@@ -172,23 +174,79 @@ function activationCutoffNow(): string {
 // simplesmente não recebia aqueles pedidos.
 // Guardar o corte por loja resolve: uma sessão que já estava ativa retoma o
 // corte antigo (e alcança o backlog), e só uma sessão de fato NOVA (outro
-// aparelho, localStorage limpo) cria corte novo.
-const ACTIVATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+// aparelho, localStorage limpo, PDV que ficou desligado) cria corte novo.
+//
+// O QUE DECIDE "sessão nova" é a ÚLTIMA ATIVIDADE, não a idade do corte
+// (correção da revisão do fix, 2026-09-13 — Important #2). A primeira versão
+// descartava o corte salvo depois de 12h, medindo a coisa errada: o corte é
+// gravado UMA vez e nunca atualizado enquanto a estação roda, então a idade
+// dele diz "quando esta sessão começou", não "há quanto tempo esta estação
+// está parada". Turno de 10:00 às 02:00 (comum) com um reload na hora 13
+// caía justamente nisso — chave com mais de 12h, corte novo em `agora -
+// 5min`, backlog da janela morta perdido: exatamente o bug que esta
+// correção existe pra fechar, de volta. `ultimaAtividadeKey` (regravada a
+// cada reconciliação BEM-SUCEDIDA, ver `saveUltimaAtividade`) separa os dois
+// casos de verdade: estação viva há poucos minutos = mesma sessão de
+// trabalho, retoma o corte por mais longo que ele seja; estação sem dar
+// sinal há mais de ACTIVATION_IDLE_MAX_MS = aparelho que ficou desligado
+// (horas ou dias), aí sim corte novo, que é o cenário de "backlog spew" que
+// o corte existe pra proteger.
+const ACTIVATION_IDLE_MAX_MS = 30 * 60 * 1000;
 
 function activationCutoffKey(storeId: string) {
   return `${STORAGE_PREFIX}_corte_ativacao_${storeId}`;
+}
+
+function ultimaAtividadeKey(storeId: string) {
+  return `${STORAGE_PREFIX}_ultima_atividade_${storeId}`;
+}
+
+// Carimbo de "esta estação estava viva agora" — só uma reconciliação que de
+// fato falou com o servidor conta (falha de fetch não é sinal de vida útil
+// aqui: se o PDV passou a madrugada inteira tentando e falhando, ele não
+// estava operando).
+function saveUltimaAtividade(storeId: string) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(ultimaAtividadeKey(storeId), new Date().toISOString());
+  } catch {
+    /* best-effort: sem o carimbo, o pior que acontece é o próximo mount criar corte novo */
+  }
+}
+
+function estacaoEstavaVivaHaPouco(storeId: string): boolean {
+  try {
+    const ultima = window.localStorage.getItem(ultimaAtividadeKey(storeId));
+    if (!ultima) return false;
+    const delta = Date.now() - new Date(ultima).getTime();
+    // `delta < 0` (carimbo no futuro) cai fora de propósito — mesmo motivo do
+    // guarda de futuro em loadOrCreateActivationCutoff logo abaixo.
+    return delta >= 0 && delta < ACTIVATION_IDLE_MAX_MS;
+  } catch {
+    return false;
+  }
 }
 
 function loadOrCreateActivationCutoff(storeId: string): string {
   if (!isBrowser()) return activationCutoffNow();
   try {
     const salvo = window.localStorage.getItem(activationCutoffKey(storeId));
-    // Corte muito antigo (o PDV ficou dias desligado) volta a ser "agora":
-    // aí sim queremos o corte protegendo contra despejo de backlog velho.
-    if (salvo && Date.now() - new Date(salvo).getTime() < ACTIVATION_MAX_AGE_MS) return salvo;
-    const novo = activationCutoffNow();
-    window.localStorage.setItem(activationCutoffKey(storeId), novo);
-    return novo;
+    const agora = activationCutoffNow();
+    // Corte só pode ser retomado PRA TRÁS, nunca pra frente (Critical #1 da
+    // revisão do fix, 2026-09-13). Um PC de loja com a bateria do RTC morta
+    // sobe com a data adiantada, grava um corte no FUTURO, e o NTP corrige o
+    // relógio em seguida — como o filtro é `created_at >= corte`, a partir
+    // daí NENHUM pedido é auto-impresso até o relógio real alcançar aquele
+    // carimbo (dias, se o adiantamento foi de dias), e em silêncio. Antes de
+    // persistir, isso se curava sozinho no mount seguinte (o corte era
+    // recalculado do relógio atual); persistido, gruda. É a mesma classe do
+    // Critical #2 já documentado no cabeçalho ("o corte confia no relógio do
+    // aparelho, não no do servidor"), então recebe a mesma resposta: corte
+    // adiantado em relação a `agora` é descartado.
+    const salvoUtil = salvo && new Date(salvo).getTime() <= new Date(agora).getTime();
+    if (salvoUtil && estacaoEstavaVivaHaPouco(storeId)) return salvo as string;
+    window.localStorage.setItem(activationCutoffKey(storeId), agora);
+    return agora;
   } catch {
     return activationCutoffNow();
   }
@@ -239,11 +297,30 @@ function loadPrintedIds(storeId: string, destination: Destination): Set<string> 
   }
 }
 
+// Interação com o corte persistido (Important #3 da revisão do fix,
+// 2026-09-13): o corte e o dedupe são as DUAS metades da mesma proteção —
+// o corte diz "não olhe pra trás daqui", o dedupe diz "este eu já imprimi".
+// Enquanto as duas chaves somem juntas (localStorage limpo, aparelho novo) o
+// comportamento é o seguro de sempre: corte novo, nada de backlog. O risco é
+// o dedupe sumir SOZINHO, com o corte sobrevivendo — aí todo item ainda não
+// entregue depois do corte volta a ser candidato a reimpressão. Esta função
+// era a fonte mais provável disso: sem try/catch, um QuotaExceededError
+// lançava daqui, `reconcile` engolia como falha genérica, e o id ficava só
+// em memória — no reload seguinte o dedupe não tinha aquele item, mas o
+// corte continuava lá. Com o catch, uma falha de escrita para de ser
+// silenciosa (vai pro console) e não interrompe mais o lote; o trim por
+// MAX_PRINTED_IDS continua sendo a outra fonte possível, mitigada pelo fato
+// de o corte agora só ser retomado por estação viva há minutos (ver
+// ACTIVATION_IDLE_MAX_MS), não por até 12h.
 function savePrintedIds(storeId: string, destination: Destination, ids: Set<string>) {
   if (!isBrowser()) return;
   const arr = Array.from(ids);
   const trimmed = arr.length > MAX_PRINTED_IDS ? arr.slice(arr.length - MAX_PRINTED_IDS) : arr;
-  window.localStorage.setItem(printedIdsKey(storeId, destination), JSON.stringify(trimmed));
+  try {
+    window.localStorage.setItem(printedIdsKey(storeId, destination), JSON.stringify(trimmed));
+  } catch (e) {
+    console.error('savePrintedIds falhou (dedupe segue só em memória nesta sessão):', e);
+  }
 }
 
 // Leitura read-only do dedupe persistido, pro histórico do dia (TablesView,
@@ -527,10 +604,12 @@ export interface CaixaPrintStationState {
 
 // Hook que efetivamente roda a reconciliação. Montado UMA vez em
 // StoreLayout (sobrevive à troca de aba Mesas↔Balcão, que é exatamente o
-// requisito: "regardless of which tab"). `active` decide se o efeito
-// principal sequer liga — nas 6 lojas reais sem `order_flow: 'direct_print'`
-// isto nunca roda, sem footprint nenhum (nem intervalo, nem assinatura
-// Realtime, nem leitura de localStorage).
+// requisito: "regardless of which tab"). `active` decide se os efeitos
+// sequer ligam — o principal (Realtime/intervalo) e o de estado por loja
+// logo abaixo, que desde 2026-09-13 não só lê como GRAVA o corte de ativação
+// (ver o comentário dele). Nas 6 lojas reais sem `order_flow:
+// 'direct_print'` isto nunca roda, sem footprint nenhum: nem intervalo, nem
+// assinatura Realtime, nem leitura OU escrita de localStorage.
 export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser | null): CaixaPrintStationState {
   const active = !!store && !!loggedUser && resolveOrderFlow(store) === 'direct_print' && isCaixaRole(loggedUser);
 
@@ -564,11 +643,24 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
   // loja onde esta estação já estava ativa há pouco RETOMA o corte dela em
   // vez de criar um novo — é isso que faz o backlog acumulado durante um
   // reload continuar sendo impresso. Corte novo só nasce quando não há
-  // nenhum salvo pra esta loja, ou quando o salvo já passou de
-  // ACTIVATION_MAX_AGE_MS.
+  // nenhum salvo pra esta loja, quando a estação não deu sinal de vida há
+  // mais de ACTIVATION_IDLE_MAX_MS, ou quando o salvo está adiantado em
+  // relação ao relógio de agora (ver loadOrCreateActivationCutoff).
+  //
+  // GATEADO POR `active` (Important #1 da revisão do fix, 2026-09-13): antes
+  // deste fix o efeito só LIA o localStorage, então rodar pra qualquer loja/
+  // usuário era inofensivo. Agora ele CRIA E GRAVA o corte, e isso mudava
+  // duas coisas que ninguém pediu: (1) as 6 lojas reais sem `direct_print`
+  // passariam a ganhar a chave no navegador de todo mundo, quebrando a
+  // promessa de "footprint zero" declarada logo acima; (2) numa loja
+  // `direct_print`, qualquer login abrindo o painel às 09:00 gravaria o
+  // corte daquele momento, e o caixa que entra às 11:00 HERDARIA o corte das
+  // 09:00 em vez de nascer com `agora - 5min` — o corte deixaria de
+  // significar "quando esta estação ficou ativa", que é a definição inteira
+  // dele. Só estação de fato ativa escreve.
   useEffect(() => {
     storeRef.current = store;
-    if (!store) return;
+    if (!store || !active) return;
     printedIdsRef.current = {
       kitchen: loadPrintedIds(store.id, 'kitchen'),
       bar: loadPrintedIds(store.id, 'bar'),
@@ -591,7 +683,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     // ainda quebrada, exatamente o bug que esta persistência fecha. Só uma
     // reconciliação BEM-SUCEDIDA pode apagá-lo.
     reconcileFailStreakRef.current = alarmeRetomado ? RECONCILE_FAILURE_ALERT_THRESHOLD : 0;
-  }, [store?.id]);
+  }, [store?.id, active]);
 
   const reconcile = useCallback(async () => {
     const s = storeRef.current;
@@ -628,7 +720,14 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       // faz o aviso sobreviver ao reload automático do desktop, e o que
       // garante que ele só se cala depois de uma reconciliação que de fato
       // deu certo — nunca só porque a tela recarregou.
-      if (s) saveFalhaPersistente(s.id, alarmada);
+      saveFalhaPersistente(s.id, alarmada);
+      // Carimbo de vida da estação (ver ACTIVATION_IDLE_MAX_MS): é ele, e
+      // não a idade do corte, que decide se o próximo mount retoma o corte
+      // desta sessão ou começa um novo. Só conta quando a passada falou com
+      // o servidor de verdade — um PDV que passa a madrugada tentando e
+      // falhando não estava operando, e não deveria conseguir arrastar um
+      // corte de ontem pro turno de hoje.
+      if (!fetchFailed) saveUltimaAtividade(s.id);
       reconcileLockRef.current = false;
     }
   }, []);
