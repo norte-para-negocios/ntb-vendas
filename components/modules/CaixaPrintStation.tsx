@@ -68,7 +68,17 @@
 // SERVIDOR (Postgres) — um aparelho com o relógio adiantado excluía pedidos
 // legítimos do auto-print sem avisar ninguém. Ver ACTIVATION_SAFETY_MARGIN_MS
 // abaixo pro fix e o porquê da escolha (margem fixa, não "maior created_at
-// devolvido pelo servidor").
+// devolvido pelo servidor"). **Correção de reload (revisão independente,
+// 2026-09-13)**: "hora do mount desta sessão" era literal demais — o app
+// desktop se recarrega sozinho quando o renderer morre (Task 2), e nesse
+// mount novo o corte pulava pra frente, deixando pra trás justamente os
+// pedidos que entraram enquanto a tela estava morta. O corte passou a ser
+// PERSISTIDO por loja (`loadOrCreateActivationCutoff`): reload retoma o
+// corte antigo e alcança o backlog; só uma sessão de fato nova (outro
+// aparelho, localStorage limpo, ou corte com mais de 12h) cria corte novo,
+// que é o caso que o corte existe pra proteger. Mesmo raciocínio se aplicou
+// ao alarme de falha persistente (`falhaPersistenteKey`), que também se
+// calava sozinho no reload com a impressão ainda quebrada.
 //
 // O QUE NÃO FOI PORTADO (decisão consciente, não esquecimento): o station
 // original também reconciliava PEDIDOS FECHADOS (comprovante de conta paga,
@@ -151,6 +161,67 @@ const ACTIVATION_SAFETY_MARGIN_MS = 5 * 60 * 1000;
 // que o corte de ativação existe pra evitar.
 function activationCutoffNow(): string {
   return new Date(Date.now() - ACTIVATION_SAFETY_MARGIN_MS).toISOString();
+}
+
+// O corte de ativação precisa sobreviver a um reload da MESMA sessão de
+// trabalho. Achado de revisão independente (2026-09-13): ele nascia sempre
+// de `Date.now() - 5min`, então quando o app se recarrega sozinho depois de
+// uma falha (ver desktop/electron/main.js, render-process-gone), tudo que
+// entrou na fila enquanto a tela estava morta ficava velho demais pro corte
+// e NUNCA era impresso — o operador via a tela voltar ao normal e a cozinha
+// simplesmente não recebia aqueles pedidos.
+// Guardar o corte por loja resolve: uma sessão que já estava ativa retoma o
+// corte antigo (e alcança o backlog), e só uma sessão de fato NOVA (outro
+// aparelho, localStorage limpo) cria corte novo.
+const ACTIVATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+function activationCutoffKey(storeId: string) {
+  return `${STORAGE_PREFIX}_corte_ativacao_${storeId}`;
+}
+
+function loadOrCreateActivationCutoff(storeId: string): string {
+  if (!isBrowser()) return activationCutoffNow();
+  try {
+    const salvo = window.localStorage.getItem(activationCutoffKey(storeId));
+    // Corte muito antigo (o PDV ficou dias desligado) volta a ser "agora":
+    // aí sim queremos o corte protegendo contra despejo de backlog velho.
+    if (salvo && Date.now() - new Date(salvo).getTime() < ACTIVATION_MAX_AGE_MS) return salvo;
+    const novo = activationCutoffNow();
+    window.localStorage.setItem(activationCutoffKey(storeId), novo);
+    return novo;
+  } catch {
+    return activationCutoffNow();
+  }
+}
+
+// Alarme de "impressão quebrada" persistido por loja (mesmo achado de
+// revisão independente, 2026-09-13, segunda metade): `failedRef` e
+// `persistentReconcileFailure` viviam só em memória, então o reload
+// automático do desktop APAGAVA o alarme — a impressão continuava quebrada
+// e o aviso sumia da tela sozinho, que é o pior resultado possível pra um
+// mecanismo cuja garantia central é "uma cozinha nunca pode parar de
+// receber pedido em silêncio" (ver cabeçalho do arquivo).
+function falhaPersistenteKey(storeId: string) {
+  return `${STORAGE_PREFIX}_falha_impressao_${storeId}`;
+}
+
+function loadFalhaPersistente(storeId: string): boolean {
+  if (!isBrowser()) return false;
+  try {
+    return window.localStorage.getItem(falhaPersistenteKey(storeId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveFalhaPersistente(storeId: string, alarmada: boolean) {
+  if (!isBrowser()) return;
+  try {
+    if (alarmada) window.localStorage.setItem(falhaPersistenteKey(storeId), '1');
+    else window.localStorage.removeItem(falhaPersistenteKey(storeId));
+  } catch {
+    /* localStorage cheio/bloqueado: o alarme em memória continua valendo nesta sessão */
+  }
 }
 
 function printedIdsKey(storeId: string, destination: Destination) {
@@ -477,8 +548,10 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
   const storeRef = useRef<Store | null>(null);
   // Corte de ativação desta sessão (Critical #1, corrigido pro Critical #2 —
   // ver ACTIVATION_SAFETY_MARGIN_MS acima) — hora do mount MENOS a margem de
-  // segurança, recarregada junto com o dedupe sempre que a loja muda (mesmo
-  // efeito abaixo). Um `Date.now()` de fallback nunca deveria ser lido de
+  // segurança, resolvida de verdade (e possivelmente RETOMADA do
+  // localStorage, ver loadOrCreateActivationCutoff) junto com o dedupe
+  // sempre que a loja muda, no efeito abaixo — a loja, que é a chave do
+  // corte persistido, só é conhecida lá. Um `Date.now()` de fallback nunca deveria ser lido de
   // verdade (o efeito abaixo roda antes do primeiro `reconcile()` sempre que
   // `store` já existe no mount), mas existe pra nunca deixar a comparação de
   // corte comparar contra `null`/`NaN` num cenário inesperado.
@@ -486,9 +559,13 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
 
   // Recarrega o dedupe (localStorage) sempre que a loja muda — cobre tanto
   // "loja resolveu depois do login" quanto "conta universal trocou de loja".
-  // Também redefine `activatedAtRef`: trocar de loja (conta universal) é,
-  // pra efeito do corte de ativação, uma sessão nova nesta loja — mesmo
-  // motivo de `printedIds` recarregar do zero aqui.
+  // Também resolve `activatedAtRef`: o corte é POR LOJA e persistido
+  // (2026-09-13, ver loadOrCreateActivationCutoff), então voltar pra uma
+  // loja onde esta estação já estava ativa há pouco RETOMA o corte dela em
+  // vez de criar um novo — é isso que faz o backlog acumulado durante um
+  // reload continuar sendo impresso. Corte novo só nasce quando não há
+  // nenhum salvo pra esta loja, ou quando o salvo já passou de
+  // ACTIVATION_MAX_AGE_MS.
   useEffect(() => {
     storeRef.current = store;
     if (!store) return;
@@ -496,9 +573,24 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       kitchen: loadPrintedIds(store.id, 'kitchen'),
       bar: loadPrintedIds(store.id, 'bar'),
     };
-    activatedAtRef.current = activationCutoffNow();
+    // Ver loadOrCreateActivationCutoff: retoma o corte da sessão anterior
+    // desta loja quando existir (reload/recuperação de falha), em vez de
+    // descartar o backlog acumulado enquanto a tela esteve fora do ar.
+    activatedAtRef.current = loadOrCreateActivationCutoff(store.id);
     failedRef.current = new Map();
     setFailedItemsState(new Map());
+    // O alarme de falha persistente também é retomado aqui (mesma razão:
+    // a loja só é conhecida neste ponto). Sem isto, o reload automático
+    // apagava o aviso de impressão quebrada mesmo com o problema de pé.
+    const alarmeRetomado = loadFalhaPersistente(store.id);
+    setPersistentReconcileFailure(alarmeRetomado);
+    // A contagem de falhas seguidas também precisa ser retomada, senão a
+    // PRIMEIRA reconciliação depois do reload apagaria o alarme retomado só
+    // por ainda não ter acumulado o streak de novo (streak 1 < threshold 2
+    // zera o estado) — o alarme voltaria a se calar sozinho com a impressão
+    // ainda quebrada, exatamente o bug que esta persistência fecha. Só uma
+    // reconciliação BEM-SUCEDIDA pode apagá-lo.
+    reconcileFailStreakRef.current = alarmeRetomado ? RECONCILE_FAILURE_ALERT_THRESHOLD : 0;
   }, [store?.id]);
 
   const reconcile = useCallback(async () => {
@@ -530,7 +622,13 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       setLastReconcileAt(new Date().toISOString());
       setLastReconcileFailed(fetchFailed);
       reconcileFailStreakRef.current = fetchFailed ? reconcileFailStreakRef.current + 1 : 0;
-      setPersistentReconcileFailure(reconcileFailStreakRef.current >= RECONCILE_FAILURE_ALERT_THRESHOLD);
+      const alarmada = reconcileFailStreakRef.current >= RECONCILE_FAILURE_ALERT_THRESHOLD;
+      setPersistentReconcileFailure(alarmada);
+      // Grava/apaga o alarme por loja (ver falhaPersistenteKey): é o que
+      // faz o aviso sobreviver ao reload automático do desktop, e o que
+      // garante que ele só se cala depois de uma reconciliação que de fato
+      // deu certo — nunca só porque a tela recarregou.
+      if (s) saveFalhaPersistente(s.id, alarmada);
       reconcileLockRef.current = false;
     }
   }, []);
