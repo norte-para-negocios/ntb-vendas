@@ -1,4 +1,4 @@
-import { getPendingActions, markDone, markFailed } from './queue';
+import { getPendingActions, markDone, markFailed, getFailedActions, resetActionAttempts, discardAction } from './queue';
 import { checkRealConnectivity } from './network';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
@@ -280,6 +280,73 @@ export async function runSync(): Promise<void> {
   } finally {
     syncing = false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fila de falhas visível pro operador (fix round 1 da Task 7, revisão
+// independente, 2026-09-14)
+//
+// Até aqui, `lastError` era gravado por markFailed e NUNCA lido por nenhum
+// componente: o badge do StoreLayout mostrava só "🔴 N falha(s) — verificar",
+// sem lista, sem clique. Ou seja, a mensagem que a entrega bloqueada grava
+// ("o pagamento falhou em definitivo, registre de novo") existia só dentro da
+// IndexedDB — o operador via um número e não sabia nem qual pedido. As
+// funções abaixo são o que a lista de falhas do StoreLayout consome; o padrão
+// (lista + retry manual por item) é o mesmo que CaixaPrintStation já usa pras
+// impressões falhas.
+// ---------------------------------------------------------------------------
+
+// Rótulo curto e humano de uma ação da fila — o operador não conhece
+// 'close_counter_order', ele conhece "entrega do pedido #dfc1".
+export function descreverAcaoFila(action: QueuedAction): string {
+  const payload = (action.payload ?? {}) as any;
+  const pedido = typeof payload.orderId === 'string' ? ` #${payload.orderId.slice(0, 4)}` : '';
+  switch (action.type) {
+    case 'create_order': return 'Envio de pedido novo';
+    case 'update_order_item_status': return 'Mudança de status de item';
+    case 'close_table_session': return 'Fechamento de mesa';
+    case 'close_counter_order': return `Entrega/fechamento do pedido de balcão${pedido}`;
+    case 'registrar_pagamento_balcao': return `Pagamento do pedido de balcão${pedido}`;
+    case 'open_cash_shift': return 'Abertura de caixa';
+    case 'close_cash_shift': return 'Fechamento de caixa';
+    case 'register_cash_movement': return 'Sangria/suprimento de caixa';
+    case 'open_table_manually': return 'Abertura de mesa';
+    default: return 'Ação pendente';
+  }
+}
+
+export async function listarAcoesFalhas(): Promise<QueuedAction[]> {
+  return getFailedActions(MAX_ATTEMPTS);
+}
+
+// Recalcula e publica o status depois de mexer na fila fora do runSync —
+// sem isto o badge continuaria com o número velho até a próxima drenagem
+// (30s), e "descartei a falha mas o alarme continua" é exatamente o
+// comportamento que esta correção existe pra matar.
+async function republicarStatus(): Promise<void> {
+  const restantes = await getPendingActions();
+  notify({
+    syncing: false,
+    pending: restantes.length,
+    failed: restantes.filter((a) => a.attempts >= MAX_ATTEMPTS).length,
+  });
+}
+
+// Zera as tentativas e tenta sincronizar na hora. Serve pro caso comum: a
+// causa da falha era temporária (servidor fora, payload de um pedido que já
+// existia) e o operador quer tentar de novo sem esperar nada.
+export async function reenviarAcaoFalha(id: string): Promise<void> {
+  await resetActionAttempts(id);
+  await republicarStatus();
+  await runSync();
+}
+
+// Descarta de vez. Quem chama TEM que avisar antes que o efeito no servidor
+// nunca vai acontecer (o dinheiro não vai ser registrado, o pedido não vai
+// fechar) — ver a confirmação na lista de falhas do StoreLayout.
+export async function descartarAcaoFalha(id: string): Promise<void> {
+  await discardAction(id);
+  await republicarStatus();
 }
 
 let started = false;

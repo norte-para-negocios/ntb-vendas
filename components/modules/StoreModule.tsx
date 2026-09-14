@@ -17,7 +17,8 @@ import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateSto
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
-import { startOfflineSync, getSyncStatus, onSyncStatusChange } from '@/lib/offline/sync';
+import { startOfflineSync, getSyncStatus, onSyncStatusChange, listarAcoesFalhas, reenviarAcaoFalha, descartarAcaoFalha, descreverAcaoFila } from '@/lib/offline/sync';
+import type { QueuedAction } from '@/lib/offline/types';
 import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
 import { toast } from '@/components/Toast';
@@ -466,6 +467,116 @@ const abrirCupomFiscalQuandoSair = (
         });
 };
 
+// Badge de sincronização offline + LISTA das falhas (fix round 1 da Task 7,
+// revisão independente, 2026-09-14). Antes o badge era um <span> morto com
+// "🔴 N falha(s) — verificar": o `lastError` gravado por markFailed
+// (lib/offline/queue.ts) não era lido por componente nenhum, então a
+// mensagem da ação — inclusive a da entrega bloqueada por pagamento que
+// falhou de vez — nunca chegava a quem opera. O operador via um número e não
+// sabia nem qual pedido nem o que fazer.
+//
+// Duas saídas, no mesmo espírito (e com os mesmos tokens) da lista de
+// impressões falhas que CaixaPrintStation já tem: "Tentar de novo" (zera as
+// tentativas e sincroniza na hora) e "Descartar" (apaga a ação, com
+// confirmação dizendo o que se perde). Sem a segunda, uma ação no teto de
+// tentativas ficava na IndexedDB daquele aparelho pra sempre, mantendo o
+// alarme aceso mesmo depois do problema resolvido por fora — e alarme que
+// não some é alarme que o time aprende a ignorar.
+const SyncStatusBadge: React.FC<{ status: { pending: number; failed: number } }> = ({ status }) => {
+  const [aberto, setAberto] = useState(false);
+  const [falhas, setFalhas] = useState<QueuedAction[]>([]);
+  const [ocupado, setOcupado] = useState<string | null>(null);
+
+  const carregarFalhas = async () => {
+    try { setFalhas(await listarAcoesFalhas()); } catch { setFalhas([]); }
+  };
+
+  // Recarrega ao abrir E sempre que o contador muda (o runSync roda a cada
+  // 30s de qualquer forma; com o modal aberto, a lista acompanha).
+  useEffect(() => { if (aberto) carregarFalhas(); }, [aberto, status.failed]);
+
+  const handleReenviar = async (id: string) => {
+    setOcupado(id);
+    try {
+      await reenviarAcaoFalha(id);
+      await carregarFalhas();
+      toast.success('Reenviado — se falhar de novo, volta pra esta lista.');
+    } catch {
+      toast.error('Não consegui reenviar agora.');
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const handleDescartar = async (acao: QueuedAction) => {
+    const ok = await confirm({
+      title: 'Descartar esta ação?',
+      message: `"${descreverAcaoFila(acao)}" nunca vai chegar ao servidor: o que ela faria (registrar o pagamento, fechar o pedido, lançar a movimentação de caixa) NÃO vai acontecer. Só descarte se você já resolveu isso por outro caminho.`,
+      confirmLabel: 'Descartar mesmo assim',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setOcupado(acao.id);
+    try {
+      await descartarAcaoFalha(acao.id);
+      await carregarFalhas();
+      toast.success('Ação descartada.');
+    } catch {
+      toast.error('Não consegui descartar agora.');
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  return (
+    <>
+      {status.failed > 0 ? (
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30 hover:bg-[var(--err)]/20 u-motion"
+          title="Ver o que falhou ao sincronizar"
+        >
+          🔴 {status.failed} falha(s) — verificar
+        </button>
+      ) : status.pending > 0 ? (
+        <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
+          🟡 Offline — {status.pending} pendente(s)
+        </span>
+      ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
+
+      <Modal isOpen={aberto} onClose={() => setAberto(false)} title="Falhas de sincronização" variant="sheet">
+        <div className="space-y-3">
+          <p className="text-xs text-[var(--text-muted)]">
+            Estas ações foram feitas neste aparelho e não conseguiram chegar ao servidor depois de várias tentativas. Enquanto estiverem aqui, elas NÃO aconteceram no sistema.
+          </p>
+          {falhas.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)] text-center py-4">Nenhuma falha pendente.</p>
+          ) : (
+            falhas.map((acao) => (
+              <div key={acao.id} className="bg-[var(--surface-2)] rounded-lg p-3 border border-[var(--border)] space-y-2">
+                <p className="text-sm font-semibold text-[var(--text)]">{descreverAcaoFila(acao)}</p>
+                <p className="text-xs text-[var(--err)]">{acao.lastError || 'Erro desconhecido.'}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  {new Date(acao.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} • {acao.attempts} tentativa(s)
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => handleReenviar(acao.id)} isLoading={ocupado === acao.id}>
+                    <RotateCcw size={14} className="mr-1" /> Tentar de novo
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => handleDescartar(acao)} disabled={ocupado === acao.id}>
+                    <Trash2 size={14} className="mr-1" /> Descartar
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+};
+
 const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store } }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -602,15 +713,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
              <h1 className="font-semibold text-[var(--text)] text-[15px] truncate flex-1">{title}</h1>
           </div>
           <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
-          {syncStatus.failed > 0 ? (
-            <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30">
-              🔴 {syncStatus.failed} falha(s) — verificar
-            </span>
-          ) : syncStatus.pending > 0 ? (
-            <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
-              🟡 Offline — {syncStatus.pending} pendente(s)
-            </span>
-          ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
+          <SyncStatusBadge status={syncStatus} />
           <ThemeToggle />
       </header>
 
@@ -851,15 +954,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         </div>
         <div className="flex items-center gap-3">
            <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
-           {syncStatus.failed > 0 ? (
-             <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/30">
-               🔴 {syncStatus.failed} falha(s) — verificar
-             </span>
-           ) : syncStatus.pending > 0 ? (
-             <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/30">
-               🟡 Offline — {syncStatus.pending} pendente(s)
-             </span>
-           ) : null /* fila vazia e sem falha: nenhum badge, mesmo comportamento visual de hoje */}
+           <SyncStatusBadge status={syncStatus} />
            <div className="h-8 w-8 rounded-[var(--r-sm)] bg-[var(--brand)] flex items-center justify-center text-white font-semibold text-[12px]">
               {storeName.slice(0,2).toUpperCase()}
            </div>
