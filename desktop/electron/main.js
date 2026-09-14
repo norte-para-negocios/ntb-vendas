@@ -172,11 +172,32 @@ function createWindow() {
       // Falhar em silêncio deixaria o operador olhando pra uma tela branca
       // sem saber que o app desistiu. Diálogo nativo do SO porque neste
       // ponto NÃO existe página viva pra mostrar qualquer coisa.
-      dialog.showErrorBox(
-        'Norte Vendas',
-        'O aplicativo travou várias vezes seguidas e não conseguiu se recuperar sozinho.\n\n' +
-        'Feche e abra o aplicativo. Se continuar acontecendo, chame o suporte e mande o arquivo renderer.log.'
-      );
+      //
+      // `showMessageBox` com JANELA-PAI, e NUNCA `showErrorBox` nem
+      // `showMessageBox` sem pai: o motor de impressão (print-engine.js)
+      // roda neste mesmo processo e sobrevive à morte do renderer — é ele
+      // que continua imprimindo as comandas que os OUTROS terminais da loja
+      // enfileiram. Um diálogo bloqueante trava o event loop, e com ele o
+      // `setInterval` da fila, o heartbeat e os sockets da porta 9100. Pior:
+      // a fila só busca job com `created_at` dentro dos últimos 30 min
+      // (IDADE_MAXIMA_JOB_MS), então um diálogo esquecido aberto por mais
+      // tempo que isso faria os jobs acumulados serem descartados como
+      // obsoletos — comanda que nunca sai.
+      //
+      // A janela-pai é o que torna a chamada realmente assíncrona (vira
+      // sheet). Medido nesta máquina com um Electron de teste (2026-09-13):
+      // sem pai, `showMessageBox` congela os timers igualzinho ao
+      // `showErrorBox` — a linha seguinte à chamada nem roda; com `win` como
+      // pai, a chamada retorna na hora e os timers seguem tiquetaqueando.
+      // `win` aqui é sempre válida: o `isDestroyed()` no topo do handler já
+      // garantiu isso, e a janela existe mesmo com o renderer morto.
+      dialog.showMessageBox(win, {
+        type: 'error',
+        title: 'Norte Vendas',
+        message: 'O aplicativo travou várias vezes seguidas e não conseguiu se recuperar sozinho.',
+        detail: 'Feche e abra o aplicativo. Se continuar acontecendo, chame o suporte e mande o arquivo renderer.log.',
+        buttons: ['OK'],
+      }).catch(() => {});
       return;
     }
     logRenderer('INFO recarregando a janela sozinho');
