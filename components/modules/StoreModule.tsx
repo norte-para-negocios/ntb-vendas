@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -4627,6 +4627,33 @@ const CounterView: React.FC<{
                                  `payment_details` é o que diz se já pagou: quem grava é
                                  /api/orders/pagamento-balcao, e fetch_counter_orders_secure
                                  devolve a coluna (select o.*). */}
+                             {/* Estorno (Task 5, 2026-09-13, revisão independente): o
+                                 fluxo "paga primeiro" deixa o pedido pago e aberto por
+                                 minutos — cliente desiste, caixa cobrou o pedido errado,
+                                 maquininha recusou depois. Sem isto, a única saída era
+                                 mexer no banco à mão. Fica ao lado de "Entregar" (o
+                                 caminho inverso dele) e só pra quem tem a MESMA permissão
+                                 de receber (`canFinalize`) — quem não pode cobrar também
+                                 não pode descobrar. */}
+                             {paymentFirst && pedidoJaPago(order) && canFinalize && (
+                                 <button
+                                     type="button"
+                                     onClick={async () => {
+                                         if (!(await confirm(`Estornar o pagamento de ${order.customer_name || 'Cliente'}? O pedido volta a aparecer como não pago.`))) return;
+                                         try {
+                                             await estornarPagamentoBalcao(order.id);
+                                             toast.success('Pagamento estornado.');
+                                             load();
+                                         } catch (e: any) {
+                                             toast.error(e?.message || 'Não consegui estornar.');
+                                         }
+                                     }}
+                                     className="h-10 px-3 rounded-[var(--r-md)] border border-[var(--border)] text-xs font-bold text-[var(--text-muted)] hover:text-[var(--err)] u-motion shrink-0"
+                                     title="Estornar pagamento"
+                                 >
+                                     Estornar
+                                 </button>
+                             )}
                              {paymentFirst ? (
                                  caixaModuleOn && !canFinalize ? (
                                      <span className="h-10 px-3 flex items-center text-xs font-bold text-[var(--text-muted)] bg-[var(--surface-2)] rounded-[var(--r-md)] border border-[var(--border)] shrink-0">

@@ -1130,6 +1130,22 @@ export const entregarPedidoBalcao = async (orderId: string) => {
   }
 };
 
+// Desfaz o pagamento de um pedido de balcão ainda não entregue (ver a rota).
+// NÃO é fire-and-forget nem tem caminho offline de propósito: estorno mexe
+// em dinheiro já registrado no turno, então ou acontece agora, com a
+// confirmação do servidor, ou o operador precisa saber que não aconteceu.
+export const estornarPagamentoBalcao = async (orderId: string): Promise<void> => {
+  const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId, estornar: true }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || 'Falha ao estornar o pagamento.');
+  }
+};
+
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
 // rota interna (service role, nunca vê chave nem RLS do lado do browser) que
 // cria+conclui a Ordem de Produção correspondente no ntb-estoque. Só lojas

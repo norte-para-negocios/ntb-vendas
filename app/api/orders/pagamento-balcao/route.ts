@@ -91,11 +91,19 @@ interface RequestBody {
     emitir_nota?: boolean;
     cash_shift_id?: string;
   };
+  // Task 5 (2026-09-13, correções da revisão independente): quando `true`,
+  // esta requisição é o CAMINHO INVERSO — desfaz o pagamento em vez de
+  // gravar um. Ver o bloco de estorno no handler.
+  estornar?: boolean;
 }
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as RequestBody | null;
-  if (!body?.orderId || !body?.paymentMethod || !body?.paymentDetails) {
+
+  // orderId é a única coisa exigida pelos DOIS caminhos (pagar e estornar),
+  // então valida antes de qualquer bifurcação — o estorno não manda
+  // paymentMethod/paymentDetails nenhum.
+  if (!body?.orderId) {
     return NextResponse.json(
       { success: false, message: 'Dados de pagamento incompletos.' },
       { status: 400 }
@@ -110,6 +118,53 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'orderId inválido.' }, { status: 400 });
   }
 
+  // Validação estrita do campo novo, mesmo espírito de `emitir_nota`/
+  // `cash_shift_id` em isValidPaymentDetails: nunca confiar que o JSON que
+  // chegou bate com o tipo TypeScript. Só `true` estorna; qualquer outro
+  // valor que não seja boolean é payload malformado e é rejeitado, em vez
+  // de cair silenciosamente no caminho de pagamento (um `estornar: "true"`
+  // string cobrando o cliente é o pior desfecho possível aqui).
+  if (body.estornar !== undefined && typeof body.estornar !== 'boolean') {
+    return NextResponse.json({ success: false, message: 'estornar inválido.' }, { status: 400 });
+  }
+
+  const admin = getSupabaseAdmin();
+
+  // Estorno: limpa o pagamento de um pedido de balcão que ainda NÃO foi
+  // entregue. Existe porque o fluxo "paga primeiro" criou uma janela real
+  // entre receber e entregar (cliente desiste, caixa cobrou o pedido
+  // errado, maquininha recusou depois). Nunca toca em pedido já entregue —
+  // desfazer venda fechada é outro problema, com implicação fiscal.
+  if (body.estornar === true) {
+    const { data: estornado, error: erroEstorno } = await admin
+      .from('orders')
+      .update({ payment_method: null, payment_details: null, updated_at: new Date().toISOString() })
+      .eq('id', body.orderId)
+      .eq('order_type', 'counter')
+      .neq('status', 'delivered')
+      .neq('status', 'canceled')
+      .select('id')
+      .maybeSingle();
+    if (erroEstorno) {
+      console.error('pagamento-balcao: falha ao estornar:', erroEstorno);
+      return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+    }
+    if (!estornado) {
+      return NextResponse.json(
+        { success: false, message: 'Pedido não encontrado ou já entregue — não dá pra estornar.' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, estornado: true });
+  }
+
+  if (!body.paymentMethod || !body.paymentDetails) {
+    return NextResponse.json(
+      { success: false, message: 'Dados de pagamento incompletos.' },
+      { status: 400 }
+    );
+  }
+
   if (typeof body.paymentMethod !== 'string' || !(body.paymentMethod in PAYMENT_METHOD_LABELS)) {
     return NextResponse.json({ success: false, message: 'paymentMethod inválido.' }, { status: 400 });
   }
@@ -117,8 +172,6 @@ export async function POST(request: NextRequest) {
   if (!isValidPaymentDetails(body.paymentDetails)) {
     return NextResponse.json({ success: false, message: 'paymentDetails inválido.' }, { status: 400 });
   }
-
-  const admin = getSupabaseAdmin();
 
   // Defesa em profundidade (achado real, reunião com o Ramon, 2026-08-25):
   // não confiar que o client já normalizou o troco embutido no método CASH
