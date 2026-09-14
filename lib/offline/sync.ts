@@ -74,6 +74,45 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
     }
     case 'close_counter_order': {
       const payload = action.payload as any;
+      // Entregar fecha a venda; pagar registra o dinheiro. No fluxo "balcão
+      // paga primeiro" as duas viraram ações INDEPENDENTES da fila offline
+      // (registrar_pagamento_balcao + close_counter_order) — e a entrega não
+      // depende de nada do pagamento pra rodar. Se o pagamento falhar em
+      // definitivo (MAX_ATTEMPTS, e aí é pulado pra sempre pelo runSync), a
+      // entrega sincronizaria normalmente e marcaria o pedido 'delivered'
+      // com payment_method/payment_details NULOS: venda entregue, no
+      // histórico, fora do turno de caixa e fora de qualquer conferência.
+      // Achado de revisão independente, 2026-09-13.
+      //
+      // A fila é relida AQUI (e não do snapshot de runSync) de propósito: as
+      // ações já concluídas nesta mesma rodada foram apagadas por markDone,
+      // então um pagamento que acabou de sincronizar (é o caminho normal —
+      // ele foi enfileirado ANTES, e a fila drena por createdAt) não aparece
+      // mais e não adia a entrega à toa.
+      const fila = await getPendingActions();
+      const pagamentoDoPedido = fila.find(
+        (a) =>
+          a.type === 'registrar_pagamento_balcao' &&
+          (a.payload as any)?.orderId === payload.orderId,
+      );
+      if (pagamentoDoPedido) {
+        // Lançar aqui faz runSync chamar markFailed nesta ação — ou seja, a
+        // entrega também conta tentativa e, depois de MAX_ATTEMPTS, para de
+        // tentar e passa a aparecer no badge de falhas com o lastError
+        // abaixo. É de propósito: adiar em silêncio pra sempre esconderia do
+        // operador que existe uma venda entregue no balcão que o sistema se
+        // recusa a fechar. A distinção de mensagem importa porque é o texto
+        // que ele vê — "ainda não sincronizou" é espera normal, "falhou" é
+        // ação humana (registrar o pagamento de novo, com o pedido reaberto).
+        if (pagamentoDoPedido.attempts >= MAX_ATTEMPTS) {
+          throw new Error(
+            'O pagamento deste pedido falhou em definitivo na sincronização — a entrega não pode fechar a venda sem pagamento. Registre o pagamento de novo neste pedido.',
+          );
+        }
+        throw new Error(
+          'Pagamento deste pedido ainda não sincronizou — entrega adiada até o pagamento entrar.',
+        );
+      }
       // C2: mesmo raciocínio do case 'close_table_session' acima.
       let paymentData = payload.paymentData;
       if (paymentData?.cash_shift_id) {
