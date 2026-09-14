@@ -957,6 +957,10 @@ fetch(u+'/rest/v1/stores?select=slug,config',{headers:{apikey:k,Authorization:'B
 ```
 - [ ] Confirmar que não sobrou dado de teste na `zz-laboratorio` (pedidos `QA%`, `printer_configs` de teste, `print_jobs` de teste).
 
+## Pedido novo, para um plano próprio (2026-09-13)
+
+- **App Android pra rodar na maquininha.** Pedido do dono: "transformar um app possível para Android para baixarmos em maquininha". Não entra neste plano (é projeto próprio, não correção). O que já dá pra adiantar do levantamento: a parte de TELA é quase de graça (maquininha é Android com WebView; um wrapper tipo TWA/Capacitor serve, e o app já é responsivo e funciona offline). O trabalho de verdade é a **impressora térmica embutida da maquininha**, que só é acessível por SDK nativo do fabricante (Sunmi, Gertec, Positivo, PAX) — cada um com biblioteca Java própria, e nenhuma alcançável de dentro de uma página web. Ou seja: precisa de uma casca Android nativa mínima expondo "imprimir" pro WebView, no mesmo espírito do que foi feito no Electron. **Pergunta que decide o resto: qual maquininha?** (Stone/PagSeguro/Cielo têm loja de aplicativos própria e regras próprias de publicação; uma Sunmi "pura" é a mais livre.)
+
 ## Fora deste plano (registrado de propósito)
 
 - **Testar em Windows real.** Todo o app desktop segue validado por dedução num Mac — é o maior risco em aberto do projeto. Não é tarefa de código.
