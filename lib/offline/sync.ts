@@ -296,22 +296,115 @@ export async function runSync(): Promise<void> {
 // impressões falhas.
 // ---------------------------------------------------------------------------
 
+// `#` + 4 primeiros dígitos de um id — é o mesmo recorte que o card do
+// Balcão já mostra ("#dfc1"), então o operador reconhece na tela. Ids de
+// mesa/turno/item não aparecem em lugar nenhum da UI, mas continuam sendo a
+// única identificação que o payload carrega: melhor um id curto do que
+// "Fechamento de mesa" sem dizer qual.
+function refCurta(valor: unknown): string {
+  return typeof valor === 'string' && valor.length > 0 ? `#${valor.slice(0, 4)}` : '';
+}
+
+function emReais(valor: unknown): string {
+  return typeof valor === 'number' && Number.isFinite(valor)
+    ? `R$ ${valor.toFixed(2).replace('.', ',')}`
+    : '';
+}
+
+// Junta os pedaços que existirem, sem deixar " — " solto quando o payload
+// não tem nada identificável (fix round 2: nesse caso é melhor dizer que
+// não dá pra identificar do que inventar rótulo).
+function comDetalhe(base: string, partes: (string | false | null | undefined)[]): string {
+  const detalhe = partes.filter(Boolean).join(', ');
+  return detalhe ? `${base} — ${detalhe}` : `${base} — sem identificação no registro`;
+}
+
 // Rótulo curto e humano de uma ação da fila — o operador não conhece
-// 'close_counter_order', ele conhece "entrega do pedido #dfc1".
+// 'close_counter_order', ele conhece "entrega do pedido #dfc1". Fix round 2
+// da revisão: todos os 9 tipos identificam o alvo com o que o payload já
+// carrega (mesa, item, turno, valor, nome do cliente), não só os dois de
+// balcão — sem isso a lista dizia QUE falhou, mas não ONDE agir.
 export function descreverAcaoFila(action: QueuedAction): string {
-  const payload = (action.payload ?? {}) as any;
-  const pedido = typeof payload.orderId === 'string' ? ` #${payload.orderId.slice(0, 4)}` : '';
+  const p = (action.payload ?? {}) as any;
   switch (action.type) {
-    case 'create_order': return 'Envio de pedido novo';
-    case 'update_order_item_status': return 'Mudança de status de item';
-    case 'close_table_session': return 'Fechamento de mesa';
-    case 'close_counter_order': return `Entrega/fechamento do pedido de balcão${pedido}`;
-    case 'registrar_pagamento_balcao': return `Pagamento do pedido de balcão${pedido}`;
-    case 'open_cash_shift': return 'Abertura de caixa';
-    case 'close_cash_shift': return 'Fechamento de caixa';
-    case 'register_cash_movement': return 'Sangria/suprimento de caixa';
-    case 'open_table_manually': return 'Abertura de mesa';
-    default: return 'Ação pendente';
+    case 'create_order': {
+      const onde = p.p_table_id ? `mesa ${refCurta(p.p_table_id)}` : 'balcão';
+      const itens = Array.isArray(p.p_items) ? `${p.p_items.length} item(ns)` : '';
+      return comDetalhe('Envio de pedido novo', [onde, p.p_customer_name || false, itens]);
+    }
+    case 'update_order_item_status':
+      return comDetalhe('Mudança de status de item', [
+        refCurta(p.p_item_id) && `item ${refCurta(p.p_item_id)}`,
+        typeof p.p_status === 'string' ? `para "${p.p_status}"` : '',
+      ]);
+    case 'close_table_session':
+      return comDetalhe('Fechamento de conta de mesa', [
+        refCurta(p.tableId) && `mesa ${refCurta(p.tableId)}`,
+        emReais(p.paymentData?.total),
+      ]);
+    case 'close_counter_order':
+      return comDetalhe('Entrega/fechamento do pedido de balcão', [
+        refCurta(p.orderId) && `pedido ${refCurta(p.orderId)}`,
+        emReais(p.paymentData?.total),
+      ]);
+    case 'registrar_pagamento_balcao':
+      return comDetalhe('Pagamento do pedido de balcão', [
+        refCurta(p.orderId) && `pedido ${refCurta(p.orderId)}`,
+        emReais(p.paymentData?.total),
+      ]);
+    case 'open_cash_shift':
+      return comDetalhe('Abertura de caixa', [
+        emReais(p.p_opening_float) && `fundo de troco ${emReais(p.p_opening_float)}`,
+      ]);
+    case 'close_cash_shift':
+      return comDetalhe('Fechamento de caixa', [
+        refCurta(p.p_shift_id) && `turno ${refCurta(p.p_shift_id)}`,
+        emReais(p.p_closing_counted_cash) && `contado ${emReais(p.p_closing_counted_cash)}`,
+      ]);
+    case 'register_cash_movement':
+      return comDetalhe(p.p_type === 'suprimento' ? 'Suprimento de caixa' : 'Sangria de caixa', [
+        emReais(p.p_amount),
+        refCurta(p.p_shift_id) && `turno ${refCurta(p.p_shift_id)}`,
+        p.p_reason || false,
+      ]);
+    case 'open_table_manually':
+      return comDetalhe('Abertura de mesa', [
+        refCurta(p.p_table_id) && `mesa ${refCurta(p.p_table_id)}`,
+        p.p_host_name || false,
+      ]);
+    default:
+      return 'Ação pendente';
+  }
+}
+
+// O que exatamente deixa de acontecer ao descartar — por TIPO (fix round 2
+// da revisão). Antes o aviso era um texto fixo falando de pagamento/caixa
+// pra qualquer ação: quem descartava uma abertura de mesa lia algo que não
+// tinha nada a ver, e — o caso grave — quem descartava um `create_order`
+// não era avisado de que estava apagando um PEDIDO INTEIRO, itens e tudo,
+// achando que só limpava um alerta.
+export function explicarDescarteAcao(action: QueuedAction): string {
+  switch (action.type) {
+    case 'create_order':
+      return 'Este pedido nunca chegou ao servidor: descartar APAGA o pedido inteiro, com todos os itens dele. A cozinha/bar nunca vai recebê-lo e ele não vai existir em venda nenhuma. Se o pedido é real, lance de novo antes de descartar.';
+    case 'update_order_item_status':
+      return 'O item vai continuar com o status antigo no servidor (quem olha o KDS não vai ver essa mudança). Refaça pela tela depois de descartar, se ainda valer.';
+    case 'close_table_session':
+      return 'A conta desta mesa NÃO vai ser fechada nem o pagamento registrado: a mesa continua ocupada e o dinheiro não entra no turno. Só descarte se já fechou essa mesa por outro caminho.';
+    case 'close_counter_order':
+      return 'O pedido de balcão NÃO vai ser fechado (e, se esta ação carregava o pagamento, ele também não é registrado). O pedido continua aberto na tela do Balcão.';
+    case 'registrar_pagamento_balcao':
+      return 'O pagamento NÃO vai ser registrado: o pedido volta a aparecer como não pago e esse dinheiro não entra no fechamento do caixa. Só descarte se for receber de novo pela tela.';
+    case 'open_cash_shift':
+      return 'O turno de caixa não vai existir no servidor. Qualquer venda/movimentação que dependia dele fica sem turno — abra o caixa de novo pela tela antes de continuar operando.';
+    case 'close_cash_shift':
+      return 'O turno continua ABERTO no servidor, com a contagem que você fez perdida. Feche o caixa de novo pela tela.';
+    case 'register_cash_movement':
+      return 'Esta sangria/suprimento não vai ser lançada: o esperado em dinheiro do turno vai ficar diferente do que tem na gaveta. Lance de novo pela tela se o dinheiro saiu/entrou de verdade.';
+    case 'open_table_manually':
+      return 'A mesa não vai ser aberta no servidor — ela continua livre pra quem olhar de outro aparelho. Abra de novo pela tela se ainda tem gente sentada.';
+    default:
+      return 'Esta ação nunca vai chegar ao servidor — o efeito dela não vai acontecer.';
   }
 }
 

@@ -17,7 +17,7 @@ import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateSto
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
-import { startOfflineSync, getSyncStatus, onSyncStatusChange, listarAcoesFalhas, reenviarAcaoFalha, descartarAcaoFalha, descreverAcaoFila } from '@/lib/offline/sync';
+import { startOfflineSync, getSyncStatus, onSyncStatusChange, listarAcoesFalhas, reenviarAcaoFalha, descartarAcaoFalha, descreverAcaoFila, explicarDescarteAcao } from '@/lib/offline/sync';
 import type { QueuedAction } from '@/lib/offline/types';
 import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
@@ -509,9 +509,13 @@ const SyncStatusBadge: React.FC<{ status: { pending: number; failed: number } }>
   };
 
   const handleDescartar = async (acao: QueuedAction) => {
+    // Fix round 2 da revisão: o aviso é POR TIPO (explicarDescarteAcao em
+    // lib/offline/sync.ts). O texto fixo anterior falava de pagamento/caixa
+    // pra qualquer ação — e não dizia que descartar um pedido novo apaga o
+    // pedido inteiro, que é a perda irreversível de verdade aqui.
     const ok = await confirm({
       title: 'Descartar esta ação?',
-      message: `"${descreverAcaoFila(acao)}" nunca vai chegar ao servidor: o que ela faria (registrar o pagamento, fechar o pedido, lançar a movimentação de caixa) NÃO vai acontecer. Só descarte se você já resolveu isso por outro caminho.`,
+      message: `${descreverAcaoFila(acao)}\n\n${explicarDescarteAcao(acao)}`,
       confirmLabel: 'Descartar mesmo assim',
       variant: 'danger',
     });
