@@ -455,6 +455,12 @@ export async function POST(request: NextRequest) {
   const paymentDetailsNormalizado = {
     ...body.paymentDetails,
     methods: getPaymentMethodsForRecord(body.paymentDetails.methods, body.paymentDetails.total),
+    // Task 6 (fix round 1, revisão independente): o instante do PAGAMENTO,
+    // não o de criação do pedido. No fluxo "paga primeiro" o pedido pode
+    // ficar aberto horas antes de o caixa cobrar — `order.created_at` mede
+    // outra coisa. Gravado aqui (não recalculado na tela) porque é o único
+    // lugar server-side que sabe que o pagamento está acontecendo agora.
+    pago_em: new Date().toISOString(),
   };
 
   const { data, error } = await admin

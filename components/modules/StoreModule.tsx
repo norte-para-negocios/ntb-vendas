@@ -4587,12 +4587,30 @@ const CounterView: React.FC<{
                                      'delivered') — o aviso de idade é o que faz o operador
                                      perceber que tem venda pendurada antes de fechar o caixa. */}
                                  {pedidoJaPago(order) && (() => {
-                                     const minutosPago = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
-                                     if (minutosPago <= 30) return null;
-                                     const horasPago = Math.round(minutosPago / 60);
+                                     // Fix round 1 (revisão independente): a idade tem que vir
+                                     // do INSTANTE DO PAGAMENTO (payment_details.pago_em,
+                                     // gravado por /api/orders/pagamento-balcao), não da
+                                     // criação do pedido — no fluxo "paga primeiro" o pedido
+                                     // pode ficar aberto horas antes de o caixa cobrar, e usar
+                                     // `created_at` faria um pedido pago há 5 minutos aparecer
+                                     // como "pago há 8h". Pedido pago antes desta correção não
+                                     // tem `pago_em` — nesse caso mostra "aberto há" (o que
+                                     // realmente se sabe), nunca inventa quando foi pago.
+                                     const pagoEm = order.payment_details?.pago_em;
+                                     const referencia = pagoEm ? new Date(pagoEm) : new Date(order.created_at);
+                                     const rotulo = pagoEm ? 'Pago' : 'Aberto';
+                                     const minutos = Math.round((Date.now() - referencia.getTime()) / 60000);
+                                     if (minutos <= 30) return null;
+                                     // Abaixo de 1h, minutos exatos; a partir de 1h, horas
+                                     // truncadas + minutos restantes ("1h20") —
+                                     // Math.round(minutos/60) fazia qualquer coisa entre 31 e
+                                     // 89min virar "1h", subestimando em até quase 3x.
+                                     const texto = minutos < 60
+                                         ? `${minutos}min`
+                                         : `${Math.floor(minutos / 60)}h${String(minutos % 60).padStart(2, '0')}`;
                                      return (
                                          <span className="text-xs font-bold text-[var(--warn)]">
-                                             Pago há {horasPago}h
+                                             {rotulo} há {texto}
                                          </span>
                                      );
                                  })()}
@@ -5932,9 +5950,18 @@ const CaixaView: React.FC<{
                 // contador não bate com o do dia.
                 const pagosNaoEntregues = counterOrders.filter(o => !!o.payment_details);
                 if (pagosNaoEntregues.length === 0) return null;
-                const total = pagosNaoEntregues.reduce((s, o) =>
-                    s + (o.order_items || []).filter(i => i.status !== 'canceled')
-                        .reduce((a, i) => a + i.price_at_time * i.quantity, 0), 0);
+                // Fix round 1 (revisão independente): o valor COBRADO é
+                // `payment_details.total`, congelado no instante do
+                // pagamento — nunca recalculado de `order_items` na hora de
+                // renderizar. Nesse fluxo o pedido fica pago e não entregue
+                // DE PROPÓSITO, e a cozinha pode cancelar item nesse
+                // meio-tempo (`cancelSpecificOrderItem` funciona em pedido
+                // não entregue); recalcular a partir dos itens então
+                // SUBESTIMA o dinheiro que já está na gaveta — o oposto do
+                // que este aviso promete. Mesma fonte que
+                // `getOrderDisplayTotal` já usa em todo o resto do projeto
+                // (Histórico de Vendas, dashboard) desde 2026-08-25.
+                const total = pagosNaoEntregues.reduce((s, o) => s + getOrderDisplayTotal(o), 0);
                 return (
                     <Card className="p-3 bg-[var(--warn)]/10 border-[var(--warn)]/30">
                         <p className="text-xs font-bold text-[var(--warn)] uppercase tracking-wide mb-1">
