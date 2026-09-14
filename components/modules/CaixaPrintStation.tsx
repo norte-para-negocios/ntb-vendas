@@ -193,6 +193,41 @@ function activationCutoffNow(): string {
 // o corte existe pra proteger.
 const ACTIVATION_IDLE_MAX_MS = 30 * 60 * 1000;
 
+// Janela MÁXIMA de ociosidade que ainda pode ser chamada de "lacuna"
+// (Critical #1 da revisão final, 2026-09-13 — "o aviso de lacuna dispara toda
+// manhã, sem lacuna nenhuma").
+//
+// O bug: descartar o corte e AVISAR eram a mesma coisa. A partir do segundo
+// dia de uso sempre existe corte salvo, então toda abertura normal da loja
+// (fechou 23h, abre 10h — o horário real do Sertão, a única loja
+// `direct_print`), todo intervalo entre almoço e jantar, todo restart de PC e
+// todo app fechado por 31 minutos caía no mesmo caminho e mostrava "pode ter
+// ficado pedido sem imprimir". Um alarme que aparece todo dia sem nada de
+// errado é pior que nenhum: o time aprende a fechar no reflexo, e no dia da
+// lacuna DE VERDADE ele é dispensado no mesmo movimento.
+//
+// Descartar o corte continua igual (é proteção contra "backlog spew", e ela
+// tem que valer sempre). O que mudou é QUANDO isso vira aviso: só quando a
+// estação ficou fora numa janela em que pedidos plausivelmente entraram —
+// ou seja, ela estava operando e parou no meio, não "o PDV estava desligado".
+//
+// Critério escolhido: a ociosidade medida (`ultima_atividade` → agora) precisa
+// ficar ENTRE ACTIVATION_IDLE_MAX_MS (30 min, abaixo disso o corte nem é
+// descartado) e este teto. 2 horas, calibrado com horário real de loja:
+//   - 23h→10h (Sertão, fechada) = 11h de ociosidade → SILÊNCIO, é abertura
+//     fria, ninguém pediu nada nesse intervalo;
+//   - intervalo almoço→jantar (fecha 15h, abre 18h/19h) = 3h a 4h → também
+//     silêncio, mesma natureza;
+//   - 40 min no meio do expediente (renderer morreu e recarregou, servidor
+//     instável) = AVISA, que é o caso real que este mecanismo existe pra
+//     cobrir.
+// O teto tem que ficar abaixo do menor intervalo de loja fechada que existe
+// na prática (o de almoço→jantar, ~3h) e acima da maior janela cega plausível
+// durante o serviço. 2h atende os dois: uma estação parada 2h com a loja
+// aberta já seria notada por gente (a cozinha para de receber ticket muito
+// antes disso) — o aviso ali é redundante, não crítico.
+const LACUNA_JANELA_MAX_MS = 2 * 60 * 60 * 1000;
+
 function activationCutoffKey(storeId: string) {
   return `${STORAGE_PREFIX}_corte_ativacao_${storeId}`;
 }
@@ -214,10 +249,16 @@ function saveUltimaAtividade(storeId: string) {
   }
 }
 
-function estacaoEstavaVivaHaPouco(storeId: string): boolean {
+// Quanto tempo faz que esta estação deu o último sinal de vida, em ms.
+// `null` = não dá pra afirmar nada (nunca houve carimbo, ou ele está
+// corrompido/no futuro). Separado de `estacaoEstavaVivaHaPouco` porque o
+// Critical #1 (ver LACUNA_JANELA_MAX_MS) precisa do VALOR da ociosidade, não
+// só do booleano "menos de 30 min": 40 minutos e 11 horas caem os dois no
+// mesmo `false`, e são coisas completamente diferentes pro operador.
+function msDesdeUltimaAtividade(storeId: string): number | null {
   try {
     const ultima = window.localStorage.getItem(ultimaAtividadeKey(storeId));
-    if (!ultima) return false;
+    if (!ultima) return null;
     const delta = Date.now() - new Date(ultima).getTime();
     if (delta < 0 || Number.isNaN(delta)) {
       // Carimbo no FUTURO (ou corrompido) não prova nada, mas também não pode
@@ -233,12 +274,16 @@ function estacaoEstavaVivaHaPouco(storeId: string): boolean {
       // estação estava viva), mas a partir do próximo mount o carimbo volta
       // a ser confiável mesmo que nenhuma reconciliação chegue a dar certo.
       saveUltimaAtividade(storeId);
-      return false;
+      return null;
     }
-    return delta < ACTIVATION_IDLE_MAX_MS;
+    return delta;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function estacaoEstavaVivaHaPouco(ociosaHaMs: number | null): boolean {
+  return ociosaHaMs !== null && ociosaHaMs < ACTIVATION_IDLE_MAX_MS;
 }
 
 // Devolve o corte a usar e, quando aplicável, o corte que foi DESCARTADO —
@@ -246,11 +291,19 @@ function estacaoEstavaVivaHaPouco(storeId: string): boolean {
 // `descartado: null` cobre os dois casos silenciosos e corretos: retomamos o
 // corte salvo, ou não havia corte salvo nenhum (aparelho novo/localStorage
 // limpo — não existe buraco pra avisar, nunca houve sessão anterior aqui).
-function loadOrCreateActivationCutoff(storeId: string): { corte: string; descartado: string | null } {
-  if (!isBrowser()) return { corte: activationCutoffNow(), descartado: null };
+//
+// `aberturaFria` (Critical #1 da revisão final, ver LACUNA_JANELA_MAX_MS):
+// descartamos o corte porque a estação passou MUITO tempo parada — loja
+// fechada, PDV desligado. Não é lacuna, é o começo de um dia de trabalho.
+function loadOrCreateActivationCutoff(storeId: string): { corte: string; descartado: string | null; aberturaFria: boolean } {
+  if (!isBrowser()) return { corte: activationCutoffNow(), descartado: null, aberturaFria: false };
   try {
     const salvo = window.localStorage.getItem(activationCutoffKey(storeId));
     const agora = activationCutoffNow();
+    // Medido ANTES de qualquer `saveUltimaAtividade` desta função — ela
+    // recarimba o "agora" e apagaria justamente a informação que decide se
+    // houve lacuna.
+    const ociosaHaMs = msDesdeUltimaAtividade(storeId);
     // Corte só pode ser retomado PRA TRÁS, nunca pra frente (Critical #1 da
     // revisão do fix, 2026-09-13). Um PC de loja com a bateria do RTC morta
     // sobe com a data adiantada, grava um corte no FUTURO, e o NTP corrige o
@@ -263,7 +316,7 @@ function loadOrCreateActivationCutoff(storeId: string): { corte: string; descart
     // aparelho, não no do servidor"), então recebe a mesma resposta: corte
     // adiantado em relação a `agora` é descartado.
     const salvoUtil = salvo && new Date(salvo).getTime() <= new Date(agora).getTime();
-    if (salvoUtil && estacaoEstavaVivaHaPouco(storeId)) return { corte: salvo as string, descartado: null };
+    if (salvoUtil && estacaoEstavaVivaHaPouco(ociosaHaMs)) return { corte: salvo as string, descartado: null, aberturaFria: false };
     window.localStorage.setItem(activationCutoffKey(storeId), agora);
     // Nascer é sinal de vida (achado ao vivo ao testar o aviso de lacuna,
     // 2026-09-13): sem carimbar aqui, o carimbo só existiria depois da
@@ -278,9 +331,25 @@ function loadOrCreateActivationCutoff(storeId: string): { corte: string; descart
     // errar, pela regra já documentada no cabeçalho deste arquivo (ticket
     // duplicado se joga fora; pedido nunca impresso, não).
     saveUltimaAtividade(storeId);
-    return { corte: agora, descartado: salvo || null };
+    // AQUI mora o Critical #1 (ver LACUNA_JANELA_MAX_MS pro raciocínio e pelos
+    // horários reais usados pra calibrar): descartar o corte é uma coisa,
+    // AVISAR que pode ter ficado pedido sem imprimir é outra. Três casos:
+    //  - `!salvo`: aparelho novo/localStorage limpo, nunca houve sessão
+    //    anterior aqui — não existe buraco pra avisar (comportamento antigo,
+    //    inalterado).
+    //  - ociosidade desconhecida (`null`: sem carimbo, carimbo corrompido ou
+    //    no futuro) ou acima do teto: não dá pra afirmar que a estação ficou
+    //    CEGA — o mais provável, de longe, é que o PDV estava desligado com a
+    //    loja fechada. Silêncio, e ainda por cima uma lacuna antiga guardada
+    //    é apagada: ela falava de "Pedidos do Dia" de um dia que já acabou,
+    //    ninguém reimprime hoje um ticket de ontem.
+    //  - ociosidade entre 30 min e o teto: a estação estava operando e parou
+    //    no meio do expediente. Isso sim é lacuna, e é o único caso que avisa.
+    const aberturaFria = !!salvo && (ociosaHaMs === null || ociosaHaMs > LACUNA_JANELA_MAX_MS);
+    const houveLacuna = !!salvo && !aberturaFria;
+    return { corte: agora, descartado: houveLacuna ? salvo : null, aberturaFria };
   } catch {
-    return { corte: activationCutoffNow(), descartado: null };
+    return { corte: activationCutoffNow(), descartado: null, aberturaFria: false };
   }
 }
 
@@ -302,6 +371,12 @@ function loadOrCreateActivationCutoff(storeId: string): { corte: string; descart
 // apaga (`dismissBacklogGap`) — nenhuma reconciliação bem-sucedida o
 // resolve, porque um item pulado pelo corte nunca volta a ser candidato
 // automático por definição.
+// LIMITE DE QUANDO ISTO APARECE (Critical #1 da revisão final, 2026-09-13):
+// nem todo descarte de corte vira este aviso — só o que aconteceu dentro de
+// LACUNA_JANELA_MAX_MS. Ver o comentário daquela constante: abertura de loja
+// fechada não é "o PDV ficou cego", é "o PDV estava desligado", e avisar isso
+// todo dia matava a credibilidade do aviso justamente nos dias em que ele
+// importa.
 function lacunaCorteKey(storeId: string) {
   return `${STORAGE_PREFIX}_lacuna_corte_${storeId}`;
 }
@@ -756,13 +831,18 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     // Ver loadOrCreateActivationCutoff: retoma o corte da sessão anterior
     // desta loja quando existir (reload/recuperação de falha), em vez de
     // descartar o backlog acumulado enquanto a tela esteve fora do ar.
-    const { corte, descartado } = loadOrCreateActivationCutoff(store.id);
+    const { corte, descartado, aberturaFria } = loadOrCreateActivationCutoff(store.id);
     activatedAtRef.current = corte;
-    // Descarte de corte é a única situação em que este mecanismo assume,
-    // conscientemente, que pode ter ficado pedido pra trás — ver
-    // lacunaCorteKey. Grava e mostra; quem apaga é o operador.
+    // Descarte de corte DENTRO da janela de lacuna é a única situação em que
+    // este mecanismo assume, conscientemente, que pode ter ficado pedido pra
+    // trás — ver lacunaCorteKey e LACUNA_JANELA_MAX_MS (Critical #1). Grava e
+    // mostra; quem apaga é o operador. Abertura fria (loja estava fechada) faz
+    // o contrário: não avisa nada e ainda limpa aviso antigo pendente, pra não
+    // arrastar pro dia seguinte um "confira Pedidos do Dia" que já não tem o
+    // que conferir.
     if (descartado) saveLacunaCorte(store.id, descartado);
-    setBacklogGapSince(descartado ?? loadLacunaCorte(store.id));
+    else if (aberturaFria) saveLacunaCorte(store.id, null);
+    setBacklogGapSince(descartado ?? (aberturaFria ? null : loadLacunaCorte(store.id)));
     failedRef.current = new Map();
     setFailedItemsState(new Map());
     // O alarme de falha persistente também é retomado aqui (mesma razão:
@@ -991,11 +1071,31 @@ const CONNECTING_GRACE_MS = 4000;
 // continua sendo a terceira coisa, separada das duas ("está quebrado
 // agora"). Offline tem prioridade na faixa: sem internet, não adianta mandar
 // o operador reimprimir.
+//
+// POSIÇÃO: EMPURRA, NUNCA SOBREPÕE (Important #4 da revisão final,
+// 2026-09-13). Esta faixa era `fixed top-0 inset-x-0 z-[60]` e o header do
+// lojista é `sticky top-0 z-30` (StoreModule.tsx) — ou seja, ela cobria o
+// header inteiro no celular: o hambúrguer (a ÚNICA navegação em mobile), o
+// badge de falhas e o indicador de impressão. Com o banner de offline isso já
+// era ruim mas passageiro (some sozinho quando a conexão volta); o aviso de
+// lacuna fica na tela até alguém clicar no X, quebra em duas linhas a 390px e
+// deixa o operador SEM COMO NAVEGAR — e o X, coberto pelo próprio conteúdo
+// que ele deveria liberar, vira a única saída.
+// Correção: a faixa passa a ser um elemento de FLUXO NORMAL (sem `fixed`,
+// sem z-index) renderizado acima do header em StoreModule.tsx. Ela empurra a
+// página pra baixo em vez de flutuar por cima, então nunca há sobreposição em
+// largura nenhuma — nada de calcular offset de header, `scroll-margin` ou
+// z-index novo, que é o tipo de coisa que quebra de novo na próxima mudança de
+// layout. Efeito colateral aceito de propósito: rolando a página a faixa sai
+// de vista (o header sticky assume o topo, como sempre). Nenhum dos dois
+// avisos é acionável em tempo real — offline se resolve sozinho e a lacuna se
+// resolve em "Pedidos do Dia" —, e o badge do header (que a faixa cobria!)
+// continua visível o tempo todo pra quem quiser o estado atual.
 export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStationState }> = ({ status }) => {
   if (!status.active) return null;
   if (!status.online) {
     return (
-      <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--warn)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+      <div className="bg-[var(--warn)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
         <WifiOff size={14} className="shrink-0" />
         Sem conexão com a internet — pedidos, mesas e caixa continuam funcionando normalmente e sincronizam sozinhos quando a conexão voltar. Só a impressão automática fica pausada até reconectar.
       </div>
@@ -1003,7 +1103,7 @@ export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStatio
   }
   if (!status.backlogGapSince) return null;
   return (
-    <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--info)] text-white text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+    <div className="bg-[var(--info)] text-white text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
       <AlertTriangle size={14} className="shrink-0" />
       <span className="text-center">
         A impressão automática ficou fora do ar por um tempo (desde {new Date(status.backlogGapSince).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}). Pode ter ficado pedido sem imprimir — confira "Pedidos do Dia" e use Reimprimir.
