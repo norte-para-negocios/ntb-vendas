@@ -23,7 +23,13 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       <div className="max-w-md w-full bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] p-6 text-center">
         <h1 className="text-lg font-bold text-[var(--text)] mb-2">A tela travou, mas nada foi perdido</h1>
         <p className="text-sm text-[var(--text-muted)] mb-1">
-          Seus pedidos e sua conta continuam salvos no servidor. Toque abaixo pra voltar.
+          {/* Correção (revisão independente, fix round 1): a promessa antiga
+              ("seus pedidos e sua conta continuam salvos") é falsa quando o
+              carrinho do cliente ainda está só em memória (AppContext,
+              nenhum pedido enviado ainda) e o erro derruba essa tela — nesse
+              caso nada foi salvo, porque não existe pedido no servidor. Só
+              o que já foi ENVIADO está de fato salvo. */}
+          Pedidos já enviados continuam salvos no servidor. Se você estava montando um pedido, confira o carrinho antes de enviar de novo.
         </p>
         <p className="text-[11px] text-[var(--text-muted)] mb-5 select-text">
           Detalhe técnico: {error.message}{error.digest ? ` (${error.digest})` : ''}
