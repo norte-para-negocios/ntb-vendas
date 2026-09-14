@@ -8,7 +8,7 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield, WifiOff } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
@@ -5327,6 +5327,18 @@ const CaixaView: React.FC<{
                                             ? `Estornou pagamento de R$ ${formatBRL(Number(ev.details?.valor) || 0)} do pedido #${String(ev.details?.order_id || '').slice(0, 4)}${ev.details?.nota_autorizada_id ? ' (venda com nota fiscal autorizada — não cancelada na SEFAZ)' : ''}`
                                             : `Cancelou "${ev.details?.produto || 'item'}"`}
                                     </p>
+                                    {/* `resultado: 'incerto'` (app/api/orders/pagamento-balcao):
+                                        o estorno foi tentado, o rastro foi gravado, mas a
+                                        resposta do banco se perdeu — pode ter aplicado ou não.
+                                        Sem este aviso a linha ficava IDÊNTICA a um estorno
+                                        confirmado, e o motivo de manter o evento (avisar quem
+                                        audita que aquele pedido precisa ser conferido à mão)
+                                        não chegava em ninguém. */}
+                                    {ev.event_type === 'pagamento_estornado' && ev.details?.resultado === 'incerto' && (
+                                        <p className="mt-1 inline-flex items-center gap-1 rounded-[var(--r-sm)] bg-[var(--warn)]/10 px-2 py-0.5 text-[11px] font-bold uppercase text-[var(--warn)] border border-[var(--warn)]/30">
+                                            <AlertTriangle size={12} /> Não confirmado — conferir o pedido
+                                        </p>
+                                    )}
                                     <p className="text-[11px] text-[var(--text-muted)]">{new Date(ev.created_at).toLocaleString('pt-BR')}</p>
                                 </div>
                                 <Badge color={
