@@ -605,7 +605,15 @@ async function reconcileDestination(
         orderIdShort: item.order_id.slice(0, 8),
       });
       printersForItem.forEach((printer) => {
-        enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content })
+        // `dedupeKey` (migration 073): o dedupe desta tela é `printedIds` no
+        // localStorage, ou seja, POR APARELHO — dois computadores da mesma
+        // loja com o app aberto nunca enxergam o que o outro já imprimiu e
+        // cada um cria seu próprio print_job pro MESMO item, fazendo a
+        // comanda sair duas vezes na cozinha. A reserva atômica do motor de
+        // impressão não cobre isso (são jobs distintos, cada um reservado
+        // legitimamente por uma máquina): quem decide é o índice único no
+        // banco, e o segundo insert vira `duplicado: true` em silêncio.
+        enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content, dedupeKey: `item:${item.id}:${destination}:${printer.id}` })
           .catch((e) => console.error('enqueuePrintJob (auto) falhou:', e));
       });
     }

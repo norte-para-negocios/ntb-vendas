@@ -2450,15 +2450,27 @@ export const enqueuePrintJob = async (params: {
   destination: 'kitchen' | 'bar' | 'all' | 'receipt';
   title: string;
   content: string;
-}): Promise<{ success: boolean; id?: string; message?: string }> => {
+  // Ver migration 073: quando informada, o banco garante que o MESMO
+  // trabalho não entra duas vezes na fila — é o que impede dois PCs da
+  // mesma loja de mandarem a mesma comanda pra cozinha (o dedupe antigo era
+  // localStorage, por aparelho).
+  dedupeKey?: string;
+}): Promise<{ success: boolean; id?: string; message?: string; duplicado?: boolean }> => {
   const { data, error } = await supabase.from('print_jobs').insert({
     store_id: params.storeId,
     printer_config_id: params.printerConfigId || null,
     destination: params.destination,
     title: params.title,
     content: params.content,
+    dedupe_key: params.dedupeKey || null,
   }).select('id').single();
-  if (error) { console.error('Error enqueueing print job:', error); return { success: false, message: error.message }; }
+  if (error) {
+    // 23505 = unique_violation: outro aparelho já enfileirou este mesmo
+    // trabalho. É o comportamento desejado, não um erro pra reportar.
+    if ((error as { code?: string }).code === '23505') return { success: true, duplicado: true };
+    console.error('Error enqueueing print job:', error);
+    return { success: false, message: error.message };
+  }
   return { success: true, id: data?.id };
 };
 
