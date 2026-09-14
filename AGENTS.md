@@ -223,6 +223,29 @@ conexão via pooler (`aws-1-sa-east-1.pooler.supabase.com`) usando
 `SUPABASE_DB_URL` do `.env.local`. Rodar SQL ad-hoc: `node scripts/db.mjs
 "select ..."`.
 
+**⚠️ No deploy self-hosted do Contabo (`testvendase`), que é onde o trabalho
+acontece hoje, esses dois scripts NÃO funcionam** — `SUPABASE_DB_URL` foi
+removida do `.env.local` de propósito. Caminho real, confirmado aplicando a
+migration 073 em 2026-09-13 (anotado aqui porque custou tentativa e erro):
+
+```bash
+ssh -i ~/.ssh/notebook_contabo_key root@185.193.66.240
+docker ps --format '{{.Names}}'            # confira antes de chutar nome
+docker exec -i supabase-db psql -U supabase_admin -d ntb_vendas < arquivo.sql
+```
+
+Três armadilhas: (1) o container é **`supabase-db`** e o banco é
+**`ntb_vendas`** — o banco `postgres` do mesmo container é de outro projeto e
+nem tem as tabelas daqui (há dois PostgREST no host: `rest-vendas` →
+`ntb_vendas`, `supabase-rest` → `postgres`); (2) **`-U postgres` não é dono
+das tabelas** e falha com `must be owner of table ...` — use
+`-U supabase_admin`; (3) depois de aplicar, o PostgREST continua com o schema
+antigo em cache (erro `PGRST204`/400 na coluna nova) até rodar
+`NOTIFY pgrst, 'reload schema';` ou reiniciar `rest-vendas`. Como esse
+caminho não passa pelo `aplicar-migration.mjs`, **nenhum controle de
+migrations aplicadas é atualizado** — o arquivo em `supabase/migrations/` é o
+único registro.
+
 - **`001_schema_inicial.sql`** — schema completo: `system_admins`, `stores`,
   `store_users`, `categories`, `products`, `tables`, `orders`, `order_items`.
   RLS `allow_all_anon` em tudo. `order_items.order_id` tem `on delete cascade`
