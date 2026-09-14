@@ -3784,13 +3784,36 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             </header>
 
             {/* Barra de status da sessão: só existe fato real pra mostrar quando
-                há uma comanda de mesa com pelo menos 1 pedido já enviado
-                (mesaOrders, populado em submitOrder ao enviar pra cozinha —
-                nunca um número inventado). Sem sessão de mesa aberta, não
-                renderiza nada. */}
-            {hasAccess && mesaOrders.length > 0 && (
-                <div className="w-full bg-[var(--ink)] py-2 text-center text-[13px] text-white">
-                    Comanda aberta • {mesaItemCount} {mesaItemCount === 1 ? 'item' : 'itens'}
+                há comanda de mesa aberta. Usa `hasOpenTableOrders` (não mais
+                `mesaOrders.length > 0`) porque também cobre o caso de
+                recarregar a página com a comanda já aberta no servidor
+                (`tableOrdersUnknown`/`isWaitingBill`) -- exatamente quando o
+                cliente mais precisa de um jeito óbvio de pedir a conta. */}
+            {hasAccess && hasOpenTableOrders && (
+                <div className="w-full bg-[var(--ink)] px-4 py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-white truncate">
+                            {mesaItemCount > 0
+                                ? `Comanda aberta • ${mesaItemCount} ${mesaItemCount === 1 ? 'item' : 'itens'}`
+                                : 'Comanda aberta'}
+                        </p>
+                        <p className="text-[11px] text-white/50">
+                            {isWaitingBill ? 'Conta pedida — o garçom está a caminho' : 'Quando terminar, peça a conta aqui'}
+                        </p>
+                    </div>
+                    {/* Pedido direto do dono (2026-09-13): antes isto só existia
+                        como um ícone de 36px no cabeçalho, do mesmo tamanho do
+                        botão de busca — ninguém achava. Pedir a conta é a ÚLTIMA
+                        coisa que todo cliente de mesa faz; merece ser o botão
+                        mais óbvio da tela nesse momento. */}
+                    <button
+                        type="button"
+                        onClick={() => { setBillRequestIntent(true); setShowBill(true); }}
+                        className="shrink-0 h-11 px-4 rounded-full bg-white text-[var(--ink)] text-[14px] font-bold flex items-center gap-2 u-motion u-press-sm"
+                    >
+                        <Receipt size={16} />
+                        {isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
+                    </button>
                 </div>
             )}
 
