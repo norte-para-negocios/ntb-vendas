@@ -69,3 +69,15 @@ scripts/.pooler-host
 # cada `npm run dist`, nunca versionados (binário grande).
 /desktop/dist
 /desktop/node_modules
+
+# App mobile Android/Capacitor (mobile/) — mesmo motivo do desktop: build
+# estático regenerado a cada `npm run build:web`, nunca versionado.
+/mobile/node_modules
+/mobile/webapp/.next/
+/mobile/webapp/out/
+# local.properties tem o caminho do Android SDK da máquina de quem builda,
+# nunca deve ser commitado por cima do de outra máquina.
+/mobile/android/local.properties
+# Nenhum keystore de assinatura deve ser versionado (regra do projeto).
+*.jks
+*.keystore

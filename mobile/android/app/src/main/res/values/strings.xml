@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Norte Vendas</string>
+    <string name="title_activity_main">Norte Vendas</string>
+    <string name="package_name">com.norteparanegocios.ntbvendas</string>
+    <string name="custom_url_scheme">com.norteparanegocios.ntbvendas</string>
+</resources>
