@@ -2586,6 +2586,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // completar sozinho assim que o PIN é validado.
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [pendingCartAction, setPendingCartAction] = useState<(() => void) | null>(null);
+    // "Só ver o cardápio" só esconde o convite de entrar — nada mais muda:
+    // navegar sempre funcionou sem login. Fica por sessão (não em
+    // localStorage) porque quem recarrega a página normalmente quer o
+    // convite de volta: a intenção mais comum ao reabrir é pedir.
+    const [entradaDispensada, setEntradaDispensada] = useState(false);
 
     // Tracker State
     const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
@@ -3761,22 +3766,46 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <Coffee size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
                                 <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Pedido no balcão</span>
                             </div>
+                        ) : !entradaDispensada ? (
+                            /* Pedido direto do dono (2026-09-13): "ter o botão
+                               de também só pedir pin ou de só ver o cardápio".
+                               Um botão só ("Abrir minha mesa ou comanda") não
+                               dizia que dá pra navegar sem entrar — quem chega
+                               pelo QR não sabe se precisa se identificar pra ver
+                               preço. Agora as duas intenções têm caminho
+                               próprio, e a de entrar continua sendo a primária
+                               (cor cheia). "Só ver o cardápio" não é um modo
+                               novo: é literalmente ficar onde já está, com o
+                               banner fora do caminho. */
+                            <div className="flex w-full gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsLoginModalOpen(true)}
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] py-2.5 u-motion u-press-sm"
+                                    style={{ backgroundColor: IFOOD_RED }}
+                                >
+                                    <LogIn size={16} className="flex-shrink-0 text-white" />
+                                    <span className="text-[13px] font-bold text-white">Entrar na mesa (PIN)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setEntradaDispensada(true)}
+                                    className="flex items-center justify-center gap-2 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2.5 u-motion u-press-sm"
+                                >
+                                    <span className="text-[13px] font-semibold text-[var(--text-muted)]">Só ver o cardápio</span>
+                                </button>
+                            </div>
                         ) : (
-                            /* Reunião 2026-09-10 (min 25:12): "pra eu entrar, eu preciso
-                               escolher o produto... se eu quiser entrar no cardápio, entrar
-                               na loja, poderia ter um acesso aqui também". Confirmado ao
-                               vivo que esta entrada SEMPRE funcionou sem escolher produto —
-                               o problema era só visual: com ícone de "info" e texto cinza,
-                               lia como aviso informativo, não como o botão de entrar. Mesmo
-                               destino, mesma ação, agora com cara de chamada pra ação. */
+                            /* Ninguém pode ficar sem caminho de entrada depois de
+                               dispensar o convite acima — link discreto que traz
+                               ele de volta a qualquer momento. */
                             <button
                                 type="button"
-                                onClick={() => setIsLoginModalOpen(true)}
-                                className="flex w-full items-center justify-center gap-2 rounded-[var(--r-md)] py-2.5 text-center u-motion u-press-sm"
-                                style={{ backgroundColor: IFOOD_RED }}
+                                onClick={() => setEntradaDispensada(false)}
+                                className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-muted)] u-motion"
                             >
-                                <LogIn size={16} className="flex-shrink-0 text-white" />
-                                <span className="text-[13px] font-bold text-white">Abrir minha mesa ou comanda</span>
+                                <LogIn size={12} className="flex-shrink-0" />
+                                Entrar na mesa
                             </button>
                         )}
                     </div>
