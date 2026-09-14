@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Este projeto NÃO tem framework de teste** (sem jest/vitest/playwright em `package.json`). Verificação = `npx tsc --noEmit`, `npm run build`, e teste AO VIVO (navegador via chrome-devtools, CDP no app Electron, ou consulta REST ao banco). Nenhuma tarefa pode ser dada como pronta só com typecheck.
-- **Loja de teste é `zz-laboratorio`** (`f33b4310-ff0a-487c-a3b1-62acd0a58850`, nome real "ZZ Laboratorio (NAO E CLIENTE)"). NUNCA testar com dado de loja real de cliente. Usuário de QA: `qa-caixa-task4@zz-laboratorio.test` / `qa-teste-2026`.
+- **Loja de teste é `zz-laboratorio`** (`f33b4310-ff0a-487c-a3b1-62acd0a58850`, nome real "ZZ Laboratorio (NAO E CLIENTE)"). NUNCA testar com dado de loja real de cliente. Usuário de QA: `qa-caixa-task4@zz-laboratorio.test` (senha no cofre de credenciais — nunca em documento commitado; ver "Secrets vault" / repo privado de chaves).
 - **Todo dado de teste criado tem que ser apagado ao fim da tarefa**, e toda flag de configuração ligada pra teste tem que ser revertida.
 - **NUNCA emitir nota fiscal real.** Nenhuma tarefa aqui chama `/api/fiscal/emitir` com loja de cliente; se precisar, confirmar `ambiente=homologacao` antes.
 - **`orders`, `order_items`, `tables` e `fiscal_notas` não têm SELECT anônimo** (migrations 021/022/031). Leitura desses dados no client é sempre por RPC `security definer`; em script de verificação, usar a service role de `.env.local` (`node --env-file=.env.local`).
