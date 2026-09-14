@@ -98,7 +98,7 @@
 // motivo: não existe reconciliação de fechamento pra proteger.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob } from '@/lib/api';
@@ -219,16 +219,35 @@ function estacaoEstavaVivaHaPouco(storeId: string): boolean {
     const ultima = window.localStorage.getItem(ultimaAtividadeKey(storeId));
     if (!ultima) return false;
     const delta = Date.now() - new Date(ultima).getTime();
-    // `delta < 0` (carimbo no futuro) cai fora de propósito — mesmo motivo do
-    // guarda de futuro em loadOrCreateActivationCutoff logo abaixo.
-    return delta >= 0 && delta < ACTIVATION_IDLE_MAX_MS;
+    if (delta < 0 || Number.isNaN(delta)) {
+      // Carimbo no FUTURO (ou corrompido) não prova nada, mas também não pode
+      // ficar envenenando o aparelho pra sempre (Minor da 2ª revisão,
+      // 2026-09-13): um PC com o relógio adiantado grava carimbos
+      // adiantados a sessão inteira; quando o NTP corrige a hora no meio do
+      // turno, TODA leitura seguinte parece estar no futuro,
+      // `estacaoEstavaVivaHaPouco` fica falso pra sempre naquela máquina e
+      // todo reload volta a descartar o corte — o bug original da Task 3 de
+      // volta, só que restrito a esse aparelho. Mesma resposta do Critical
+      // #1: valor inválido é reescrito com o instante atual (auto-cura).
+      // Continua devolvendo `false` nesta passada (não dá pra afirmar que a
+      // estação estava viva), mas a partir do próximo mount o carimbo volta
+      // a ser confiável mesmo que nenhuma reconciliação chegue a dar certo.
+      saveUltimaAtividade(storeId);
+      return false;
+    }
+    return delta < ACTIVATION_IDLE_MAX_MS;
   } catch {
     return false;
   }
 }
 
-function loadOrCreateActivationCutoff(storeId: string): string {
-  if (!isBrowser()) return activationCutoffNow();
+// Devolve o corte a usar e, quando aplicável, o corte que foi DESCARTADO —
+// ver `lacunaCorteKey` abaixo pro porquê de isso precisar chegar até a tela.
+// `descartado: null` cobre os dois casos silenciosos e corretos: retomamos o
+// corte salvo, ou não havia corte salvo nenhum (aparelho novo/localStorage
+// limpo — não existe buraco pra avisar, nunca houve sessão anterior aqui).
+function loadOrCreateActivationCutoff(storeId: string): { corte: string; descartado: string | null } {
+  if (!isBrowser()) return { corte: activationCutoffNow(), descartado: null };
   try {
     const salvo = window.localStorage.getItem(activationCutoffKey(storeId));
     const agora = activationCutoffNow();
@@ -244,11 +263,65 @@ function loadOrCreateActivationCutoff(storeId: string): string {
     // aparelho, não no do servidor"), então recebe a mesma resposta: corte
     // adiantado em relação a `agora` é descartado.
     const salvoUtil = salvo && new Date(salvo).getTime() <= new Date(agora).getTime();
-    if (salvoUtil && estacaoEstavaVivaHaPouco(storeId)) return salvo as string;
+    if (salvoUtil && estacaoEstavaVivaHaPouco(storeId)) return { corte: salvo as string, descartado: null };
     window.localStorage.setItem(activationCutoffKey(storeId), agora);
-    return agora;
+    // Nascer é sinal de vida (achado ao vivo ao testar o aviso de lacuna,
+    // 2026-09-13): sem carimbar aqui, o carimbo só existiria depois da
+    // primeira reconciliação BEM-SUCEDIDA — e qualquer segundo mount antes
+    // dela (React StrictMode em dev, um F5 logo depois de abrir, ou o
+    // próprio reload automático acontecendo antes do primeiro fetch voltar)
+    // via "corte salvo + estação sem sinal de vida" e descartava o corte que
+    // ele mesmo tinha acabado de criar, disparando um aviso de lacuna falso.
+    // Trade-off consciente do outro lado: um PDV que reabre de tempos em
+    // tempos com o servidor fora do ar mantém o corte antigo mais tempo, e
+    // pode reimprimir mais quando o servidor voltar — que é o lado certo de
+    // errar, pela regra já documentada no cabeçalho deste arquivo (ticket
+    // duplicado se joga fora; pedido nunca impresso, não).
+    saveUltimaAtividade(storeId);
+    return { corte: agora, descartado: salvo || null };
   } catch {
-    return activationCutoffNow();
+    return { corte: activationCutoffNow(), descartado: null };
+  }
+}
+
+// Aviso de LACUNA: "o corte antigo foi descartado, pode ter ficado pedido pra
+// trás" (Important da 2ª revisão, 2026-09-13). A janela de 30 min está certa
+// como desenho, mas ela tem um limite honesto: se o fetch falhar sem parar
+// por mais de ACTIVATION_IDLE_MAX_MS (servidor instável, não
+// necessariamente PDV desligado) E o renderer recarregar logo em seguida —
+// que é EXATAMENTE o gatilho que este mecanismo existe pra tratar, o reload
+// automático do Electron —, o corte é descartado e recriado em `agora -
+// 5min`, e o que entrou durante a instabilidade deixa de ser candidato ao
+// auto-print. O que não dá pra aceitar é isso acontecer em SILÊNCIO: o
+// operador não tem como saber que existe buraco. Este aviso é o contrário do
+// alarme de falha de reconciliação e não pode se confundir com ele — aquele
+// diz "está quebrado AGORA", este diz "pode ter ficado buraco PRA TRÁS, e o
+// conserto é manual: Pedidos do Dia → Reimprimir". Persistido no mesmo
+// padrão das outras chaves justamente porque ele nasce durante um reload:
+// estado em memória morreria junto com o mount que o criou. Só o operador o
+// apaga (`dismissBacklogGap`) — nenhuma reconciliação bem-sucedida o
+// resolve, porque um item pulado pelo corte nunca volta a ser candidato
+// automático por definição.
+function lacunaCorteKey(storeId: string) {
+  return `${STORAGE_PREFIX}_lacuna_corte_${storeId}`;
+}
+
+function loadLacunaCorte(storeId: string): string | null {
+  if (!isBrowser()) return null;
+  try {
+    return window.localStorage.getItem(lacunaCorteKey(storeId));
+  } catch {
+    return null;
+  }
+}
+
+function saveLacunaCorte(storeId: string, desde: string | null) {
+  if (!isBrowser()) return;
+  try {
+    if (desde) window.localStorage.setItem(lacunaCorteKey(storeId), desde);
+    else window.localStorage.removeItem(lacunaCorteKey(storeId));
+  } catch {
+    /* best-effort, igual às outras chaves */
   }
 }
 
@@ -598,6 +671,12 @@ export interface CaixaPrintStationState {
   lastReconcileAt: string | null;
   lastReconcileFailed: boolean;
   persistentReconcileFailure: boolean;
+  // Ver lacunaCorteKey: instante do corte que foi descartado (ou seja, "a
+  // impressão automática pode ter ficado cega a partir daqui"), ou null.
+  // NÃO é sinônimo de falha — é um aviso de buraco passado, que só o
+  // operador dispensa.
+  backlogGapSince: string | null;
+  dismissBacklogGap: () => void;
   failedItems: FailedEntry[];
   retryItem: (key: string) => Promise<void>;
 }
@@ -618,6 +697,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
   const [lastReconcileAt, setLastReconcileAt] = useState<string | null>(null);
   const [lastReconcileFailed, setLastReconcileFailed] = useState(false);
   const [persistentReconcileFailure, setPersistentReconcileFailure] = useState(false);
+  const [backlogGapSince, setBacklogGapSince] = useState<string | null>(null);
   const [failedItemsState, setFailedItemsState] = useState<Map<string, FailedEntry>>(new Map());
 
   const printedIdsRef = useRef<Record<Destination, Set<string>>>({ kitchen: new Set(), bar: new Set() });
@@ -668,7 +748,13 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     // Ver loadOrCreateActivationCutoff: retoma o corte da sessão anterior
     // desta loja quando existir (reload/recuperação de falha), em vez de
     // descartar o backlog acumulado enquanto a tela esteve fora do ar.
-    activatedAtRef.current = loadOrCreateActivationCutoff(store.id);
+    const { corte, descartado } = loadOrCreateActivationCutoff(store.id);
+    activatedAtRef.current = corte;
+    // Descarte de corte é a única situação em que este mecanismo assume,
+    // conscientemente, que pode ter ficado pedido pra trás — ver
+    // lacunaCorteKey. Grava e mostra; quem apaga é o operador.
+    if (descartado) saveLacunaCorte(store.id, descartado);
+    setBacklogGapSince(descartado ?? loadLacunaCorte(store.id));
     failedRef.current = new Map();
     setFailedItemsState(new Map());
     // O alarme de falha persistente também é retomado aqui (mesma razão:
@@ -811,6 +897,11 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     }
   }, []);
 
+  const dismissBacklogGap = useCallback(() => {
+    if (storeRef.current) saveLacunaCorte(storeRef.current.id, null);
+    setBacklogGapSince(null);
+  }, []);
+
   return {
     active,
     connectionStatus,
@@ -818,6 +909,8 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     lastReconcileAt,
     lastReconcileFailed,
     persistentReconcileFailure,
+    backlogGapSince,
+    dismissBacklogGap,
     failedItems: Array.from(failedItemsState.values()),
     retryItem,
   };
@@ -870,12 +963,52 @@ const CONNECTING_GRACE_MS = 4000;
 // (não faz parte da fila — corre à parte, em `CaixaPrintStation.tsx`,
 // e depende de reconciliação em tempo real), então isso continua na
 // mensagem; o resto foi reescrito pra refletir a realidade atual.
+// ONDE O AVISO DE LACUNA MORA (Important da 2ª revisão, 2026-09-13): aqui,
+// junto do banner de offline, e não no `CaixaPrintStationIndicator`. Dois
+// motivos. (1) Visibilidade: o indicador é um badge pequeno no header, e o
+// achado que criou este aviso é justamente "o operador não tem como saber
+// que ficou buraco" — um badge que ele já aprendeu a ignorar não resolve;
+// esta faixa fixa no topo é o ponto mais visível que existe pro caixa.
+// (2) Mount único: o indicador é montado DUAS vezes (mobile + desktop, ver
+// StoreModule.tsx), então uma faixa renderizada de lá apareceria duplicada —
+// este componente é o único da estação com um mount point só. O nome do
+// componente ficou mais estreito que o conteúdo (hoje ele é a faixa de
+// avisos da estação, não só a de offline), mas renomear exigiria tocar em
+// StoreModule.tsx, fora do escopo desta correção.
+//
+// Os dois avisos são deliberadamente DIFERENTES em cor, ícone e texto, e não
+// se sobrepõem: offline é `--warn` e fala de agora ("a impressão está
+// pausada"); lacuna é `--info` e fala do passado ("pode ter ficado pedido
+// sem imprimir, confira Pedidos do Dia"). O alarme vermelho do indicador
+// continua sendo a terceira coisa, separada das duas ("está quebrado
+// agora"). Offline tem prioridade na faixa: sem internet, não adianta mandar
+// o operador reimprimir.
 export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStationState }> = ({ status }) => {
-  if (!status.active || status.online) return null;
+  if (!status.active) return null;
+  if (!status.online) {
+    return (
+      <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--warn)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+        <WifiOff size={14} className="shrink-0" />
+        Sem conexão com a internet — pedidos, mesas e caixa continuam funcionando normalmente e sincronizam sozinhos quando a conexão voltar. Só a impressão automática fica pausada até reconectar.
+      </div>
+    );
+  }
+  if (!status.backlogGapSince) return null;
   return (
-    <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--warn)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
-      <WifiOff size={14} className="shrink-0" />
-      Sem conexão com a internet — pedidos, mesas e caixa continuam funcionando normalmente e sincronizam sozinhos quando a conexão voltar. Só a impressão automática fica pausada até reconectar.
+    <div className="fixed top-0 inset-x-0 z-[60] bg-[var(--info)] text-white text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+      <AlertTriangle size={14} className="shrink-0" />
+      <span className="text-center">
+        A impressão automática ficou fora do ar por um tempo (desde {new Date(status.backlogGapSince).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}). Pode ter ficado pedido sem imprimir — confira "Pedidos do Dia" e use Reimprimir.
+      </span>
+      <button
+        type="button"
+        onClick={status.dismissBacklogGap}
+        title="Já conferi, pode dispensar"
+        aria-label="Dispensar aviso"
+        className="shrink-0 ml-1 rounded-full p-1 bg-white/20 hover:bg-white/30 u-motion"
+      >
+        <X size={14} />
+      </button>
     </div>
   );
 };
@@ -977,6 +1110,22 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
                 : 'Aguardando primeira verificação...'}
             </span>
           </div>
+
+          {/* Mesmo aviso da faixa, repetido aqui porque é onde o caixa vem
+              olhar quando desconfia da impressão — e porque a faixa pode ter
+              sido dispensada sem ninguém conferir. Cor de informação, nunca
+              a vermelha de falha: não é "está quebrado", é "confira se ficou
+              buraco". Ver lacunaCorteKey. */}
+          {status.backlogGapSince && (
+            <div className="p-3 rounded-lg bg-[var(--info)]/10 border border-[var(--info)]/30 text-sm text-[var(--info)] space-y-2">
+              <p className="font-semibold">
+                A impressão automática ficou fora do ar por um tempo (desde {new Date(status.backlogGapSince).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}). Pode ter ficado pedido sem imprimir — confira &quot;Pedidos do Dia&quot; e use Reimprimir.
+              </p>
+              <Button size="sm" variant="secondary" onClick={status.dismissBacklogGap}>
+                Já conferi, dispensar aviso
+              </Button>
+            </div>
+          )}
 
           {status.persistentReconcileFailure && (
             <div className="p-3 rounded-lg bg-[var(--err)]/10 border border-[var(--err)]/30 text-sm text-[var(--err)] font-semibold">
