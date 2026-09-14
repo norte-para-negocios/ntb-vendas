@@ -176,6 +176,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'confirmarNotaAutorizada inválido.' }, { status: 400 });
     }
 
+    // Fix round 2 (Important 4a): o `operator_user_id` do evento de
+    // auditoria tem FK pra `store_users`. Um id que não existe (ou de
+    // outra loja) só estouraria lá embaixo como violação de FK → 500
+    // genérico, bloqueando um estorno legítimo sem explicar nada. Validar
+    // aqui devolve o motivo certo e, de quebra, levanta a barra contra
+    // identidade forjada: `store_users` não tem SELECT anônimo desde a
+    // migration 014, então um cliente não tem como descobrir um id válido
+    // desta loja pra chutar. (Não é autenticação — a identidade continua
+    // sendo afirmação do client, dívida de fundo do projeto inteiro.)
+    if (body.operatorUserId) {
+      const { data: operador, error: erroOperador } = await admin
+        .from('store_users')
+        .select('id')
+        .eq('id', body.operatorUserId)
+        .eq('store_id', body.storeId)
+        .maybeSingle();
+      if (erroOperador) {
+        console.error('pagamento-balcao: falha ao validar operador:', erroOperador);
+        return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+      }
+      if (!operador) {
+        return NextResponse.json(
+          { success: false, message: 'Operador não encontrado nesta loja — faça login de novo.' },
+          { status: 403 }
+        );
+      }
+    }
+
     // Lê ANTES de limpar: é a única chance de saber o que está sendo
     // desfeito (valor, formas, turno) — depois do UPDATE esse dado não
     // existe em lugar nenhum. Também é o que distingue os motivos de
@@ -259,12 +287,24 @@ export async function POST(request: NextRequest) {
     // tenha outro valor/forma. Então o estorno só passa com um de-acordo
     // explícito de quem está operando (a tela mostra número/chave e diz
     // que a SEFAZ não é tocada).
+    //
+    // `.order().limit(1)` antes do `maybeSingle()` (fix round 2, Important
+    // 1): a idempotência de app/api/fiscal/emitir é só checagem de
+    // aplicação — NÃO existe UNIQUE em `fiscal_notas` — e já existe em
+    // produção pedido com DUAS notas 'autorizada'. Com `maybeSingle()`
+    // puro, esse caso virava PGRST116 → 500 genérico pra sempre, travando
+    // um estorno perfeitamente legítimo sem dizer o motivo. Pega a mais
+    // recente: o aviso é o mesmo de qualquer forma (existe nota autorizada
+    // desta venda), e o `nota_autorizada_id` do evento aponta pra uma nota
+    // real que leva o contador até as demais pelo mesmo `order_id`.
     const { data: notaAutorizada, error: erroNota } = await admin
       .from('fiscal_notas')
       .select('id, numero, serie, modelo, chave_acesso')
       .eq('store_id', body.storeId)
       .eq('order_id', body.orderId)
       .eq('status', 'autorizada')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (erroNota) {
       console.error('pagamento-balcao: falha ao checar nota fiscal:', erroNota);
@@ -307,8 +347,19 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single();
     if (erroEvento) {
+      // Fix round 2 (Important 4b): mensagem específica em vez de 500
+      // genérico — quem está no caixa precisa saber que o estorno NÃO
+      // aconteceu e por quê. Continua falhando FECHADO: sem auditoria,
+      // não estorna.
       console.error('pagamento-balcao: falha ao registrar auditoria do estorno:', erroEvento);
-      return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            'Não consegui registrar a auditoria do estorno, por isso não estornei. Tente de novo; se persistir, chame o suporte.',
+        },
+        { status: 500 }
+      );
     }
 
     const { data: estornado, error: erroEstorno } = await admin
@@ -325,13 +376,49 @@ export async function POST(request: NextRequest) {
       .not('payment_details', 'is', null)
       .select('id')
       .maybeSingle();
-    if (erroEstorno || !estornado) {
-      // Desfaz o evento de auditoria — ele afirmaria um estorno que não
-      // aconteceu.
-      await admin.from('cash_shift_audit_events').delete().eq('id', evento.id);
-      if (erroEstorno) {
-        console.error('pagamento-balcao: falha ao estornar:', erroEstorno);
-        return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+    if (erroEstorno) {
+      // Fix round 2 (Important 2): resultado INCERTO — o UPDATE pode ter
+      // commitado no Postgres e só a resposta ter se perdido (blip de
+      // rede, timeout do PostgREST). Apagar o evento aqui era o pior
+      // desfecho possível: pagamento apagado E rastro apagado, com o
+      // operador achando que falhou. O evento FICA, marcado como incerto,
+      // pra quem auditar depois saber que precisa conferir o pedido.
+      console.error('pagamento-balcao: falha ao estornar (resultado incerto):', erroEstorno);
+      const { error: erroMarcaIncerto } = await admin
+        .from('cash_shift_audit_events')
+        .update({ details: { ...detalhesEvento, resultado: 'incerto' } })
+        .eq('id', evento.id);
+      if (erroMarcaIncerto) {
+        console.error('pagamento-balcao: falha ao marcar evento de auditoria como incerto:', erroMarcaIncerto);
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            'Não deu pra confirmar o estorno — recarregue a tela e confira o pedido antes de tentar de novo.',
+        },
+        { status: 500 }
+      );
+    }
+    if (!estornado) {
+      // Aqui SIM o UPDATE respondeu e não casou nenhuma linha: o estorno
+      // comprovadamente não aconteceu (outro caixa estornou antes, ou o
+      // pedido mudou de estado no meio). Só neste caso o evento é
+      // compensado.
+      const { error: erroCompensacao } = await admin
+        .from('cash_shift_audit_events')
+        .delete()
+        .eq('id', evento.id);
+      if (erroCompensacao) {
+        // Fix round 2 (Important 3): sem esta checagem, uma deleção que
+        // falha deixa "Estornou pagamento de R$ X" na Auditoria de um
+        // estorno que NUNCA aconteceu — rastro mentindo. Não dá pra fazer
+        // mais nada em runtime além de gritar no log do servidor.
+        console.error(
+          'pagamento-balcao: evento de auditoria órfão (estorno não aplicado e compensação falhou), id:',
+          evento.id,
+          erroCompensacao
+        );
       }
       return NextResponse.json(
         { success: false, message: 'O pagamento deste pedido mudou de estado — recarregue a tela e tente de novo.' },
