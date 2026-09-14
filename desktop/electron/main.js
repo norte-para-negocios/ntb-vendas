@@ -384,6 +384,12 @@ app.whenReady().then(() => {
       logUpdate('INFO checagem manual ignorada — app rodando sem instalador (modo desenvolvimento)');
       return { ok: false, empacotado: false };
     }
+    // Rechecar com uma versão já BAIXADA faz o electron-updater reemitir
+    // 'update-downloaded' (acha o arquivo no cache): segunda notificação do
+    // sistema e um toast dizendo "baixando" quando não há nada baixando.
+    if (estadoUpdate.versaoBaixada) {
+      return { ok: true, empacotado: true, versaoDisponivel: estadoUpdate.versaoBaixada, jaBaixada: true };
+    }
     logUpdate('INFO checagem manual solicitada pelo botão "Procurar atualização"');
     try {
       const r = await autoUpdater.checkForUpdates();

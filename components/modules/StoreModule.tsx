@@ -482,11 +482,17 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     if (!window.electronApp?.checkForUpdate) return;
     setProcurandoUpdate(true);
     try {
-      const r = await window.electronApp.checkForUpdate();
+      // `jaBaixada` não vem no tipo compartilhado de `checkForUpdate`
+      // (lib/api.ts) — declarado aqui como opcional pra não mexer num
+      // contrato usado por outras telas só por causa deste caminho.
+      const r: { ok: boolean; empacotado: boolean; versaoDisponivel?: string | null; erro?: string; jaBaixada?: boolean } =
+        await window.electronApp.checkForUpdate();
       if (!r.empacotado) {
         toast.error('Esta janela está rodando em modo de desenvolvimento — atualização automática só existe no app instalado.');
       } else if (!r.ok) {
         toast.error('Não foi possível checar agora: ' + (r.erro || 'sem conexão com o servidor de atualização.'));
+      } else if (r.jaBaixada) {
+        toast.success(`A versão ${r.versaoDisponivel} já está baixada — é só clicar em "Atualizar agora" no aviso.`);
       } else if (r.versaoDisponivel && r.versaoDisponivel !== window.electronApp.version) {
         toast.success(`Versão ${r.versaoDisponivel} encontrada — baixando. O aviso pra atualizar aparece assim que terminar.`);
       } else {
@@ -779,15 +785,31 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             {!isCollapsed && <span>Sair</span>}
           </button>
         </div>
-        {!isCollapsed && typeof window !== 'undefined' && window.electronApp?.version && (
-          <button
-            onClick={handleProcurarAtualizacao}
-            disabled={procurandoUpdate}
-            className="w-full text-center text-[11px] text-white/25 hover:text-white/60 pb-2 u-motion disabled:opacity-50"
-            title="Procurar atualização"
-          >
-            App v{window.electronApp.version} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
-          </button>
+        {/* Com a barra recolhida o botão sumia por completo — quem trabalha o
+            dia inteiro com a barra recolhida (o padrão de quem já sabe os
+            ícones de cor) simplesmente não tinha como procurar atualização.
+            Recolhido vira só o ícone, com o `title` dizendo a versão. */}
+        {typeof window !== 'undefined' && window.electronApp?.version && (
+          isCollapsed ? (
+            <button
+              onClick={handleProcurarAtualizacao}
+              disabled={procurandoUpdate}
+              className="flex items-center justify-center w-full px-3 pb-3 text-white/25 hover:text-white/60 u-motion disabled:opacity-50"
+              title={`App v${window.electronApp.version} — procurar atualização`}
+              aria-label="Procurar atualização"
+            >
+              <Download size={18} className={procurandoUpdate ? 'animate-pulse' : ''} />
+            </button>
+          ) : (
+            <button
+              onClick={handleProcurarAtualizacao}
+              disabled={procurandoUpdate}
+              className="w-full text-center text-[11px] text-white/25 hover:text-white/60 pb-2 u-motion disabled:opacity-50"
+              title="Procurar atualização"
+            >
+              App v{window.electronApp.version} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
+            </button>
+          )
         )}
       </aside>
 
