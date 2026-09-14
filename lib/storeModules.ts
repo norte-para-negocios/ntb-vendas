@@ -57,6 +57,26 @@ export const resolveOrderFlow = (store?: { config?: any } | null): OrderFlow =>
 export const isCounterPaymentFirst = (store?: { config?: any } | null): boolean =>
   store?.config?.counter_payment_first === true;
 
+// "Este pedido de balcão JÁ FOI PAGO" — predicado ÚNICO, compartilhado por
+// todas as telas do Caixa/Balcão (Important #1 da revisão final, 2026-09-13).
+//
+// O achado: a fila "Aguardando pagamento" e o card "Pago e ainda não
+// entregue" respondiam essa mesma pergunta com regras diferentes. A fila só
+// olhava `payment_details` quando `counter_payment_first` estava LIGADO
+// (hoje, nenhuma loja está) — com a chave desligada, numa loja
+// `direct_print`, ela caía em `return true` e mostrava todo pedido de balcão,
+// pago ou não. O card, esse, sempre olhou `payment_details`. Resultado: um
+// pedido pago e pendurado (o pagamento sincronizou, o fechamento falhou)
+// aparecia nas DUAS ao mesmo tempo, na mesma tela — "cobre este pedido" logo
+// acima de "este pedido já está pago". Convite direto a cobrar em dobro.
+//
+// Pagar é um FATO do pedido, não um modo de exibição da loja: `payment_details`
+// só é gravado quando o dinheiro entrou de verdade. Por isso o predicado não
+// recebe `store` nenhum — ele vale igual em qualquer configuração, e é isso
+// que garante que as duas telas nunca mais discordem.
+export const isCounterOrderPaid = (order?: { payment_details?: unknown } | null): boolean =>
+  !!order?.payment_details;
+
 // Removido (redesign 2026-08-23, "caixa como estação de impressão"): existia
 // um `print_target: 'device' | 'station'` aqui, decidindo entre imprimir no
 // aparelho de quem lança o pedido (garçom) ou numa "Estação de Impressão"

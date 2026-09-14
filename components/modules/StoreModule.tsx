@@ -4,7 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
@@ -4182,7 +4182,12 @@ const CounterView: React.FC<{
     // nenhum indício de que já tinham sido pagos. Cobrança em dobro no
     // cliente. Agora qualquer pedido de balcão com pagamento gravado é
     // tratado como pago em qualquer configuração da loja.
-    const pedidoJaPago = (order: Order) => !!order.payment_details;
+    // Predicado ÚNICO, compartilhado com a fila do Caixa e com o card "Pago e
+    // ainda não entregue" (Important #1 da revisão final, 2026-09-13) — ver
+    // `isCounterOrderPaid` em lib/storeModules.ts. Era uma cópia local com a
+    // mesma regra; virou alias do predicado compartilhado pra que as três
+    // telas nunca possam divergir de novo.
+    const pedidoJaPago = (order: Order) => isCounterOrderPaid(order);
 
     // Captura de pagamento (Task 5) — só usada quando caixaModuleOn. Mesmo
     // shape de estado que TablesView usa pro pagamento de mesa
@@ -5609,12 +5614,18 @@ const CaixaView: React.FC<{
             // RECEBER. Pedido já pago some daqui (está esperando a entrega,
             // não o caixa) — senão o caixa cobraria duas vezes.
             .filter(o => {
-                // MESMA condição que o Balcão usa (isCounterPaymentFirst +
-                // módulo Caixa) — escrever isso de dois jeitos fazia as duas
-                // telas discordarem numa loja com a chave ligada e o Caixa
-                // desligado. Pago nunca aparece: está esperando entrega, não
-                // o caixa.
-                if (isCounterPaymentFirst(store) && resolveStoreModules(store).caixa) return !o.payment_details;
+                // PEDIDO JÁ PAGO NUNCA ENTRA NESTA FILA, em configuração
+                // NENHUMA (Important #1 da revisão final, 2026-09-13 — ver
+                // `isCounterOrderPaid` em lib/storeModules.ts pro achado
+                // completo). Antes esta checagem estava presa a
+                // `isCounterPaymentFirst + módulo Caixa`; com a chave
+                // desligada (todas as lojas de hoje) e `direct_print` a linha
+                // seguinte devolvia `true` pra qualquer pedido, então um
+                // pedido pago e pendurado aparecia AQUI ("a receber") e no
+                // card "Pago e ainda não entregue" ao mesmo tempo. As duas
+                // telas agora perguntam a mesma coisa pelo mesmo predicado.
+                if (isCounterOrderPaid(o)) return false;
+                if (isCounterPaymentFirst(store) && resolveStoreModules(store).caixa) return true;
                 if (orderFlow === 'direct_print') return true;
                 return o.status !== OrderStatus.PENDING;
             })
@@ -6047,7 +6058,11 @@ const CaixaView: React.FC<{
                 // 'delivered'). Sem este aviso, o caixa fecha o turno sem
                 // saber que existe venda pendurada — e o relatório do
                 // contador não bate com o do dia.
-                const pagosNaoEntregues = counterOrders.filter(o => !!o.payment_details);
+                // Mesmo predicado da fila "Aguardando pagamento" acima
+                // (`isCounterOrderPaid`) — as duas telas são complementares
+                // por construção: o que está aqui não pode estar lá, e
+                // vice-versa (Important #1 da revisão final, 2026-09-13).
+                const pagosNaoEntregues = counterOrders.filter(isCounterOrderPaid);
                 if (pagosNaoEntregues.length === 0) return null;
                 // Fix round 1 (revisão independente): o valor COBRADO é
                 // `payment_details.total`, congelado no instante do
