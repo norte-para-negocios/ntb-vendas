@@ -38,4 +38,11 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Bluetooth (Task 6): API 31+ exige BLUETOOTH_CONNECT/BLUETOOTH_SCAN em
+         vez do antigo BLUETOOTH/BLUETOOTH_ADMIN. O minSdkVersion do template
+         Capacitor 6 é 22+, mas o app roda em Android moderno o suficiente
+         pra precisar das novas. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 </manifest>
