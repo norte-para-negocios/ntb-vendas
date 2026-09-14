@@ -1,6 +1,20 @@
 'use client';
 
 import { useEffect } from 'react';
+import { registerPlugin } from '@capacitor/core';
+
+// Assinatura do plugin nativo Kotlin (Task 4,
+// mobile/android/.../printer/NtbPrinterPlugin.kt). `getStatus` diz qual
+// driver o app escolheu pro aparelho atual ("sunmi"/"bluetooth"/
+// "unsupported") — "unsupported" é o valor CORRETO em qualquer aparelho
+// que não seja Sunmi nem tenha impressora Bluetooth pareada (ex.: o
+// próprio emulador, que reporta fabricante "Google").
+interface NtbPrinterPlugin {
+  getStatus(): Promise<{ driver: string; manufacturer: string; available: boolean }>;
+  printText(opts: { text: string }): Promise<{ success: boolean; message?: string }>;
+}
+
+const NtbPrinter = registerPlugin<NtbPrinterPlugin>('NtbPrinter');
 
 // Mesmo truque do preload.js do app desktop (Electron): `lib/api.ts` já lê
 // `window.electronApp?.isElectron`/`apiBaseUrl` pra resolver rota de API e
@@ -26,11 +40,13 @@ export function NtbBridgeInit() {
       version: document.querySelector('meta[name="ntb-app-version"]')?.getAttribute('content') || '0.0.0-dev',
     };
 
-    // Placeholder pra impressão nativa — implementado de verdade na Task 4
-    // (ponte Capacitor com a maquininha/impressora térmica). Existir desde
-    // já evita checagens tipo `window.ntbPrinter &&` quebrarem por
-    // `undefined` em código que testar a presença da ponte antes da Task 4.
-    (window as any).ntbPrinter = (window as any).ntbPrinter || {};
+    // Ponte de impressão nativa de verdade (Task 4) — substitui o
+    // placeholder `{}` que existia aqui antes. `registerPlugin` do
+    // Capacitor já resolve pro plugin nativo real dentro do app Android; no
+    // navegador solto (sem casca nativa) cai no proxy web padrão do
+    // Capacitor, que rejeita a chamada — mesma resiliência que
+    // `window.electronApp` já tem.
+    (window as any).ntbPrinter = NtbPrinter;
   }, []);
 
   return null;

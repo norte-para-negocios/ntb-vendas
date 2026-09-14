@@ -1,8 +1,18 @@
 apply plugin: 'com.android.application'
+// Ver comentario no build.gradle raiz — Kotlin adicionado especificamente
+// pro plugin nativo de impressao da Task 4.
+apply plugin: 'kotlin-android'
 
 android {
     namespace "com.norteparanegocios.ntbvendas"
     compileSdk rootProject.ext.compileSdkVersion
+    // Kotlin precisa mirar o mesmo bytecode do Java (17, definido em
+    // capacitor.build.gradle) — sem isso o Gradle recusa compilar com
+    // "Inconsistent JVM-target compatibility" entre compileDebugJavaWithJavac
+    // e compileDebugKotlin (Kotlin usa 21 do JDK do Gradle por padrao).
+    kotlinOptions {
+        jvmTarget = "17"
+    }
     defaultConfig {
         applicationId "com.norteparanegocios.ntbvendas"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -40,6 +50,7 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
 }
 
 apply from: 'capacitor.build.gradle'
