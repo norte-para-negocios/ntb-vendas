@@ -16,6 +16,12 @@ import { SPRING_SHEET } from '@/lib/motion';
 // o próximo reinício — a instalação automática ao fechar o app continua
 // garantida de qualquer jeito (`autoInstallOnAppQuit`), o botão só existe
 // pra quem não quer esperar sem saber se vai mesmo acontecer.
+
+// Quanto tempo o "Entendi" segura a faixa de erro. Curto o bastante pra uma
+// falha real voltar a incomodar no mesmo turno, longo o bastante pra não
+// virar ruído em cima de quem está no meio de uma venda.
+const ERRO_SILENCIO_MS = 30 * 60 * 1000;
+
 export function DesktopUpdateBanner() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -29,9 +35,21 @@ export function DesktopUpdateBanner() {
   // aviso nunca vinha — o operador não tinha como saber de jeito nenhum.
   const [erroUpdate, setErroUpdate] = useState<string | null>(null);
   // Guardado pra não reaparecer a cada poll depois de o operador fechar;
-  // um erro DIFERENTE (outro detalhe) volta a aparecer, porque é
+  // um erro DIFERENTE (outro detalhe) volta a aparecer na hora, porque é
   // informação nova, não a mesma que ele já leu.
-  const [erroDispensado, setErroDispensado] = useState<string | null>(null);
+  //
+  // Achado da revisão (2026-09-13): silenciar PRA SEMPRE pelo texto do erro
+  // reabria justamente o buraco que este aviso existe pra fechar — no caso
+  // mais comum (internet da loja fora por horas), toda checagem de 4 em 4h
+  // devolve exatamente a MESMA mensagem, então um único "Entendi" apagaria
+  // o aviso pro resto do dia enquanto a atualização segue falhando. Por
+  // isso a dispensa é temporária: silencia pra deixar trabalhar, mas uma
+  // falha que PERSISTE volta a aparecer — que é a verdade.
+  const [erroDispensado, setErroDispensado] = useState<{ detalhe: string; em: number } | null>(null);
+  // Redesenha junto com o poll (o `setErroUpdate` sozinho não redesenha
+  // quando o detalhe é idêntico — React descarta state igual), senão a
+  // janela de silêncio venceria sem ninguém perceber até o próximo clique.
+  const [agora, setAgora] = useState(() => Date.now());
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.electronApp?.isElectron) return;
@@ -55,6 +73,7 @@ export function DesktopUpdateBanner() {
         .then((s) => {
           if (s?.versaoBaixada) setUpdateVersion(s.versaoBaixada);
           setErroUpdate(s?.situacao === 'erro' ? (s.detalhe || 'sem detalhe') : null);
+          setAgora(Date.now());
         })
         .catch(() => {});
     };
@@ -70,7 +89,10 @@ export function DesktopUpdateBanner() {
   const mostrarUpdate = !!updateVersion && !dismissed;
   // Atualização já baixada ganha a faixa de sucesso — um erro velho de uma
   // tentativa anterior não faz mais diferença nenhuma pra quem está na tela.
-  const mostrarErro = !!erroUpdate && !mostrarUpdate && erroUpdate !== erroDispensado;
+  const silenciado = !!erroDispensado
+    && erroDispensado.detalhe === erroUpdate
+    && agora - erroDispensado.em < ERRO_SILENCIO_MS;
+  const mostrarErro = !!erroUpdate && !mostrarUpdate && !silenciado;
   if (!mostrarUpdate && !recuperou && !mostrarErro) return null;
 
   const handleInstall = () => {
@@ -132,7 +154,7 @@ export function DesktopUpdateBanner() {
           <p className="text-[12px] font-medium text-white/80 break-words">{erroUpdate}</p>
         </div>
         <button
-          onClick={() => setErroDispensado(erroUpdate)}
+          onClick={() => setErroDispensado({ detalhe: erroUpdate, em: Date.now() })}
           className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] bg-white/20 hover:bg-white/30 text-white text-[13px] font-semibold u-motion u-press"
         >
           Entendi

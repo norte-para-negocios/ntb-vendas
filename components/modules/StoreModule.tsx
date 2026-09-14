@@ -794,7 +794,11 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             <button
               onClick={handleProcurarAtualizacao}
               disabled={procurandoUpdate}
-              className="flex items-center justify-center w-full px-3 pb-3 text-white/25 hover:text-white/60 u-motion disabled:opacity-50"
+              // min-h de 44px: é o alvo de toque padrão do projeto (mesmo
+              // valor já usado no seletor de adicionais e nos +/- do
+              // carrinho) — o PDV pode rodar em touchscreen, e só `pb-3`
+              // deixava o botão com 30px de altura.
+              className="flex items-center justify-center w-full min-h-[44px] px-3 pb-2 text-white/25 hover:text-white/60 u-motion disabled:opacity-50"
               title={`App v${window.electronApp.version} — procurar atualização`}
               aria-label="Procurar atualização"
             >
