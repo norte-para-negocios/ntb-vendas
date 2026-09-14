@@ -51,6 +51,9 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
     implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+    // SDK publico da Sunmi (Maven Central, sem cadastro/parceria necessarios)
+    // pra falar com o servico nativo de impressao via AIDL (InnerPrinterManager).
+    implementation 'com.sunmi:printerlibrary:1.0.18'
 }
 
 apply from: 'capacitor.build.gradle'
