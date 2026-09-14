@@ -1130,20 +1130,54 @@ export const entregarPedidoBalcao = async (orderId: string) => {
   }
 };
 
+// Nota fiscal já autorizada da venda que está sendo estornada — a rota
+// devolve isto (409) em vez de estornar, pra tela poder avisar QUAL
+// documento fica órfão antes de o operador confirmar.
+export interface EstornoNotaAutorizada {
+  id: string;
+  numero: number | null;
+  serie: number | null;
+  modelo: string | null;
+  chave_acesso: string | null;
+}
+
 // Desfaz o pagamento de um pedido de balcão ainda não entregue (ver a rota).
 // NÃO é fire-and-forget nem tem caminho offline de propósito: estorno mexe
 // em dinheiro já registrado no turno, então ou acontece agora, com a
 // confirmação do servidor, ou o operador precisa saber que não aconteceu.
-export const estornarPagamentoBalcao = async (orderId: string): Promise<void> => {
+//
+// `operatorUserId`/`operatorName` são obrigatórios do lado da rota: o
+// estorno vira evento em `cash_shift_audit_events` (migration 074), que é
+// o que faz a aba Auditoria do Caixa saber quem tirou o dinheiro do
+// esperado do turno. `storeId` existe pra rota (service role) não aceitar
+// estornar pedido de outra loja.
+//
+// Retorno: `{}` quando estornou. `{ notaAutorizada }` quando a rota
+// RECUSOU porque a venda tem nota fiscal autorizada e falta o de-acordo
+// explícito — a tela mostra a nota e chama de novo com
+// `confirmarNotaAutorizada: true`. Qualquer outra recusa é `throw`.
+export const estornarPagamentoBalcao = async (
+  orderId: string,
+  params: {
+    storeId: string;
+    operatorUserId: string | null;
+    operatorName: string;
+    confirmarNotaAutorizada?: boolean;
+  },
+): Promise<{ notaAutorizada?: EstornoNotaAutorizada }> => {
   const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ orderId, estornar: true }),
+    body: JSON.stringify({ orderId, estornar: true, ...params }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
+    if (body?.notaAutorizada && !params.confirmarNotaAutorizada) {
+      return { notaAutorizada: body.notaAutorizada as EstornoNotaAutorizada };
+    }
     throw new Error(body?.message || 'Falha ao estornar o pagamento.');
   }
+  return {};
 };
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md): dispara a
@@ -1688,7 +1722,7 @@ export interface CashShiftAuditEvent {
   shift_id: string | null;
   operator_user_id: string | null;
   operator_name: string;
-  event_type: 'item_cancelado' | 'sangria_grande' | 'tolerancia_excedida';
+  event_type: 'item_cancelado' | 'sangria_grande' | 'tolerancia_excedida' | 'pagamento_estornado';
   details: Record<string, any>;
   created_at: string;
 }

@@ -4640,8 +4640,37 @@ const CounterView: React.FC<{
                                      type="button"
                                      onClick={async () => {
                                          if (!(await confirm(`Estornar o pagamento de ${order.customer_name || 'Cliente'}? O pedido volta a aparecer como não pago.`))) return;
+                                         // Identidade de quem estorna vai junto: a rota grava o
+                                         // evento 'pagamento_estornado' na trilha de auditoria do
+                                         // Caixa (migration 074). `null` pra conta universal, mesmo
+                                         // critério do resto do projeto (não é linha de store_users).
+                                         const identidade = {
+                                             storeId,
+                                             operatorUserId: loggedUser.role === 'universal' ? null : loggedUser.id,
+                                             operatorName: loggedUser.name,
+                                         };
                                          try {
-                                             await estornarPagamentoBalcao(order.id);
+                                             const r = await estornarPagamentoBalcao(order.id, identidade);
+                                             // Nota fiscal AUTORIZADA desta venda: a rota recusa até
+                                             // o operador ver o que fica pra trás. Confirmação
+                                             // específica (não o confirm genérico) porque o que está
+                                             // em jogo é diferente — o estorno NÃO cancela nada na
+                                             // SEFAZ, e o cancelamento tem prazo.
+                                             if (r.notaAutorizada) {
+                                                 const n = r.notaAutorizada;
+                                                 const ident = n.numero
+                                                     ? `nº ${n.numero}${n.serie ? `/série ${n.serie}` : ''}`
+                                                     : n.chave_acesso
+                                                     ? `chave ${n.chave_acesso}`
+                                                     : 'já emitida';
+                                                 const ok = await confirm({
+                                                     message: `Esta venda já tem NOTA FISCAL AUTORIZADA (${ident}${n.chave_acesso && n.numero ? ` — chave ${n.chave_acesso}` : ''}). O estorno NÃO cancela essa nota na SEFAZ: o cancelamento tem que ser feito pelo caminho fiscal, dentro do prazo legal. Estornar mesmo assim?`,
+                                                     variant: 'danger',
+                                                     confirmLabel: 'Estornar mesmo assim',
+                                                 });
+                                                 if (!ok) return;
+                                                 await estornarPagamentoBalcao(order.id, { ...identidade, confirmarNotaAutorizada: true });
+                                             }
                                              toast.success('Pagamento estornado.');
                                              load();
                                          } catch (e: any) {
@@ -5292,6 +5321,10 @@ const CaixaView: React.FC<{
                                             // "Cancelou item" por engano — mostrava um operador como
                                             // tendo cancelado algo que nunca existiu.
                                             ? `Diferença de R$ ${formatBRL(Math.abs(Number(ev.details?.diferenca) || 0))} (${Number(ev.details?.diferenca) >= 0 ? 'sobra' : 'falta'}) acima da tolerância de R$ ${formatBRL(Number(ev.details?.tolerancia) || 0)} ao fechar o caixa`
+                                            : ev.event_type === 'pagamento_estornado'
+                                            // Migration 074: sem este branch o estorno cairia no
+                                            // "Cancelou item" genérico (mesmo bug do achado #1 acima).
+                                            ? `Estornou pagamento de R$ ${formatBRL(Number(ev.details?.valor) || 0)} do pedido #${String(ev.details?.order_id || '').slice(0, 4)}${ev.details?.nota_autorizada_id ? ' (venda com nota fiscal autorizada — não cancelada na SEFAZ)' : ''}`
                                             : `Cancelou "${ev.details?.produto || 'item'}"`}
                                     </p>
                                     <p className="text-[11px] text-[var(--text-muted)]">{new Date(ev.created_at).toLocaleString('pt-BR')}</p>
@@ -5301,7 +5334,7 @@ const CaixaView: React.FC<{
                                     : ev.event_type === 'tolerancia_excedida' ? 'bg-[var(--warn)]/10 text-[var(--warn)]'
                                     : 'bg-[var(--err)]/10 text-[var(--err)]'
                                 }>
-                                    {ev.event_type === 'sangria_grande' ? 'Sangria' : ev.event_type === 'tolerancia_excedida' ? 'Tolerância excedida' : 'Cancelamento'}
+                                    {ev.event_type === 'sangria_grande' ? 'Sangria' : ev.event_type === 'tolerancia_excedida' ? 'Tolerância excedida' : ev.event_type === 'pagamento_estornado' ? 'Estorno' : 'Cancelamento'}
                                 </Badge>
                             </div>
                         ))}

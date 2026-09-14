@@ -95,6 +95,17 @@ interface RequestBody {
   // esta requisição é o CAMINHO INVERSO — desfaz o pagamento em vez de
   // gravar um. Ver o bloco de estorno no handler.
   estornar?: boolean;
+  // Só no estorno (fix round 1 da Task 5). `storeId` fecha o buraco de
+  // rota cross-loja (I2) e os dois campos de operador alimentam a trilha
+  // de auditoria (C1, migration 074) — `operatorUserId` é null pra conta
+  // universal, mesmo critério do resto do projeto (ver AGENTS.md, "Conta
+  // universal"). `confirmarNotaAutorizada` é o de-acordo explícito de que
+  // existe nota fiscal AUTORIZADA desta venda e o estorno não cancela nada
+  // na SEFAZ (I1).
+  storeId?: string;
+  operatorUserId?: string | null;
+  operatorName?: string;
+  confirmarNotaAutorizada?: boolean;
 }
 
 export async function POST(request: NextRequest) {
@@ -136,23 +147,195 @@ export async function POST(request: NextRequest) {
   // errado, maquininha recusou depois). Nunca toca em pedido já entregue —
   // desfazer venda fechada é outro problema, com implicação fiscal.
   if (body.estornar === true) {
+    // I2 (fix round 1): sem `storeId`, esta rota era cross-loja — ela roda
+    // com service role e aceitava só o `orderId`, que o PRÓPRIO CLIENTE
+    // final recebe de volta de `create_order_secure`. Qualquer um com um
+    // UUID de pedido apagava o pagamento dele em QUALQUER loja da
+    // plataforma, quantas vezes quisesse (ao contrário do caminho de
+    // pagamento, que ao menos é idempotente pela guarda
+    // `payment_details is null`). O `storeId` vira filtro do UPDATE lá
+    // embaixo: pedido de outra loja simplesmente não é encontrado.
+    if (typeof body.storeId !== 'string' || !UUID_RE.test(body.storeId)) {
+      return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
+    }
+    // C1: identidade do operador é OBRIGATÓRIA no estorno — é o dado que
+    // faltava pra trilha de auditoria existir. `operatorUserId` null é
+    // legítimo (conta universal, que não é uma linha de `store_users`);
+    // `operatorName` nunca é, porque é a única coisa que aparece na aba
+    // Auditoria pra dizer QUEM fez.
+    if (body.operatorUserId !== undefined && body.operatorUserId !== null) {
+      if (typeof body.operatorUserId !== 'string' || !UUID_RE.test(body.operatorUserId)) {
+        return NextResponse.json({ success: false, message: 'operatorUserId inválido.' }, { status: 400 });
+      }
+    }
+    const operatorName = typeof body.operatorName === 'string' ? body.operatorName.trim() : '';
+    if (!operatorName || operatorName.length > 120) {
+      return NextResponse.json({ success: false, message: 'operatorName inválido.' }, { status: 400 });
+    }
+    if (body.confirmarNotaAutorizada !== undefined && typeof body.confirmarNotaAutorizada !== 'boolean') {
+      return NextResponse.json({ success: false, message: 'confirmarNotaAutorizada inválido.' }, { status: 400 });
+    }
+
+    // Lê ANTES de limpar: é a única chance de saber o que está sendo
+    // desfeito (valor, formas, turno) — depois do UPDATE esse dado não
+    // existe em lugar nenhum. Também é o que distingue os motivos de
+    // recusa abaixo, em vez de um 404 genérico (M1).
+    const { data: pedido, error: erroLeitura } = await admin
+      .from('orders')
+      .select('id, status, payment_details')
+      .eq('id', body.orderId)
+      .eq('store_id', body.storeId)
+      .eq('order_type', 'counter')
+      .maybeSingle();
+    if (erroLeitura) {
+      console.error('pagamento-balcao: falha ao ler pedido pra estorno:', erroLeitura);
+      return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+    }
+    if (!pedido) {
+      return NextResponse.json(
+        { success: false, message: 'Pedido de balcão não encontrado nesta loja.' },
+        { status: 404 }
+      );
+    }
+    if (pedido.status === 'delivered' || pedido.status === 'canceled') {
+      return NextResponse.json(
+        { success: false, message: 'Este pedido já foi entregue/cancelado — não dá pra estornar.' },
+        { status: 409 }
+      );
+    }
+    // M1: "não tem pagamento" não é a mesma coisa que "não existe".
+    const detalhes = (pedido.payment_details || null) as
+      | { total?: unknown; methods?: unknown; cash_shift_id?: unknown }
+      | null;
+    if (!detalhes) {
+      return NextResponse.json(
+        { success: false, message: 'Este pedido não tem pagamento registrado — não há o que estornar.' },
+        { status: 409 }
+      );
+    }
+
+    // C2: o esperado do turno NÃO é congelado no fechamento — 051/052/054/
+    // 057 recalculam `expected_cash`/`difference` ao vivo, lendo
+    // `payment_details.cash_shift_id`, inclusive pra turno já `closed`.
+    // Estornar um pagamento de um turno fechado faria aquele turno, já
+    // conferido e assinado, passar a exibir uma SOBRA que nunca existiu —
+    // enquanto o dinheiro de verdade está na gaveta de outro turno.
+    // Ajuste de caixa já fechado é decisão de supervisor, não um clique de
+    // operador.
+    const cashShiftId =
+      typeof detalhes.cash_shift_id === 'string' && UUID_RE.test(detalhes.cash_shift_id)
+        ? detalhes.cash_shift_id
+        : null;
+    if (cashShiftId) {
+      const { data: turno, error: erroTurno } = await admin
+        .from('cash_shifts')
+        .select('id, status')
+        .eq('id', cashShiftId)
+        .maybeSingle();
+      if (erroTurno) {
+        console.error('pagamento-balcao: falha ao ler turno de caixa:', erroTurno);
+        return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+      }
+      if (turno?.status === 'closed') {
+        return NextResponse.json(
+          {
+            success: false,
+            caixaFechado: true,
+            message:
+              'Esse pagamento é de um caixa já fechado — o ajuste tem que ser feito pelo supervisor.',
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // I1: nota fiscal AUTORIZADA não é cancelada por este estorno — nem
+    // pode ser, cancelamento é evento fiscal na SEFAZ, com prazo e
+    // justificativa, e este projeto não tem essa rotina (ver a regra
+    // crítica de emissão fiscal no AGENTS.md). Pior: como a emissão é
+    // idempotente por (store_id, order_id, status='autorizada'), pagar de
+    // novo depois do estorno NÃO emite nota nova — a nota antiga continua
+    // sendo o documento fiscal daquela venda, mesmo que o novo pagamento
+    // tenha outro valor/forma. Então o estorno só passa com um de-acordo
+    // explícito de quem está operando (a tela mostra número/chave e diz
+    // que a SEFAZ não é tocada).
+    const { data: notaAutorizada, error: erroNota } = await admin
+      .from('fiscal_notas')
+      .select('id, numero, serie, modelo, chave_acesso')
+      .eq('store_id', body.storeId)
+      .eq('order_id', body.orderId)
+      .eq('status', 'autorizada')
+      .maybeSingle();
+    if (erroNota) {
+      console.error('pagamento-balcao: falha ao checar nota fiscal:', erroNota);
+      return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+    }
+    if (notaAutorizada && body.confirmarNotaAutorizada !== true) {
+      return NextResponse.json(
+        {
+          success: false,
+          notaAutorizada,
+          message:
+            'Esta venda já tem nota fiscal autorizada — o estorno não cancela nada na SEFAZ.',
+        },
+        { status: 409 }
+      );
+    }
+
+    // Auditoria ANTES do UPDATE, de propósito: se gravar o evento falhar,
+    // nada é estornado (é exatamente o cenário que a migration 074 existe
+    // pra impedir — dinheiro recebido sumindo do esperado do turno sem
+    // ninguém saber quem tirou). Se o UPDATE falhar depois, o evento órfão
+    // é apagado logo abaixo.
+    const detalhesEvento = {
+      order_id: body.orderId,
+      valor: Number.isFinite(detalhes.total as number) ? (detalhes.total as number) : null,
+      methods: Array.isArray(detalhes.methods) ? detalhes.methods : [],
+      cash_shift_id: cashShiftId,
+      nota_autorizada_id: notaAutorizada?.id ?? null,
+    };
+    const { data: evento, error: erroEvento } = await admin
+      .from('cash_shift_audit_events')
+      .insert({
+        store_id: body.storeId,
+        shift_id: cashShiftId,
+        operator_user_id: body.operatorUserId ?? null,
+        operator_name: operatorName,
+        event_type: 'pagamento_estornado',
+        details: detalhesEvento,
+      })
+      .select('id')
+      .single();
+    if (erroEvento) {
+      console.error('pagamento-balcao: falha ao registrar auditoria do estorno:', erroEvento);
+      return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+    }
+
     const { data: estornado, error: erroEstorno } = await admin
       .from('orders')
       .update({ payment_method: null, payment_details: null, updated_at: new Date().toISOString() })
       .eq('id', body.orderId)
+      .eq('store_id', body.storeId)
       .eq('order_type', 'counter')
       .neq('status', 'delivered')
       .neq('status', 'canceled')
+      // Nunca estornar duas vezes o mesmo pagamento (espelho da guarda
+      // `.is('payment_details', null)` do caminho de pagamento): entre a
+      // leitura acima e este UPDATE, outro caixa pode ter estornado.
+      .not('payment_details', 'is', null)
       .select('id')
       .maybeSingle();
-    if (erroEstorno) {
-      console.error('pagamento-balcao: falha ao estornar:', erroEstorno);
-      return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
-    }
-    if (!estornado) {
+    if (erroEstorno || !estornado) {
+      // Desfaz o evento de auditoria — ele afirmaria um estorno que não
+      // aconteceu.
+      await admin.from('cash_shift_audit_events').delete().eq('id', evento.id);
+      if (erroEstorno) {
+        console.error('pagamento-balcao: falha ao estornar:', erroEstorno);
+        return NextResponse.json({ success: false, message: 'Falha ao estornar o pagamento.' }, { status: 500 });
+      }
       return NextResponse.json(
-        { success: false, message: 'Pedido não encontrado ou já entregue — não dá pra estornar.' },
-        { status: 404 }
+        { success: false, message: 'O pagamento deste pedido mudou de estado — recarregue a tela e tente de novo.' },
+        { status: 409 }
       );
     }
     return NextResponse.json({ success: true, estornado: true });
