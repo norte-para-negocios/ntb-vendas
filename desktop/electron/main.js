@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, protocol, net, shell, Notification, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net, shell, Notification, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -148,20 +148,48 @@ function createWindow() {
   // forçada).
   //
   // Trava contra loop: se recarregar não resolve (ex. bundle corrompido),
-  // 3 tentativas em 1 minuto param as recargas — melhor a tela branca
-  // parada do que um pisca-pisca infinito impossível de usar.
+  // 3 tentativas em 1 minuto param as recargas de VEZ (a trava é um
+  // interruptor, não uma janela que reabre) — melhor uma tela parada com
+  // aviso do que um pisca-pisca infinito impossível de usar.
   let recargas = [];
+  let desistiuDeRecarregar = false;
   win.webContents.on('render-process-gone', (_event, details) => {
     logRenderer(`ERROR renderer morreu (motivo=${details.reason}, exitCode=${details.exitCode})`);
-    const agora = Date.now();
-    recargas = recargas.filter((t) => agora - t < 60_000);
-    if (recargas.length >= 3) {
-      logRenderer('ERROR 3 recargas em 1 min sem resolver — parando de recarregar sozinho');
+    if (win.isDestroyed()) return;
+    if (desistiuDeRecarregar) {
+      logRenderer('ERROR ja tinha desistido de recarregar — nao tenta de novo');
       return;
     }
+    const agora = Date.now();
+    recargas = recargas.filter((t) => agora - t < 60_000);
+    // A tentativa RECUSADA também entra na conta (era o bug: sem isto, a
+    // janela deslizante esvaziava sozinha em 60s e o app voltava a
+    // recarregar pra sempre, a 3 por minuto, em vez de desistir).
     recargas.push(agora);
+    if (recargas.length > 3) {
+      desistiuDeRecarregar = true;
+      logRenderer('ERROR 3 recargas em 1 min sem resolver — desistindo de vez');
+      // Falhar em silêncio deixaria o operador olhando pra uma tela branca
+      // sem saber que o app desistiu. Diálogo nativo do SO porque neste
+      // ponto NÃO existe página viva pra mostrar qualquer coisa.
+      dialog.showErrorBox(
+        'Norte Vendas',
+        'O aplicativo travou várias vezes seguidas e não conseguiu se recuperar sozinho.\n\n' +
+        'Feche e abra o aplicativo. Se continuar acontecendo, chame o suporte e mande o arquivo renderer.log.'
+      );
+      return;
+    }
     logRenderer('INFO recarregando a janela sozinho');
     win.webContents.reload();
+    // A recuperação era 100% silenciosa: a tela piscava e voltava limpa, o
+    // que é indistinguível de "o pagamento foi" pra quem estava no meio de
+    // um. O estado já tinha morrido junto com o renderer — o que faltava
+    // era CONTAR isso pra quem está no caixa, assim que a página existir de
+    // novo (antes do did-finish-load não há ninguém pra ouvir o evento).
+    win.webContents.once('did-finish-load', () => {
+      if (win.isDestroyed()) return;
+      win.webContents.send('ntb-recuperou-de-falha');
+    });
   });
 
   // Não é a mesma coisa que morrer: aqui o renderer está VIVO mas travado
@@ -186,6 +214,10 @@ function createWindow() {
     if (jaTentouRecarregar) return;
     jaTentouRecarregar = true;
     setTimeout(() => {
+      // A janela pode ter sido fechada nesses 2s (inclusive por
+      // quitAndInstall durante uma atualização) — mexer num BrowserWindow
+      // destruído lança TypeError no processo principal.
+      if (win.isDestroyed()) return;
       logRenderer('INFO tentando carregar de novo');
       win.loadURL('app://bundle/index.html');
     }, 2000);

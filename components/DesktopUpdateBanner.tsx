@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Download, X } from 'lucide-react';
+import { Download, RotateCcw, X } from 'lucide-react';
 import { SPRING_SHEET } from '@/lib/motion';
 
 // Pedido direto do dono (2026-09-10): a atualização automática do app
@@ -20,10 +20,18 @@ export function DesktopUpdateBanner() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [recuperou, setRecuperou] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.electronApp?.isElectron) return;
     window.electronApp.onUpdateDownloaded?.((info) => setUpdateVersion(info.version));
+    // Achado da revisão independente: quando o renderer morre, main.js
+    // recarrega a janela sozinho — e até aqui isso era 100% invisível. Pra
+    // quem está no caixa, a tela pisca e volta limpa, o que é
+    // indistinguível de "a operação foi concluída". O aviso precisa vir do
+    // processo principal porque quem sabe que houve recarga é ele; a página
+    // que recebe este evento é uma página NOVA, sem memória do que morreu.
+    window.electronApp.onRecuperouDeFalha?.(() => setRecuperou(true));
     // Pergunta o estado assim que a tela monta, em vez de só esperar o
     // evento acima. Achado real (2026-09-13): o evento é disparado UMA vez,
     // no instante em que o download termina — se a tela ainda não existia
@@ -36,7 +44,8 @@ export function DesktopUpdateBanner() {
       .catch(() => {});
   }, []);
 
-  if (!updateVersion || dismissed) return null;
+  const mostrarUpdate = !!updateVersion && !dismissed;
+  if (!mostrarUpdate && !recuperou) return null;
 
   const handleInstall = () => {
     setInstalling(true);
@@ -44,14 +53,45 @@ export function DesktopUpdateBanner() {
   };
 
   return (
+    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2" style={{ maxWidth: 420 }}>
     <AnimatePresence>
+      {recuperou && (
+      // Deliberadamente DIFERENTE do aviso de lacuna de impressão da estação
+      // do caixa (CaixaPrintStation.tsx), que fala de pedido que pode não ter
+      // sido impresso: este fala da JANELA do app, que morreu e recarregou
+      // sozinha — o que estava digitado/aberto na tela se perdeu junto, e só
+      // quem estava mexendo sabe dizer se a ação chegou a ser concluída.
       <motion.div
+        key="recuperou"
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={SPRING_SHEET}
-        className="fixed bottom-4 right-4 z-[9999] flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--ink)] px-4 py-3 shadow-2xl border border-white/10"
-        style={{ maxWidth: 420 }}
+        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--warn)] px-4 py-3 shadow-2xl border border-black/10"
+      >
+        <div className="shrink-0 w-9 h-9 rounded-full bg-black/10 flex items-center justify-center">
+          <RotateCcw size={18} className="text-[var(--ink)]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-bold text-[var(--ink)]">O aplicativo travou e se recuperou sozinho</p>
+          <p className="text-[12px] font-medium text-[var(--ink)]/80">Confira se a última coisa que você estava fazendo foi concluída.</p>
+        </div>
+        <button
+          onClick={() => setRecuperou(false)}
+          className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] bg-[var(--ink)] text-white text-[13px] font-semibold u-motion u-press"
+        >
+          Entendi
+        </button>
+      </motion.div>
+      )}
+      {mostrarUpdate && (
+      <motion.div
+        key="update"
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={SPRING_SHEET}
+        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--ink)] px-4 py-3 shadow-2xl border border-white/10"
       >
         <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--brand)]/20 flex items-center justify-center">
           <Download size={18} className="text-[var(--brand)]" />
@@ -78,6 +118,8 @@ export function DesktopUpdateBanner() {
           </button>
         )}
       </motion.div>
+      )}
     </AnimatePresence>
+    </div>
   );
 }

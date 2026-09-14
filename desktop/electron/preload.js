@@ -7,6 +7,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 const versionArg = process.argv.find((a) => a.startsWith('--ntb-app-version='));
 const version = versionArg ? versionArg.split('=')[1] : undefined;
 
+// O preload roda ANTES de qualquer script da página, então é o único ponto
+// que consegue ouvir uma mensagem do processo principal que chega junto com o
+// carregamento — e guardá-la até o React existir pra receber (ver
+// `onRecuperouDeFalha` abaixo pro achado que motivou isto).
+let recuperouDeFalha = false;
+let callbackRecuperouDeFalha = null;
+ipcRenderer.on('ntb-recuperou-de-falha', () => {
+  recuperouDeFalha = true;
+  if (callbackRecuperouDeFalha) callbackRecuperouDeFalha();
+});
+
 // Exposto como window.electronApp na página carregada — é isso que
 // lib/api.ts:resolverUrlApi() lê pra decidir se resolve /api/* pra URL
 // absoluta. contextIsolation:true (setado em main.js) garante que a
@@ -29,6 +40,21 @@ contextBridge.exposeInMainWorld('electronApp', {
   // Pergunta o estado da atualização em vez de depender de ter ouvido o
   // evento acima na hora exata (ver main.js) — e permite procurar
   // atualização na hora, sem esperar a checagem automática de 4 em 4h.
+  // Recuperação automática de tela branca (ver render-process-gone em
+  // main.js). Não é o aviso de impressão da estação do caixa: este fala da
+  // JANELA que morreu e recarregou sozinha, levando junto o que estava
+  // preenchido na tela.
+  //
+  // Assina no `recuperouDeFalha` bufferizado acima, e não em `ipcRenderer.on`
+  // direto: achado testando ao vivo (2026-09-13) — o main manda a mensagem no
+  // `did-finish-load`, que acontece ANTES do React rodar o `useEffect` que
+  // chama isto, então assinar aqui na hora perdia o aviso todas as vezes (a
+  // faixa nunca aparecia). Mesma classe do bug já documentado no
+  // DesktopUpdateBanner com o evento de atualização baixada.
+  onRecuperouDeFalha: (callback) => {
+    callbackRecuperouDeFalha = callback;
+    if (recuperouDeFalha) callback();
+  },
   getUpdateStatus: () => ipcRenderer.invoke('ntb-update-status'),
   checkForUpdate: () => ipcRenderer.invoke('ntb-check-update'),
   // Impressão de rede (IP) / USB direto pelo app, sem programa separado
