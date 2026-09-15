@@ -2432,6 +2432,30 @@ export const fetchPrinterConfigs = async (storeId: string): Promise<PrinterConfi
   return data || [];
 };
 
+// Achado ao vivo na loja Sertão (2026-09-15): o comprovante/conferência
+// (printBillReceipt, window.print()) não tinha o mesmo guard que
+// CaixaPrintStation.tsx já usa pros tickets de cozinha/bar — sem essa
+// checagem, TODA venda imprimia tanto pela impressora térmica cadastrada em
+// printer_configs (via print_jobs) QUANTO pela janela de impressão do
+// navegador, saindo duplicado (às vezes triplicado, um print_job por
+// tentativa de fechar a conta) na mesma impressora física CAIXA. `destination`
+// 'all' cobre config antiga/genérica que ainda não distingue destino.
+export const hasActivePrinterForDestination = async (
+  storeId: string,
+  destination: 'receipt' | 'kitchen' | 'bar',
+): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('printer_configs')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('connection_type', ['network', 'usb'])
+    .in('destination', [destination, 'all'])
+    .limit(1);
+  if (error) { console.error('hasActivePrinterForDestination falhou:', error); return false; }
+  return (data || []).length > 0;
+};
+
 // Impressoras USB detectadas pelo agente local rodando no computador da
 // loja (migration 065, achado ao vivo 2026-08-28: digitar o nome exato
 // da impressora era fricção/erro desnecessário). Lista vazia = nenhum
