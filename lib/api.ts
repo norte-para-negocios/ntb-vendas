@@ -2585,7 +2585,19 @@ export const enqueuePrintJob = async (params: {
 // CaixaPrintStation pros tickets de cozinha/bar. Fire-and-forget de
 // propósito: falha aqui nunca deve impedir o fechamento, que já
 // aconteceu antes desta chamada.
-export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string): Promise<void> => {
+// `dedupeKeyBase` (opcional): achado ao vivo, loja Sertão (2026-09-15) — o
+// cupom fiscal saiu impresso 2x com a MESMA nota, 351ms de diferença. Não é
+// bug de fila (agente já reserva job atomicamente, ver print-engine.js) —
+// é o fechamento da venda sendo disparado 2x quase junto (mesmo clique
+// duplo já documentado como causa da nota fiscal duplicada em si), cada
+// disparo achando a MESMA nota já autorizada e enfileirando o cupom de
+// novo. Sem tocar no código de emissão fiscal (fora de escopo, decisão já
+// tomada nesta sessão), a fila em si pode ser deduplicada: quando o
+// chamador passa uma chave estável (ex.: o id da nota), o índice único de
+// `print_jobs(store_id, dedupe_key)` (migration 073) barra a segunda
+// tentativa. Combinado com o id da impressora pra nunca colidir entre
+// impressoras diferentes da mesma loja.
+export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string, dedupeKeyBase?: string): Promise<void> => {
   const { data: printers, error } = await supabase
     .from('printer_configs')
     .select('*')
@@ -2596,7 +2608,14 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
   if (error) { console.error('Error fetching receipt printers:', error); return; }
   await Promise.all(
     (printers || []).map((printer) =>
-      enqueuePrintJob({ storeId, printerConfigId: printer.id, destination: printer.destination, title, content })
+      enqueuePrintJob({
+        storeId,
+        printerConfigId: printer.id,
+        destination: printer.destination,
+        title,
+        content,
+        dedupeKey: dedupeKeyBase ? `${dedupeKeyBase}:${printer.id}` : undefined,
+      })
     )
   );
 };

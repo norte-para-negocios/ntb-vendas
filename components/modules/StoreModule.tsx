@@ -468,9 +468,14 @@ const abrirCupomFiscalQuandoSair = (
     // sem clique nenhum. O PDF oficial (DANFCe/DANFe completo, com QR Code
     // de verdade) continua abrindo/disponível como já fazia, pra quem
     // precisar do documento visual completo.
-    const imprimirCupomNoCaixa = (nota: { numero: number | null; serie: number | null; chave_acesso: string | null; protocolo: string | null; valor_total: number | null; modelo: '55' | '65'; ambiente: 'homologacao' | 'producao' }) => {
+    const imprimirCupomNoCaixa = (nota: { id: string; numero: number | null; serie: number | null; chave_acesso: string | null; protocolo: string | null; valor_total: number | null; modelo: '55' | '65'; ambiente: 'homologacao' | 'producao' }) => {
         const texto = buildFiscalCupomText({ storeName, nota });
-        enqueueReceiptPrintJobs(storeId, `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''}`, texto)
+        // dedupeKeyBase = id da nota: fechar a mesma venda 2x quase junto
+        // (achado ao vivo, mesma classe do clique-duplo já documentado na
+        // emissão fiscal em si) acha a MESMA nota já autorizada nas duas
+        // vezes — sem uma chave estável aqui, cada disparo enfileirava seu
+        // próprio job e o cupom saía impresso 2x fisicamente.
+        enqueueReceiptPrintJobs(storeId, `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''}`, texto, `cupom-fiscal:${nota.id}`)
             .catch((e) => console.error('enqueueReceiptPrintJobs (cupom fiscal) falhou:', e));
     };
 
