@@ -429,6 +429,40 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
+  // Cupom fiscal (NFC-e/NF-e) na impressora física do caixa (2026-09-15,
+  // pedido direto da reunião de 2026-09-10: "comanda e nota fiscal têm que
+  // ir pra mesma coisa, que é a caixa"). Diferente do motor de rede/USB
+  // acima (que manda TEXTO puro pra impressoras térmicas), o cupom é um
+  // PDF de verdade (com o QR Code exigido pela SEFAZ) — só o processo
+  // principal do Electron consegue carregar um PDF e mandar pro spooler do
+  // Windows em silêncio, sem diálogo, mirando a impressora pelo nome exato
+  // instalado (o mesmo `usb_system_name` já usado em printer_configs).
+  // Janela oculta, nunca aparece na tela — existe só pelo tempo de imprimir.
+  ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
+    const { pdfUrl, printerName } = params || {};
+    if (!pdfUrl || !printerName) {
+      logPrint('WARN impressão de PDF sem pdfUrl/printerName — ignorada');
+      return { ok: false, reason: 'parâmetros ausentes' };
+    }
+    let win = null;
+    try {
+      win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true } });
+      await win.loadURL(pdfUrl);
+      await new Promise((resolve, reject) => {
+        win.webContents.print({ silent: true, deviceName: printerName, printBackground: true }, (success, failureReason) => {
+          if (success) resolve(); else reject(new Error(failureReason || 'falha desconhecida'));
+        });
+      });
+      logPrint(`INFO cupom fiscal impresso em "${printerName}"`);
+      return { ok: true };
+    } catch (e) {
+      logPrint(`ERROR ao imprimir cupom fiscal em "${printerName}": ${e.message}`);
+      return { ok: false, reason: e.message };
+    } finally {
+      if (win && !win.isDestroyed()) win.destroy();
+    }
+  });
+
   // Achado real: um PDV de restaurante fica ligado o turno inteiro (às
   // vezes dias, se ninguém desliga o PC) — checar só uma vez ao abrir o
   // app significa que uma loja que raramente reinicia o app pode nunca

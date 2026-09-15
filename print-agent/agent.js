@@ -85,21 +85,35 @@ async function loadConfig() {
   return config;
 }
 
+// `podeRepetir` (mesmo padrão de desktop/electron/print-engine.js, portado
+// aqui em 2026-09-15): só marca como seguro repetir um erro que aconteceu
+// ANTES de qualquer byte ter sido escrito no socket. Erro depois do texto
+// já ter saído (impressora térmica que corta a conexão em vez de fechar
+// direito, comum) nunca deve virar reimpressão -- resolve como sucesso.
 function printViaNetwork(ip, port, content) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
+    let jaEscreveu = false;
     const timeout = setTimeout(() => {
       socket.destroy();
-      reject(new Error(`Timeout conectando em ${ip}:${port}`));
+      const e = new Error(`Timeout conectando em ${ip}:${port}`);
+      e.podeRepetir = true;
+      reject(e);
     }, 5000);
     socket.connect(port, ip, () => {
       socket.write(Buffer.from(content, 'utf8'), (err) => {
-        if (err) { clearTimeout(timeout); socket.destroy(); reject(err); return; }
+        if (err) { clearTimeout(timeout); socket.destroy(); err.podeRepetir = true; reject(err); return; }
+        jaEscreveu = true;
         socket.end();
       });
     });
     socket.on('close', () => { clearTimeout(timeout); resolve(); });
-    socket.on('error', (err) => { clearTimeout(timeout); reject(err); });
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      if (jaEscreveu) { resolve(); return; }
+      err.podeRepetir = true;
+      reject(err);
+    });
   });
 }
 
@@ -214,13 +228,26 @@ async function printOnce(printer, content) {
 // (driver reinstalado, preferencia alterada) -- é o próprio SO ainda
 // "assentando" a config nova, some sozinho em segundos. Sem retry, isso
 // virava 'error' permanente na fila, exigindo alguém notar e reenviar na
-// mão. 1 retentativa automática, com uma pausa curta, cobre esse caso sem
-// mascarar falha real (impressora desligada/errada continua falhando nas
-// duas tentativas e vira 'error' normalmente).
+// mão.
+//
+// Achado ao vivo, loja Sertão (2026-09-15): esse retry cego imprimiu um
+// ticket de teste DUAS VEZES com um único agente rodando -- Out-Printer
+// (Windows) pode reportar erro DEPOIS de já ter mandado o conteúdo pro
+// spooler (impressora térmica lenta pra confirmar), e printOnce não tem
+// como saber se o papel já saiu antes do erro. Repetir às cegas arrisca
+// imprimir fisicamente 2x; agora só repete pra impressora de REDE, e só
+// quando nada foi escrito ainda no socket (ver `podeRepetir` em
+// printViaNetwork). USB nunca repete: falha vira 'error' na fila,
+// reenviável na aba Impressão.
 async function printJob(printer, content) {
+  if (printer.connection_type !== 'network') {
+    await printOnce(printer, content);
+    return;
+  }
   try {
     await printOnce(printer, content);
   } catch (firstErr) {
+    if (!firstErr.podeRepetir) throw firstErr;
     console.error(`  Falhou na 1a tentativa (${firstErr.message}), tentando de novo em 2s...`);
     await sleep(2000);
     await printOnce(printer, content);

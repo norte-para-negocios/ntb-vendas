@@ -233,14 +233,26 @@ async function printOnce(printer, content) {
 // isso virava 'error' permanente na fila (achado do agente original).
 //
 // Mas só repete quando é SEGURO repetir: erro de rede antes de mandar os
-// bytes (`podeRepetir`) ou falha do comando de impressão USB, que não chega
-// a enfileirar no spooler. Erro depois do texto já ter saído nunca chega
+// bytes (`podeRepetir`). Erro depois do texto já ter saído nunca chega
 // aqui — printViaNetwork resolve nesse caso (ver lá).
+//
+// USB nunca repete (achado ao vivo, loja Sertão, 2026-09-15): o teste saiu
+// impresso 2x com só uma máquina/um app rodando — `Out-Printer` do
+// PowerShell pode reportar erro DEPOIS de já ter mandado o conteúdo pro
+// spooler do Windows (impressora térmica lenta pra confirmar), e não existe
+// um `podeRepetir` confiável pra USB como existe pra socket de rede (não dá
+// pra saber se o papel já saiu antes do erro). Repetir às cegas arrisca
+// imprimir fisicamente 2x; falhar e deixar 'error' na fila (reenviável na
+// aba Impressão) é sempre a escolha mais segura aqui.
 async function printJob(printer, content) {
+  if (printer.connection_type !== 'network') {
+    await printOnce(printer, content);
+    return;
+  }
   try {
     await printOnce(printer, content);
   } catch (firstErr) {
-    if (printer.connection_type === 'network' && !firstErr.podeRepetir) throw firstErr;
+    if (!firstErr.podeRepetir) throw firstErr;
     log(`WARN 1a tentativa falhou (${firstErr.message}), tentando de novo em 2s`);
     await new Promise((r) => setTimeout(r, 2000));
     await printOnce(printer, content);

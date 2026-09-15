@@ -27,6 +27,7 @@ declare global {
       checkForUpdate?: () => Promise<{ ok: boolean; empacotado: boolean; versaoDisponivel?: string | null; erro?: string }>;
       startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
+      printPdfSilent?: (params: { pdfUrl: string; printerName: string }) => Promise<{ ok: boolean; reason?: string }>;
     };
   }
 }
@@ -2454,6 +2455,33 @@ export const hasActivePrinterForDestination = async (
     .limit(1);
   if (error) { console.error('hasActivePrinterForDestination falhou:', error); return false; }
   return (data || []).length > 0;
+};
+
+// Achado ao vivo, loja Sertão (2026-09-15): a reunião de 2026-09-10 pedia
+// "comanda e nota fiscal têm que ir pra mesma coisa, que é a caixa" — mas
+// abrirCupomFiscalQuandoSair sempre só ABRIU o PDF (pro operador imprimir
+// na mão), nunca mandou de verdade pra impressora física. Só faz sentido
+// pro app desktop (Electron), que sabe imprimir um PDF de verdade em
+// silêncio numa impressora por nome — o navegador comum não tem essa
+// capacidade. Só USB por enquanto: é o tipo de conexão que a impressora do
+// caixa dessa loja usa, e é a única que webContents.print() do Electron
+// consegue mirar pelo nome exato instalado no Windows.
+export const fetchUsbPrinterForAutoprint = async (
+  storeId: string,
+  destination: 'receipt' | 'kitchen' | 'bar',
+): Promise<{ usbSystemName: string } | null> => {
+  const { data, error } = await supabase
+    .from('printer_configs')
+    .select('usb_system_name')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .eq('connection_type', 'usb')
+    .in('destination', [destination, 'all'])
+    .limit(1)
+    .maybeSingle();
+  if (error) { console.error('fetchUsbPrinterForAutoprint falhou:', error); return null; }
+  if (!data?.usb_system_name) return null;
+  return { usbSystemName: data.usb_system_name };
 };
 
 // Impressoras USB detectadas pelo agente local rodando no computador da

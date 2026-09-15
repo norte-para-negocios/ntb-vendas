@@ -66,4 +66,7 @@ contextBridge.exposeInMainWorld('electronApp', {
   // digitado à mão do agente separado.
   startPrintEngine: (params) => ipcRenderer.invoke('ntb-start-print-engine', params),
   stopPrintEngine: () => ipcRenderer.invoke('ntb-stop-print-engine'),
+  // Cupom fiscal (PDF real, com QR Code) direto na impressora do caixa, sem
+  // diálogo — ver handler 'ntb-print-pdf-silent' em main.js.
+  printPdfSilent: (params) => ipcRenderer.invoke('ntb-print-pdf-silent', params),
 });
