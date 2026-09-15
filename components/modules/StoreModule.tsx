@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -26,7 +26,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
-import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText } from '@/lib/print';
+import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
@@ -457,37 +457,37 @@ const abrirCupomFiscalQuandoSair = (
     // URL real assim que ela existir.
     const isElectron = typeof window !== 'undefined' && Boolean(window.electronApp?.isElectron);
 
-    // Reunião 2026-09-10 + achado ao vivo (2026-09-15): "a nota fiscal tem
-    // que imprimir no caixa também" — igual à comanda/comprovante, não só
-    // abrir um PDF pra alguém clicar em imprimir. Tentativa anterior de
-    // mandar o PDF real (com QR Code) pra térmica saiu ilegível (PDF é
-    // desenhado pra A4, não pra rolo de 80mm) — revertida. Em vez disso,
-    // enfileira um resumo em TEXTO PURO (buildFiscalCupomText) pela MESMA
-    // fila já usada e testada pro comprovante (enqueueReceiptPrintJobs,
-    // impressora USB/rede do destino 'receipt') — sai fisicamente no caixa
-    // sem clique nenhum. O PDF oficial (DANFCe/DANFe completo, com QR Code
-    // de verdade) continua abrindo/disponível como já fazia, pra quem
-    // precisar do documento visual completo.
-    const imprimirCupomNoCaixa = (nota: { id: string; numero: number | null; serie: number | null; chave_acesso: string | null; protocolo: string | null; valor_total: number | null; modelo: '55' | '65'; ambiente: 'homologacao' | 'producao' }) => {
-        const texto = buildFiscalCupomText({ storeName, nota });
-        // dedupeKeyBase = id da nota: fechar a mesma venda 2x quase junto
-        // (achado ao vivo, mesma classe do clique-duplo já documentado na
-        // emissão fiscal em si) acha a MESMA nota já autorizada nas duas
-        // vezes — sem uma chave estável aqui, cada disparo enfileirava seu
-        // próprio job e o cupom saía impresso 2x fisicamente.
-        enqueueReceiptPrintJobs(storeId, `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''}`, texto, `cupom-fiscal:${nota.id}`)
-            .catch((e) => console.error('enqueueReceiptPrintJobs (cupom fiscal) falhou:', e));
-    };
-
     if (isElectron) {
         aguardarNotaFiscalDaVenda(storeId, alvo)
-            .then((resultado) => {
-                if (resultado) {
-                    imprimirCupomNoCaixa(resultado.nota);
-                    window.open(resultado.pdfUrl, '_blank');
-                } else {
+            .then(async (resultado) => {
+                if (!resultado) {
                     toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
+                    return;
                 }
+                // Reunião 2026-09-10 + achado ao vivo (2026-09-15): "a nota
+                // fiscal tem que imprimir no caixa também" — com o DOCUMENTO
+                // REAL (com QR Code), não um resumo em texto (tentativa
+                // anterior, rejeitada). 2ª tentativa de silent-print: o PDF
+                // do cupom (nfe-danfe-pdf) usa uma página propositalmente
+                // estreita e alta (confirmado lendo o MediaBox de um cupom
+                // real: 201x1000pt) — main.js agora lê esse tamanho exato do
+                // PDF e manda um `pageSize` customizado batendo com ele, em
+                // vez de deixar o Chromium encaixar contra o tamanho de
+                // papel padrão da impressora (era isso que virava ruído/
+                // borrão na 1ª tentativa). Sem impressora cadastrada, ou se
+                // a impressão silenciosa falhar, cai pro comportamento
+                // anterior (abre o PDF pro operador imprimir na mão via
+                // Ctrl+P) — nunca perde o cupom por causa disso.
+                const printer = await fetchUsbPrinterForAutoprint(storeId, 'receipt');
+                if (printer) {
+                    const resultadoPrint = await window.electronApp?.printPdfSilent?.({ pdfUrl: resultado.pdfUrl, printerName: printer.usbSystemName });
+                    if (resultadoPrint?.ok) {
+                        toast.success('Cupom fiscal impresso no caixa.');
+                        return;
+                    }
+                    console.error('printPdfSilent falhou, abrindo o PDF pra impressão manual:', resultadoPrint?.reason);
+                }
+                window.open(resultado.pdfUrl, '_blank');
             })
             .catch((e) => {
                 console.error('abrirCupomFiscalQuandoSair falhou:', e);
@@ -502,7 +502,6 @@ const abrirCupomFiscalQuandoSair = (
     }
     aguardarNotaFiscalDaVenda(storeId, alvo)
         .then((resultado) => {
-            if (resultado) imprimirCupomNoCaixa(resultado.nota);
             if (resultado && janela && !janela.closed) {
                 janela.location.href = resultado.pdfUrl;
             } else if (resultado) {

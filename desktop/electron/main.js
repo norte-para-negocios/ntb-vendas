@@ -438,6 +438,10 @@ app.whenReady().then(() => {
   // Windows em silêncio, sem diálogo, mirando a impressora pelo nome exato
   // instalado (o mesmo `usb_system_name` já usado em printer_configs).
   // Janela oculta, nunca aparece na tela — existe só pelo tempo de imprimir.
+  // 1 ponto PDF = 1/72 polegada; 1 polegada = 25400 microns (unidade que
+  // webContents.print() espera em `pageSize` customizado).
+  const PONTO_PARA_MICRON = 25400 / 72;
+
   ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
     const { pdfUrl, printerName } = params || {};
     if (!pdfUrl || !printerName) {
@@ -446,12 +450,38 @@ app.whenReady().then(() => {
     }
     let win = null;
     try {
+      // Achado ao vivo (2026-09-15): a 1ª tentativa (sem `pageSize`) saiu
+      // como um borrão cinza ilegível. O PDF do cupom (nfe-danfe-pdf) NÃO é
+      // uma folha A4 — é uma página estreitíssima e alta de propósito
+      // (confirmado lendo o MediaBox de um cupom real: 201x1000 pontos,
+      // ~7cm de largura por ~35cm de altura, pensada pra ser cortada pela
+      // própria impressora térmica). Sem dizer isso explicitamente ao
+      // Chromium, ele encaixava/esticava a página contra o tamanho de
+      // papel PADRÃO da impressora (provavelmente Carta/A4) — texto e QR
+      // Code virando ruído numa cabeça de impressão monocromática. Agora
+      // lê o MediaBox real do PDF e manda um `pageSize` customizado batendo
+      // exatamente, em vez de deixar o Chromium adivinhar.
+      const pdfBytes = Buffer.from(await (await fetch(pdfUrl)).arrayBuffer());
+      const mediaBoxMatch = pdfBytes.toString('latin1').match(/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/);
+      let pageSize;
+      if (mediaBoxMatch) {
+        const larguraPt = parseFloat(mediaBoxMatch[3]) - parseFloat(mediaBoxMatch[1]);
+        const alturaPt = parseFloat(mediaBoxMatch[4]) - parseFloat(mediaBoxMatch[2]);
+        pageSize = { width: Math.round(larguraPt * PONTO_PARA_MICRON), height: Math.round(alturaPt * PONTO_PARA_MICRON) };
+        logPrint(`INFO cupom fiscal: MediaBox lido (${larguraPt}x${alturaPt}pt) -> pageSize ${pageSize.width}x${pageSize.height} microns`);
+      } else {
+        logPrint('WARN cupom fiscal: não achei /MediaBox no PDF, imprimindo sem pageSize customizado');
+      }
+
       win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true } });
       await win.loadURL(pdfUrl);
       await new Promise((resolve, reject) => {
-        win.webContents.print({ silent: true, deviceName: printerName, printBackground: true }, (success, failureReason) => {
-          if (success) resolve(); else reject(new Error(failureReason || 'falha desconhecida'));
-        });
+        win.webContents.print(
+          { silent: true, deviceName: printerName, printBackground: true, scaleFactor: 100, margins: { marginType: 'none' }, ...(pageSize ? { pageSize } : {}) },
+          (success, failureReason) => {
+            if (success) resolve(); else reject(new Error(failureReason || 'falha desconhecida'));
+          }
+        );
       });
       logPrint(`INFO cupom fiscal impresso em "${printerName}"`);
       return { ok: true };
