@@ -81,3 +81,9 @@ scripts/.pooler-host
 # Nenhum keystore de assinatura deve ser versionado (regra do projeto).
 *.jks
 *.keystore
+# Build gerado do Android (Task 9) — APK/artefatos do Gradle e cache
+# .gradle são sempre regenerados por `./gradlew assembleDebug`, nunca
+# versionados (mesmo princípio dos outros build/ deste projeto).
+/mobile/android/app/build/
+/mobile/android/build/
+/mobile/android/.gradle/
