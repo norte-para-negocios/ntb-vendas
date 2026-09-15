@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, protocol, net, shell, Notification, ipcMain, d
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
+const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const printEngine = require('./print-engine');
 
@@ -431,65 +432,56 @@ app.whenReady().then(() => {
 
   // Cupom fiscal (NFC-e/NF-e) na impressora física do caixa (2026-09-15,
   // pedido direto da reunião de 2026-09-10: "comanda e nota fiscal têm que
-  // ir pra mesma coisa, que é a caixa"). Diferente do motor de rede/USB
-  // acima (que manda TEXTO puro pra impressoras térmicas), o cupom é um
-  // PDF de verdade (com o QR Code exigido pela SEFAZ) — só o processo
-  // principal do Electron consegue carregar um PDF e mandar pro spooler do
-  // Windows em silêncio, sem diálogo, mirando a impressora pelo nome exato
-  // instalado (o mesmo `usb_system_name` já usado em printer_configs).
-  // Janela oculta, nunca aparece na tela — existe só pelo tempo de imprimir.
-  // 1 ponto PDF = 1/72 polegada; 1 polegada = 25400 microns (unidade que
-  // webContents.print() espera em `pageSize` customizado).
-  const PONTO_PARA_MICRON = 25400 / 72;
-
+  // ir pra mesma coisa, que é a caixa"). 3 tentativas anteriores usando o
+  // motor de PDF do PRÓPRIO Electron (`win.loadURL` + `webContents.print`)
+  // saíram como borrão cinza ilegível, mesmo corrigindo o tamanho de
+  // página — mas o usuário confirmou ao vivo que baixar o mesmo PDF e
+  // mandar imprimir manualmente (app padrão do Windows pra PDF) IMPRIME
+  // CERTO na mesma impressora. Ou seja, o problema nunca foi a
+  // impressora/driver — é o motor de renderização de PDF do Electron
+  // (Chromium embutido) que não lida bem com essa página customizada.
+  // Solução: em vez do app tentar renderizar o PDF ele mesmo, baixa o
+  // arquivo pra um temp e manda o PRÓPRIO WINDOWS executar o verbo
+  // "imprimir" nele — o mesmo mecanismo que já funciona manualmente
+  // (abre o app padrão de PDF da loja, que sabe imprimir esse arquivo
+  // direito, e manda pra impressora pedida via "Imprimir em").
   ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
     const { pdfUrl, printerName } = params || {};
     if (!pdfUrl || !printerName) {
       logPrint('WARN impressão de PDF sem pdfUrl/printerName — ignorada');
       return { ok: false, reason: 'parâmetros ausentes' };
     }
-    let win = null;
+    const tmpFile = path.join(app.getPath('temp'), `ntb-cupom-fiscal-${Date.now()}.pdf`);
     try {
-      // Achado ao vivo (2026-09-15): a 1ª tentativa (sem `pageSize`) saiu
-      // como um borrão cinza ilegível. O PDF do cupom (nfe-danfe-pdf) NÃO é
-      // uma folha A4 — é uma página estreitíssima e alta de propósito
-      // (confirmado lendo o MediaBox de um cupom real: 201x1000 pontos,
-      // ~7cm de largura por ~35cm de altura, pensada pra ser cortada pela
-      // própria impressora térmica). Sem dizer isso explicitamente ao
-      // Chromium, ele encaixava/esticava a página contra o tamanho de
-      // papel PADRÃO da impressora (provavelmente Carta/A4) — texto e QR
-      // Code virando ruído numa cabeça de impressão monocromática. Agora
-      // lê o MediaBox real do PDF e manda um `pageSize` customizado batendo
-      // exatamente, em vez de deixar o Chromium adivinhar.
       const pdfBytes = Buffer.from(await (await fetch(pdfUrl)).arrayBuffer());
-      const mediaBoxMatch = pdfBytes.toString('latin1').match(/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/);
-      let pageSize;
-      if (mediaBoxMatch) {
-        const larguraPt = parseFloat(mediaBoxMatch[3]) - parseFloat(mediaBoxMatch[1]);
-        const alturaPt = parseFloat(mediaBoxMatch[4]) - parseFloat(mediaBoxMatch[2]);
-        pageSize = { width: Math.round(larguraPt * PONTO_PARA_MICRON), height: Math.round(alturaPt * PONTO_PARA_MICRON) };
-        logPrint(`INFO cupom fiscal: MediaBox lido (${larguraPt}x${alturaPt}pt) -> pageSize ${pageSize.width}x${pageSize.height} microns`);
-      } else {
-        logPrint('WARN cupom fiscal: não achei /MediaBox no PDF, imprimindo sem pageSize customizado');
-      }
+      fs.writeFileSync(tmpFile, pdfBytes);
 
-      win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true } });
-      await win.loadURL(pdfUrl);
+      // "PrintTo" é o verbo do Shell que o Explorer usa quando você
+      // arrasta um arquivo pra cima do ícone de uma impressora específica
+      // — dispara o app padrão de PDF já instalado (o mesmo que o
+      // operador usa na hora de clicar "Imprimir" manualmente) mirando a
+      // impressora exata, sem diálogo. Só funciona se o app padrão de PDF
+      // da loja tiver esse verbo registrado (a maioria tem: Adobe Reader,
+      // Foxit, SumatraPDF, o próprio Edge). Falha aqui não é destrutiva —
+      // só retorna erro, quem chamou cai pro comportamento já testado
+      // (abrir o PDF pro operador imprimir na mão).
       await new Promise((resolve, reject) => {
-        win.webContents.print(
-          { silent: true, deviceName: printerName, printBackground: true, scaleFactor: 100, margins: { marginType: 'none' }, ...(pageSize ? { pageSize } : {}) },
-          (success, failureReason) => {
-            if (success) resolve(); else reject(new Error(failureReason || 'falha desconhecida'));
-          }
-        );
+        execFile('powershell.exe', [
+          '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+          `Start-Process -FilePath '${tmpFile.replace(/'/g, "''")}' -Verb PrintTo -ArgumentList '${printerName.replace(/'/g, "''")}' -Wait`,
+        ], { timeout: 30000 }, (err) => { if (err) reject(err); else resolve(); });
       });
-      logPrint(`INFO cupom fiscal impresso em "${printerName}"`);
+      logPrint(`INFO cupom fiscal impresso em "${printerName}" via verbo PrintTo`);
       return { ok: true };
     } catch (e) {
-      logPrint(`ERROR ao imprimir cupom fiscal em "${printerName}": ${e.message}`);
+      logPrint(`ERROR ao imprimir cupom fiscal em "${printerName}" via PrintTo: ${e.message}`);
       return { ok: false, reason: e.message };
     } finally {
-      if (win && !win.isDestroyed()) win.destroy();
+      // Espera um pouco antes de apagar: o app disparado pelo Shell pode
+      // levar um instante a mais pra terminar de ler o arquivo mesmo
+      // depois do processo retornar (alguns apps de PDF entregam o job
+      // pro spooler e saem antes do spooler terminar de ler o arquivo).
+      setTimeout(() => { try { fs.unlinkSync(tmpFile); } catch { /* ignore */ } }, 15000);
     }
   });
 
