@@ -154,7 +154,14 @@ $doc.add_PrintPage({
   $lineHeight = $font.GetHeight($e.Graphics)
   $y = $e.MarginBounds.Top
   while ($script:lineIndex -lt $lines.Count -and ($y + $lineHeight) -le $e.MarginBounds.Bottom) {
-    $e.Graphics.DrawString($lines[$script:lineIndex], $font, [System.Drawing.Brushes]::Black, [float]$e.MarginBounds.Left, [float]$y)
+    $texto = $lines[$script:lineIndex]
+    # Centralizado (pedido direto, 2026-09-15) -- mesmo padrao visual de
+    # cupom termico de qualquer PDV: cada linha centrada na largura real do
+    # papel, nao alinhada a esquerda. Nunca fica negativo se a linha for
+    # mais larga que a pagina (cai pra esquerda nesse caso raro).
+    $largura = $e.Graphics.MeasureString($texto, $font).Width
+    $x = $e.MarginBounds.Left + [Math]::Max(0, ($e.MarginBounds.Width - $largura) / 2)
+    $e.Graphics.DrawString($texto, $font, [System.Drawing.Brushes]::Black, [float]$x, [float]$y)
     $y += $lineHeight
     $script:lineIndex++
   }
