@@ -44,5 +44,11 @@
          Capacitor 6 é 22+, mas o app roda em Android moderno o suficiente
          pra precisar das novas. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- neverForLocation: sem essa flag o Android/Play Store trata scan
+         Bluetooth como capaz de inferir localização física e passa a
+         exigir também ACCESS_FINE_LOCATION. O app nunca faz descoberta de
+         dispositivos (só cancelDiscovery() e leitura de bondedDevices, ou
+         seja, impressoras JÁ PAREADAS) — não usa BLE nem RSSI pra
+         localização, então a flag é segura e correta aqui. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
 </manifest>

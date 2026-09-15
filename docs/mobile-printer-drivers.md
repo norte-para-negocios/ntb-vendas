@@ -54,15 +54,44 @@ framework de plugin no caso do Capacitor). Sem esse pedido, `checkSelfPermission
 nunca retorna `PERMISSION_GRANTED` sozinho — não existe "concessão automática"
 por declarar no manifest.
 
+**Correção 2026-09-14 — a limitação é mais grave do que "só Android 12+":**
+o texto anterior dizia que o driver Bluetooth ficava morto "em qualquer
+Android 12+". Isso estava incompleto. Conferindo o `AndroidManifest.xml`
+(`mobile/android/app/src/main/AndroidManifest.xml`), o app declara
+**apenas** `BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN` — as permissões
+específicas de Android 12+ (API 31+). Ele **não** declara as permissões
+legadas exigidas em Android ANTERIOR ao 12 (API ≤ 30):
+`android.permission.BLUETOOTH` e `android.permission.BLUETOOTH_ADMIN`
+(ambas com `android:maxSdkVersion="30"`).
+
+Ou seja: em Android ≤ 30 o app nem tem a permissão declarada no manifest
+pra usar Bluetooth clássico (`BluetoothAdapter`/`bondedDevices`) — o
+sistema operacional bloqueia de partida, antes mesmo de qualquer diálogo
+de runtime entrar em jogo. Em Android 12+ a permissão legada não é
+necessária, mas `BLUETOOTH_CONNECT` fica presa em "negada" pela ausência
+do pedido runtime (limitação já documentada acima).
+
 **Consequência prática, confirmada pela leitura do código (não é
-hipotética): o driver Bluetooth fica funcionalmente morto em qualquer
-Android 12+, mesmo com uma impressora pareada de verdade.**
-`temPermissao()` sempre retorna `false` → `dispositivoParaeado()` sempre
-retorna `null` → `isAvailable()` sempre retorna `false` → `NtbPrinterPlugin.
-driverAtivo()` nunca escolhe esse driver, mesmo que exista uma impressora
-Bluetooth pareada e ligada na mesa do lojista. O app cai direto no
-`PartnerDriverStub`, reportando "impressora não configurada" num aparelho
-que teria impressora de verdade disponível.
+hipotética): o driver Bluetooth está funcionalmente morto em QUALQUER
+versão do Android hoje — não só nas mais novas —, mesmo com uma
+impressora pareada de verdade.** Em Android ≤ 30 falta a permissão legada
+no manifest; em Android 12+, `temPermissao()` sempre retorna `false` →
+`dispositivoParaeado()` sempre retorna `null` → `isAvailable()` sempre
+retorna `false` → `NtbPrinterPlugin.driverAtivo()` nunca escolhe esse
+driver. Em ambos os casos o app cai direto no `PartnerDriverStub`,
+reportando "impressora não configurada" num aparelho que teria impressora
+de verdade disponível.
+
+**Implementação completa precisaria de dois pedaços, não só um:**
+1. Permissões legadas no manifest, só até API 30:
+   ```xml
+   <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+   <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+   ```
+2. O fluxo de permissão runtime pro Android 12+ já documentado logo
+   abaixo (`requestBluetoothPermission` via `@CapacitorPlugin`).
+Sem os dois, o driver Bluetooth continua inoperante — um resolve só a
+faixa de Android antiga, o outro só a faixa nova.
 
 **Padrão de código que resolve** — usar o mecanismo nativo de permissão do
 Capacitor 6, que evita reimplementar `ActivityCompat.requestPermissions`/

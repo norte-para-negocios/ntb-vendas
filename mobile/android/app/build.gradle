@@ -17,8 +17,19 @@ android {
         applicationId "com.norteparanegocios.ntbvendas"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // Sincronizado com mobile/package.json ("version": "1.0.0") na
+        // revisão final de 2026-09-14 — antes ficava "1.0" (resíduo do
+        // template Capacitor), dessincronizado da versão real do app.
+        // O Android usa versionCode (não versionName) pra decidir se uma
+        // instalação é uma ATUALIZAÇÃO; como versionCode nunca mudava, uma
+        // segunda instalação de versão nova no MESMO celular podia ser
+        // recusada ou não substituir o APK corretamente.
+        // ATENÇÃO: não existe automação disso neste projeto (diferente do
+        // app desktop, que tem fluxo de build separado) — versionCode
+        // precisa ser incrementado manualmente a cada nova versão, e
+        // versionName atualizado junto com mobile/package.json.
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
