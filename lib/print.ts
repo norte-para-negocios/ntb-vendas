@@ -592,6 +592,55 @@ export function buildBillReceiptText(opts: {
   return lines.join('\n');
 }
 
+// Achado ao vivo, loja Sertão (2026-09-15): tentativa anterior de
+// auto-imprimir o PDF real do cupom (DANFCe/DANFe, com QR Code) direto na
+// térmica saiu ilegível — o PDF é desenhado pra A4/Letter, não dá pra
+// mandar "cru" pra um rolo de 80mm sem virar ruído. Solução: um resumo em
+// TEXTO PURO com os dados que a SEFAZ exige que o cliente consiga
+// conferir (chave de acesso, número, série, protocolo, ambiente) pela
+// MESMA fila (print_jobs) já usada e testada pro comprovante — reaproveita
+// o mesmo `enqueueReceiptPrintJobs`/impressora USB do destino 'receipt',
+// nunca o PDF. Isto NÃO substitui o DANFCe/DANFe oficial (que continua
+// disponível em Administração → Notas Fiscais e abre como PDF pro
+// operador que precisar) — é um comprovante físico rápido de que a nota
+// foi emitida, com o essencial pra conferência manual.
+export function buildFiscalCupomText(opts: {
+  storeName: string;
+  nota: { modelo: '55' | '65'; ambiente: 'homologacao' | 'producao'; numero: number | null; serie: number | null; chave_acesso: string | null; protocolo: string | null; valor_total: number | null };
+  paperWidthMm?: 48 | 58 | 80;
+}): string {
+  const maxChars = CHARS_PER_LINE[opts.paperWidthMm || 48];
+  const divider = '-'.repeat(maxChars);
+  const { nota } = opts;
+  const lines: string[] = [];
+  lines.push(...wrapLine(opts.storeName.toUpperCase(), maxChars));
+  lines.push(nota.modelo === '65' ? 'CUPOM FISCAL (NFC-e)' : 'NOTA FISCAL (NF-e)');
+  if (nota.ambiente === 'homologacao') {
+    lines.push(...wrapLine('AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL', maxChars));
+  }
+  lines.push(new Date().toLocaleString('pt-BR'));
+  lines.push(divider);
+  lines.push(`Numero: ${nota.numero ?? '-'}  Serie: ${nota.serie ?? '-'}`);
+  if (nota.valor_total != null) lines.push(`Valor total: R$ ${formatBRL(nota.valor_total)}`);
+  lines.push(divider);
+  lines.push('Chave de acesso:');
+  if (nota.chave_acesso) {
+    // Formato tradicional do DANFE/DANFCe: blocos de 4 dígitos.
+    lines.push(...wrapLine(nota.chave_acesso.replace(/(\d{4})(?=\d)/g, '$1 '), maxChars));
+  } else {
+    lines.push('-');
+  }
+  if (nota.protocolo) {
+    lines.push(divider);
+    lines.push('Protocolo de autorizacao:');
+    lines.push(...wrapLine(nota.protocolo, maxChars));
+  }
+  lines.push(divider);
+  lines.push(...wrapLine('Consulte o documento fiscal completo (com QR Code) em Administracao -> Notas Fiscais.', maxChars));
+  lines.push('\n\n\n');
+  return lines.join('\n');
+}
+
 const REPORT_STYLES = `
   body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 24px; font-size: 13px; }
   .report-header { text-align: center; border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 16px; }

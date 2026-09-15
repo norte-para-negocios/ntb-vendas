@@ -26,7 +26,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
-import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText } from '@/lib/print';
+import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
@@ -441,6 +441,7 @@ function useWatchedTables(storeId: string | undefined): Set<string> {
 // cai num aviso claro em vez de não fazer nada.
 const abrirCupomFiscalQuandoSair = (
     storeId: string,
+    storeName: string,
     alvo: { orderId?: string; tableId?: string },
 ) => {
     // No app desktop (Electron), main.js nega TODO window.open() internamente
@@ -456,24 +457,29 @@ const abrirCupomFiscalQuandoSair = (
     // URL real assim que ela existir.
     const isElectron = typeof window !== 'undefined' && Boolean(window.electronApp?.isElectron);
 
+    // Reunião 2026-09-10 + achado ao vivo (2026-09-15): "a nota fiscal tem
+    // que imprimir no caixa também" — igual à comanda/comprovante, não só
+    // abrir um PDF pra alguém clicar em imprimir. Tentativa anterior de
+    // mandar o PDF real (com QR Code) pra térmica saiu ilegível (PDF é
+    // desenhado pra A4, não pra rolo de 80mm) — revertida. Em vez disso,
+    // enfileira um resumo em TEXTO PURO (buildFiscalCupomText) pela MESMA
+    // fila já usada e testada pro comprovante (enqueueReceiptPrintJobs,
+    // impressora USB/rede do destino 'receipt') — sai fisicamente no caixa
+    // sem clique nenhum. O PDF oficial (DANFCe/DANFe completo, com QR Code
+    // de verdade) continua abrindo/disponível como já fazia, pra quem
+    // precisar do documento visual completo.
+    const imprimirCupomNoCaixa = (nota: { numero: number | null; serie: number | null; chave_acesso: string | null; protocolo: string | null; valor_total: number | null; modelo: '55' | '65'; ambiente: 'homologacao' | 'producao' }) => {
+        const texto = buildFiscalCupomText({ storeName, nota });
+        enqueueReceiptPrintJobs(storeId, `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''}`, texto)
+            .catch((e) => console.error('enqueueReceiptPrintJobs (cupom fiscal) falhou:', e));
+    };
+
     if (isElectron) {
-        // REVERTIDO ao vivo (2026-09-15): a tentativa de auto-imprimir o
-        // PDF do cupom direto na térmica via printPdfSilent (fetch abaixo
-        // comentado) saiu como um borrão cinza ilegível — o PDF é
-        // desenhado pra folha A4/Letter (fonte, DPI, margens todos
-        // pensados pra isso), e mandar essa página inteira "crua" pro
-        // driver de uma impressora térmica de 80mm não faz o
-        // reaproveitamento de layout que um cupom térmico de verdade
-        // precisa (é basicamente uma imagem de alta resolução forçada
-        // num rolo estreito e monocromático — vira ruído, não texto).
-        // Precisa de um desenho próprio (ex.: gerar o cupom como
-        // ESC/POS "de verdade", não reaproveitar o PDF do DANFCe/DANFe) antes
-        // de tentar de novo. Até lá, volta a só abrir o PDF pro operador
-        // imprimir na hora — que já funciona desde o fix de hoje mais cedo.
         aguardarNotaFiscalDaVenda(storeId, alvo)
-            .then((nota) => {
-                if (nota) {
-                    window.open(nota.pdfUrl, '_blank');
+            .then((resultado) => {
+                if (resultado) {
+                    imprimirCupomNoCaixa(resultado.nota);
+                    window.open(resultado.pdfUrl, '_blank');
                 } else {
                     toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
                 }
@@ -490,10 +496,11 @@ const abrirCupomFiscalQuandoSair = (
         janela.document.close();
     }
     aguardarNotaFiscalDaVenda(storeId, alvo)
-        .then((nota) => {
-            if (nota && janela && !janela.closed) {
-                janela.location.href = nota.pdfUrl;
-            } else if (nota) {
+        .then((resultado) => {
+            if (resultado) imprimirCupomNoCaixa(resultado.nota);
+            if (resultado && janela && !janela.closed) {
+                janela.location.href = resultado.pdfUrl;
+            } else if (resultado) {
                 // Popup bloqueado (ou fechado na mão): não abre nada à força,
                 // avisa onde está.
                 toast.error('O cupom fiscal saiu, mas o navegador bloqueou a janela. Abra por Administração → Notas Fiscais.');
@@ -2869,7 +2876,7 @@ NOTIFY pgrst, 'reload schema';`;
                 // aviso claro em vez de ficar esperando uma janela que não vem.
                 if (emissaoFiscalConfigurada && emitirNotaFiscal) {
                     const tableIdParaNota = selectedTable.id;
-                    abrirCupomFiscalQuandoSair(store.id, { tableId: tableIdParaNota });
+                    abrirCupomFiscalQuandoSair(store.id, store.name, { tableId: tableIdParaNota });
                 }
 
                 setRemovedServiceFees(prev => {
@@ -4616,7 +4623,7 @@ const CounterView: React.FC<{
             // TablesView.handleFinishPayment (reunião 2026-09-10, min 15:06).
             if (emissaoFiscalConfigurada && emitirNotaFiscal) {
                 const orderIdParaNota = paymentOrder.id;
-                abrirCupomFiscalQuandoSair(store.id, { orderId: orderIdParaNota });
+                abrirCupomFiscalQuandoSair(store.id, store.name, { orderId: orderIdParaNota });
             }
 
             setPaymentOrder(null);

@@ -136,6 +136,13 @@ $doc = New-Object System.Drawing.Printing.PrintDocument
 $doc.PrinterSettings.PrinterName = $PrinterName
 if (-not $doc.PrinterSettings.IsValid) { throw "Impressora invalida: $PrinterName" }
 $doc.DefaultPageSettings.Landscape = $false
+# Margem padrao do .NET e' 1 polegada de cada lado -- numa impressora de
+# 80mm (~3.15 polegadas) isso sozinho consome quase toda a largura util,
+# cortando o texto no mesmo lugar sempre, independente do tamanho de papel
+# escolhido no app (achado ao vivo, loja Sertao, 2026-09-15). Zera pra
+# aproveitar a largura real do rolo -- o driver clampa sozinho pro minimo
+# de hardware se 0 nao for suportado.
+$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
 $font = New-Object System.Drawing.Font('Consolas', 9)
 $script:lineIndex = 0
 $doc.add_PrintPage({

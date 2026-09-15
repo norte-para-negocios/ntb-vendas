@@ -2020,7 +2020,7 @@ export const aguardarNotaFiscalDaVenda = async (
   storeId: string,
   alvo: { orderId?: string; tableId?: string },
   opts: { timeoutMs?: number; intervalMs?: number } = {},
-): Promise<{ pdfUrl: string } | null> => {
+): Promise<{ pdfUrl: string; nota: FiscalNota } | null> => {
   const timeoutMs = opts.timeoutMs ?? 12000;
   const intervalMs = opts.intervalMs ?? 1500;
   const limite = Date.now() + timeoutMs;
@@ -2037,7 +2037,7 @@ export const aguardarNotaFiscalDaVenda = async (
 
       if (daVenda?.status === 'autorizada' && daVenda.pdf_path) {
         const pdfUrl = await fetchFiscalNotaPdfUrl(daVenda.id, daVenda.pdf_path);
-        if (pdfUrl) return { pdfUrl };
+        if (pdfUrl) return { pdfUrl, nota: daVenda as FiscalNota };
       }
       // Rejeitada: não adianta continuar esperando.
       if (daVenda?.status === 'erro') return null;
