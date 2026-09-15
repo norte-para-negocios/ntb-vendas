@@ -225,7 +225,25 @@ function printHtmlDocument(title: string, styles: string, bodyHtml: string): Pro
   });
 }
 
-function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 48 | 58 | 80): Promise<boolean> {
+// Ponto único de saída de qualquer ticket térmico (cozinha/bar,
+// comprovante de mesa/balcão, teste de impressão). No app Android
+// (Capacitor), `window.ntbPrinter` existe e sabe falar com a impressora
+// de verdade do aparelho (embutida na maquininha, ou Bluetooth pareada)
+// — nesse caso, pula o iframe/window.print() (que nem existe de verdade
+// numa WebView sem diálogo do sistema por trás) e manda o TEXTO PURO pro
+// driver nativo. No navegador normal e no app desktop, `window.ntbPrinter`
+// não existe, e o caminho de sempre (HTML + window.print()) continua
+// intacto — nenhuma mudança de comportamento pra quem já usa o sistema.
+async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 48 | 58 | 80, plainText?: string): Promise<boolean> {
+  const nativo = (typeof window !== 'undefined') ? (window as any).ntbPrinter : undefined;
+  if (nativo && plainText) {
+    try {
+      const resultado = await nativo.printText({ text: plainText });
+      return !!resultado?.success;
+    } catch {
+      return false;
+    }
+  }
   return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
 
@@ -257,7 +275,12 @@ export function printKitchenTicket(opts: {
     ${opts.observation ? `<div class="obs">OBS: ${escapeHtml(opts.observation)}</div>` : ''}
     <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;
-  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm);
+  const plainText = buildKitchenTicketText({
+    kind: opts.kind, storeName: opts.storeName, orderType: opts.orderType, identifier: opts.identifier,
+    client: opts.client, quantity: opts.quantity, productName: opts.productName, addons: opts.addons,
+    observation: opts.observation, orderIdShort: opts.orderIdShort,
+  });
+  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm, plainText);
 }
 
 // Aba "Impressão" (2026-08-27, migration 061): versão em TEXTO PURO do
@@ -333,7 +356,8 @@ export function printGenericTestTicket(paperWidthMm: 48 | 58 | 80, storeName?: s
     <div class="item-line">2x Produto de teste B, com nome mais comprido pra testar a quebra de linha</div>
     <div class="footer">Documento sem valor fiscal — só teste.</div>
   `;
-  return openThermalPrint('Teste de Impressão', body, paperWidthMm);
+  const plainText = buildGenericTestTicketText(paperWidthMm, storeName);
+  return openThermalPrint('Teste de Impressão', body, paperWidthMm, plainText);
 }
 
 export function buildKitchenTicketText(opts: {
@@ -509,7 +533,8 @@ export function printBillReceipt(opts: {
     ${paymentSection}
     <div class="footer">Obrigado pela preferência!</div>
   `;
-  return openThermalPrint(`Comprovante - ${opts.label}`, body, opts.paperWidthMm);
+  const plainText = buildBillReceiptText(opts);
+  return openThermalPrint(`Comprovante - ${opts.label}`, body, opts.paperWidthMm, plainText);
 }
 
 // Achado ao vivo (2026-08-28, loja real com 3 impressoras cabeadas —
