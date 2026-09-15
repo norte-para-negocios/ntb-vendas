@@ -26,6 +26,9 @@
       "electron/**/*",
       "webapp/out/**/*"
     ],
+    "extraResources": [
+      { "from": "vendor", "to": "vendor" }
+    ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.png"

@@ -432,55 +432,57 @@ app.whenReady().then(() => {
 
   // Cupom fiscal (NFC-e/NF-e) na impressora física do caixa (2026-09-15,
   // pedido direto da reunião de 2026-09-10: "comanda e nota fiscal têm que
-  // ir pra mesma coisa, que é a caixa"). 3 tentativas anteriores usando o
-  // motor de PDF do PRÓPRIO Electron (`win.loadURL` + `webContents.print`)
-  // saíram como borrão cinza ilegível, mesmo corrigindo o tamanho de
-  // página — mas o usuário confirmou ao vivo que baixar o mesmo PDF e
-  // mandar imprimir manualmente (app padrão do Windows pra PDF) IMPRIME
-  // CERTO na mesma impressora. Ou seja, o problema nunca foi a
-  // impressora/driver — é o motor de renderização de PDF do Electron
-  // (Chromium embutido) que não lida bem com essa página customizada.
-  // Solução: em vez do app tentar renderizar o PDF ele mesmo, baixa o
-  // arquivo pra um temp e manda o PRÓPRIO WINDOWS executar o verbo
-  // "imprimir" nele — o mesmo mecanismo que já funciona manualmente
-  // (abre o app padrão de PDF da loja, que sabe imprimir esse arquivo
-  // direito, e manda pra impressora pedida via "Imprimir em").
+  // ir pra mesma coisa, que é a caixa"). Histórico de tentativas na mesma
+  // sessão: (1)-(3) o motor de PDF do PRÓPRIO Electron (`webContents.
+  // print`) saiu como borrão cinza, mesmo corrigindo tamanho de página —
+  // mas o usuário confirmou que abrir o PDF manualmente e mandar imprimir
+  // (app padrão de PDF da loja) imprime CERTO na mesma impressora, então
+  // nunca foi a impressora/driver. (4) verbo Shell "PrintTo" (mirar uma
+  // impressora específica) falhou porque o app padrão de PDF da loja é o
+  // Microsoft Edge, que não registra esse verbo. (5) verbo genérico
+  // "Print" exigiria a impressora do caixa virar a PADRÃO do Windows —
+  // rejeitado pelo dono (a loja tem outras impressoras/fluxos que dependem
+  // de imprimir em OUTRAS impressoras, não dá pra trocar a padrão global).
+  //
+  // Solução definitiva: embute o SumatraPDF (leitor de PDF gratuito e
+  // portátil — um único .exe, sem instalação, sem escrever no registro,
+  // `desktop/vendor/SumatraPDF.exe`, baixado oficial de
+  // sumatrapdfreader.org) — ele tem suporte de linha de comando NATIVO pra
+  // imprimir silenciosamente numa impressora ESPECÍFICA por nome
+  // (`-print-to`), sem depender de nenhum verbo do Shell nem de qual é o
+  // app padrão de PDF da loja. É a mesma técnica usada por incontáveis
+  // sistemas de PDV/nota fiscal pra exatamente este problema.
+  const sumatraPath = path.join(process.resourcesPath || path.join(__dirname, '..'), 'vendor', 'SumatraPDF.exe');
+
   ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
     const { pdfUrl, printerName } = params || {};
     if (!pdfUrl || !printerName) {
       logPrint('WARN impressão de PDF sem pdfUrl/printerName — ignorada');
       return { ok: false, reason: 'parâmetros ausentes' };
     }
+    if (!fs.existsSync(sumatraPath)) {
+      logPrint(`ERROR SumatraPDF.exe não encontrado em ${sumatraPath}`);
+      return { ok: false, reason: 'SumatraPDF.exe ausente no pacote instalado' };
+    }
     const tmpFile = path.join(app.getPath('temp'), `ntb-cupom-fiscal-${Date.now()}.pdf`);
     try {
       const pdfBytes = Buffer.from(await (await fetch(pdfUrl)).arrayBuffer());
       fs.writeFileSync(tmpFile, pdfBytes);
 
-      // Achado ao vivo (2026-09-15): "PrintTo" falhou de novo — o app
-      // padrão de PDF da loja é o Microsoft Edge, que NÃO registra o
-      // verbo "PrintTo" (mirar impressora específica) do jeito que
-      // Adobe/Foxit/Sumatra registram. Só o verbo genérico "Print" (que
-      // manda pra impressora PADRÃO do Windows, sem escolher qual) tem
-      // suporte amplo o suficiente pra funcionar com Edge. Por isso a
-      // impressora do caixa precisa estar configurada como impressora
-      // padrão do Windows na loja — sem isso, cai certo pro PDF sendo
-      // aberto na tela (comportamento já testado).
       await new Promise((resolve, reject) => {
-        execFile('powershell.exe', [
-          '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
-          `Start-Process -FilePath '${tmpFile.replace(/'/g, "''")}' -Verb Print -Wait`,
-        ], { timeout: 30000 }, (err) => { if (err) reject(err); else resolve(); });
+        execFile(
+          sumatraPath,
+          ['-print-to', printerName, '-silent', '-exit-when-done', tmpFile],
+          { timeout: 30000 },
+          (err) => { if (err) reject(err); else resolve(); }
+        );
       });
-      logPrint(`INFO cupom fiscal impresso em "${printerName}" via verbo PrintTo`);
+      logPrint(`INFO cupom fiscal impresso em "${printerName}" via SumatraPDF`);
       return { ok: true };
     } catch (e) {
-      logPrint(`ERROR ao imprimir cupom fiscal em "${printerName}" via PrintTo: ${e.message}`);
+      logPrint(`ERROR ao imprimir cupom fiscal em "${printerName}" via SumatraPDF: ${e.message}`);
       return { ok: false, reason: e.message };
     } finally {
-      // Espera um pouco antes de apagar: o app disparado pelo Shell pode
-      // levar um instante a mais pra terminar de ler o arquivo mesmo
-      // depois do processo retornar (alguns apps de PDF entregam o job
-      // pro spooler e saem antes do spooler terminar de ler o arquivo).
       setTimeout(() => { try { fs.unlinkSync(tmpFile); } catch { /* ignore */ } }, 15000);
     }
   });
