@@ -2054,8 +2054,14 @@ export const aguardarNotaFiscalDaVenda = async (
         const pdfUrl = await fetchFiscalNotaPdfUrl(daVenda.id, daVenda.pdf_path);
         if (pdfUrl) return { pdfUrl, nota: daVenda as FiscalNota };
       }
-      // Rejeitada: não adianta continuar esperando.
-      if (daVenda?.status === 'erro') return null;
+      // Rejeitada pela SEFAZ ou erro de transmissão: documento definitivo
+      // não vai aparecer, não adianta continuar esperando o tempo todo.
+      // Achado ao vivo (2026-09-15): só tratava 'erro', então uma
+      // REJEIÇÃO (ex.: cStat=899, campo de pagamento inválido) fazia esta
+      // função esperar o timeout inteiro (12s) sem motivo antes de
+      // devolver null — a mesma coisa acontecia mais rápido tratando os
+      // dois estados terminais juntos.
+      if (daVenda?.status === 'erro' || daVenda?.status === 'rejeitada') return null;
     } catch {
       // Rede instável não pode travar o fechamento — tenta de novo até o teto.
     }

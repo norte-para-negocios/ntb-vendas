@@ -180,6 +180,23 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ skipped: true, reason: 'Emissão desativada para esta venda' });
   }
 
+  // Venda 100% cortesia (sem nenhum pagamento real) — achado ao vivo,
+  // loja Sertão (2026-09-15): a SEFAZ rejeita (cStat=899 "Informado
+  // incorretamente o campo meio de pagamento") uma NFC-e com tPag=90 ("Sem
+  // pagamento") e vPag maior que zero — que é exatamente o que
+  // `lib/fiscal/xml.ts` monta hoje pra uma venda inteira em cortesia (usa
+  // o valor cheio do pedido, não zero). Decisão do dono: cortesia não teve
+  // cobrança real de cliente nenhuma, então não faz sentido fiscal emitir
+  // nota nenhuma pra ela — pula igual ao opt-out `emitir_nota === false`
+  // acima, nunca grava linha em fiscal_notas (não é erro, é uma venda que
+  // nunca devia ter tentado emitir).
+  const metodosPagamento = Array.isArray((paymentDetailsAncora as any)?.methods)
+    ? ((paymentDetailsAncora as any).methods as Array<{ method?: string; amount?: number }>)
+    : null;
+  if (metodosPagamento && metodosPagamento.every((m) => m.method === 'COURTESY')) {
+    return NextResponse.json({ skipped: true, reason: 'Venda 100% cortesia — sem pagamento real, nota fiscal não é emitida' });
+  }
+
   // 1.5. Guarda de idempotência — nada nesta rota impede que o mesmo
   // orderId/tableId seja chamado duas vezes (retry de rede do fire-and-
   // forget que vai chamar essa rota, ou dois garçons fechando a mesma mesa
