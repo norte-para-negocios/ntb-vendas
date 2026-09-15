@@ -2024,6 +2024,20 @@ export const aguardarNotaFiscalDaVenda = async (
   const timeoutMs = opts.timeoutMs ?? 12000;
   const intervalMs = opts.intervalMs ?? 1500;
   const limite = Date.now() + timeoutMs;
+  // Bug real achado ao vivo (2026-09-15): quando o fechamento usa `tableId`
+  // (mesa, não `orderId`), o filtro batia com QUALQUER nota já emitida
+  // alguma vez naquela mesa — uma mesa física é reaproveitada por vários
+  // pedidos ao longo do dia. Se o primeiro poll rodasse ANTES da nota NOVA
+  // desta venda ainda existir no banco (emissão é assíncrona), a nota mais
+  // recente ENCONTRADA era uma autorizada antiga de uma venda anterior
+  // daquela mesma mesa — e essa nota errada (valor/chave de outro cliente)
+  // era devolvida como se fosse a desta venda, sem nenhum aviso. Confirmado
+  // ao vivo: imprimiu o cupom de uma venda de R$49,39 de 40 min atrás numa
+  // venda de R$206,69 que tinha acabado de fechar na mesma mesa. Corrigido
+  // rejeitando qualquer nota cujo `created_at` seja anterior ao início
+  // desta espera — só aceita nota genuinamente NOVA desta chamada (folga de
+  // 5s pra cobrir clock skew entre o relógio do navegador e o do Postgres).
+  const inicioEspera = Date.now() - 5000;
 
   while (Date.now() < limite) {
     try {
@@ -2033,6 +2047,7 @@ export const aguardarNotaFiscalDaVenda = async (
         // (migration 055) já é tratada no próprio fluxo "Por pessoa".
         .filter((n: any) => !n.pessoa_identificador)
         .filter((n: any) => (alvo.orderId ? n.order_id === alvo.orderId : n.table_id === alvo.tableId))
+        .filter((n: any) => new Date(n.created_at).getTime() >= inicioEspera)
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] as any;
 
       if (daVenda?.status === 'autorizada' && daVenda.pdf_path) {
