@@ -118,24 +118,67 @@ function printViaNetwork(ip, port, content) {
   });
 }
 
-function escapePowerShellSingleQuoted(value) {
-  return value.replace(/'/g, "''");
-}
+// Achado ao vivo, loja Sertão (2026-09-15) — "tudo mais imprime normal
+// nessa impressora, só o nosso sistema sai deitado": `Out-Printer` (usado
+// até aqui) não dá NENHUM controle de orientação — ele delega inteiramente
+// pro objeto .NET `PrintDocument` interno do cmdlet, cujo comportamento de
+// orientação/tamanho de página é opaco e, na prática, se mostrou diferente
+// do que qualquer outro programa manda pra essa mesma impressora física.
+// Troca por um script .ps1 que usa `System.Drawing.Printing.PrintDocument`
+// diretamente e FIXA `Landscape = $false` de forma explícita (em vez de
+// deixar o cmdlet decidir sozinho) — dá controle de verdade sobre a
+// orientação em vez de confiar em comportamento implícito.
+const PS_PRINT_SCRIPT = `
+param(
+  [Parameter(Mandatory=$true)][string]$PrinterName,
+  [Parameter(Mandatory=$true)][string]$FilePath
+)
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
+$lines = Get-Content -Encoding UTF8 -Path $FilePath
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = $PrinterName
+if (-not $doc.PrinterSettings.IsValid) { throw "Impressora invalida: $PrinterName" }
+$doc.DefaultPageSettings.Landscape = $false
+$font = New-Object System.Drawing.Font('Consolas', 9)
+$script:lineIndex = 0
+$doc.add_PrintPage({
+  param($sender, $e)
+  $lineHeight = $font.GetHeight($e.Graphics)
+  $y = $e.MarginBounds.Top
+  while ($script:lineIndex -lt $lines.Count -and ($y + $lineHeight) -le $e.MarginBounds.Bottom) {
+    $e.Graphics.DrawString($lines[$script:lineIndex], $font, [System.Drawing.Brushes]::Black, [float]$e.MarginBounds.Left, [float]$y)
+    $y += $lineHeight
+    $script:lineIndex++
+  }
+  $e.HasMorePages = $script:lineIndex -lt $lines.Count
+})
+$doc.Print()
+`;
 
 function printViaUsb(printerName, content) {
   return new Promise((resolve, reject) => {
-    const tmpFile = path.join(os.tmpdir(), `ntb-print-${Date.now()}.txt`);
+    const stamp = Date.now();
+    const tmpFile = path.join(os.tmpdir(), `ntb-print-${stamp}.txt`);
     fs.writeFileSync(tmpFile, content, 'utf8');
-    const cleanup = () => { try { fs.unlinkSync(tmpFile); } catch { /* ignore */ } };
+    const cleanup = (extra) => {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+      if (extra) { try { fs.unlinkSync(extra); } catch { /* ignore */ } }
+    };
 
     if (process.platform === 'win32') {
-      const safeFile = escapePowerShellSingleQuoted(tmpFile);
-      const safeName = escapePowerShellSingleQuoted(printerName);
-      const psCommand = `Get-Content -Encoding UTF8 -Path '${safeFile}' | Out-Printer -Name '${safeName}'`;
-      execFile('powershell.exe', ['-NoProfile', '-Command', psCommand], (err) => {
-        cleanup();
-        if (err) reject(err); else resolve();
-      });
+      const scriptFile = path.join(os.tmpdir(), `ntb-print-${stamp}.ps1`);
+      fs.writeFileSync(scriptFile, PS_PRINT_SCRIPT, 'utf8');
+      // Parâmetros vão por argv (-PrinterName/-FilePath), nunca interpolados
+      // dentro do texto do script — não precisa (nem arrisca) escapar aspas.
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', tmpFile],
+        (err) => {
+          cleanup(scriptFile);
+          if (err) reject(err); else resolve();
+        }
+      );
     } else {
       execFile('lp', ['-d', printerName, tmpFile], (err) => {
         cleanup();
