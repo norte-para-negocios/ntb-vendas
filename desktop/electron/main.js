@@ -456,19 +456,19 @@ app.whenReady().then(() => {
       const pdfBytes = Buffer.from(await (await fetch(pdfUrl)).arrayBuffer());
       fs.writeFileSync(tmpFile, pdfBytes);
 
-      // "PrintTo" é o verbo do Shell que o Explorer usa quando você
-      // arrasta um arquivo pra cima do ícone de uma impressora específica
-      // — dispara o app padrão de PDF já instalado (o mesmo que o
-      // operador usa na hora de clicar "Imprimir" manualmente) mirando a
-      // impressora exata, sem diálogo. Só funciona se o app padrão de PDF
-      // da loja tiver esse verbo registrado (a maioria tem: Adobe Reader,
-      // Foxit, SumatraPDF, o próprio Edge). Falha aqui não é destrutiva —
-      // só retorna erro, quem chamou cai pro comportamento já testado
-      // (abrir o PDF pro operador imprimir na mão).
+      // Achado ao vivo (2026-09-15): "PrintTo" falhou de novo — o app
+      // padrão de PDF da loja é o Microsoft Edge, que NÃO registra o
+      // verbo "PrintTo" (mirar impressora específica) do jeito que
+      // Adobe/Foxit/Sumatra registram. Só o verbo genérico "Print" (que
+      // manda pra impressora PADRÃO do Windows, sem escolher qual) tem
+      // suporte amplo o suficiente pra funcionar com Edge. Por isso a
+      // impressora do caixa precisa estar configurada como impressora
+      // padrão do Windows na loja — sem isso, cai certo pro PDF sendo
+      // aberto na tela (comportamento já testado).
       await new Promise((resolve, reject) => {
         execFile('powershell.exe', [
           '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
-          `Start-Process -FilePath '${tmpFile.replace(/'/g, "''")}' -Verb PrintTo -ArgumentList '${printerName.replace(/'/g, "''")}' -Wait`,
+          `Start-Process -FilePath '${tmpFile.replace(/'/g, "''")}' -Verb Print -Wait`,
         ], { timeout: 30000 }, (err) => { if (err) reject(err); else resolve(); });
       });
       logPrint(`INFO cupom fiscal impresso em "${printerName}" via verbo PrintTo`);
