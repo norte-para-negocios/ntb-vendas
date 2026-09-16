@@ -10,6 +10,11 @@ export interface DadosNotaAutorizada {
   xmlAssinado: string; // com <infNFeSupl> já inserido, se NFC-e
   protocoloXmlBruto: string; // resposta.xmlBruto de transmitirNota — de onde extrai <protNFe>
   protocolo: string | null;
+  /**
+   * Só é gravado no caminho de INSERT (emissão síncrona). Com
+   * `notaIdExistente` presente (retransmissão) o campo é IGNORADO — a linha
+   * em contingência já tem o valor certo gravado. Ver montagem de `linha`.
+   */
   valorTotalComTaxa: number;
   notaBase: Record<string, unknown>; // campos comuns já montados por quem chama (order_id, table_id, ambiente, etc.)
   itensValidos: { id: string }[];
@@ -60,9 +65,8 @@ export async function salvarNotaAutorizada(
     console.error('salvarNotaAutorizada: nota autorizada mas pós-processamento (PDF/storage) falhou:', e);
   }
 
-  const linha = {
+  const linha: Record<string, unknown> = {
     ...dados.notaBase,
-    valor_total: dados.valorTotalComTaxa,
     status: 'autorizada' as const,
     chave_acesso: dados.chave,
     numero: dados.numero,
@@ -72,6 +76,17 @@ export async function salvarNotaAutorizada(
     pdf_path: pdfPath,
     motivo_erro: motivoPosAutorizacao,
   };
+
+  // Na emissão síncrona (INSERT) `valor_total` PRECISA ser gravado — a linha
+  // está nascendo agora. Na retransmissão de uma nota que nasceu em
+  // contingência (UPDATE), esse valor já foi gravado pela tentativa original
+  // (emitirEmContingencia grava `montado.valorTotalComTaxa`, calculado pelo
+  // mesmo montarXmlNota que gerou o XML que está sendo retransmitido agora):
+  // omitir aqui evita que o caminho de retransmissão precise recalcular — ou
+  // pior, chutar — um número que o banco já tem certo.
+  if (!dados.notaIdExistente) {
+    linha.valor_total = dados.valorTotalComTaxa;
+  }
 
   const query = dados.notaIdExistente
     ? admin.from('fiscal_notas').update(linha).eq('id', dados.notaIdExistente).select('id').single()

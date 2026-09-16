@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createHash } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { extrairCertificado } from '@/lib/fiscal/certificado';
+import {
+  carregarConfigFiscalDaLoja,
+  carregarMetadadosCertificadoDaLoja,
+  extrairCertificadoDaLoja,
+} from '@/lib/fiscal/carregarCredenciaisFiscaisDaLoja';
 import { montarXmlNota, ItemNota, PagamentoNota, MontarXmlParams } from '@/lib/fiscal/xml';
 import { assinarXmlNota } from '@/lib/fiscal/assinatura';
 import {
@@ -438,7 +442,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   }
 
   // 2. Config da loja — decide SE emite e QUAL modelo.
-  const { data: config } = await admin.from('store_fiscal_config').select('*').eq('store_id', storeId).maybeSingle();
+  const config = await carregarConfigFiscalDaLoja(admin, storeId);
   if (!config || config.modelo_emissao_automatica === 'nenhuma') {
     return NextResponse.json({ skipped: true, reason: 'Loja sem emissão automática configurada' });
   }
@@ -448,19 +452,12 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ skipped: true, reason: `Série do modelo ${modelo} não configurada` });
   }
 
-  // 3. Certificado + senha + cadeia.
-  const { data: certMeta } = await admin
-    .from('store_fiscal_certificates')
-    .select('file_path, chain_pem')
-    .eq('store_id', storeId)
-    .maybeSingle();
-  const { data: certSecret } = await admin
-    .from('store_fiscal_certificate_secrets')
-    .select('password')
-    .eq('store_id', storeId)
-    .maybeSingle();
-
-  if (!certMeta || !certSecret?.password) {
+  // 3. Certificado + senha + cadeia (metadados agora; o download/extração do
+  // .pfx continua acontecendo mais abaixo, junto da validação de CNPJ — ver
+  // lib/fiscal/carregarCredenciaisFiscaisDaLoja.ts pro porquê de as peças
+  // serem granulares em vez de uma chamada só aqui).
+  const certMeta = await carregarMetadadosCertificadoDaLoja(admin, storeId);
+  if (!certMeta) {
     return NextResponse.json({ skipped: true, reason: 'Loja sem certificado digital configurado' });
   }
 
@@ -586,12 +583,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
 
   let certificadoValidado: { certPem: string; keyPem: string; certComCadeia: string };
   try {
-    const certBucket = admin.storage.from('store-certificates');
-    const { data: pfxFile, error: pfxErr } = await certBucket.download(certMeta.file_path);
-    if (pfxErr || !pfxFile) throw new Error('Não foi possível baixar o certificado digital.');
-    const pfxBuffer = Buffer.from(await pfxFile.arrayBuffer());
-    const { certPem, keyPem, cnpjCertificado } = extrairCertificado(pfxBuffer, certSecret.password);
-    const certComCadeia = certMeta.chain_pem ? `${certPem}\n${certMeta.chain_pem}` : certPem;
+    const { certPem, keyPem, certComCadeia, cnpjCertificado } = await extrairCertificadoDaLoja(admin, certMeta);
 
     if (!cnpjLoja) {
       const { error: insertErr } = await admin.from('fiscal_notas').insert({
