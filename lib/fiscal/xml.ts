@@ -84,6 +84,12 @@ export interface MontarXmlParams {
   // igual ao total de produtos) — nunca quebra uma emissão que já
   // funcionava.
   pagamentos?: PagamentoNota[];
+  // Contingência offline (2026-09-15): 1 = emissão normal (default), 9 =
+  // contingência (SEFAZ/rede inacessível no momento da venda). Repassado
+  // pra montarChaveAcesso E pro grupo <ide> do XML — os dois precisam
+  // bater, senão a chave de acesso calculada não corresponde ao que o XML
+  // declara.
+  tpEmis?: number;
 }
 
 // Código de forma de pagamento da SEFAZ (Nota Técnica 2015/002, grupo
@@ -189,7 +195,7 @@ function componentesSaoPaulo(now: Date) {
 }
 
 export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: string; infNFeId: string; valorTotalComTaxa: number } {
-  const { modelo, ambiente, serie, numero, emitente, itens, destinatario, pagamentos } = params;
+  const { modelo, ambiente, serie, numero, emitente, itens, destinatario, pagamentos, tpEmis } = params;
   if (!itens.length) throw new Error('Nota sem itens.');
   if (modelo === '55' && !destinatario) throw new Error('NF-e (modelo 55) exige destinatário.');
 
@@ -205,6 +211,7 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     modelo,
     serie,
     numero,
+    tpEmis: tpEmis ?? 1,
   });
 
   const dhEmi = `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}-03:00`;
@@ -368,7 +375,7 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<ide><cUF>${emitente.cUF}</cUF><cNF>${cNF}</cNF><natOp>VENDA AO CONSUMIDOR</natOp><mod>${modelo}</mod>` +
     `<serie>${serie}</serie><nNF>${numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF>` +
     `<idDest>${destinatario ? 1 : 1}</idDest><cMunFG>${emitente.cMun}</cMunFG>` +
-    `<tpImp>${modelo === '65' ? 4 : 1}</tpImp><tpEmis>1</tpEmis><cDV>${chave.slice(-1)}</cDV>` +
+    `<tpImp>${modelo === '65' ? 4 : 1}</tpImp><tpEmis>${tpEmis ?? 1}</tpEmis><cDV>${chave.slice(-1)}</cDV>` +
     `<tpAmb>${tpAmb}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres>` +
     `<procEmi>0</procEmi><verProc>ntb-vendas-1.0</verProc></ide>` +
     `<emit><CNPJ>${emitente.cnpj}</CNPJ><xNome>${escapeXml(emitente.razaoSocial)}</xNome>` +
