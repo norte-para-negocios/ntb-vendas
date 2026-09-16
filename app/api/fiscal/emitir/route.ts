@@ -14,7 +14,7 @@ import {
   extrairDigestValue,
   inserirSuplNoXmlAssinado,
 } from '@/lib/fiscal/qrcode';
-import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
+import { transmitirNota, resolverEndpointsNfceConsulta, ehSefazIndisponivel } from '@/lib/fiscal/soap';
 import { montarNfeProc } from '@/lib/fiscal/pdf';
 import { gerarPdfContingencia } from '@/lib/fiscal/pdfContingencia';
 import { montarPayloadIncluirNfce, incluirNfceDireto } from '@/lib/omie/nota-fiscal';
@@ -103,8 +103,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Contingência offline NFC-e/NF-e (tpEmis=9) — chamada SÓ pelo caminho de
-// falha de transporte da Fase 1 (ver os dois pontos de chamada abaixo).
+// Contingência offline NFC-e (tpEmis=9) — SÓ modelo 65. NF-e (modelo 55)
+// usa mecanismos de contingência totalmente diferentes (FS-DA, EPEC) que
+// este codebase não implementa; os dois pontos de chamada abaixo gateiam
+// explicitamente em `modelo === '65'`. Chamada SÓ pelos caminhos em que a
+// SEFAZ não analisou o documento na Fase 1 (exceção de transporte, ou
+// resposta indicando indisponibilidade — ver `ehSefazIndisponivel`).
 // Remonta o MESMO documento que estava sendo transmitido, agora declarando
 // `tpEmis: 9` (o que muda a chave de acesso — o dígito de tpEmis entra no
 // cálculo, ver montarChaveAcesso), assina, gera o cupom de contingência
@@ -818,7 +822,13 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       codigoErro === 'ENETUNREACH' ||
       codigoErro === 'EPIPE';
 
-    if (ehFalhaDeTransporte && paramsXmlUsados) {
+    // `modelo === '65'`: contingência offline (tpEmis=9) é um mecanismo
+    // ESPECÍFICO de NFC-e. NF-e (modelo 55) tem mecanismos próprios de
+    // contingência (FS-DA em formulário de segurança, EPEC) que este
+    // codebase não implementa — mandar uma NF-e por este caminho geraria um
+    // documento inválido. Modelo 55 nesta mesma condição mantém o
+    // comportamento anterior à feature de contingência: 'erro'.
+    if (ehFalhaDeTransporte && paramsXmlUsados && modelo === '65') {
       console.error('Emissão fiscal: falha de transporte pra SEFAZ, caindo pra contingência:', e);
       return await emitirEmContingencia({
         admin,
@@ -845,17 +855,27 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
   }
 
-  // Resposta CHEGOU (sem exceção) mas sem nenhum cStat reconhecível — página
-  // de erro HTML de gateway, corpo vazio, conexão cortada no meio do body.
-  // Isso é uma falha de transporte disfarçada de resposta HTTP, não uma
-  // rejeição de negócio: a SEFAZ nunca analisou este documento, então a
-  // contingência é o desfecho certo (antes desta task, caía em 'erro' junto
-  // com as rejeições, na checagem logo abaixo). Rejeição de negócio de
-  // verdade (cStat presente e != '100') continua intocada.
-  if (resposta.cStat === null && paramsXmlUsados) {
-    console.error(
-      `Emissão fiscal: resposta da SEFAZ sem cStat (HTTP ${resposta.httpStatus}), caindo pra contingência.`,
-    );
+  // A resposta CHEGOU (sem exceção), mas a SEFAZ não analisou o documento:
+  // ou não veio cStat reconhecível (página de erro HTML de gateway, corpo
+  // vazio, conexão cortada no meio do body — falha de transporte disfarçada
+  // de resposta HTTP), ou veio um cStat de INDISPONIBILIDADE do serviço
+  // (105/106/108/109 — ver `ehSefazIndisponivel` em lib/fiscal/soap.ts).
+  // Nos dois casos a contingência é o desfecho certo: é literalmente a
+  // condição que esta feature existe pra sobreviver. Antes desta correção,
+  // só o caso `null` caía aqui — uma SEFAZ alcançável mas PARALISADA
+  // (cStat=108/109) escorregava pro branch `cStat !== '100'` logo abaixo e
+  // virava 'rejeitada' pra sempre, deixando uma venda real sem nenhum
+  // caminho válido pra virar documento fiscal.
+  //
+  // Rejeição de negócio de verdade (cStat presente, != '100' e fora dessa
+  // lista — ex.: 204 Duplicidade, 899 pagamento incorreto) continua intocada.
+  // `modelo === '65'` pelo mesmo motivo do site de exceção acima: tpEmis=9 é
+  // mecanismo de NFC-e, NF-e mantém o comportamento pré-feature.
+  if (ehSefazIndisponivel(resposta.cStat) && paramsXmlUsados && modelo === '65') {
+    const motivoIndisponivel = resposta.cStat
+      ? `SEFAZ indisponível na transmissão (cStat=${resposta.cStat} ${resposta.xMotivo ?? ''}).`.replace(/\s+\)/, ')')
+      : `Falha de transporte na transmissão pra SEFAZ (HTTP ${resposta.httpStatus}).`;
+    console.error(`Emissão fiscal: ${motivoIndisponivel} Caindo pra contingência.`);
     return await emitirEmContingencia({
       admin,
       storeId,
@@ -866,7 +886,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       itensValidos,
       notaBase,
       certificado: certificadoValidado,
-      motivoOriginal: `Falha de transporte na transmissão pra SEFAZ (HTTP ${resposta.httpStatus}).`,
+      motivoOriginal: motivoIndisponivel,
     });
   }
 

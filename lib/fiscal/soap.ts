@@ -124,6 +124,38 @@ export function parseRespostaSefaz(xmlBruto: string, httpStatus: number): Respos
   return { httpStatus, cStat, xMotivo, cStatLote, protocolo, xmlBruto };
 }
 
+// Códigos de status em que a SEFAZ NÃO analisou o documento — ela está fora
+// do ar, paralisada ou sobrecarregada. São códigos de LOTE (chegam aqui pelo
+// ramo `else` de parseRespostaSefaz, quando não existe <protNFe>: sem
+// protocolo não há "status da nota", só o do lote), e NÃO são rejeições de
+// negócio: reenviar o MESMO documento depois pode perfeitamente autorizar.
+// Tratá-los como rejeição terminal ('rejeitada') é exatamente o modo de
+// falha que a contingência offline existe pra evitar — a venda ficaria sem
+// nenhum caminho válido pra virar documento fiscal.
+//
+//   105 Lote em processamento              (SEFAZ não processou sincronicamente)
+//   106 Lote não localizado
+//   108 Serviço Paralisado Momentaneamente
+//   109 Serviço Paralisado sem Previsão
+//
+// `null` entra na mesma classe: resposta sem cStat reconhecível (página de
+// erro HTML de gateway, corpo vazio, conexão cortada no meio do body) é
+// falha de transporte disfarçada de resposta HTTP — a SEFAZ nunca viu o
+// documento.
+//
+// Deliberadamente FORA da lista (verificado lendo parseRespostaSefaz):
+// - '104' (Lote processado) nunca chega como `cStat` num fluxo normal — com
+//   <protNFe> o cStat lido é o da nota; sem <protNFe> um 104 seria uma
+//   resposta malformada, não um sinal de indisponibilidade.
+// - '103' (Lote recebido com sucesso) é do fluxo ASSÍNCRONO (indSinc=0), que
+//   este código nunca usa (transmitirNota manda indSinc=1). Se aparecesse,
+//   significaria que a SEFAZ vai processar o lote DEPOIS — cair pra
+//   contingência aí arriscaria um segundo documento pra mesma venda, então
+//   fica de fora de propósito.
+export function ehSefazIndisponivel(cStat: string | null): boolean {
+  return cStat === null || cStat === '105' || cStat === '106' || cStat === '108' || cStat === '109';
+}
+
 // Envelope SOAP 1.2 + envio via mTLS (cert+key do certificado da loja,
 // rejectUnauthorized:false porque o bundle de CA do Node não traz a cadeia
 // ICP-Brasil — mesmo ajuste já validado no script de referência).
