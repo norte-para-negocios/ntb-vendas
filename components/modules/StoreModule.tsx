@@ -485,11 +485,21 @@ const abrirCupomFiscalQuandoSair = (
                     toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
                     return;
                 }
+                // Contingência: 2 vias físicas (cliente + estabelecimento) —
+                // pedido explícito do dono (2026-09-15), já que o documento
+                // não tem protocolo/QR ainda e o cliente precisa sair com o
+                // comprovante em papel mesmo assim. Dobra a via qualquer que
+                // seja o caminho de impressão que acabar sendo usado abaixo.
+                const emContingencia = resultado.nota.status === 'contingencia';
                 const printer = await fetchUsbPrinterForAutoprint(storeId, 'receipt');
                 if (printer) {
                     const resultadoPrint = await window.electronApp?.printPdfSilent?.({ pdfUrl: resultado.pdfUrl, printerName: printer.usbSystemName });
                     if (resultadoPrint?.ok) {
                         toast.success('Cupom fiscal impresso no caixa.');
+                        if (emContingencia) {
+                            await window.electronApp?.printPdfSilent?.({ pdfUrl: resultado.pdfUrl, printerName: printer.usbSystemName });
+                            toast.warning('Nota emitida em contingência — 2 vias impressas. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
+                        }
                         return;
                     }
                     console.error('printPdfSilent (PrintTo) falhou, caindo pro resumo em texto:', resultadoPrint?.reason);
@@ -497,6 +507,10 @@ const abrirCupomFiscalQuandoSair = (
                     toast.error('O cupom fiscal real não imprimiu — saiu um resumo em texto no caixa. O PDF completo está abrindo aqui.');
                 }
                 window.open(resultado.pdfUrl, '_blank');
+                if (emContingencia) {
+                    window.open(resultado.pdfUrl, '_blank');
+                    toast.warning('Nota emitida em contingência — 2 vias impressas. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
+                }
             })
             .catch((e) => {
                 console.error('abrirCupomFiscalQuandoSair falhou:', e);
@@ -514,6 +528,14 @@ const abrirCupomFiscalQuandoSair = (
             if (resultado) imprimirResumoTextoNoCaixa(resultado.nota);
             if (resultado && janela && !janela.closed) {
                 janela.location.href = resultado.pdfUrl;
+                // Contingência: 2 vias físicas (cliente + estabelecimento) —
+                // pedido explícito do dono (2026-09-15), já que o documento
+                // não tem protocolo/QR ainda e o cliente precisa sair com o
+                // comprovante em papel mesmo assim.
+                if (resultado.nota.status === 'contingencia') {
+                    window.open(resultado.pdfUrl, '_blank');
+                    toast.warning('Nota emitida em contingência — 2 vias impressas. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
+                }
             } else if (resultado) {
                 // Popup bloqueado (ou fechado na mão): não abre nada à força,
                 // avisa onde está.

@@ -357,7 +357,7 @@ export interface FiscalNota {
   order_id: string | null;
   modelo: '55' | '65';
   ambiente: 'homologacao' | 'producao';
-  status: 'pendente' | 'autorizada' | 'rejeitada' | 'erro';
+  status: 'pendente' | 'autorizada' | 'rejeitada' | 'erro' | 'contingencia';
   chave_acesso: string | null;
   numero: number | null;
   serie: number | null;

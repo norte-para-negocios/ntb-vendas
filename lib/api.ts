@@ -2050,7 +2050,7 @@ export const aguardarNotaFiscalDaVenda = async (
         .filter((n: any) => new Date(n.created_at).getTime() >= inicioEspera)
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] as any;
 
-      if (daVenda?.status === 'autorizada' && daVenda.pdf_path) {
+      if ((daVenda?.status === 'autorizada' || daVenda?.status === 'contingencia') && daVenda.pdf_path) {
         const pdfUrl = await fetchFiscalNotaPdfUrl(daVenda.id, daVenda.pdf_path);
         if (pdfUrl) return { pdfUrl, nota: daVenda as FiscalNota };
       }
