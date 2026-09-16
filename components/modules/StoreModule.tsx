@@ -9620,12 +9620,14 @@ const FISCAL_STATUS_LABELS: Record<string, string> = {
     pendente: 'Pendente',
     rejeitada: 'Rejeitada',
     erro: 'Erro',
+    contingencia: 'Contingência',
 };
 
 const fiscalStatusBadgeColor = (status: string): string => {
     switch (status) {
         case 'autorizada': return 'bg-[var(--ok)]/10 text-[var(--ok)] border border-[var(--ok)]/20';
         case 'pendente': return 'bg-[var(--info)]/10 text-[var(--info)] border border-[var(--info)]/20';
+        case 'contingencia': return 'bg-amber-500/10 text-amber-600 border border-amber-500/20';
         default: return 'bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/20'; // 'erro'/'rejeitada'
     }
 };
@@ -9823,6 +9825,19 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
     return (
         <div className="space-y-6">
+            {(() => {
+                const emContingencia = notas.filter((n) => n.status === 'contingencia');
+                if (emContingencia.length === 0) return null;
+                const UMA_HORA_MS = 60 * 60 * 1000;
+                const antigas = emContingencia.filter((n) => Date.now() - new Date(n.created_at).getTime() > 2 * UMA_HORA_MS);
+                return (
+                    <div className={`p-3 rounded-lg border text-sm font-medium ${antigas.length > 0 ? 'bg-[var(--err)]/10 border-[var(--err)]/30 text-[var(--err)]' : 'bg-amber-500/10 border-amber-500/30 text-amber-700'}`}>
+                        {antigas.length > 0
+                            ? `${antigas.length} nota(s) em contingência pendente(s) há mais de 2h — verifique a conexão com a SEFAZ. (${emContingencia.length} no total aguardando confirmação.)`
+                            : `${emContingencia.length} nota(s) em contingência aguardando confirmação automática da SEFAZ.`}
+                    </div>
+                );
+            })()}
             <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
                 <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-3">
                     <div className="flex justify-between items-center flex-wrap gap-2">
