@@ -194,7 +194,17 @@ function componentesSaoPaulo(now: Date) {
   };
 }
 
-export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: string; infNFeId: string; valorTotalComTaxa: number } {
+export function montarXmlNota(params: MontarXmlParams): {
+  xml: string;
+  chave: string;
+  infNFeId: string;
+  valorTotalComTaxa: number;
+  // Exposto porque o QR Code de contingência (modo offline, NT 2015/002)
+  // precisa do DIA da emissão na fórmula do hash — e esse dhEmi é gerado
+  // aqui dentro (fuso de São Paulo), não pelo chamador. Reparsear o XML pra
+  // recuperá-lo seria frágil.
+  dhEmi: string;
+} {
   const { modelo, ambiente, serie, numero, emitente, itens, destinatario, pagamentos, tpEmis } = params;
   if (!itens.length) throw new Error('Nota sem itens.');
   if (modelo === '55' && !destinatario) throw new Error('NF-e (modelo 55) exige destinatário.');
@@ -217,6 +227,23 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
   const dhEmi = `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}-03:00`;
 
   const infNFeId = `NFe${chave}`;
+
+  // Contingência (tpEmis != 1): o schema da NFe 4.00 exige o par
+  // <dhCont>/<xJust> no fim do grupo <ide> (campos B28/B29, logo depois de
+  // <verProc> e antes de </ide> — a ordem importa, XSD é sequence). Sem eles
+  // a SEFAZ rejeita o documento com cStat=225 na validação de schema.
+  //
+  // <dhCont> = instante em que a contingência começou. Este sistema não
+  // rastreia "início de indisponibilidade" em lugar nenhum: a contingência
+  // nasce exatamente da tentativa online que acabou de falhar, então o
+  // próprio dhEmi desta nota é o instante correto e defensável.
+  //
+  // <xJust> tem minLength 15 / maxLength 256 no schema. Texto fixo em ASCII
+  // puro (sem acento), mesma convenção de AVISO_HOMOLOGACAO acima — evita
+  // qualquer questão de escape/encoding num campo que a SEFAZ lê e guarda.
+  const XJUST_CONTINGENCIA = 'Falha de comunicacao com o servico de autorizacao da SEFAZ.';
+  const contingenciaIde =
+    (tpEmis ?? 1) !== 1 ? `<dhCont>${dhEmi}</dhCont><xJust>${XJUST_CONTINGENCIA}</xJust>` : '';
 
   let vProdTotal = 0;
   for (const item of itens) {
@@ -377,7 +404,7 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<idDest>${destinatario ? 1 : 1}</idDest><cMunFG>${emitente.cMun}</cMunFG>` +
     `<tpImp>${modelo === '65' ? 4 : 1}</tpImp><tpEmis>${tpEmis ?? 1}</tpEmis><cDV>${chave.slice(-1)}</cDV>` +
     `<tpAmb>${tpAmb}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres>` +
-    `<procEmi>0</procEmi><verProc>ntb-vendas-1.0</verProc></ide>` +
+    `<procEmi>0</procEmi><verProc>ntb-vendas-1.0</verProc>${contingenciaIde}</ide>` +
     `<emit><CNPJ>${emitente.cnpj}</CNPJ><xNome>${escapeXml(emitente.razaoSocial)}</xNome>` +
     `<enderEmit><xLgr>${escapeXml(emitente.logradouro)}</xLgr><nro>${escapeXml(emitente.numero)}</nro><xBairro>${escapeXml(emitente.bairro)}</xBairro>` +
     `<cMun>${emitente.cMun}</cMun><xMun>${escapeXml(emitente.municipio)}</xMun><UF>${emitente.uf}</UF><CEP>${emitente.cep}</CEP>` +
@@ -410,5 +437,5 @@ export function montarXmlNota(params: MontarXmlParams): { xml: string; chave: st
     `<infAdic><infCpl>Documento emitido pelo sistema NTB Vendas.${vOutro > 0 ? ` Inclui taxa de servico opcional de R$ ${vOutro.toFixed(2)}.` : ''}</infCpl></infAdic>` +
     `</infNFe></NFe>`;
 
-  return { xml: nfeXml, chave, infNFeId, valorTotalComTaxa: Number(vNF) };
+  return { xml: nfeXml, chave, infNFeId, valorTotalComTaxa: Number(vNF), dhEmi };
 }

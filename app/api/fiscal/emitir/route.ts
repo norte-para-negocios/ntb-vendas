@@ -4,7 +4,12 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { extrairCertificado } from '@/lib/fiscal/certificado';
 import { montarXmlNota, ItemNota, PagamentoNota, MontarXmlParams } from '@/lib/fiscal/xml';
 import { assinarXmlNota } from '@/lib/fiscal/assinatura';
-import { montarQrCode, inserirSuplNoXmlAssinado } from '@/lib/fiscal/qrcode';
+import {
+  montarQrCode,
+  montarQrCodeOffline,
+  extrairDigestValue,
+  inserirSuplNoXmlAssinado,
+} from '@/lib/fiscal/qrcode';
 import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
 import { montarNfeProc } from '@/lib/fiscal/pdf';
 import { gerarPdfContingencia } from '@/lib/fiscal/pdfContingencia';
@@ -129,7 +134,39 @@ async function emitirEmContingencia(params: {
 
   try {
     const montado = montarXmlNota({ ...paramsXml, tpEmis: 9 });
-    const xmlAssinado = assinarXmlNota(montado.xml, montado.infNFeId, certificado.certPem, certificado.keyPem);
+    let xmlAssinado = assinarXmlNota(montado.xml, montado.infNFeId, certificado.certPem, certificado.keyPem);
+
+    // QR Code (só NFC-e) — obrigatório TAMBÉM em contingência: <infNFeSupl>
+    // é exigido pro modelo 65 em qualquer tpEmis. Mesma busca de CSC/CSCID e
+    // mesmas URLs por ambiente do caminho online (passo 9 desta rota), mas
+    // com a fórmula OFF-LINE (montarQrCodeOffline): a fórmula online num
+    // documento tpEmis=9 geraria um QR errado.
+    if (paramsXml.modelo === '65') {
+      const { data: fiscalSecret } = await admin
+        .from('store_fiscal_config_secrets')
+        .select('csc_homologacao, cscid_homologacao, csc_producao, cscid_producao')
+        .eq('store_id', storeId)
+        .maybeSingle();
+      const csc = paramsXml.ambiente === 'homologacao' ? fiscalSecret?.csc_homologacao : fiscalSecret?.csc_producao;
+      const idCsc =
+        paramsXml.ambiente === 'homologacao' ? fiscalSecret?.cscid_homologacao : fiscalSecret?.cscid_producao;
+      if (!csc || !idCsc) throw new Error('CSC/CSCID não configurado pro ambiente atual da loja.');
+
+      const { urlQrCode, urlChave } = resolverEndpointsNfceConsulta(paramsXml.ambiente);
+
+      const { supl } = montarQrCodeOffline({
+        chave: montado.chave,
+        tpAmb: paramsXml.ambiente === 'homologacao' ? 2 : 1,
+        idCsc,
+        csc,
+        urlQrCode,
+        urlChave,
+        dhEmi: montado.dhEmi,
+        vNF: montado.valorTotalComTaxa,
+        digVal: extrairDigestValue(xmlAssinado),
+      });
+      xmlAssinado = inserirSuplNoXmlAssinado(xmlAssinado, supl);
+    }
 
     const emitente = paramsXml.emitente;
     const endereco = [
