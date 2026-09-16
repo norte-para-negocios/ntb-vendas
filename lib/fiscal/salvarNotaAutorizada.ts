@@ -65,6 +65,25 @@ export async function salvarNotaAutorizada(
     console.error('salvarNotaAutorizada: nota autorizada mas pós-processamento (PDF/storage) falhou:', e);
   }
 
+  // No caminho de retransmissão (UPDATE), motivo_erro não pode ser
+  // sobrescrito com null às cegas: motivoPosAutorizacao só existe se o
+  // PDF/Storage falhou aqui (raro); no caso comum (null) o valor que já
+  // está gravado é o motivo original da contingência (ex.: erro de conexão
+  // com a SEFAZ no momento da emissão, gravado por emitirEmContingencia) —
+  // perdê-lo apaga o único registro de por que a nota caiu em contingência.
+  let motivoErro = motivoPosAutorizacao;
+  if (dados.notaIdExistente && !motivoPosAutorizacao) {
+    const { data: notaAtual } = await admin
+      .from('fiscal_notas')
+      .select('motivo_erro')
+      .eq('id', dados.notaIdExistente)
+      .single();
+    const motivoOriginal = (notaAtual?.motivo_erro as string | null) ?? null;
+    motivoErro = motivoOriginal
+      ? `Promovida de contingência (motivo original: ${motivoOriginal})`
+      : null;
+  }
+
   const linha: Record<string, unknown> = {
     ...dados.notaBase,
     status: 'autorizada' as const,
@@ -74,7 +93,7 @@ export async function salvarNotaAutorizada(
     protocolo: dados.protocolo,
     xml_path: xmlPath,
     pdf_path: pdfPath,
-    motivo_erro: motivoPosAutorizacao,
+    motivo_erro: motivoErro,
   };
 
   // Na emissão síncrona (INSERT) `valor_total` PRECISA ser gravado — a linha
