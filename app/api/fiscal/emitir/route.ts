@@ -2,11 +2,12 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createHash } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { extrairCertificado } from '@/lib/fiscal/certificado';
-import { montarXmlNota, ItemNota, PagamentoNota } from '@/lib/fiscal/xml';
+import { montarXmlNota, ItemNota, PagamentoNota, MontarXmlParams } from '@/lib/fiscal/xml';
 import { assinarXmlNota } from '@/lib/fiscal/assinatura';
 import { montarQrCode, inserirSuplNoXmlAssinado } from '@/lib/fiscal/qrcode';
 import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
 import { montarNfeProc } from '@/lib/fiscal/pdf';
+import { gerarPdfContingencia } from '@/lib/fiscal/pdfContingencia';
 import { montarPayloadIncluirNfce, incluirNfceDireto } from '@/lib/omie/nota-fiscal';
 import { salvarNotaAutorizada } from '@/lib/fiscal/salvarNotaAutorizada';
 
@@ -90,6 +91,139 @@ export async function POST(request: NextRequest) {
     // um 500 não tratado (constraint do Task 13) — sempre volta JSON.
     console.error('Emissão fiscal: falha não tratada na rota:', e);
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
+  }
+}
+
+// Contingência offline NFC-e/NF-e (tpEmis=9) — chamada SÓ pelo caminho de
+// falha de transporte da Fase 1 (ver os dois pontos de chamada abaixo).
+// Remonta o MESMO documento que estava sendo transmitido, agora declarando
+// `tpEmis: 9` (o que muda a chave de acesso — o dígito de tpEmis entra no
+// cálculo, ver montarChaveAcesso), assina, gera o cupom de contingência
+// (sem protocolo, porque não existe protocolo ainda) e grava a linha como
+// 'contingencia'. A retransmissão em background (Task 7) reenvia
+// `xml_contingencia` tal e qual e promove a linha pra 'autorizada'.
+//
+// Invariante importante: esta função NUNCA consome numeração nova — reusa o
+// número que a tentativa online já tinha consumido (`paramsXml.numero`), do
+// contrário cada falha de rede queimaria dois números fiscais.
+async function emitirEmContingencia(params: {
+  admin: ReturnType<typeof getSupabaseAdmin>;
+  storeId: string;
+  nomeLoja: string;
+  serie: number;
+  // Exatamente os parâmetros já usados na tentativa online — spread com
+  // tpEmis:9, nunca remontados a partir dos itens crus.
+  paramsXml: MontarXmlParams;
+  itensXml: ItemNota[];
+  itensValidos: { id: string }[];
+  notaBase: Record<string, unknown>;
+  certificado: { certPem: string; keyPem: string; certComCadeia: string };
+  // Motivo real da queda (mensagem da exceção de rede ou "HTTP nnn sem
+  // cStat") — gravado em motivo_erro pra o lojista/suporte saber POR QUE
+  // esta venda saiu em contingência, sem precisar caçar log.
+  motivoOriginal: string;
+}): Promise<NextResponse> {
+  const { admin, storeId, nomeLoja, serie, paramsXml, itensXml, itensValidos, notaBase, certificado, motivoOriginal } =
+    params;
+  const numero = paramsXml.numero;
+
+  try {
+    const montado = montarXmlNota({ ...paramsXml, tpEmis: 9 });
+    const xmlAssinado = assinarXmlNota(montado.xml, montado.infNFeId, certificado.certPem, certificado.keyPem);
+
+    const emitente = paramsXml.emitente;
+    const endereco = [
+      [emitente.logradouro, emitente.numero].filter(Boolean).join(', '),
+      emitente.bairro,
+      [emitente.municipio, emitente.uf].filter(Boolean).join('/'),
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+    const pdfVia1 = await gerarPdfContingencia({
+      storeName: nomeLoja,
+      cnpj: emitente.cnpj,
+      endereco: endereco || undefined,
+      chave: montado.chave,
+      dataHora: new Date(),
+      itens: itensXml.map((i) => ({
+        descricao: i.xProd,
+        quantidade: i.qCom,
+        valorUnitario: i.vUnCom,
+        valorTotal: i.qCom * i.vUnCom,
+      })),
+      valorTotal: montado.valorTotalComTaxa,
+      via: 1,
+    });
+
+    // Mesmo bucket e mesmo padrão de caminho da nota normal
+    // (lib/fiscal/salvarNotaAutorizada.ts), com sufixo próprio: quando a
+    // retransmissão autorizar esta nota, ela sobe `${chave}.pdf` ao lado —
+    // os dois artefatos coexistem sem um sobrescrever o outro. Sem
+    // `upsert` (idem salvarNotaAutorizada): a chave já embute o número
+    // fiscal, que é único por tentativa.
+    const caminhoPdf = `${storeId}/${montado.chave}-contingencia.pdf`;
+    const upload = await admin.storage
+      .from('fiscal-documentos')
+      .upload(caminhoPdf, pdfVia1, { contentType: 'application/pdf' });
+    if (upload.error) throw upload.error;
+
+    const { data: notaSalva, error: insertErr } = await admin
+      .from('fiscal_notas')
+      .insert({
+        ...notaBase,
+        valor_total: montado.valorTotalComTaxa,
+        status: 'contingencia',
+        chave_acesso: montado.chave,
+        numero,
+        serie,
+        xml_contingencia: xmlAssinado,
+        pdf_path: caminhoPdf,
+        motivo_erro: motivoOriginal,
+      })
+      .select('id')
+      .single();
+
+    if (insertErr || !notaSalva) {
+      console.error(
+        `emitirEmContingencia: cupom gerado (chave=${montado.chave}) mas falha ao gravar fiscal_notas:`,
+        insertErr,
+      );
+      return NextResponse.json({ ok: false, reason: 'Falha ao gravar nota em contingência' });
+    }
+
+    // Marca os itens como faturados por ESTA nota — mesmo motivo do caminho
+    // autorizado (migration 055: impedir que o fechamento final da mesa
+    // cobre de novo o que já saiu numa nota) e também o que a retransmissão
+    // (Task 7) usa pra reencontrar os itens da nota quando ela for
+    // promovida a 'autorizada'. Falha aqui não desfaz a contingência.
+    if (itensValidos.length) {
+      const { error: marcarErr } = await admin
+        .from('order_items')
+        .update({ fiscal_nota_id: notaSalva.id })
+        .in('id', itensValidos.map((i) => i.id));
+      if (marcarErr) {
+        console.error(
+          `emitirEmContingencia: nota em contingência gravada (id=${notaSalva.id}) mas falha ao marcar order_items.fiscal_nota_id:`,
+          marcarErr,
+        );
+      }
+    }
+
+    return NextResponse.json({ ok: true, contingencia: true, chave: montado.chave, motivo: motivoOriginal });
+  } catch (e) {
+    // A contingência em si falhou (assinatura, PDF, Storage) — não há cupom
+    // nenhum pra entregar, então a venda vira 'erro' como sempre foi. Nada
+    // aqui toca a SEFAZ, então não há risco de documento órfão.
+    const mensagemErro = e instanceof Error ? e.message : 'Erro desconhecido';
+    console.error('emitirEmContingencia falhou:', e);
+    const { error: insertErr } = await admin.from('fiscal_notas').insert({
+      ...notaBase,
+      status: 'erro',
+      motivo_erro: `Falha ao emitir em contingência (${motivoOriginal}): ${mensagemErro}`,
+    });
+    if (insertErr) console.error('emitirEmContingencia: falha ao gravar fiscal_notas (erro):', insertErr);
+    return NextResponse.json({ ok: false, reason: mensagemErro });
   }
 }
 
@@ -400,8 +534,12 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // número fiscal consumido por uma tentativa que já nasce inválida) — o
   // certificado baixado/extraído aqui é reaproveitado dentro da FASE 1 via
   // `certificadoValidado`, pra não baixar/extrair duas vezes.
-  const { data: storeRow } = await admin.from('stores').select('cnpj').eq('id', storeId).maybeSingle();
+  // `name` vem junto só pro cabeçalho do cupom de contingência (o cupom
+  // normal é gerado pela lib de DANFE a partir do próprio XML, e por isso
+  // nunca precisou do nome da loja aqui) — mesma query, sem round-trip extra.
+  const { data: storeRow } = await admin.from('stores').select('cnpj, name').eq('id', storeId).maybeSingle();
   const cnpjLoja = (storeRow?.cnpj || '').replace(/\D/g, '');
+  const nomeLoja = storeRow?.name || '';
 
   let certificadoValidado: { certPem: string; keyPem: string; certComCadeia: string };
   try {
@@ -473,7 +611,15 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // Hoisted pra ficar acessível no bloco de envio pra Omie (after(), pós
   // cStat=100, ver mais abaixo) — mesmos itens já usados pra montar o XML
   // desta nota, nunca recalculados.
-  let itensXml: ItemNota[];
+  let itensXml: ItemNota[] = [];
+  // Contingência (2026-09-15): os parâmetros EXATOS já usados pra montar o
+  // XML online, guardados pra poder remontar o mesmo documento com
+  // `tpEmis: 9` numa falha de transporte — nunca remontados a partir dos
+  // itens crus, senão o XML de contingência poderia divergir do que foi
+  // tentado online (pagamentos, destinatário, vNF com taxa de serviço).
+  // `null` enquanto a montagem não aconteceu: uma falha ANTES disso
+  // (numeração, certificado) nunca pode virar contingência.
+  let paramsXmlUsados: MontarXmlParams | null = null;
 
   try {
     // 5. Numeração atômica.
@@ -515,7 +661,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     const { certPem, keyPem, certComCadeia } = certificadoValidado;
 
     // 8. Monta e assina o XML.
-    const montado = montarXmlNota({
+    const paramsXml: MontarXmlParams = {
       modelo,
       ambiente: config.ambiente,
       serie,
@@ -564,7 +710,9 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       pagamentos: Array.isArray((paymentDetailsAncora as any)?.methods)
         ? ((paymentDetailsAncora as any).methods as PagamentoNota[])
         : undefined,
-    });
+    };
+    paramsXmlUsados = paramsXml;
+    const montado = montarXmlNota(paramsXml);
     chave = montado.chave;
     valorTotalComTaxa = montado.valorTotalComTaxa;
 
@@ -609,15 +757,82 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       keyPem,
     });
   } catch (e) {
+    const mensagemErro = e instanceof Error ? e.message : 'Erro desconhecido na emissão.';
+
+    // Falha de TRANSPORTE (rede/DNS/TLS/timeout — a exceção vem de dentro de
+    // transmitirNota, ver lib/fiscal/soap.ts: `req.on('error', reject)` e o
+    // timeout de 30s) — é exatamente o cenário que a contingência offline
+    // existe pra cobrir: a SEFAZ está inalcançável, mas a venda já
+    // aconteceu de verdade e o cliente precisa de um cupom agora.
+    //
+    // Qualquer OUTRA exceção desta fase (numeração, CSC ausente, XML que
+    // não monta, assinatura que falha) continua caindo em 'erro' — nunca
+    // vira contingência às cegas. A guarda `paramsXmlUsados` reforça isso
+    // estruturalmente: só existe XML de contingência possível se o XML
+    // online já tinha sido montado com sucesso, o que só acontece nos
+    // passos 8/9/10 (assinatura, QR, transmissão).
+    const codigoErro = (e as { code?: string } | null)?.code;
+    const ehFalhaDeTransporte =
+      mensagemErro.includes('Timeout na transmissão pra SEFAZ') ||
+      codigoErro === 'ECONNREFUSED' ||
+      codigoErro === 'ENOTFOUND' ||
+      codigoErro === 'ETIMEDOUT' ||
+      codigoErro === 'ECONNRESET' ||
+      codigoErro === 'EAI_AGAIN' ||
+      codigoErro === 'EHOSTUNREACH' ||
+      codigoErro === 'ENETUNREACH' ||
+      codigoErro === 'EPIPE';
+
+    if (ehFalhaDeTransporte && paramsXmlUsados) {
+      console.error('Emissão fiscal: falha de transporte pra SEFAZ, caindo pra contingência:', e);
+      return await emitirEmContingencia({
+        admin,
+        storeId,
+        nomeLoja,
+        serie,
+        paramsXml: paramsXmlUsados,
+        itensXml,
+        itensValidos,
+        notaBase,
+        certificado: certificadoValidado,
+        motivoOriginal: mensagemErro,
+      });
+    }
+
     const { error: insertErr } = await admin.from('fiscal_notas').insert({
       ...notaBase,
       valor_total: valorTotalComTaxa,
       status: 'erro',
-      motivo_erro: e instanceof Error ? e.message : 'Erro desconhecido na emissão.',
+      motivo_erro: mensagemErro,
     });
     if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (erro pré-autorização):', insertErr);
     console.error('Emissão fiscal falhou (fase pré-autorização):', e);
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
+  }
+
+  // Resposta CHEGOU (sem exceção) mas sem nenhum cStat reconhecível — página
+  // de erro HTML de gateway, corpo vazio, conexão cortada no meio do body.
+  // Isso é uma falha de transporte disfarçada de resposta HTTP, não uma
+  // rejeição de negócio: a SEFAZ nunca analisou este documento, então a
+  // contingência é o desfecho certo (antes desta task, caía em 'erro' junto
+  // com as rejeições, na checagem logo abaixo). Rejeição de negócio de
+  // verdade (cStat presente e != '100') continua intocada.
+  if (resposta.cStat === null && paramsXmlUsados) {
+    console.error(
+      `Emissão fiscal: resposta da SEFAZ sem cStat (HTTP ${resposta.httpStatus}), caindo pra contingência.`,
+    );
+    return await emitirEmContingencia({
+      admin,
+      storeId,
+      nomeLoja,
+      serie,
+      paramsXml: paramsXmlUsados,
+      itensXml,
+      itensValidos,
+      notaBase,
+      certificado: certificadoValidado,
+      motivoOriginal: `Falha de transporte na transmissão pra SEFAZ (HTTP ${resposta.httpStatus}).`,
+    });
   }
 
   if (resposta.cStat !== '100') {
