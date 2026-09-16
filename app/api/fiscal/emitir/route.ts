@@ -6,8 +6,9 @@ import { montarXmlNota, ItemNota, PagamentoNota } from '@/lib/fiscal/xml';
 import { assinarXmlNota } from '@/lib/fiscal/assinatura';
 import { montarQrCode, inserirSuplNoXmlAssinado } from '@/lib/fiscal/qrcode';
 import { transmitirNota, resolverEndpointsNfceConsulta } from '@/lib/fiscal/soap';
-import { gerarPdfNota, montarNfeProc } from '@/lib/fiscal/pdf';
+import { montarNfeProc } from '@/lib/fiscal/pdf';
 import { montarPayloadIncluirNfce, incluirNfceDireto } from '@/lib/omie/nota-fiscal';
+import { salvarNotaAutorizada } from '@/lib/fiscal/salvarNotaAutorizada';
 
 // O pipeline completo (download+parse de certificado, XML, assinatura,
 // SOAP até 30s pra SEFAZ, geração de PDF) pode passar do limite padrão de
@@ -652,82 +653,25 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // futura seria um problema real de compliance).
   // ════════════════════════════════════════════════════════════════════════
 
-  // FASE 2 — monta nfeProc, gera o PDF (DANFE/DANFCe) e sobe os dois pro
-  // Storage. Qualquer falha aqui vira só um motivo_erro informativo,
-  // nunca muda o status de 'autorizada'.
-  let xmlPath: string | null = null;
-  let pdfPath: string | null = null;
-  let motivoPosAutorizacao: string | null = null;
-
-  try {
-    const protXml = resposta.xmlBruto.match(/<protNFe[\s\S]*?<\/protNFe>/)?.[0] ?? '';
-    const nfeProc = montarNfeProc(xmlAssinado, protXml);
-    const pdfBuffer = await gerarPdfNota(modelo, nfeProc);
-
-    const caminhoXml = `${storeId}/${chave}.xml`;
-    const caminhoPdf = `${storeId}/${chave}.pdf`;
-    const [uploadXml, uploadPdf] = await Promise.all([
-      admin.storage.from('fiscal-documentos').upload(caminhoXml, nfeProc, { contentType: 'application/xml' }),
-      admin.storage.from('fiscal-documentos').upload(caminhoPdf, pdfBuffer, { contentType: 'application/pdf' }),
-    ]);
-    if (uploadXml.error) throw uploadXml.error;
-    if (uploadPdf.error) throw uploadPdf.error;
-
-    // Só marca os caminhos como válidos se AMBOS os uploads confirmaram —
-    // um sucesso parcial (ex.: XML subiu, PDF falhou) não deixa metade da
-    // informação enganosamente disponível; motivo_erro explica o que faltou.
-    xmlPath = caminhoXml;
-    pdfPath = caminhoPdf;
-  } catch (e) {
-    motivoPosAutorizacao = `Autorizada na SEFAZ mas falha ao gerar/salvar PDF: ${
-      e instanceof Error ? e.message : 'erro desconhecido'
-    }`;
-    console.error('Emissão fiscal: nota autorizada mas pós-processamento (PDF/storage) falhou:', e);
-  }
-
-  const { data: notaInserida, error: insertErr } = await admin
-    .from('fiscal_notas')
-    .insert({
-      ...notaBase,
-      valor_total: valorTotalComTaxa,
-      status: 'autorizada',
-      chave_acesso: chave,
-      numero,
-      serie,
-      protocolo: resposta.protocolo,
-      xml_path: xmlPath,
-      pdf_path: pdfPath,
-      motivo_erro: motivoPosAutorizacao,
-    })
-    .select('id')
-    .single();
-  if (insertErr) {
-    // Pior caso: a nota está autorizada na SEFAZ de verdade, mas nem essa
-    // linha de bookkeeping foi gravada — registra bem alto no log pra
-    // alguém conseguir reconciliar manualmente (a chave/protocolo abaixo
-    // aparecem no log, então não se perdem).
-    console.error(
-      `Emissão fiscal: nota AUTORIZADA (chave=${chave}, protocolo=${resposta.protocolo}) mas falha ao gravar fiscal_notas:`,
-      insertErr,
-    );
-  } else {
-    // Marca os itens cobertos por ESTA nota como faturados (migration 055)
-    // — impede o fechamento final da mesa (caminho automático) de cobrar
-    // de novo o que já saiu numa nota individual. Falha aqui não desfaz a
-    // nota já autorizada (mesmo princípio de "nada pode virar erro depois
-    // do cStat=100" do resto desta rota) — só loga, uma reconciliação
-    // manual via fiscal_notas.id ainda é possível.
-    const { error: marcarErr } = await admin
-      .from('order_items')
-      .update({ fiscal_nota_id: notaInserida.id })
-      .in('id', itensValidos.map((i) => i.id));
-    if (marcarErr) {
-      console.error(
-        `Emissão fiscal: nota AUTORIZADA (chave=${chave}) mas falha ao marcar order_items.fiscal_nota_id=${notaInserida.id}:`,
-        marcarErr,
-      );
-    }
-  }
+  // FASE 2 — monta nfeProc, gera o PDF (DANFE/DANFCe), sobe os dois pro
+  // Storage, grava fiscal_notas e marca order_items.fiscal_nota_id.
+  // Qualquer falha aqui vira só um motivo_erro informativo, nunca muda o
+  // status de 'autorizada'. Extraída pra lib/fiscal/salvarNotaAutorizada.ts
+  // pra ser compartilhada com a retransmissão em background de notas que
+  // nasceram em contingência.
+  const { motivoPosAutorizacao } = await salvarNotaAutorizada({
+    storeId,
+    modelo,
+    chave,
+    numero,
+    serie,
+    xmlAssinado,
+    protocoloXmlBruto: resposta.xmlBruto,
+    protocolo: resposta.protocolo,
+    valorTotalComTaxa,
+    notaBase,
+    itensValidos,
+  });
 
   // Envio pra Omie (2026-09-05) — só NFC-e (modelo 65) por enquanto,
   // ver Global Constraints do plano/spec pro porquê do modelo 55 ficar
