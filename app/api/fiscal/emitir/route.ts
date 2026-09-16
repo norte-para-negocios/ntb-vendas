@@ -141,6 +141,10 @@ async function emitirEmContingencia(params: {
     // mesmas URLs por ambiente do caminho online (passo 9 desta rota), mas
     // com a fórmula OFF-LINE (montarQrCodeOffline): a fórmula online num
     // documento tpEmis=9 geraria um QR errado.
+    // `qrCode` guardado à parte pro cupom impresso (só o `supl` XML entra
+    // no documento transmissível/retransmissível) — mesmo raciocínio do
+    // caminho online, onde o QR também vai pro PDF além do XML.
+    let qrCodeParaCupom: string | undefined;
     if (paramsXml.modelo === '65') {
       const { data: fiscalSecret } = await admin
         .from('store_fiscal_config_secrets')
@@ -154,7 +158,7 @@ async function emitirEmContingencia(params: {
 
       const { urlQrCode, urlChave } = resolverEndpointsNfceConsulta(paramsXml.ambiente);
 
-      const { supl } = montarQrCodeOffline({
+      const { qrCode, supl } = montarQrCodeOffline({
         chave: montado.chave,
         tpAmb: paramsXml.ambiente === 'homologacao' ? 2 : 1,
         idCsc,
@@ -166,6 +170,7 @@ async function emitirEmContingencia(params: {
         digVal: extrairDigestValue(xmlAssinado),
       });
       xmlAssinado = inserirSuplNoXmlAssinado(xmlAssinado, supl);
+      qrCodeParaCupom = qrCode;
     }
 
     const emitente = paramsXml.emitente;
@@ -191,6 +196,7 @@ async function emitirEmContingencia(params: {
       })),
       valorTotal: montado.valorTotalComTaxa,
       via: 1,
+      qrCode: qrCodeParaCupom,
     });
 
     // Mesmo bucket e mesmo padrão de caminho da nota normal
