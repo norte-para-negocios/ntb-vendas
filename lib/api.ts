@@ -742,6 +742,29 @@ export const updateProductOrder = async (updates: { id: string; order: number }[
   }
 };
 
+export interface ProdutoEstoqueBusca {
+  codigo: string;
+  codigo_produto: number;
+  descricao: string;
+  valor_unitario: number;
+}
+
+// Busca produtos já cadastrados no NTB Estoque por nome (modo "Vincular a um
+// código Omie já existente" do modal de produto) — evita o operador ter que
+// saber o código de cor. Retorna [] em qualquer falha (loja sem integração
+// configurada, NTB Estoque fora do ar, etc.) — nunca lança, o modal cai de
+// volta pro campo de texto manual nesse caso.
+export const buscarProdutosNoEstoque = async (storeId: string, query: string): Promise<ProdutoEstoqueBusca[]> => {
+  try {
+    const res = await fetch(`/api/integracao/buscar-produto-estoque?storeId=${storeId}&q=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    if (!res.ok || !data.success) return [];
+    return data.produtos as ProdutoEstoqueBusca[];
+  } catch {
+    return [];
+  }
+};
+
 // Vincula/desvincula um produto a um omie_codigo já existente (caso
 // "Vincular a um código Omie já existente" do modal de produto) — nunca cria
 // nada novo no Omie/ntb-estoque, só grava o código informado. `null` limpa o

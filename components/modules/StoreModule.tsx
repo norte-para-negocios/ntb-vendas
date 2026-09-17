@@ -13,7 +13,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -6555,6 +6555,26 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // novo, não em editar). Substituiu o antigo `pCriarNoEstoque` boolean.
     const [pOmieMode, setPOmieMode] = useState<'none' | 'link' | 'create'>('none');
     const [pOmieCodeInput, setPOmieCodeInput] = useState('');
+    // Busca de produto já existente no NTB Estoque (modo 'link') — pesquisa
+    // por nome em vez de exigir o código Omie de cor. Debounce simples (a
+    // mesma ideia do pRecommendationSearch, mas com chamada de rede real,
+    // então precisa de debounce de verdade, não só filtro local).
+    const [pOmieSearchTerm, setPOmieSearchTerm] = useState('');
+    const [pOmieSearchResults, setPOmieSearchResults] = useState<ProdutoEstoqueBusca[]>([]);
+    const [pOmieSearching, setPOmieSearching] = useState(false);
+    useEffect(() => {
+        if (pOmieMode !== 'link' || pOmieSearchTerm.trim().length < 2) {
+            setPOmieSearchResults([]);
+            return;
+        }
+        setPOmieSearching(true);
+        const timer = setTimeout(() => {
+            buscarProdutosNoEstoque(storeId, pOmieSearchTerm.trim())
+                .then(setPOmieSearchResults)
+                .finally(() => setPOmieSearching(false));
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [pOmieMode, pOmieSearchTerm, storeId]);
     const [pFile, setPFile] = useState<File | null>(null);
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -6839,6 +6859,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 setPOmieMode('none');
                 setPOmieCodeInput('');
             }
+            setPOmieSearchTerm('');
         } else {
             setEditingProduct(null);
             setPName('');
@@ -6856,6 +6877,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPNcm('');
             setPOmieMode('none');
             setPOmieCodeInput('');
+            setPOmieSearchTerm('');
         }
         setPRecommendationSearch('');
         setPFile(null);
@@ -7516,12 +7538,34 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <span className="text-sm text-[var(--text)]">Vincular a um código Omie já existente</span>
                         </label>
                         {pOmieMode === 'link' && (
-                            <Input
-                                placeholder="Código Omie (ex: 90386)"
-                                value={pOmieCodeInput}
-                                onChange={e => setPOmieCodeInput(e.target.value)}
-                                className="ml-6"
-                            />
+                            <div className="ml-6 flex flex-col gap-2">
+                                <Input
+                                    placeholder="Buscar produto no NTB Estoque por nome..."
+                                    value={pOmieSearchTerm}
+                                    onChange={e => setPOmieSearchTerm(e.target.value)}
+                                />
+                                {pOmieSearching && <span className="text-xs text-[var(--text-muted)]">Buscando...</span>}
+                                {pOmieSearchResults.length > 0 && (
+                                    <div className="flex flex-col gap-1 max-h-40 overflow-y-auto border border-[var(--border)] rounded-lg p-1 bg-[var(--surface)]">
+                                        {pOmieSearchResults.map(p => (
+                                            <button
+                                                type="button"
+                                                key={p.codigo}
+                                                onClick={() => { setPOmieCodeInput(p.codigo); setPOmieSearchTerm(''); setPOmieSearchResults([]); }}
+                                                className={`text-left text-sm px-2 py-1.5 rounded-md hover:bg-[var(--surface-2)] ${pOmieCodeInput === p.codigo ? 'bg-[var(--brand)]/10 font-semibold' : ''}`}
+                                            >
+                                                {p.descricao} <span className="text-[var(--text-muted)]">· {p.codigo} · R$ {formatBRL(p.valor_unitario)}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <Input
+                                    label="Código Omie selecionado"
+                                    placeholder="Ou digite o código direto (ex: 90386)"
+                                    value={pOmieCodeInput}
+                                    onChange={e => setPOmieCodeInput(e.target.value)}
+                                />
+                            </div>
                         )}
                         {!editingProduct && (
                             <label className="flex items-center gap-2 cursor-pointer">
