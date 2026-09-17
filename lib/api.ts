@@ -742,6 +742,19 @@ export const updateProductOrder = async (updates: { id: string; order: number }[
   }
 };
 
+// Vincula/desvincula um produto a um omie_codigo já existente (caso
+// "Vincular a um código Omie já existente" do modal de produto) — nunca cria
+// nada novo no Omie/ntb-estoque, só grava o código informado. `null` limpa o
+// vínculo.
+export const setProductOmieCodigo = async (id: string, storeId: string, omieCodigo: string | null) => {
+  const { error } = await supabase.rpc('set_product_omie_codigo_secure', {
+    p_product_id: id,
+    p_store_id: storeId,
+    p_omie_codigo: omieCodigo,
+  });
+  if (error) throw error;
+};
+
 export const deleteProduct = async (id: string, storeId: string) => {
   const { error } = await supabase.rpc('delete_product_secure', { p_product_id: id, p_store_id: storeId });
   if (error) throw error;
