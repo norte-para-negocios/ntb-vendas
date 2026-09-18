@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, protocol, net, shell, Notification, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, protocol, net, shell, Notification, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -88,6 +88,71 @@ app.setName('Norte Vendas');
 // dev) podem aparecer como "electron.exe" na barra de tarefas do Windows.
 app.setAppUserModelId('com.norteparanegocios.ntbvendas');
 
+// Segundo plano (pedido do dono, 2026-09-18): "o aplicativo funciona em segundo
+// plano, mesmo fechado, com o computador ligado, pra continuar imprimindo".
+// O motor de impressão e a auto-impressão de comanda rodam neste app (motor no
+// processo principal, auto-impressão no renderer) — então fechar a janela NÃO
+// pode encerrar o app: só esconde na bandeja. Encerrar de verdade = "Sair" no
+// menu da bandeja (isQuitting).
+let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+const iniciouEscondido = process.argv.includes('--hidden');
+
+// Uma instância só: sem isso, abrir o app de novo (ou o Windows abrindo no
+// login + o usuário clicando no atalho) duplicava o motor de impressão e a
+// comanda saía 2x.
+const temInstanciaUnica = app.requestSingleInstanceLock();
+if (!temInstanciaUnica) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
+
+function mostrarJanela() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function sairDeVez() {
+  isQuitting = true;
+  app.quit();
+}
+
+function criarBandeja() {
+  if (tray) return;
+  let icone = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png'));
+  if (!icone.isEmpty()) icone = icone.resize({ width: 16, height: 16 });
+  tray = new Tray(icone);
+  tray.setToolTip('Norte Vendas — imprimindo em segundo plano');
+  const montarMenu = () => Menu.buildFromTemplate([
+    { label: 'Abrir Norte Vendas', click: mostrarJanela },
+    {
+      label: 'Iniciar com o computador',
+      type: 'checkbox',
+      checked: app.getLoginItemSettings().openAtLogin,
+      click: (item) => {
+        app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] });
+        appendLog('update.log', `INFO iniciar com o computador = ${item.checked}`);
+      },
+    },
+    { type: 'separator' },
+    { label: 'Sair (para de imprimir)', click: sairDeVez },
+  ]);
+  tray.setContextMenu(montarMenu());
+  tray.on('click', mostrarJanela);
+}
+
 // Sem menu de navegador — "cara de PDV", não de app genérico.
 Menu.setApplicationMenu(null);
 
@@ -108,6 +173,8 @@ protocol.registerSchemesAsPrivileged([
 function createWindow() {
   const win = new BrowserWindow({
     title: 'Norte Vendas',
+    // Aberto pelo Windows no login (--hidden): sobe direto na bandeja.
+    show: !(iniciouEscondido && !isQuitting && tray),
     width: 1280,
     height: 800,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
@@ -116,6 +183,9 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Janela escondida na bandeja NÃO pode ter timers/Realtime/polling
+      // estrangulados pelo Chromium — é ela que dispara a auto-impressão.
+      backgroundThrottling: false,
       // Preload roda sandboxed por padrão (Electron 20+, mesmo com
       // contextIsolation:true) — nesse modo `require()` só resolve um
       // punhado de módulos nativos (ex. 'electron'), NUNCA um arquivo
@@ -133,6 +203,20 @@ function createWindow() {
   });
 
   win.loadURL('app://bundle/index.html');
+
+  // Fechar a janela só esconde (o app continua na bandeja imprimindo).
+  win.on('close', (e) => {
+    if (isQuitting || process.platform === 'darwin') return;
+    e.preventDefault();
+    win.hide();
+    if (!win.__avisouBandeja) {
+      win.__avisouBandeja = true;
+      new Notification({
+        title: 'Norte Vendas',
+        body: 'O app continua rodando em segundo plano para imprimir. Para encerrar, use "Sair" no ícone da bandeja.',
+      }).show();
+    }
+  });
 
   // TELA BRANCA (o sintoma relatado na loja em 2026-09-11: "voltando para
   // telas tá dando tela branca"). Quando o processo do RENDERER morre —
@@ -196,7 +280,7 @@ function createWindow() {
         type: 'error',
         title: 'Norte Vendas',
         message: 'O aplicativo travou várias vezes seguidas e não conseguiu se recuperar sozinho.',
-        detail: 'Feche e abra o aplicativo. Se continuar acontecendo, chame o suporte e mande o arquivo renderer.log.',
+        detail: 'Use "Sair" no ícone da bandeja e abra o aplicativo de novo. Se continuar acontecendo, chame o suporte e mande o arquivo renderer.log.',
         buttons: ['OK'],
       }).catch(() => {});
       return;
@@ -257,6 +341,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (!temInstanciaUnica) return;
   protocol.handle('app', (request) => {
     const url = new URL(request.url);
     let pathname = decodeURIComponent(url.pathname);
@@ -274,7 +359,18 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(filePath).toString());
   });
 
-  createWindow();
+  criarBandeja();
+  mainWindow = createWindow();
+  // Inicia com o Windows (escondido na bandeja) — só no app instalado. O dono
+  // pode desligar pelo menu da bandeja; a escolha dele é respeitada depois da
+  // primeira execução (não reativa sozinho).
+  if (app.isPackaged && process.platform === 'win32') {
+    const chave = path.join(app.getPath('userData'), 'autostart-configurado');
+    if (!fs.existsSync(chave)) {
+      app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] });
+      try { fs.writeFileSync(chave, new Date().toISOString()); } catch { /* ignore */ }
+    }
+  }
 
   // Confere atualização ao abrir; baixa em background se houver, aplica
   // no próximo reinício (comportamento padrão do electron-updater, não
@@ -403,6 +499,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('ntb-install-update', () => {
     logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora"');
+    isQuitting = true;
     autoUpdater.quitAndInstall();
   });
 
@@ -496,11 +593,27 @@ app.whenReady().then(() => {
   // expediente.
   setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  // App na bandeja nunca "fecha", então a instalação de "ao sair" nunca
+  // aconteceria. Pedido do dono (2026-09-18): pode instalar de madrugada.
+  // Se já baixou versão nova e são entre 04:00 e 05:59, instala (silencioso) —
+  // horário em que a loja está fechada; o app reabre sozinho e o motor de
+  // impressão volta com a sessão salva.
+  setInterval(() => {
+    if (!estadoUpdate.versaoBaixada) return;
+    const hora = new Date().getHours();
+    if (hora < 4 || hora > 5) return;
+    logUpdate(`INFO instalando v${estadoUpdate.versaoBaixada} de madrugada (${hora}h)`);
+    isQuitting = true;
+    autoUpdater.quitAndInstall(true, true);
+  }, 10 * 60 * 1000);
+
+  app.on('activate', mostrarJanela);
 });
 
+app.on('before-quit', () => { isQuitting = true; });
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // Com a janela escondida na bandeja esta janela nunca fecha de fato; só chega
+  // aqui ao encerrar (Sair / quitAndInstall).
+  if (process.platform !== 'darwin' && isQuitting) app.quit();
 });
