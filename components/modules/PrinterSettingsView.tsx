@@ -33,7 +33,7 @@ import { Button, Input, Card, Badge } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
-  enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters, fetchPrintAgentStatus,
+  enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters, fetchPrintAgentStatus, updateStoreConfig,
 } from '@/lib/api';
 import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
 import { PrinterConfig, PrintJob, Store } from '@/types';
@@ -87,6 +87,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [port, setPort] = useState('9100');
   const [usbSystemName, setUsbSystemName] = useState('');
   const [destination, setDestination] = useState<PrinterConfig['destination']>('all');
+  const [paperWidthMm, setPaperWidthMm] = useState<PrinterConfig['paper_width_mm']>(80);
   // Achado ao vivo (2026-08-28): lista de impressoras USB detectadas pelo
   // agente local (print-agent/, migration 065) — quando existe, vira
   // seletor em vez de campo de texto livre. Vazia = nenhum agente rodou
@@ -130,7 +131,23 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
     setPort('9100');
     setUsbSystemName('');
     setDestination('all');
+    setPaperWidthMm(80);
     setShowAddForm(false);
+  };
+
+  // O sistema decide o tamanho da impressão (pedido do dono, 2026-09-18): a largura
+  // escolhida aqui vira também a largura padrão de comanda/comprovante da loja
+  // (stores.config.printer_paper_width_mm, lida em todos os pontos de impressão).
+  // A4 (210) só vale pro cupom fiscal, não mexe na térmica.
+  const syncStorePaperWidth = async (mm: PrinterConfig['paper_width_mm']) => {
+    if (mm !== 58 && mm !== 80) return;
+    const config = { ...(store.config || {}), printer_paper_width_mm: mm };
+    try {
+      await updateStoreConfig(store.id, config);
+      Object.assign(store, { config });
+    } catch (e) {
+      console.error('Falha ao sincronizar a largura do papel da loja:', e);
+    }
   };
 
   const handleAddPrinter = async () => {
@@ -147,8 +164,10 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         port: connectionType === 'network' ? (parseInt(port, 10) || 9100) : undefined,
         usbSystemName: connectionType === 'usb' ? usbSystemName.trim() : null,
         destination,
+        paperWidthMm,
       });
       if (!result.success) { toast.error(result.message || 'Erro ao salvar impressora.'); return; }
+      await syncStorePaperWidth(paperWidthMm);
       toast.success('Impressora cadastrada.');
       resetForm();
       load();
@@ -160,6 +179,14 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const handleToggleActive = async (printer: PrinterConfig) => {
     const result = await updatePrinterConfig(printer.id, { is_active: !printer.is_active });
     if (!result.success) { toast.error(result.message || 'Erro ao atualizar.'); return; }
+    load();
+  };
+
+  const handleChangePaperWidth = async (printer: PrinterConfig, mm: PrinterConfig['paper_width_mm']) => {
+    const result = await updatePrinterConfig(printer.id, { paper_width_mm: mm });
+    if (!result.success) { toast.error(result.message || 'Erro ao atualizar o tamanho do papel.'); return; }
+    await syncStorePaperWidth(mm);
+    toast.success(`Papel de "${printer.name}" agora é ${mm === 210 ? 'A4' : mm + 'mm'}.`);
     load();
   };
 
@@ -285,6 +312,25 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           <Input label="Nome" placeholder="Ex: Cozinha, Bar, Balcão" value={name} onChange={(e) => setName(e.target.value)} />
 
           <div className="flex flex-col gap-1">
+            <label className="text-[13px] font-medium text-[var(--text-muted)]">Tamanho do papel desta impressora</label>
+            <div className="flex gap-2">
+              {([58, 80, 210] as const).map((mm) => (
+                <button
+                  key={mm}
+                  type="button"
+                  onClick={() => setPaperWidthMm(mm)}
+                  className={`px-4 py-2 rounded-[var(--r-md)] border text-sm font-semibold u-motion u-press-sm ${
+                    paperWidthMm === mm ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
+                  }`}
+                >
+                  {mm === 210 ? 'A4' : `${mm}mm`}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">É o sistema que define o tamanho da impressão (comanda, comprovante e cupom fiscal) — não depende de configurar o driver.</p>
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label className="text-[13px] font-medium text-[var(--text-muted)]">Tipo de conexão</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(['browser_default', 'network', 'usb'] as const).map((type) => (
@@ -396,6 +442,16 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={printer.paper_width_mm ?? 80}
+                  onChange={(e) => handleChangePaperWidth(printer, Number(e.target.value) as PrinterConfig['paper_width_mm'])}
+                  className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs font-semibold text-[var(--text)]"
+                  title="Tamanho do papel"
+                >
+                  <option value={58}>58mm</option>
+                  <option value={80}>80mm</option>
+                  <option value={210}>A4</option>
+                </select>
                 <Button size="sm" variant="secondary" onClick={() => handleTestPrint(printer)} isLoading={testingId === printer.id}>
                   Imprimir teste
                 </Button>

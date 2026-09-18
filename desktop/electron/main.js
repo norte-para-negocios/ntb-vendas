@@ -472,7 +472,7 @@ app.whenReady().then(() => {
       await new Promise((resolve, reject) => {
         execFile(
           sumatraPath,
-          ['-print-to', printerName, '-silent', '-exit-when-done', tmpFile],
+          ['-print-to', printerName, '-print-settings', 'noscale', '-silent', '-exit-when-done', tmpFile],
           { timeout: 30000 },
           (err) => { if (err) reject(err); else resolve(); }
         );

@@ -419,6 +419,8 @@ export interface PrinterConfig {
   // de ticket de cozinha/bar — achado ao vivo, loja real com 3 impressoras
   // cabeadas distintas (cozinha, bar, caixa).
   destination: 'kitchen' | 'bar' | 'all' | 'receipt';
+  // Largura do papel desta impressora (migration 077): 58, 80 ou 210 (A4).
+  paper_width_mm: 58 | 80 | 210;
   is_active: boolean;
   created_at: string;
 }

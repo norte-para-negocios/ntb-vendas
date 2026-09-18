@@ -1,8 +1,274 @@
+diff --git a/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/index.js b/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/index.js
+index 341d368..2665827 100644
+--- a/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/index.js
++++ b/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/index.js
+@@ -20,6 +20,6 @@ async function gerarPDF(xmlNFe, opcoes) {
+         return await (0, pdf_NFe_1.pdfNFe)(nfeProc, opcoes);
+     }
+     else {
+-        return await (0, pdf_NFCe_1.pdfNFCe)(nfeProc, opcoes?.pathLogo);
++        return await (0, pdf_NFCe_1.pdfNFCe)(nfeProc, opcoes?.pathLogo, opcoes);
+     }
+ }
 diff --git a/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js b/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js
-index 0b4a615..f37d414 100644
+index 0b4a615..a08f492 100644
 --- a/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js
 +++ b/node_modules/nfe-danfe-pdf/lib/domain/use-cases/pdf/pdf-NFCe.js
-@@ -322,7 +322,7 @@ async function pdfNFCe(nf, pathLogo) {
+@@ -11,14 +11,31 @@ const load_fontes_1 = require("../../../application/helpers/generate-pdf/nfe/loa
+ const negrito_1 = require("../../../application/helpers/generate-pdf/nfe/negrito");
+ const normal_1 = require("../../../application/helpers/generate-pdf/nfe/normal");
+ const utils_1 = require("../utils");
+-async function pdfNFCe(nf, pathLogo) {
++async function pdfNFCe(nf, pathLogo, opcoes = {}) {
++    // Patch NTB: duas passadas. A 1a mede a altura real do conteudo, a 2a gera
++    // o PDF com a pagina do tamanho exato (sem 1000pt fixos que faziam o driver
++    // encolher tudo pra caber na altura do papel).
++    const medida = await pdfNFCeRender(nf, pathLogo, { ...opcoes, alturaPagina: 8000 });
++    const altura = medida.__alturaFinal;
++    return pdfNFCeRender(nf, pathLogo, { ...opcoes, alturaPagina: altura });
++}
++async function pdfNFCeRender(nf, pathLogo, opcoes = {}) {
+     const { NFe, protNFe } = nf;
+     const { infProt } = protNFe;
+     const { ide, emit, det, total, pag, dest, infAdic } = NFe.infNFe;
+-    const larguraPagina = 201;
++    // Patch NTB: largura fisica (pt) e escala vindas de fora. Layout continua
++    // sendo calculado em "unidades de layout" (largura 201 por padrao); doc.scale
++    // amplia tudo (fonte, posicoes, QR) pro tamanho fisico do papel.
++    const larguraPt = opcoes.larguraPt ?? 201;
++    const escala = opcoes.escala ?? 1;
++    const larguraPagina = larguraPt / escala;
++    // g: grade da tabela de itens (colunas absolutas pensadas p/ 201 unidades)
++    // f: fator de fonte (aumenta o texto sem mexer no resto do layout)
++    const g = larguraPagina / 201;
++    const f = opcoes.fonte ?? 1;
+     const margemPadrao = 2.5;
+     const doc = new pdfkit_1.default({
+-        size: [larguraPagina, 1000],
++        size: [larguraPt, opcoes.alturaPagina ?? 1000],
+         margins: {
+             top: margemPadrao,
+             bottom: 0,
+@@ -27,6 +44,15 @@ async function pdfNFCe(nf, pathLogo) {
+         }
+     });
+     (0, load_fontes_1.loadFontsNFCe)(doc);
++    if (opcoes.negritoTudo) {
++        // Roboto Condensed Regular em 6-8pt sai fraco/cinza no termico; usa a Bold em tudo.
++        doc.registerFont('normal', require('path').join(__dirname, '../../../application/helpers/generate-pdf/fontes/roboto-condensed/RobotoCondensed-Bold.ttf'));
++    }
++    if (escala !== 1) doc.scale(escala);
++    if (f !== 1) {
++        const fontSizeOriginal = doc.fontSize.bind(doc);
++        doc.fontSize = (n) => fontSizeOriginal(n * f);
++    }
+     (0, negrito_1.negrito)({
+         doc,
+         value: emit.xNome,
+@@ -80,11 +106,11 @@ async function pdfNFCe(nf, pathLogo) {
+     let posicao = doc.y;
+     (0, negrito_1.negrito)({
+         doc,
+-        value: 'CODIGO',
++        value: 'COD',
+         x: 0,
+         y: posicao,
+-        largura: 26.5,
+-        tamanho: 8,
++        largura: 26.5 * g,
++        tamanho: 7.5 / f,
+         ajusteX: 0,
+         ajusteY: 0,
+         margemEsquerda: margemPadrao,
+@@ -94,10 +120,10 @@ async function pdfNFCe(nf, pathLogo) {
+     (0, negrito_1.negrito)({
+         doc,
+         value: 'DESCRICAO',
+-        x: 31,
++        x: 31 * g,
+         y: posicao,
+-        largura: 74.5,
+-        tamanho: 8,
++        largura: 74.5 * g,
++        tamanho: 7.5 / f,
+         ajusteX: 0,
+         ajusteY: 0,
+         margemEsquerda: 0,
+@@ -107,10 +133,10 @@ async function pdfNFCe(nf, pathLogo) {
+     (0, negrito_1.negrito)({
+         doc,
+         value: 'UN',
+-        x: 105,
++        x: 105 * g,
+         y: posicao,
+-        largura: 15,
+-        tamanho: 8,
++        largura: 15 * g,
++        tamanho: 7.5 / f,
+         ajusteX: 0,
+         ajusteY: 0,
+         margemEsquerda: 0,
+@@ -120,10 +146,10 @@ async function pdfNFCe(nf, pathLogo) {
+     (0, negrito_1.negrito)({
+         doc,
+         value: 'QTD',
+-        x: 120,
++        x: 120 * g,
+         y: posicao,
+-        largura: 20,
+-        tamanho: 8,
++        largura: 20 * g,
++        tamanho: 7.5 / f,
+         ajusteX: 0,
+         ajusteY: 0,
+         margemEsquerda: 0,
+@@ -133,10 +159,10 @@ async function pdfNFCe(nf, pathLogo) {
+     (0, negrito_1.negrito)({
+         doc,
+         value: 'VL UN',
+-        x: 140,
++        x: 140 * g,
+         y: posicao,
+-        largura: 27,
+-        tamanho: 8,
++        largura: 27 * g,
++        tamanho: 7.5 / f,
+         ajusteX: 0,
+         ajusteY: 0,
+         margemEsquerda: 0,
+@@ -145,11 +171,11 @@ async function pdfNFCe(nf, pathLogo) {
+     });
+     (0, negrito_1.negrito)({
+         doc,
+-        value: 'VL TOTAL',
+-        x: 167,
++        value: 'TOTAL',
++        x: 167 * g,
+         y: posicao,
+-        largura: larguraPagina - 167,
+-        tamanho: 8,
++        largura: larguraPagina - 167 * g,
++        tamanho: 7.5 / f,
+         ajusteX: 0,
+         ajusteY: 0,
+         margemEsquerda: 0,
+@@ -160,11 +186,11 @@ async function pdfNFCe(nf, pathLogo) {
+         posicao = doc.y;
+         (0, normal_1.normal)({
+             doc,
+-            value: element.prod.cProd.padStart(9, '0').substring(0, 9),
++            value: String(element.prod.cProd).slice(-6),
+             x: 0 + margemPadrao,
+             y: posicao,
+-            largura: 28,
+-            tamanho: 6,
++            largura: 28 * g,
++            tamanho: 6.5 / f,
+             ajusteX: 0,
+             ajusteY: 0,
+             margemEsquerda: 0,
+@@ -173,11 +199,11 @@ async function pdfNFCe(nf, pathLogo) {
+         });
+         (0, normal_1.normal)({
+             doc,
+-            value: ajusteTamanhoTexto(doc, ide.tpAmb === '1' ? element.prod.xProd.substring(0, 26) : 'NOTA FISCAL EMITIDA EM AMB', 73.5),
+-            x: 31,
++            value: ajusteTamanhoTexto(doc, ide.tpAmb === '1' ? element.prod.xProd.substring(0, 26) : 'NOTA FISCAL EMITIDA EM AMB', 73.5 * g),
++            x: 31 * g,
+             y: posicao,
+-            largura: 73.5,
+-            tamanho: 6,
++            largura: 73.5 * g,
++            tamanho: 6.5 / f,
+             ajusteX: 0,
+             ajusteY: 0,
+             margemEsquerda: 0,
+@@ -187,10 +213,10 @@ async function pdfNFCe(nf, pathLogo) {
+         (0, normal_1.normal)({
+             doc,
+             value: element.prod.uCom,
+-            x: 105,
++            x: 105 * g,
+             y: posicao,
+-            largura: 15,
+-            tamanho: 6,
++            largura: 15 * g,
++            tamanho: 6.5 / f,
+             ajusteX: 0,
+             ajusteY: 0,
+             margemEsquerda: 0,
+@@ -199,11 +225,11 @@ async function pdfNFCe(nf, pathLogo) {
+         });
+         (0, normal_1.normal)({
+             doc,
+-            value: (0, utils_1.formatNumber)(element.prod.qCom, 3),
+-            x: 120,
++            value: String(+element.prod.qCom).replace('.', ','),
++            x: 120 * g,
+             y: posicao,
+-            largura: 20,
+-            tamanho: 6,
++            largura: 20 * g,
++            tamanho: 6.5 / f,
+             ajusteX: 0,
+             ajusteY: 0,
+             margemEsquerda: 0,
+@@ -213,10 +239,10 @@ async function pdfNFCe(nf, pathLogo) {
+         (0, normal_1.normal)({
+             doc,
+             value: (0, utils_1.formatNumber)(element.prod.vUnCom, 2),
+-            x: 140,
++            x: 140 * g,
+             y: posicao,
+-            largura: 27,
+-            tamanho: 6,
++            largura: 27 * g,
++            tamanho: 6.5 / f,
+             ajusteX: 0,
+             ajusteY: 0,
+             margemEsquerda: 0,
+@@ -226,10 +252,10 @@ async function pdfNFCe(nf, pathLogo) {
+         (0, normal_1.normal)({
+             doc,
+             value: (0, utils_1.formatNumber)(element.prod.vProd, 2),
+-            x: 167,
++            x: 167 * g,
+             y: posicao,
+-            largura: larguraPagina - 167,
+-            tamanho: 6,
++            largura: larguraPagina - 167 * g,
++            tamanho: 6.5 / f,
+             ajusteX: 0,
+             ajusteY: 0,
+             margemEsquerda: 0,
+@@ -252,7 +278,7 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
+     (0, normal_1.normal)({
+         doc,
+         value: String(det.length),
+@@ -279,7 +305,7 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
+     (0, normal_1.normal)({
+         doc,
+         value: (0, utils_1.formatNumber)(total.ICMSTot.vProd, 2),
+@@ -306,7 +332,7 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
+     (0, normal_1.normal)({
+         doc,
+         value: (0, utils_1.formatNumber)(total.ICMSTot.vDesc, 2),
+@@ -322,7 +348,7 @@ async function pdfNFCe(nf, pathLogo) {
      });
      (0, normal_1.normal)({
          doc,
@@ -11,8 +277,12 @@ index 0b4a615..f37d414 100644
          x: margemPadrao,
          y: doc.y,
          largura: larguraPagina,
-@@ -336,7 +336,7 @@ async function pdfNFCe(nf, pathLogo) {
-     doc.y -= 7;
+@@ -333,10 +359,10 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
      (0, normal_1.normal)({
          doc,
 -        value: (0, utils_1.formatNumber)(total.ICMSTot.vFrete, 2),
@@ -20,3 +290,49 @@ index 0b4a615..f37d414 100644
          x: 0,
          y: doc.y,
          largura: larguraPagina - margemPadrao,
+@@ -360,7 +386,7 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
+     (0, normal_1.normal)({
+         doc,
+         value: (0, utils_1.formatNumber)(total.ICMSTot.vNF, 2),
+@@ -388,7 +414,7 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
+     (0, normal_1.normal)({
+         doc,
+         value: 'VALOR PAGO',
+@@ -416,7 +442,7 @@ async function pdfNFCe(nf, pathLogo) {
+             margemTopo: 0,
+             alinhamento: 'left'
+         });
+-        doc.y -= 7;
++        doc.y -= 7 * f;
+         (0, normal_1.normal)({
+             doc,
+             value: (0, utils_1.formatNumber)(element.vPag, 2),
+@@ -444,7 +470,7 @@ async function pdfNFCe(nf, pathLogo) {
+         margemTopo: 0,
+         alinhamento: 'left'
+     });
+-    doc.y -= 7;
++    doc.y -= 7 * f;
+     (0, normal_1.normal)({
+         doc,
+         value: (0, utils_1.formatNumber)(pag.vTroco ?? 0, 2),
+@@ -624,7 +650,9 @@ async function pdfNFCe(nf, pathLogo) {
+         alinhamento: 'center'
+     });
+     const qrImage = await qrcode_1.default.toDataURL(NFe.infNFeSupl?.qrCode ?? '');
++    const yQr = doc.y;
+     doc.image(qrImage, larguraPagina / 2 - 45, doc.y, { fit: [90, 90], align: 'center' });
++    doc.__alturaFinal = Math.ceil((yQr + 94) * escala);
+     doc.end();
+     return doc;
+ }

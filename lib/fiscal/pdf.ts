@@ -58,9 +58,28 @@ function coletarPdfKitDoc(doc: Awaited<ReturnType<typeof gerarNfceDanfe>>): Prom
 // da SEFAZ (não só o primeiro item, como a regra realmente exige) — cosmético
 // e sem risco, já que nota de homologação não tem valor fiscal; confirmado
 // que em PRODUÇÃO (`tpAmb=1`) os nomes reais aparecem certos.
-export async function gerarPdfNota(modelo: '55' | '65', nfeProcXml: string): Promise<Buffer> {
+// Papel do cupom (NFC-e): largura da área imprimível (mm) e largura do layout
+// (unidades de layout do nfe-danfe-pdf, ver patches/nfe-danfe-pdf+1.0.3.patch).
+// escala = larguraPt / layout => texto cresce até o tamanho físico do papel e a
+// impressão sai em 1:1 (sem depender de "encolher pra caber" do driver).
+export type LarguraPapelMm = 58 | 80 | 210;
+const PAPEL_CUPOM: Record<LarguraPapelMm, { imprimivelMm: number; layout: number; fonte: number }> = {
+  58: { imprimivelMm: 48, layout: 150, fonte: 1 },
+  80: { imprimivelMm: 72, layout: 185, fonte: 1.1 },
+  210: { imprimivelMm: 100, layout: 201, fonte: 1.15 },
+};
+
+export async function gerarPdfNota(
+  modelo: '55' | '65',
+  nfeProcXml: string,
+  larguraPapelMm?: LarguraPapelMm,
+): Promise<Buffer> {
   if (modelo === '65') {
-    const doc = await gerarNfceDanfe(nfeProcXml);
+    const papel = PAPEL_CUPOM[larguraPapelMm ?? 80] ?? PAPEL_CUPOM[80];
+    const larguraPt = (papel.imprimivelMm * 72) / 25.4;
+    const opcoes = { larguraPt, escala: larguraPt / papel.layout, negritoTudo: true, fonte: papel.fonte };
+    // OpcoesPDF do pacote só declara pathLogo; o patch aceita os campos acima.
+    const doc = await gerarNfceDanfe(nfeProcXml, opcoes as Parameters<typeof gerarNfceDanfe>[1]);
     return coletarPdfKitDoc(doc);
   }
   const resultado = await DANFe({ xml: nfeProcXml });

@@ -2526,10 +2526,10 @@ export const hasActivePrinterForDestination = async (
 export const fetchUsbPrinterForAutoprint = async (
   storeId: string,
   destination: 'receipt' | 'kitchen' | 'bar',
-): Promise<{ usbSystemName: string } | null> => {
+): Promise<{ usbSystemName: string; paperWidthMm: 58 | 80 | 210 } | null> => {
   const { data, error } = await supabase
     .from('printer_configs')
-    .select('usb_system_name')
+    .select('usb_system_name, paper_width_mm')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .eq('connection_type', 'usb')
@@ -2538,7 +2538,7 @@ export const fetchUsbPrinterForAutoprint = async (
     .maybeSingle();
   if (error) { console.error('fetchUsbPrinterForAutoprint falhou:', error); return null; }
   if (!data?.usb_system_name) return null;
-  return { usbSystemName: data.usb_system_name };
+  return { usbSystemName: data.usb_system_name, paperWidthMm: (data.paper_width_mm ?? 80) as 58 | 80 | 210 };
 };
 
 // Impressoras USB detectadas pelo agente local rodando no computador da
@@ -2573,8 +2573,10 @@ export const createPrinterConfig = async (params: {
   port?: number;
   usbSystemName?: string | null;
   destination: 'kitchen' | 'bar' | 'all' | 'receipt';
+  paperWidthMm?: 58 | 80 | 210;
 }): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').insert({
+    paper_width_mm: params.paperWidthMm ?? 80,
     store_id: params.storeId,
     name: params.name,
     connection_type: params.connectionType,
@@ -2587,7 +2589,7 @@ export const createPrinterConfig = async (params: {
   return { success: true };
 };
 
-export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination'>>): Promise<{ success: boolean; message?: string }> => {
+export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm'>>): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').update(updates).eq('id', id);
   if (error) { console.error('Error updating printer config:', error); return { success: false, message: error.message }; }
   return { success: true };

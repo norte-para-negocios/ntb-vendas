@@ -35,29 +35,36 @@ function escapeHtml(str: string): string {
 // tocar em nenhuma outra regra. `store.config.printer_paper_width_mm`
 // (types/index.ts), padrão 48 = comportamento idêntico ao de sempre pras
 // lojas que nunca configuraram isso.
-const thermalStyles = (widthMm: 48 | 58 | 80 = 48) => `
-  body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: ${widthMm}mm; margin: 0; padding: 0; font-size: 10px; color: #000; }
+// Térmica imprime fino e "cinza" com fonte regular em corpo pequeno (achado ao vivo
+// 2026-09-17: "a cor tá fraca, um cinza em vez de preto"): corpo em negrito e
+// fontes que crescem com a largura do papel (`k`).
+const thermalStyles = (widthMm: 48 | 58 | 80 = 48) => {
+  const k = widthMm === 80 ? 1.3 : widthMm === 58 ? 1.1 : 1;
+  const px = (n: number) => `${Math.round(n * k * 10) / 10}px`;
+  return `
+  body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: ${widthMm}mm; margin: 0; padding: 0; font-size: ${px(10)}; color: #000; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 6px; }
-  .store-name { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-  .doc-title { font-size: 11px; font-weight: bold; text-transform: uppercase; margin-top: 2px; }
-  .meta { font-size: 8px; color: #000; margin-top: 2px; }
+  .store-name { font-size: ${px(12)}; font-weight: bold; text-transform: uppercase; }
+  .doc-title { font-size: ${px(11)}; font-weight: bold; text-transform: uppercase; margin-top: 2px; }
+  .meta { font-size: ${px(8)}; color: #000; margin-top: 2px; }
   .info { margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 6px; text-align: center; }
-  .big-text { font-size: 12px; font-weight: bold; }
-  .item-line { font-size: 12px; font-weight: bold; margin: 6px 0; line-height: 1.2; }
-  .addons { font-size: 11px; font-weight: bold; margin-top: -3px; margin-bottom: 3px; }
-  .obs { margin-top: 3px; font-size: 10px; text-transform: uppercase; }
-  .items-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 2px; }
-  .items-table th { border-bottom: 1px dashed #000; padding-bottom: 3px; text-align: left; font-weight: normal; }
+  .big-text { font-size: ${px(12)}; font-weight: bold; }
+  .item-line { font-size: ${px(12)}; font-weight: bold; margin: 6px 0; line-height: 1.2; }
+  .addons { font-size: ${px(11)}; font-weight: bold; margin-top: -3px; margin-bottom: 3px; }
+  .obs { margin-top: 3px; font-size: ${px(10)}; text-transform: uppercase; }
+  .items-table { width: 100%; border-collapse: collapse; font-size: ${px(10)}; margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 2px; }
+  .items-table th { border-bottom: 1px dashed #000; padding-bottom: 3px; text-align: left; font-weight: 700; }
   .items-table th.right, .items-table td.right { text-align: right; }
   .items-table td { padding: 3px 0; vertical-align: top; }
   .items-table td.right { white-space: nowrap; padding-left: 5px; }
-  .summary-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: ${px(10)}; }
   .summary-table td { padding: 2px 0; }
   .summary-table td.right { text-align: right; white-space: nowrap; padding-left: 5px; }
-  .total { border-top: 1px dashed #000; margin-top: 6px; padding-top: 5px; font-size: 13px; font-weight: bold; text-align: right; }
-  .footer { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; text-align: center; font-size: 9px; color: #000; }
+  .total { border-top: 1px dashed #000; margin-top: 6px; padding-top: 5px; font-size: ${px(13)}; font-weight: bold; text-align: right; }
+  .footer { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; text-align: center; font-size: ${px(9)}; color: #000; }
   @media print { @page { margin: 0; size: auto; } body { margin: 0; padding: 0; } }
 `;
+};
 
 // Impressão via iframe oculto. Substitui o antigo `window.open(..., 'noopener')`,
 // que SEMPRE retornava `null` — é o próprio propósito de `noopener`, cortar o

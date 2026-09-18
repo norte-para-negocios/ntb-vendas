@@ -18,7 +18,9 @@ export interface DadosPdfContingencia {
   qrCode?: string;
 }
 
-const LARGURA_MM = 80;
+// Área imprimível de papel 80mm (o driver não imprime até a borda). Antes era 80
+// cheio e o cupom podia perder a margem direita na térmica.
+const LARGURA_MM = 72;
 const MM_PARA_PT = 2.834645669;
 const LARGURA_PT = LARGURA_MM * MM_PARA_PT;
 // ~30mm — no piso do que ainda é confortavelmente legível por leitor de
@@ -51,43 +53,55 @@ export async function gerarPdfContingencia(dados: DadosPdfContingencia): Promise
     ? await QRCode.toBuffer(dados.qrCode, { type: 'png', margin: 1, errorCorrectionLevel: 'M' })
     : null;
 
+  // Duas passadas: a 1a mede a altura real do conteúdo, a 2a gera a página do
+  // tamanho exato (página fixa de 1000pt fazia o driver encolher/paginar).
+  const medida = await renderizarContingencia(dados, qrCodePng, 6000);
+  return (await renderizarContingencia(dados, qrCodePng, medida.alturaFinal)).pdf;
+}
+
+function renderizarContingencia(
+  dados: DadosPdfContingencia,
+  qrCodePng: Buffer | null,
+  alturaPagina: number,
+): Promise<{ pdf: Buffer; alturaFinal: number }> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: [LARGURA_PT, 1000], margins: { top: 10, bottom: 10, left: 8, right: 8 } });
+    const doc = new PDFDocument({ size: [LARGURA_PT, alturaPagina], margins: { top: 10, bottom: 10, left: 8, right: 8 } });
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    let alturaFinal = 0;
+    doc.on('end', () => resolve({ pdf: Buffer.concat(chunks), alturaFinal }));
     doc.on('error', reject);
 
     const largura = LARGURA_PT - 16;
 
-    doc.font('Helvetica-Bold').fontSize(9).text(dados.storeName.toUpperCase(), { width: largura, align: 'center' });
-    doc.font('Helvetica').fontSize(7).text(`CNPJ: ${dados.cnpj}`, { width: largura, align: 'center' });
+    doc.font('Helvetica-Bold').fontSize(11).text(dados.storeName.toUpperCase(), { width: largura, align: 'center' });
+    doc.font('Helvetica-Bold').fontSize(8.5).text(`CNPJ: ${dados.cnpj}`, { width: largura, align: 'center' });
     if (dados.endereco) doc.text(dados.endereco, { width: largura, align: 'center' });
     doc.moveDown(0.3);
 
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('black').text(
+    doc.font('Helvetica-Bold').fontSize(9.5).fillColor('black').text(
       'EMITIDO EM CONTINGENCIA - DOCUMENTO SEM VALIDACAO DA SEFAZ NO MOMENTO DA EMISSAO',
       { width: largura, align: 'center' },
     );
-    doc.font('Helvetica').fontSize(7).text(
+    doc.font('Helvetica-Bold').fontSize(8.5).text(
       dados.dataHora.toLocaleString('pt-BR'),
       { width: largura, align: 'center' },
     );
     doc.moveDown(0.3);
-    doc.text('-'.repeat(42), { width: largura });
+    doc.text('-'.repeat(32), { width: largura });
 
-    doc.font('Helvetica').fontSize(7);
+    doc.font('Helvetica-Bold').fontSize(8.5);
     for (const item of dados.itens) {
       doc.text(
         `${item.quantidade}x ${item.descricao} - R$ ${formatarBRL(item.valorTotal)}`,
         { width: largura },
       );
     }
-    doc.text('-'.repeat(42), { width: largura });
+    doc.text('-'.repeat(32), { width: largura });
     doc.font('Helvetica-Bold').text(`TOTAL: R$ ${formatarBRL(dados.valorTotal)}`, { width: largura });
     doc.moveDown(0.3);
 
-    doc.font('Helvetica').fontSize(7).text('Chave de acesso:', { width: largura });
+    doc.font('Helvetica-Bold').fontSize(8.5).text('Chave de acesso:', { width: largura });
     doc.text(formatarChave(dados.chave), { width: largura });
     doc.moveDown(0.3);
     doc.text(
@@ -102,18 +116,19 @@ export async function gerarPdfContingencia(dados: DadosPdfContingencia): Promise
       doc.image(qrCodePng, x, y, { width: QR_LADO_PT, height: QR_LADO_PT });
       doc.y = y + QR_LADO_PT;
       doc.moveDown(0.2);
-      doc.font('Helvetica').fontSize(6.5).text(
+      doc.font('Helvetica-Bold').fontSize(8).text(
         'Consulte pela camera do celular ou no site da SEFAZ do seu estado.',
         { width: largura, align: 'center' },
       );
     }
 
     doc.moveDown(0.5);
-    doc.font('Helvetica-Bold').fontSize(8).text(
+    doc.font('Helvetica-Bold').fontSize(9.5).text(
       dados.via === 1 ? '1a VIA - CLIENTE' : '2a VIA - ESTABELECIMENTO',
       { width: largura, align: 'center' },
     );
 
+    alturaFinal = Math.ceil(doc.y + 14);
     doc.end();
   });
 }

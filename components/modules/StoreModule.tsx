@@ -493,11 +493,16 @@ const abrirCupomFiscalQuandoSair = (
                 const emContingencia = resultado.nota.status === 'contingencia';
                 const printer = await fetchUsbPrinterForAutoprint(storeId, 'receipt');
                 if (printer) {
-                    const resultadoPrint = await window.electronApp?.printPdfSilent?.({ pdfUrl: resultado.pdfUrl, printerName: printer.usbSystemName });
+                    // NFC-e autorizada: gera o cupom na largura do papel da impressora
+                    // (rota sob demanda); contingência/NF-e usam o PDF guardado.
+                    const pdfParaImprimir = resultado.nota.modelo === '65' && resultado.nota.status === 'autorizada'
+                        ? resolverUrlApi(`/api/fiscal/cupom-pdf?noteId=${resultado.nota.id}&larguraMm=${printer.paperWidthMm}`)
+                        : resultado.pdfUrl;
+                    const resultadoPrint = await window.electronApp?.printPdfSilent?.({ pdfUrl: pdfParaImprimir, printerName: printer.usbSystemName });
                     if (resultadoPrint?.ok) {
                         toast.success('Cupom fiscal impresso no caixa.');
                         if (emContingencia) {
-                            await window.electronApp?.printPdfSilent?.({ pdfUrl: resultado.pdfUrl, printerName: printer.usbSystemName });
+                            await window.electronApp?.printPdfSilent?.({ pdfUrl: pdfParaImprimir, printerName: printer.usbSystemName });
                             toast.warning('Nota emitida em contingência — 2 vias impressas. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
                         }
                         return;
