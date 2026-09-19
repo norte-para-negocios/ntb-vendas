@@ -4035,10 +4035,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 key={cat.id}
                                 type="button"
                                 onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
-                                className="text-left rounded-xl border border-white/15 px-3 py-3 u-motion u-press-sm"
+                                className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
                             >
                                 <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
-                                <span className="block text-[12px] opacity-70 mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
                             </button>
                         );
                     })}
