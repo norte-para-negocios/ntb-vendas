@@ -2496,6 +2496,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
+    // Sheet "Todas as categorias" (pedido do dono, 2026-09-18): a barra só rola pro
+    // lado e com 40 categorias fica ruim de navegar.
+    const [showAllCategories, setShowAllCategories] = useState(false);
 
     // Vende mais II (migration 020): "mais vendido" automático (via RPC
     // get_bestseller_product_ids, só quando a loja liga
@@ -3976,7 +3979,17 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     embaixo, sem precisar de navegação por tab (ver
                     hasActiveFilter e a lista de seções logo abaixo). */}
                 {!hasActiveFilter && visibleCategories.length > 0 && (
-                    <div role="group" aria-label="Categorias do cardápio" className="flex gap-5 overflow-x-auto no-scrollbar px-4 pb-2.5">
+                    <div className="flex items-start gap-2 pl-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowAllCategories(true)}
+                        aria-label="Ver todas as categorias"
+                        className="flex-shrink-0 flex items-center gap-1.5 text-[13px] font-semibold pb-1.5 u-motion u-press-sm"
+                        style={{ color: IFOOD_RED }}
+                    >
+                        <LayoutGrid size={16} /> Categorias
+                    </button>
+                    <div role="group" aria-label="Categorias do cardápio" className="flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pr-4 pb-2.5">
                         {visibleCategories.map(cat => {
                             const isActive = activeCategory === cat.id;
                             return (
@@ -4009,8 +4022,28 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             );
                         })}
                     </div>
+                    </div>
                 )}
             </div>
+
+            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet">
+                <div className="grid grid-cols-2 gap-2">
+                    {visibleCategories.map(cat => {
+                        const qtd = (productsByCategory[cat.id] || []).length;
+                        return (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
+                                className="text-left rounded-xl border border-white/15 px-3 py-3 u-motion u-press-sm"
+                            >
+                                <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
+                                <span className="block text-[12px] opacity-70 mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </Modal>
 
             {/* Seções empilhadas (Task 3, substitui o acordeão): todo produto
                 fica visível sem nenhum toque — `scroll-margin-top` (via

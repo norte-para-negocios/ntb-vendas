@@ -1483,6 +1483,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     const [activeCategory, setActiveCategory] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [showAllCategories, setShowAllCategories] = useState(false);
 
     useEffect(() => {
         fetchMenu(storeId, true).then(({ categories, products }) => {
@@ -1521,7 +1522,16 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     onChange={e => setSearchTerm(e.target.value)}
                     className="bg-[var(--surface-2)]"
                 />
-                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                <div className="flex items-center gap-2 pb-2">
+                <button
+                    type="button"
+                    onClick={() => setShowAllCategories(true)}
+                    className="flex-shrink-0 flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold u-motion u-press-sm border border-[var(--brand)] text-[var(--brand)] bg-[var(--surface)]"
+                    title="Ver todas as categorias"
+                >
+                    <LayoutGrid size={14} /> Categorias
+                </button>
+                <div className="flex-1 min-w-0 flex gap-2 overflow-x-auto no-scrollbar">
                     {categories.map(cat => (
                         <button
                             key={cat.id}
@@ -1534,7 +1544,36 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         </button>
                     ))}
                 </div>
+                </div>
             </div>
+
+            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias">
+                <div className="space-y-3">
+                    <button
+                        type="button"
+                        onClick={() => { setSearchTerm(''); setActiveCategory(''); setShowAllCategories(false); }}
+                        className={`w-full text-left rounded-xl border px-3 py-3 text-sm font-bold u-motion u-press-sm ${activeCategory === '' ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text)]'}`}
+                    >
+                        Ver todos os produtos <span className="font-normal text-[var(--text-muted)]">({products.length})</span>
+                    </button>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {categories.map(cat => {
+                            const qtd = products.filter(p => p.category_id === cat.id).length;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => { setSearchTerm(''); setActiveCategory(cat.id); setShowAllCategories(false); }}
+                                    className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${activeCategory === cat.id ? 'border-[var(--brand)] bg-[var(--brand)]/10' : 'border-[var(--border)]'}`}
+                                >
+                                    <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
+                                    <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </Modal>
 
             <div className="flex-1 overflow-y-auto py-2">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -3575,8 +3614,58 @@ NOTIFY pgrst, 'reload schema';`;
                                 grande (ex.: Sertão, ~110 produtos) vazaria pra fora da caixa em
                                 vez de respeitar o teto de 70vh. overflow-hidden garante que,
                                 se algo escapar mesmo assim, fica contido, não vaza visualmente. */}
+                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-3 items-start">
                             <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] max-h-[70vh] flex flex-col overflow-hidden">
                                 <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
+                            </div>
+                            {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
+                                mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
+                                getTableSummary da comanda completa — atualiza sozinho
+                                (otimista no handleAddItem + Realtime). Scroll próprio. */}
+                            {(() => {
+                                const resumo = selectedTable ? getTableSummary(selectedTable.id) : null;
+                                const itens = resumo?.allItems || [];
+                                return (
+                                    <div className="border border-[var(--border)] rounded-xl bg-[var(--surface)] flex flex-col max-h-[70vh] overflow-hidden">
+                                        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-2)]">
+                                            <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Receipt size={16}/> Já pedido nesta mesa</h4>
+                                            <span className="text-xs text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto min-h-[120px]">
+                                            {itens.length === 0 ? (
+                                                <div className="p-6 text-center text-sm text-[var(--text-muted)]">Nenhum item lançado ainda.</div>
+                                            ) : itens.map(item => (
+                                                <div key={item.id} className="flex items-start justify-between gap-2 p-3 border-b border-[var(--border)] text-sm">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="font-bold text-[var(--text)] leading-tight">
+                                                            <span className="text-xs text-[var(--text-muted)] mr-1">x{item.quantity}</span>
+                                                            {getOrderItemDisplayName(item)}
+                                                        </div>
+                                                        <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                                                            R$ {formatBRL(item.price_at_time * item.quantity)}
+                                                            {orderFlow !== 'direct_print' && (
+                                                                <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteItem(item.id)}
+                                                        className="text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press flex-shrink-0"
+                                                        title="Cancelar item"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="p-3 border-t border-[var(--border)] bg-[var(--surface-2)] flex items-center justify-between">
+                                            <span className="font-bold text-[var(--text)]">Total</span>
+                                            <span className="font-black text-lg text-[var(--brand)]">R$ {formatBRL(resumo?.total || 0)}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                             </div>
                         </div>
                     ) : (
