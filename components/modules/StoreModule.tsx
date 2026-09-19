@@ -1577,35 +1577,51 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 </div>
             </Modal>
 
-            <div className="flex-1 overflow-y-auto py-2">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {filteredProducts.map(product => (
-                    <Card key={product.id} onClick={() => setSelectedProduct(product)} className="flex flex-col gap-2 p-2 cursor-pointer hover:border-[var(--brand)] transition-colors">
-                        {product.image_url ? (
-                             <div className="relative w-full h-24 rounded-lg overflow-hidden bg-[var(--surface-2)]">
-                                 <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 640px) 50vw, 240px" className="object-cover" />
-                             </div>
-                        ) : (
-                             <div className="w-full h-24 bg-[var(--surface-2)] rounded-lg flex items-center justify-center text-[var(--border)] font-bold text-xs">Sem Foto</div>
-                        )}
-                        <div>
-                            <h4 className="font-bold text-sm text-[var(--text)] leading-tight line-clamp-1">{product.name}</h4>
-                            {(() => {
-                                const effectivePrice = getEffectivePrice(product);
-                                const hasActivePromo = effectivePrice < product.price;
-                                return hasActivePromo ? (
-                                    <span className="flex items-baseline gap-1">
-                                        <span className="text-[10px] text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
-                                        <span className="text-[var(--brand)] font-bold text-xs">R$ {formatBRL(effectivePrice)}</span>
-                                    </span>
-                                ) : (
-                                    <span className="text-[var(--brand)] font-bold text-xs">R$ {formatBRL(product.price)}</span>
-                                );
-                            })()}
+            {/* Mesma linha editorial do cardápio do cliente (nome + descrição +
+                preço, miniatura só quando existe foto) — pedido do dono: o
+                garçom vê o cardápio "como o cliente vê", sem cartão "Sem Foto". */}
+            <div className="flex-1 overflow-y-auto py-1 max-h-[60vh]">
+                {filteredProducts.length === 0 && (
+                    <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum produto encontrado.</p>
+                )}
+                {filteredProducts.map(product => {
+                    const effectivePrice = getEffectivePrice(product);
+                    const hasActivePromo = effectivePrice < product.price;
+                    return (
+                        <div
+                            key={product.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedProduct(product)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProduct(product); } }}
+                            className="flex items-start gap-3 py-3.5 px-1 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                        >
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
+                                {product.description && (
+                                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
+                                )}
+                                <div className="mt-1.5">
+                                    {hasActivePromo ? (
+                                        <span className="flex items-baseline gap-1.5">
+                                            <span className="text-xs text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
+                                            <span className="text-[var(--brand)] font-bold text-sm">R$ {formatBRL(effectivePrice)}</span>
+                                        </span>
+                                    ) : (
+                                        <span className="text-[var(--brand)] font-bold text-sm">
+                                            {product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0)) ? 'A partir de ' : ''}R$ {formatBRL(product.price)}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {product.image_url && (
+                                <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-[var(--surface-2)]">
+                                    <Image src={product.image_url} alt={product.name} fill sizes="64px" className="object-cover" />
+                                </div>
+                            )}
                         </div>
-                    </Card>
-                ))}
-              </div>
+                    );
+                })}
             </div>
 
             <StoreProductModal
