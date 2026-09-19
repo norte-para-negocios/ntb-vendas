@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { usePolling } from '@/lib/usePolling';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
@@ -1112,6 +1113,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
 
     return () => { supabase.removeChannel(channel); };
   }, [storeId, destination]);
+  usePolling(() => loadOrders(true));
 
   const isItemLate = (item: OrderItem) => {
       const prepMinutes = item.product?.prep_time_minutes;
@@ -2514,6 +2516,7 @@ NOTIFY pgrst, 'reload schema';`;
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
+    usePolling(() => loadData());
 
     // Config fiscal (Task 17) — só pra saber se mostra o campo opcional de
     // CPF/CNPJ do destinatário ao fechar a mesa. Falha silenciosa de
@@ -4419,6 +4422,7 @@ const CounterView: React.FC<{
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
+    usePolling(() => load());
 
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
@@ -5369,6 +5373,7 @@ const CaixaView: React.FC<{
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
+    usePolling(() => { loadQueue(); loadShift(); });
 
     const handleOpenShift = async () => {
         const value = parseFloat(openingFloat.replace(',', '.'));
