@@ -211,6 +211,15 @@ Cada item só fecha com o resultado observado registrado na memória `project_nt
 
 ---
 
+## Status (atualizado 2026-09-21)
+
+- **A1 feito** (alerta de disco */30, testado; canal WhatsApp/e-mail ainda pendente — `enviar-alerta.sh` só grava em `/var/log/disk-alert.log`).
+- **A2 feito** (poda roda, crescimento ~44k linhas/h, min(created_at)=3 dias).
+- **A3 encerrado pelo Step 4b:** v2.134.10 já foi testada com o schema em 82 migrations e teve o mesmo sintoma; env do Realtime do estoque (funciona) é idêntico exceto `DB_NAME`. Polling de 5s (`lib/usePolling.ts`) é a solução definitiva. Compose do servidor continua divergente do container vivo (não mexido).
+- **A4 parcial:** backup diário dos dois bancos criado e restore testado (`/usr/local/bin/backup-bancos.sh`, 04:30, retenção 7 d). Falta cópia fora do servidor (decisão do dono).
+- **B1 feito** (pdv=true persiste).
+- Pendentes: B2/B3 (respostas do Ramon), B4 e Bloco C (validação do dono/loja), Bloco D (decisões).
+
 ## Ordem de execução recomendada
 
 1. **A1** (alerta) → **A2** (verificar poda) — protegem a produção agora.
