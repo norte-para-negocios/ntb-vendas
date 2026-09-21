@@ -116,7 +116,20 @@ A chave de acesso é única. Se o Omie devolver "já importada", tratar como **s
 - Tela de histórico de envios além de um selo "Omie: enviada/erro" na lista de Notas Fiscais (pequeno, entra no plano).
 - Correção do `ehChamadaDeEscrita` do `ntb-estoque` para `Importar*` (necessária **só** para o Caminho A; para o Sertão via B não bloqueia, mas deve ser feita antes de qualquer loja usar o A).
 
-## 10. Perguntas que continuam abertas
+## 10. Respostas do Ramon (2026-09-21) e perguntas ainda abertas
+
+Respondido pelo Ramon (WhatsApp):
+- Quer **todas as vendas dentro do Omie, alimentando o faturamento** → o padrão `omie_gerar_titulo` provavelmente deve ser **ligado** (a confirmar: "faturamento" = conta a receber ou só nota de saída).
+- **Hoje o cupom é emitido pela JS Sistemas** → risco de **contar a venda em dobro** no Omie se ambos enviarem. O interruptor `omie_envio_nfce` só liga no dia do corte, quando a JS parar de emitir/enviar.
+- **Aceita cadastrar a chave do Omie** na tela do Vendas ("tem que ser seguro"; o estoque já usa chave por loja).
+- **Não há cliente cadastrado**; o cupom é "tipo supermercado": no final pode-se associar CPF/CNPJ (opcional) → precisa de cliente padrão "Consumidor Final" no Omie e uso do CPF/CNPJ quando informado (testar `cAcaoCliente`/`idCliente`).
+
+Ainda abertas (perguntadas ao Ramon em 2026-09-21):
+1. "Faturamento" = lançamento no financeiro (conta a receber, forma de pagamento, conta corrente) ou nota de saída?
+2. A partir de que dia a JS Sistemas para de emitir e de mandar ao Omie?
+3. Pode-se criar o cliente "Consumidor Final" no Omie?
+
+## 10b. Perguntas antigas (superadas acima)
 
 1. O financeiro do Sertão já lança as vendas por outro caminho? (define se `omie_gerar_titulo` fica sempre desligado.)
 2. Cliente "consumidor" padrão no Omie: o Omie exige um cadastrado para a importação? (descobrir no teste §8.3.)
