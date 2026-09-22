@@ -36,17 +36,16 @@ import { THEME_PRESETS, resolveThemePreset } from '@/lib/theme';
 // abaixo, um copo de vinho dourado solto ali era o único ponto fora da
 // curva (e nem toda loja vende vinho).
 
-// Paleta iFood (correção 2026-08-21, pedido direto do usuário: quer as
-// cores REAIS do iFood, não o azul desta empresa). iFood distingue AÇÃO de
-// PROMOÇÃO — não usa uma cor só pra "marca": botão/controle de adicionar,
-// aba ativa e seletor de opção são vermelho; preço com promoção ativa
-// (e o selo -X%) são roxo; preço SEM promoção nenhuma é só texto escuro
-// em negrito, nunca colorido (essa é a maioria absoluta do catálogo hoje —
-// 390 produtos ativos na loja piloto, 0 com promo_price). Hex fixo de
-// propósito, mesmo precedente de WINE_GOLD acima — só existe neste
-// arquivo, nunca o token global --brand (usado no painel do lojista e no
-// Master Admin, fora de escopo, tem que continuar azul).
-const IFOOD_RED = '#EA1D2C';
+// Cor de AÇÃO do cardápio (2026-09-22, pedido direto do dono: o vermelho
+// iFood "não tem nada a ver com o Norte Vendas"). Volta pra identidade da
+// marca: azul-violeta da Norte (#484DB5, o mesmo do login/painel).
+// ACTION_BG é hex fixo pra fundos com texto branco (contraste bom nos dois
+// temas); ACTION_FG usa o token --brand, que no modo escuro clareia
+// (#8489e0) pra texto/ícone/sublinhado continuarem legíveis sobre fundo
+// escuro. Promoção continua com roxo próprio (IFOOD_PURPLE) — ação e
+// promoção seguem distintas; preço sem promoção nunca é colorido.
+const ACTION_BG = '#484DB5';
+const ACTION_FG = 'var(--brand)';
 const IFOOD_PURPLE = '#8E1CA8';
 
 // Cardápio que vende (migration 019): promoção "ativa" = promo_price setado
@@ -1153,7 +1152,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                 <ProductThumb src={product.image_url} name={product.name} size="row" />
                 {onQuickAdd && (
                     // Vermelho iFood (correção 2026-08-21: --brand/azul saiu de toda
-                    // "ação" do cardápio, ver IFOOD_RED acima). whileTap com spring
+                    // "ação" do cardápio, ver ACTION_FG acima). whileTap com spring
                     // de verdade (SPRING_TAP, lib/motion.ts — validado com o usuário,
                     // não criar um terceiro preset) em vez do scale CSS instantâneo do
                     // u-press: é o botão mais tocado da tela. stopPropagation preservado:
@@ -1165,7 +1164,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         whileTap={{ scale: 0.88 }}
                         transition={SPRING_TAP}
                         className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center"
-                        style={{ color: IFOOD_RED }}
+                        style={{ color: ACTION_FG }}
                     >
                         <Plus size={15} />
                     </motion.button>
@@ -1508,11 +1507,11 @@ const ProductModal: React.FC<{
                                                 <span
                                                     aria-hidden="true"
                                                     // Vermelho iFood (correção 2026-08-21): "option radio/+ controls"
-                                                    // é AÇÃO na paleta iFood, não preço/marca — ver IFOOD_RED acima.
+                                                    // é AÇÃO na paleta iFood, não preço/marca — ver ACTION_FG acima.
                                                     className={`absolute inset-0 rounded-full border-2 flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? '' : 'border-[var(--border)]'}`}
-                                                    style={isChecked ? { borderColor: IFOOD_RED } : undefined}
+                                                    style={isChecked ? { borderColor: ACTION_FG } : undefined}
                                                 >
-                                                    {isChecked && <span className="w-2.5 h-2.5 rounded-full" style={{ background: IFOOD_RED }} />}
+                                                    {isChecked && <span className="w-2.5 h-2.5 rounded-full" style={{ background: ACTION_FG }} />}
                                                 </span>
                                             </span>
                                         ) : (
@@ -1532,7 +1531,7 @@ const ProductModal: React.FC<{
                                                     // vermelho iFood nos dois estados (borda sempre; fundo cheio
                                                     // só quando marcado).
                                                     className={`absolute inset-0 rounded-full border flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand)] peer-focus-visible:ring-offset-1 ${isChecked ? 'text-white' : ''}`}
-                                                    style={{ borderColor: IFOOD_RED, ...(isChecked ? { backgroundColor: IFOOD_RED } : { color: IFOOD_RED }) }}
+                                                    style={{ borderColor: ACTION_FG, ...(isChecked ? { backgroundColor: ACTION_BG } : { color: ACTION_FG }) }}
                                                 >
                                                     {isChecked ? <Check size={14} /> : <Plus size={14} />}
                                                 </span>
@@ -1648,15 +1647,15 @@ const ProductModal: React.FC<{
                         <Button
                             className="w-full h-12"
                             // Vermelho iFood (correção 2026-08-21): "o botão Adicionar" é uma
-                            // das 4 ações explicitamente listadas pra virar IFOOD_RED. Estilo
+                            // das 4 ações explicitamente listadas pra virar ACTION_FG. Estilo
                             // inline porque o componente Button (components/ui.tsx) é
                             // compartilhado com o painel do lojista/Master Admin — não dá pra
                             // mudar a cor "primary" do componente em si sem afetar telas fora
                             // de escopo, então só esta instância recebe a cor por style
                             // (sempre vence a classe bg-[var(--brand)] do variant, sem tocar
                             // no componente). Texto/total continuam brancos (herdado do
-                            // Button), contraste de branco sobre #EA1D2C é alto o bastante.
-                            style={{ backgroundColor: IFOOD_RED }}
+                            // Button), contraste de branco sobre ACTION_BG (#484DB5) é alto o bastante.
+                            style={{ backgroundColor: ACTION_BG }}
                             disabled={missingRequired}
                             aria-describedby={missingRequired ? 'product-modal-required-error' : undefined}
                             onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}
@@ -3644,7 +3643,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             destino fictício, a própria linha expande/
                             recolhe em lugar pra revelar o endereço completo
                             (storeAddressFull) — ver bloco abaixo. Ícone
-                            MapPin em IFOOD_RED (mesma paleta de ação/leitura
+                            MapPin em ACTION_FG (mesma paleta de ação/leitura
                             já usada no resto do redesign), chevron
                             empurrado pro fim do <button> (que é flex-1) —
                             fica encostado no botão "Conta" quando ele existe,
@@ -3656,7 +3655,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             aria-label="Informações da loja"
                             className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] text-left u-motion focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                         >
-                            <MapPin size={16} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                            <MapPin size={16} className="flex-shrink-0" style={{ color: ACTION_FG }} />
                             {/* Fase 5, Task 18: fonte de destaque do preset de identidade
                                 visual — 'classico' cai em var(--font-sans-src), idêntico
                                 ao peso/família de sempre (nenhuma mudança visual pra loja
@@ -3796,13 +3795,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 onClick={() => setShowBill(true)}
                                 className="flex w-full items-center gap-2 text-left u-motion"
                             >
-                                <LayoutGrid size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                                <LayoutGrid size={15} className="flex-shrink-0" style={{ color: ACTION_FG }} />
                                 <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Mesa {currentTable.number} • ver conta</span>
                                 <ChevronRight size={16} className="flex-shrink-0 text-[var(--text-muted)]" />
                             </button>
                         ) : hasAccess ? (
                             <div className="flex w-full items-center gap-2">
-                                <Coffee size={15} className="flex-shrink-0" style={{ color: IFOOD_RED }} />
+                                <Coffee size={15} className="flex-shrink-0" style={{ color: ACTION_FG }} />
                                 <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Pedido no balcão</span>
                             </div>
                         ) : !entradaDispensada ? (
@@ -3821,7 +3820,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     type="button"
                                     onClick={() => setIsLoginModalOpen(true)}
                                     className="flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] py-2.5 u-motion u-press-sm"
-                                    style={{ backgroundColor: IFOOD_RED }}
+                                    style={{ backgroundColor: ACTION_BG }}
                                 >
                                     <LogIn size={16} className="flex-shrink-0 text-white" />
                                     <span className="text-[13px] font-bold text-white">Entrar na mesa (PIN)</span>
@@ -4021,7 +4020,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         onClick={() => setShowAllCategories(true)}
                         aria-label="Ver todas as categorias"
                         className="flex-shrink-0 flex items-center gap-1.5 text-[13px] font-semibold pb-1.5 u-motion u-press-sm"
-                        style={{ color: IFOOD_RED }}
+                        style={{ color: ACTION_FG }}
                     >
                         <LayoutGrid size={16} /> Categorias
                     </button>
@@ -4052,7 +4051,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                             <motion.div
                                                 layoutId="categoryTabUnderline"
                                                 className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
-                                                style={{ backgroundColor: IFOOD_RED }}
+                                                style={{ backgroundColor: ACTION_FG }}
                                                 transition={SPRING_TAP}
                                             />
                                         )}
@@ -4085,7 +4084,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         <motion.div
                                             layoutId="categoryTabUnderline"
                                             className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
-                                            style={{ backgroundColor: IFOOD_RED }}
+                                            style={{ backgroundColor: ACTION_FG }}
                                             transition={SPRING_TAP}
                                         />
                                     )}
@@ -4107,7 +4106,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     onClick={() => handleTabClick(cat.id)}
                                     aria-current={isActiveSub ? 'true' : undefined}
                                     className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion bg-[var(--surface-2)] ${isActiveSub ? 'font-semibold' : 'font-medium text-[var(--text)]'}`}
-                                    style={isActiveSub ? { color: IFOOD_RED } : undefined}
+                                    style={isActiveSub ? { color: ACTION_FG } : undefined}
                                 >
                                     {cat.name}
                                 </button>

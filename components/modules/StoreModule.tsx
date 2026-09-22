@@ -1639,14 +1639,11 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
     );
 };
 
-// Mesma paleta do cardápio do cliente (ClientModule.tsx: IFOOD_RED/
-// IFOOD_PURPLE) — 2026-09-22, correção real do pedido "como o cliente vê":
-// a 1ª tentativa (fc08e6f) só copiou a estrutura em linha, não a
-// identidade visual (cor de ação vermelha, aba sublinhada, medalhão).
-// Duplicada aqui de propósito (mesmo princípio já documentado neste
-// arquivo pra outras telas: painéis com público diferente não compartilham
-// componente, só o valor da cor).
-const GARCOM_IFOOD_RED = '#EA1D2C';
+// Cor de ação do cardápio do garçom = mesma do cliente (ClientModule.tsx:
+// ACTION_FG, azul-violeta da Norte via token --brand; até 2026-09-22 era
+// vermelho iFood). Duplicada de propósito — painéis não compartilham
+// componente, só o valor da cor.
+const GARCOM_ACTION = 'var(--brand)';
 const GARCOM_IFOOD_PURPLE = '#8E1CA8';
 
 const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ storeId, onAddItem }) => {
@@ -1733,7 +1730,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     onClick={() => setShowAllCategories(true)}
                     aria-label="Ver todas as categorias"
                     className="flex-shrink-0 flex items-center gap-1.5 text-[13px] font-semibold pb-1.5 u-motion u-press-sm"
-                    style={{ color: GARCOM_IFOOD_RED }}
+                    style={{ color: GARCOM_ACTION }}
                 >
                     <LayoutGrid size={16} /> Categorias
                 </button>
@@ -1754,7 +1751,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                     {isActive && (
                                         <span
                                             className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
-                                            style={{ backgroundColor: GARCOM_IFOOD_RED }}
+                                            style={{ backgroundColor: GARCOM_ACTION }}
                                         />
                                     )}
                                 </button>
@@ -1777,7 +1774,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                 {ownsActive && (
                                     <span
                                         className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
-                                        style={{ backgroundColor: GARCOM_IFOOD_RED }}
+                                        style={{ backgroundColor: GARCOM_ACTION }}
                                     />
                                 )}
                             </button>
@@ -1796,7 +1793,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                     onClick={() => selectSubcategory(cat.id)}
                                     aria-current={isActiveSub ? 'true' : undefined}
                                     className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion bg-[var(--surface-2)] ${isActiveSub ? 'font-semibold' : 'font-medium text-[var(--text)]'}`}
-                                    style={isActiveSub ? { color: GARCOM_IFOOD_RED } : undefined}
+                                    style={isActiveSub ? { color: GARCOM_ACTION } : undefined}
                                 >
                                     {cat.name}
                                 </button>
@@ -1812,7 +1809,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         type="button"
                         onClick={() => { setSearchTerm(''); setActiveCategory(''); setActiveGroupId(null); setShowAllCategories(false); }}
                         className={`w-full text-left rounded-xl border px-3 py-3 text-sm font-bold u-motion u-press-sm ${activeCategory === '' ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)] text-[var(--text)]'}`}
-                        style={activeCategory === '' ? { color: GARCOM_IFOOD_RED } : undefined}
+                        style={activeCategory === '' ? { color: GARCOM_ACTION } : undefined}
                     >
                         Ver todos os produtos <span className="font-normal text-[var(--text-muted)]">({products.length})</span>
                     </button>
@@ -1830,7 +1827,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                     onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
                                     aria-current={isActive ? 'true' : undefined}
                                     className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
-                                    style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
+                                    style={isActive ? { color: GARCOM_ACTION } : undefined}
                                 >
                                     <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
                                     <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
