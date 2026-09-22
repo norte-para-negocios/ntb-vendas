@@ -4,7 +4,7 @@ import { usePolling } from '@/lib/usePolling';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
-import { SPRING_TAP } from '@/lib/motion';
+import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
@@ -7039,6 +7039,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // empilhadas. Ver activeCategoryProducts/searchResults mais abaixo.
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
+    // Grupos da lista lateral começam fechados (sanfona); o grupo da categoria ativa abre sozinho.
+    const [openSidebarGroups, setOpenSidebarGroups] = useState<Set<string>>(new Set());
     const [activeMenuCategoryId, setActiveMenuCategoryId] = useState<string | null>(null);
     const [productSearchTerm, setProductSearchTerm] = useState('');
 
@@ -7664,6 +7666,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         }
     }, [categoriesWithItems, activeMenuCategoryId]);
 
+    useEffect(() => {
+        const gid = categories.find(c => c.id === activeMenuCategoryId)?.group_id;
+        if (gid) setOpenSidebarGroups(prev => (prev.has(gid) ? prev : new Set(prev).add(gid)));
+    }, [activeMenuCategoryId, categories]);
+
     const isSearchingProducts = productSearchTerm.trim().length > 0;
     const productSearchResults = useMemo(() => {
         if (!isSearchingProducts) return [];
@@ -7908,12 +7915,45 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                     return (
                                         <>
                                             {items.map((item: TopLevelItem) => item.kind === 'category' ? renderCategoryLi(item.category) : (
-                                                <li key={item.group.id} className="pt-3 first:pt-0">
-                                                    <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{item.group.name}</p>
-                                                    <ul className="space-y-0.5">
-                                                        {item.categories.map(renderCategoryLi)}
-                                                    </ul>
-                                                </li>
+                                                (() => {
+                                                    const isOpen = openSidebarGroups.has(item.group.id);
+                                                    const ownsActive = item.categories.some(c => c.id === activeMenuCategoryId);
+                                                    const total = item.categories.reduce((n, c) => n + products.filter(p => groupIdOf(p) === c.id).length, 0);
+                                                    return (
+                                                        <li key={item.group.id}>
+                                                            <button
+                                                                type="button"
+                                                                aria-expanded={isOpen}
+                                                                onClick={() => setOpenSidebarGroups(prev => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(item.group.id)) next.delete(item.group.id); else next.add(item.group.id);
+                                                                    return next;
+                                                                })}
+                                                                className={`w-full flex items-center gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${ownsActive && !isOpen ? 'border-[var(--brand)] text-[var(--text)] font-bold' : 'border-transparent text-[var(--text)] font-semibold hover:border-[var(--border)]'}`}
+                                                            >
+                                                                <motion.span animate={{ rotate: isOpen ? 90 : 0 }} transition={SPRING_TAP} className="shrink-0 text-[var(--text-muted)]">
+                                                                    <ChevronRight size={14} />
+                                                                </motion.span>
+                                                                <span className="flex-1 truncate tracking-[-0.01em]">{item.group.name}</span>
+                                                                <span className="text-xs opacity-60 shrink-0">{total}</span>
+                                                            </button>
+                                                            <AnimatePresence initial={false}>
+                                                                {isOpen && (
+                                                                    <motion.ul
+                                                                        key="sub"
+                                                                        initial={{ height: 0, opacity: 0 }}
+                                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                                        exit={{ height: 0, opacity: 0 }}
+                                                                        transition={SPRING_SHEET}
+                                                                        className="overflow-hidden space-y-0.5 pl-3"
+                                                                    >
+                                                                        {item.categories.map(renderCategoryLi)}
+                                                                    </motion.ul>
+                                                                )}
+                                                            </AnimatePresence>
+                                                        </li>
+                                                    );
+                                                })()
                                             ))}
                                             {uncategorized && renderCategoryLi(uncategorized)}
                                         </>
