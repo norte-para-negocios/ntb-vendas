@@ -6204,11 +6204,30 @@ const CaixaView: React.FC<{
     }
 
     // Turno aberto — Passo 1: fila consolidada; resumo + Fechar Caixa.
-    // Duração do turno formatada ("2h 14min" / "38min") — usa o mesmo `now`
-    // que já reticka a cada 30s pra fila (declarado no topo do componente),
-    // sem intervalo novo só pra isto.
-    const minutosAbertos = Math.max(0, Math.floor((now - new Date(shift.opened_at).getTime()) / 60000));
-    const duracaoLabel = minutosAbertos >= 60 ? `${Math.floor(minutosAbertos / 60)}h ${minutosAbertos % 60}min` : `${minutosAbertos}min`;
+    // Duração do turno formatada ("2h 14min" / "38min" / "11d 21h" pra um
+    // turno esquecido aberto há dias) — usa o mesmo `now` que já reticka a
+    // cada 30s pra fila (declarado no topo do componente), sem intervalo
+    // novo só pra isto. Achado real ao vivo (2026-09-22): sem o corte por
+    // dia, um turno esquecido de 11 dias mostrava "283h 8min" (técnicamente
+    // certo, mas ilegível) ao lado de "Aberto às 21:19" — que também não
+    // dizia a DATA, então parecia "hoje às 21:19", quando era 11 dias atrás.
+    const abertoEm = new Date(shift.opened_at);
+    const minutosAbertos = Math.max(0, Math.floor((now - abertoEm.getTime()) / 60000));
+    const horasAbertas = Math.floor(minutosAbertos / 60);
+    const duracaoLabel = horasAbertas >= 24
+        ? `${Math.floor(horasAbertas / 24)}d ${horasAbertas % 24}h`
+        : horasAbertas >= 1 ? `${horasAbertas}h ${minutosAbertos % 60}min` : `${minutosAbertos}min`;
+    // "Aberto hoje às HH:MM" só quando é mesmo hoje; senão a data completa,
+    // pra nunca parecer que um turno de dias atrás foi aberto agora.
+    const abertoHoje = abertoEm.toDateString() === new Date(now).toDateString();
+    const abertoLabel = abertoHoje
+        ? `Aberto às ${abertoEm.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : `Aberto em ${abertoEm.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} às ${abertoEm.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    // Turno esquecido (>24h) é um problema operacional de verdade — contagem
+    // cega/fechamento de caixa desatualizando por dias. Só avisa (cor de
+    // atenção), nunca fecha sozinho: fechar caixa mexe em dinheiro real,
+    // só quem está na loja decide.
+    const turnoEsquecido = horasAbertas >= 24;
 
     return (
         <div className="space-y-6">
@@ -6224,9 +6243,9 @@ const CaixaView: React.FC<{
                     <div className="w-12 h-12 shrink-0"><ProductThumb name={loggedUser.name} size="store" /></div>
                     <div className="min-w-0">
                         <p className="text-base font-bold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
-                        <p className="text-xs text-[var(--text-muted)]">
-                            Aberto às {new Date(shift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            {' · '}{duracaoLabel}
+                        <p className={`text-xs ${turnoEsquecido ? 'font-bold text-[var(--warn)]' : 'text-[var(--text-muted)]'}`}>
+                            {abertoLabel}
+                            {' · '}{duracaoLabel}{turnoEsquecido ? ' — esqueceu de fechar?' : ''}
                             {' · '}Fundo R$ {formatBRL(shift.opening_float)}
                         </p>
                     </div>
