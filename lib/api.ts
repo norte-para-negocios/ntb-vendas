@@ -1,5 +1,5 @@
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
+import { Store, Table, Product, Category, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
@@ -450,17 +450,19 @@ async function fetchProductRecommendationsByStore(storeId: string): Promise<Map<
   return recommendedByProduct;
 }
 
-export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<{ categories: Category[]; products: Product[]; error?: 'network' }> => {
+export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<{ categories: Category[]; products: Product[]; categoryGroups: CategoryGroup[]; error?: 'network' }> => {
   try {
     const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
+    const categoryGroupsQuery = supabase.from('category_groups').select('*').eq('store_id', storeId).order('order');
     let productsQuery = supabase.from('products').select('*').eq('store_id', storeId).order('order', { ascending: true, nullsFirst: false });
     if (onlyAvailable) productsQuery = productsQuery.eq('available', true);
 
     // Query de adicionais e de recomendações paralelizadas com
     // categorias/produtos (não dependem do resultado delas, só do storeId)
     // — antes rodava sequencialmente depois do Promise.all abaixo.
-    const [cats, prods, groupsByProduct, recommendedByProduct] = await Promise.all([
+    const [cats, catGroups, prods, groupsByProduct, recommendedByProduct] = await Promise.all([
       categoriesQuery,
+      categoryGroupsQuery,
       productsQuery,
       fetchOptionGroupsByProduct(storeId, includeUnavailable),
       fetchProductRecommendationsByStore(storeId),
@@ -495,10 +497,10 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
       if (fallbackProds.error || cats.error) {
         console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
         const cached = await getCachedMenu(storeId);
-        if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
-        return { categories: cats.data || [], products: fallbackProds.data || [], error: 'network' };
+        if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[], categoryGroups: [] };
+        return { categories: cats.data || [], products: fallbackProds.data || [], categoryGroups: catGroups.data || [], error: 'network' };
       }
-      const fallbackResult = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)) };
+      const fallbackResult = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)), categoryGroups: catGroups.data || [] };
       setCachedMenu(storeId, fallbackResult.categories, fallbackResult.products).catch(() => {});
       return fallbackResult;
     }
@@ -506,18 +508,18 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
     if (cats.error || prods.error) {
       console.error('Error fetching menu:', cats.error || prods.error);
       const cached = await getCachedMenu(storeId);
-      if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
-      return { categories: cats.data || [], products: prods.data || [], error: 'network' };
+      if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[], categoryGroups: [] };
+      return { categories: cats.data || [], products: prods.data || [], categoryGroups: catGroups.data || [], error: 'network' };
     }
 
-    const result = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)) };
+    const result = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)), categoryGroups: catGroups.data || [] };
     setCachedMenu(storeId, result.categories, result.products).catch(() => {});
     return result;
   } catch (error) {
     console.error('Error fetching menu:', error);
     const cached = await getCachedMenu(storeId);
-    if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[] };
-    return { categories: [], products: [], error: 'network' };
+    if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[], categoryGroups: [] };
+    return { categories: [], products: [], categoryGroups: [], error: 'network' };
   }
 };
 
@@ -729,6 +731,41 @@ export const updateCategorySchedule = async (
   updates: { available_from: string | null; available_until: string | null; available_days: number[] | null }
 ) => {
   const { error } = await supabase.from('categories').update(updates).eq('id', categoryId);
+  if (error) throw error;
+};
+
+export const fetchCategoryGroups = async (storeId: string): Promise<CategoryGroup[]> => {
+  const { data, error } = await supabase.from('category_groups').select('*').eq('store_id', storeId).order('order');
+  if (error) throw error;
+  return data || [];
+};
+
+export const createCategoryGroup = async (storeId: string, name: string) => {
+  const { data: maxOrderData } = await supabase.from('category_groups').select('order').eq('store_id', storeId).order('order', { ascending: false }).limit(1);
+  const nextOrder = (maxOrderData?.[0]?.order || 0) + 1;
+  const { error } = await supabase.from('category_groups').insert({ store_id: storeId, name, order: nextOrder });
+  if (error) throw error;
+};
+
+export const deleteCategoryGroup = async (id: string) => {
+  const { error } = await supabase.from('category_groups').delete().eq('id', id);
+  if (error) throw error;
+};
+
+// Loop de update simples (não RPC): diferente de update_categories_order/
+// update_products_order (que existem por causa do upsert com colunas NOT
+// NULL omitidas, ver migration 005), aqui é update puro por id — sem
+// problema de upsert, e o volume de grupos por loja é sempre pequeno
+// (poucas unidades), então atomicidade não é crítica.
+export const updateCategoryGroupOrder = async (updates: { id: string; order: number }[]) => {
+  for (const u of updates) {
+    const { error } = await supabase.from('category_groups').update({ order: u.order }).eq('id', u.id);
+    if (error) throw error;
+  }
+};
+
+export const updateCategoryGroupAssignment = async (categoryId: string, groupId: string | null) => {
+  const { error } = await supabase.from('categories').update({ group_id: groupId }).eq('id', categoryId);
   if (error) throw error;
 };
 
