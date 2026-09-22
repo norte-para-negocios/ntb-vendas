@@ -14,6 +14,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
+import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
@@ -702,11 +703,11 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
       } else if (!r.ok) {
         toast.error('Não foi possível checar agora: ' + (r.erro || 'sem conexão com o servidor de atualização.'));
       } else if (r.jaBaixada) {
-        toast.success(`A versão ${r.versaoDisponivel} já está baixada — é só clicar em "Atualizar agora" no aviso.`);
+        toast.success(`A versão ${formatAppVersion(r.versaoDisponivel)} já está baixada — é só clicar em "Atualizar agora" no aviso.`);
       } else if (r.versaoDisponivel && r.versaoDisponivel !== window.electronApp.version) {
-        toast.success(`Versão ${r.versaoDisponivel} encontrada — baixando. O aviso pra atualizar aparece assim que terminar.`);
+        toast.success(`Versão ${formatAppVersion(r.versaoDisponivel)} encontrada — baixando. O aviso pra atualizar aparece assim que terminar.`);
       } else {
-        toast.success(`Você já está na versão mais recente (v${window.electronApp.version}).`);
+        toast.success(`Você já está na versão mais recente (${formatAppVersion(window.electronApp.version)}).`);
       }
     } catch {
       toast.error('Não foi possível checar a atualização agora.');
@@ -893,7 +894,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                             className="w-full text-center text-[11px] text-white/25 hover:text-white/60 pt-2 u-motion disabled:opacity-50"
                             title="Procurar atualização"
                         >
-                            App v{window.electronApp.version} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
+                            App {formatAppVersion(window.electronApp.version)} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
                         </button>
                     )}
                 </div>
@@ -1028,7 +1029,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               // carrinho) — o PDV pode rodar em touchscreen, e só `pb-3`
               // deixava o botão com 30px de altura.
               className="flex items-center justify-center w-full min-h-[44px] px-3 pb-2 text-white/25 hover:text-white/60 u-motion disabled:opacity-50"
-              title={`App v${window.electronApp.version} — procurar atualização`}
+              title={`App ${formatAppVersion(window.electronApp.version)} — procurar atualização`}
               aria-label="Procurar atualização"
             >
               <Download size={18} className={procurandoUpdate ? 'animate-pulse' : ''} />
@@ -1040,7 +1041,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               className="w-full text-center text-[11px] text-white/25 hover:text-white/60 pb-2 u-motion disabled:opacity-50"
               title="Procurar atualização"
             >
-              App v{window.electronApp.version} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
+              App {formatAppVersion(window.electronApp.version)} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
             </button>
           )
         )}

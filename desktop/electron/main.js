@@ -1,4 +1,7 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, protocol, net, shell, Notification, ipcMain, dialog } = require('electron');
+
+// Espelha lib/appVersion.ts: número interno 1.x (updater), exibido como 0.x (beta).
+const formatAppVersion = (v) => { if (!v) return ''; const [, mi = '0', pa = '0'] = String(v).split('.'); return `v0.${mi}.${pa} (beta)`; };
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -418,7 +421,7 @@ app.whenReady().then(() => {
     estadoUpdate.detalhe = app.getVersion();
     new Notification({
       title: 'Norte Vendas',
-      body: `Atualizado (v${app.getVersion()})`,
+      body: `Atualizado (${formatAppVersion(app.getVersion())})`,
     }).show();
   });
   autoUpdater.on('update-downloaded', (info) => {
@@ -434,7 +437,7 @@ app.whenReady().then(() => {
     estadoUpdate.detalhe = info.version;
     new Notification({
       title: 'Norte Vendas',
-      body: `Nova versão baixada (v${info.version}) — será aplicada ao reabrir o app.`,
+      body: `Nova versão baixada (${formatAppVersion(info.version)}) — será aplicada ao reabrir o app.`,
     }).show();
     // Pedido direto do dono (2026-09-10): a Notification acima é
     // passageira e macOS/Windows podem suprimi-la (foco ocupado,

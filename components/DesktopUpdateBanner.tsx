@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Download, RotateCcw, X } from 'lucide-react';
 import { SPRING_SHEET } from '@/lib/motion';
+import { formatAppVersion } from '@/lib/appVersion';
 
 // Pedido direto do dono (2026-09-10): a atualização automática do app
 // desktop já baixa e aplica sozinha (ver desktop/electron/main.js), mas
@@ -174,7 +175,7 @@ export function DesktopUpdateBanner() {
           <Download size={18} className="text-[var(--brand)]" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white">Nova versão pronta (v{updateVersion})</p>
+          <p className="text-[13px] font-semibold text-white">Nova versão pronta ({formatAppVersion(updateVersion)})</p>
           <p className="text-[12px] text-white/50">Atualiza em segundos — o app fecha e reabre sozinho.</p>
         </div>
         <button
