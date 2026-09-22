@@ -1761,7 +1761,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                 <button
                                     key={item.key}
                                     type="button"
-                                    onClick={() => selectSubcategory(cat.id)}
+                                    onClick={() => { setActiveCategory(cat.id); setActiveGroupId(null); }}
                                     aria-current={isActive ? 'true' : undefined}
                                     className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
                                 >
