@@ -2194,6 +2194,11 @@ const TablesView: React.FC<{
     // MenuManagementView (onde a config fiscal já é carregada pra edição) —
     // são componentes irmãos, sem estado compartilhado.
     const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
+    // 2026-09-21: mesmo campo, agora também pra NFC-e (opcional, não trava
+    // o fechamento nem cria 'pendente' — ver route.ts). Estado separado de
+    // nfeModeloAtivo pra manter o texto de ajuda diferente por modelo (NF-e
+    // deixa a nota 'pendente' se ficar em branco; NFC-e não).
+    const [nfceModeloAtivo, setNfceModeloAtivo] = useState(false);
     const [paymentDestCpfCnpj, setPaymentDestCpfCnpj] = useState('');
     const [paymentDestNome, setPaymentDestNome] = useState('');
 
@@ -2542,6 +2547,7 @@ NOTIFY pgrst, 'reload schema';`;
         fetchStoreFiscalConfig(storeId)
             .then((cfg) => {
                 setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe');
+                setNfceModeloAtivo(cfg?.modelo_emissao_automatica === 'nfce');
                 // Task 4: qualquer modelo configurado (nfce OU nfe) já é
                 // "emissão automática ligada" pra fins do toggle de opt-out
                 // — loja sem NENHUMA config (cfg null) ou com
@@ -2550,6 +2556,7 @@ NOTIFY pgrst, 'reload schema';`;
             })
             .catch(() => {
                 setNfeModeloAtivo(false);
+                setNfceModeloAtivo(false);
                 setEmissaoFiscalConfigurada(false);
             });
     }, [storeId]);
@@ -3929,12 +3936,13 @@ NOTIFY pgrst, 'reload schema';`;
                                     </button>
                                 ) : undefined}
                             >
-                                {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
-                                    automaticamente; NFC-e não tem <dest>, não mostra nada aqui. */}
-                                {nfeModeloAtivo && (
+                                {/* Destinatário (Task 17; 2026-09-21: NFC-e também, ver
+                                    lib/fiscal/xml.ts) — nome só é usado no <dest> da NF-e
+                                    (NFC-e manda só o documento, sem endereço/xNome). */}
+                                {(nfeModeloAtivo || nfceModeloAtivo) && (
                                     <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
                                         <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
-                                            Documento do destinatário (NF-e, opcional)
+                                            Documento do destinatário (opcional)
                                         </p>
                                         <input
                                             type="text"
@@ -3943,16 +3951,19 @@ NOTIFY pgrst, 'reload schema';`;
                                             value={paymentDestCpfCnpj}
                                             onChange={(e) => setPaymentDestCpfCnpj(e.target.value)}
                                         />
-                                        <input
-                                            type="text"
-                                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
-                                            placeholder="Nome do cliente"
-                                            value={paymentDestNome}
-                                            onChange={(e) => setPaymentDestNome(e.target.value)}
-                                        />
+                                        {nfeModeloAtivo && (
+                                            <input
+                                                type="text"
+                                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                                placeholder="Nome do cliente"
+                                                value={paymentDestNome}
+                                                onChange={(e) => setPaymentDestNome(e.target.value)}
+                                            />
+                                        )}
                                         <p className="text-xs text-[var(--text-muted)]">
-                                            Deixe em branco pra fechar a mesa sem emitir a NF-e agora — dá pra preencher
-                                            e reemitir depois na aba "Notas Fiscais".
+                                            {nfeModeloAtivo
+                                                ? 'Deixe em branco pra fechar a mesa sem emitir a NF-e agora — dá pra preencher e reemitir depois na aba "Notas Fiscais".'
+                                                : 'Aparece no cupom fiscal, se informado. Deixar em branco não muda nada.'}
                                         </p>
                                     </div>
                                 )}
@@ -4354,6 +4365,8 @@ const CounterView: React.FC<{
     // usada pra decidir se mostra o modal de captura opcional de CPF/CNPJ
     // antes de fechar o pedido de balcão.
     const [nfeModeloAtivo, setNfeModeloAtivo] = useState(false);
+    // 2026-09-21: ver comentário equivalente em TablesView.
+    const [nfceModeloAtivo, setNfceModeloAtivo] = useState(false);
     // Task 4 (2026-08-23): mesmo state espelhado de TablesView, ver
     // comentário lá — qualquer modelo configurado (nfce OU nfe) já mostra
     // o toggle "Emitir nota fiscal desta venda".
@@ -4444,10 +4457,12 @@ const CounterView: React.FC<{
         fetchStoreFiscalConfig(storeId)
             .then((cfg) => {
                 setNfeModeloAtivo(cfg?.modelo_emissao_automatica === 'nfe');
+                setNfceModeloAtivo(cfg?.modelo_emissao_automatica === 'nfce');
                 setEmissaoFiscalConfigurada(!!cfg && cfg.modelo_emissao_automatica !== 'nenhuma');
             })
             .catch(() => {
                 setNfeModeloAtivo(false);
+                setNfceModeloAtivo(false);
                 setEmissaoFiscalConfigurada(false);
             });
     }, [storeId]);
@@ -4581,11 +4596,12 @@ const CounterView: React.FC<{
             return;
         }
         // Loja SEM o módulo Caixa — comportamento de hoje, intocado. Em
-        // modelo NF-e: abre o modal de captura opcional do destinatário em
-        // vez do confirm() simples de sempre — deixar em branco continua
-        // fechando o pedido normalmente (nota cai 'pendente', não impede o
-        // fechamento).
-        if (nfeModeloAtivo) {
+        // modelo NF-e OU NFC-e (2026-09-21): abre o modal de captura opcional
+        // do destinatário em vez do confirm() simples de sempre — deixar em
+        // branco continua fechando o pedido normalmente (NF-e cai
+        // 'pendente'; NFC-e simplesmente sai sem <dest>, nenhuma das duas
+        // impede o fechamento).
+        if (nfeModeloAtivo || nfceModeloAtivo) {
             setClosingOrder(orderForGate);
             setDestCpfCnpj('');
             setDestNome('');
@@ -5118,13 +5134,14 @@ const CounterView: React.FC<{
                 </div>
             )}
 
-            {/* Destinatário da NF-e (Task 17) — só aparece quando a loja emite
-                NF-e automaticamente (handleClose decide isso antes de abrir). */}
+            {/* Destinatário (Task 17; 2026-09-21: NF-e ou NFC-e — handleClose
+                decide isso antes de abrir). Nome só é usado no <dest> da
+                NF-e, ver lib/fiscal/xml.ts. */}
             <Modal isOpen={!!closingOrder} onClose={() => setClosingOrder(null)} title="Fechar Pedido">
                 <div className="space-y-4">
                     <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
                         <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
-                            Documento do destinatário (NF-e, opcional)
+                            Documento do destinatário (opcional)
                         </p>
                         <input
                             type="text"
@@ -5133,16 +5150,19 @@ const CounterView: React.FC<{
                             value={destCpfCnpj}
                             onChange={(e) => setDestCpfCnpj(e.target.value)}
                         />
-                        <input
-                            type="text"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
-                            placeholder="Nome do cliente"
-                            value={destNome}
-                            onChange={(e) => setDestNome(e.target.value)}
-                        />
+                        {nfeModeloAtivo && (
+                            <input
+                                type="text"
+                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                placeholder="Nome do cliente"
+                                value={destNome}
+                                onChange={(e) => setDestNome(e.target.value)}
+                            />
+                        )}
                         <p className="text-xs text-[var(--text-muted)]">
-                            Deixe em branco pra fechar o pedido sem emitir a NF-e agora — dá pra preencher e
-                            reemitir depois na aba "Notas Fiscais".
+                            {nfeModeloAtivo
+                                ? 'Deixe em branco pra fechar o pedido sem emitir a NF-e agora — dá pra preencher e reemitir depois na aba "Notas Fiscais".'
+                                : 'Aparece no cupom fiscal, se informado. Deixar em branco não muda nada.'}
                         </p>
                     </div>
                     <div className="flex gap-3">
@@ -5185,12 +5205,12 @@ const CounterView: React.FC<{
                     emitirNota={emitirNotaFiscal}
                     onEmitirNotaChange={setEmitirNotaFiscal}
                 >
-                    {/* Destinatário da NF-e (Task 17) — só quando a loja emite NF-e
-                        automaticamente; mesma posição/campos que TablesView usa. */}
-                    {nfeModeloAtivo && (
+                    {/* Destinatário (Task 17; 2026-09-21: NF-e ou NFC-e) —
+                        mesma posição/campos que TablesView usa. */}
+                    {(nfeModeloAtivo || nfceModeloAtivo) && (
                         <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
                             <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
-                                Documento do destinatário (NF-e, opcional)
+                                Documento do destinatário (opcional)
                             </p>
                             <input
                                 type="text"
@@ -5199,16 +5219,19 @@ const CounterView: React.FC<{
                                 value={destCpfCnpj}
                                 onChange={(e) => setDestCpfCnpj(e.target.value)}
                             />
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
-                                placeholder="Nome do cliente"
-                                value={destNome}
-                                onChange={(e) => setDestNome(e.target.value)}
-                            />
+                            {nfeModeloAtivo && (
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                    placeholder="Nome do cliente"
+                                    value={destNome}
+                                    onChange={(e) => setDestNome(e.target.value)}
+                                />
+                            )}
                             <p className="text-xs text-[var(--text-muted)]">
-                                Deixe em branco pra fechar o pedido sem emitir a NF-e agora — dá pra preencher e
-                                reemitir depois na aba "Notas Fiscais".
+                                {nfeModeloAtivo
+                                    ? 'Deixe em branco pra fechar o pedido sem emitir a NF-e agora — dá pra preencher e reemitir depois na aba "Notas Fiscais".'
+                                    : 'Aparece no cupom fiscal, se informado. Deixar em branco não muda nada.'}
                             </p>
                         </div>
                     )}
@@ -10004,12 +10027,16 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
         }
     };
 
-    // Clique no botão "Reemitir" — NF-e (modelo 55) abre o modal opcional de
-    // CPF/CNPJ antes de tentar de novo (o motivo mais comum de uma nota
-    // 'pendente' é justamente faltar esse dado); NFC-e (modelo 65) reemite
-    // na hora, igual sempre foi, porque destinatário não existe nesse modelo.
+    // Clique no botão "Reemitir" — abre o modal opcional de CPF/CNPJ sempre
+    // que a nota está 'pendente' (única razão que a rota usa esse status,
+    // pros dois modelos — ver app/api/fiscal/emitir/route.ts: falta ou
+    // documento inválido do destinatário). 2026-09-21: antes disso o modal
+    // só abria pra modelo 55 — uma NFC-e 'pendente' por CPF/CNPJ inválido
+    // reemitia na hora SEM destinatário nenhum, descartando silenciosamente
+    // o documento que o lojista queria corrigir. Qualquer outro status
+    // ('erro' etc.) continua reemitindo direto, sem modal.
     const handleRetryClick = (nota: FiscalNota) => {
-        if (nota.modelo === '55') {
+        if (nota.status === 'pendente') {
             setRetryingNota(nota);
             setRetryDestCpfCnpj('');
             setRetryDestNome('');
@@ -10175,13 +10202,14 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 </div>
             </Card>
 
-            {/* Destinatário da NF-e na reemissão (Task 17) — só abre pra
-                notas modelo 55 (handleRetryClick decide isso antes). */}
+            {/* Destinatário na reemissão (Task 17; 2026-09-21: vale pros dois
+                modelos) — só abre quando a nota está 'pendente'
+                (handleRetryClick decide isso antes). */}
             <Modal isOpen={!!retryingNota} onClose={() => setRetryingNota(null)} title="Reemitir Nota">
                 <div className="space-y-4">
                     <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
                         <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
-                            Documento do destinatário (NF-e, opcional)
+                            Documento do destinatário (opcional)
                         </p>
                         <input
                             type="text"

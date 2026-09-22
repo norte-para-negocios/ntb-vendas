@@ -78,7 +78,13 @@ export interface MontarXmlParams {
   numero: number;
   emitente: DadosEmitenteNota;
   itens: ItemNota[];
-  destinatario?: DestinatarioNota; // obrigatório pra modelo 55, ausente pra 65
+  // Obrigatório pra modelo 55. Pra modelo 65 (NFC-e) é OPCIONAL — pedido
+  // real do dono (2026-09-21, confirmado com o Ramon: o cupom do Sertão já
+  // deixa o cliente associar CPF/CNPJ no final, "tipo supermercado"): se
+  // vier preenchido, gera um <dest> mínimo (só o documento, sem endereço/
+  // xNome — ver montarDestNFCe abaixo). Vazio/ausente continua idêntico ao
+  // comportamento de sempre (cupom anônimo, sem <dest> nenhum).
+  destinatario?: DestinatarioNota;
   // Opcional de propósito: sem isso (chamador antigo, ou venda sem
   // payment_details detalhado), cai no fallback de sempre (Dinheiro, valor
   // igual ao total de produtos) — nunca quebra uma emissão que já
@@ -250,7 +256,19 @@ export function montarXmlNota(params: MontarXmlParams): {
     vProdTotal += Number((item.qCom * item.vUnCom).toFixed(2));
   }
 
-  const destXml = destinatario
+  // NFC-e (modelo 65): documento opcional do consumidor, SEM endereço/
+  // xNome/indIEDest — nada disso é exigido pra NFC-e anônima com CPF/CNPJ
+  // informado (diferente da NF-e, ver bug #3 no AGENTS.md sobre <enderDest>
+  // ser obrigatório especificamente pro modelo 55 na SEFAZ-BA). Doc vazio
+  // (string sem dígitos) continua sem <dest> nenhum — mesmo comportamento
+  // de sempre pro cupom anônimo. Nunca testado contra a SEFAZ de verdade
+  // ainda — validar em homologação antes de habilitar em produção.
+  const destDocNFCe = modelo === '65' ? (destinatario?.cpfCnpj ?? '').replace(/\D/g, '') : '';
+  const destXmlNFCe = destDocNFCe
+    ? `<dest><${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}>${destDocNFCe}</${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}></dest>`
+    : '';
+
+  const destXml = modelo === '55' && destinatario
     ? (() => {
         const doc = destinatario.cpfCnpj.replace(/\D/g, '');
         const tagDoc = doc.length === 14 ? 'CNPJ' : 'CPF';
@@ -291,7 +309,7 @@ export function montarXmlNota(params: MontarXmlParams): {
           `<cPais>1058</cPais><xPais>BRASIL</xPais></enderDest>`;
         return `<dest><${tagDoc}>${doc}</${tagDoc}><xNome>${xNome}</xNome>${enderDestXml}<indIEDest>9</indIEDest></dest>`;
       })()
-    : '';
+    : destXmlNFCe;
 
   // autXML antes de det (ordem do schema — ver AGENTS.md, "autXML depois de
   // pag dá cStat=225 Falha no Schema XML"). Só entra se a loja configurou um

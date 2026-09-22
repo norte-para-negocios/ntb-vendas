@@ -528,34 +528,41 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // `.trim()` cobre o caso de a UI mandar `destinatario: { cpfCnpj: '',
   // nome: '' }` (campo deixado em branco, não omitido) como equivalente a
   // "sem destinatário".
-  if (modelo === '55') {
-    const cpfCnpjDigits = (body.destinatario?.cpfCnpj ?? '').replace(/\D/g, '');
-    if (!cpfCnpjDigits) {
-      const { error: insertErr } = await admin.from('fiscal_notas').insert({
-        ...notaBase,
-        status: 'pendente',
-        motivo_erro: 'Falta documento do destinatário para NF-e.',
-      });
-      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por falta de destinatário):', insertErr);
-      return NextResponse.json({ ok: false, reason: 'Falta documento do destinatário para NF-e.' });
-    }
-    // Validação de tamanho (achado de revisão, Task 17 2ª rodada): sem isso,
-    // um CPF/CNPJ digitado errado (ex.: "123") passava batido até virar
-    // `<CPF>123</CPF>` no XML — consumindo um número fiscal de verdade só
-    // pra voltar rejeição garantida da SEFAZ. CPF tem 11 dígitos, CNPJ tem
-    // 14; qualquer outro tamanho não é nem um nem outro. Não valida dígito
-    // verificador (nenhum outro ponto do pipeline fiscal faz isso hoje, ver
-    // brief da task — um valor "fake-shaped" tipo '11111111111' é válido
-    // aqui de propósito, só o tamanho é checado).
-    if (cpfCnpjDigits.length !== 11 && cpfCnpjDigits.length !== 14) {
-      const { error: insertErr } = await admin.from('fiscal_notas').insert({
-        ...notaBase,
-        status: 'pendente',
-        motivo_erro: 'CPF/CNPJ do destinatário inválido.',
-      });
-      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por CPF/CNPJ inválido):', insertErr);
-      return NextResponse.json({ ok: false, reason: 'CPF/CNPJ do destinatário inválido.' });
-    }
+  // 2026-09-21: NFC-e (65) passou a aceitar o mesmo documento também, mas
+  // OPCIONAL (pedido do dono, confirmado com o Ramon — o cupom do Sertão já
+  // deixa o cliente associar CPF/CNPJ no final). Só a exigência de
+  // "obrigatório" continua exclusiva do modelo 55; a validação de tamanho
+  // (mesma regra, mesma decisão de não validar dígito verificador — ver
+  // comentário original abaixo) vale pros dois modelos quando o campo vem
+  // preenchido, pra nunca queimar um número fiscal com um valor claramente
+  // errado.
+  const cpfCnpjDigits = (body.destinatario?.cpfCnpj ?? '').replace(/\D/g, '');
+  if (modelo === '55' && !cpfCnpjDigits) {
+    const { error: insertErr } = await admin.from('fiscal_notas').insert({
+      ...notaBase,
+      status: 'pendente',
+      motivo_erro: 'Falta documento do destinatário para NF-e.',
+    });
+    if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por falta de destinatário):', insertErr);
+    return NextResponse.json({ ok: false, reason: 'Falta documento do destinatário para NF-e.' });
+  }
+  // Validação de tamanho (achado de revisão, Task 17 2ª rodada): sem isso,
+  // um CPF/CNPJ digitado errado (ex.: "123") passava batido até virar
+  // `<CPF>123</CPF>` no XML — consumindo um número fiscal de verdade só
+  // pra voltar rejeição garantida da SEFAZ. CPF tem 11 dígitos, CNPJ tem
+  // 14; qualquer outro tamanho não é nem um nem outro. Não valida dígito
+  // verificador (nenhum outro ponto do pipeline fiscal faz isso hoje, ver
+  // brief da task — um valor "fake-shaped" tipo '11111111111' é válido
+  // aqui de propósito, só o tamanho é checado). Pra NFC-e, vazio é válido
+  // (documento é opcional) — só entra aqui quando algo foi digitado.
+  if (cpfCnpjDigits && cpfCnpjDigits.length !== 11 && cpfCnpjDigits.length !== 14) {
+    const { error: insertErr } = await admin.from('fiscal_notas').insert({
+      ...notaBase,
+      status: 'pendente',
+      motivo_erro: 'CPF/CNPJ do destinatário inválido.',
+    });
+    if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (pendente por CPF/CNPJ inválido):', insertErr);
+    return NextResponse.json({ ok: false, reason: 'CPF/CNPJ do destinatário inválido.' });
   }
 
   // Emitente + certificado (achado crítico da revisão final de branch,
@@ -740,7 +747,10 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         telefone: config.telefone || undefined,
       },
       itens: itensXml,
-      destinatario: modelo === '55' ? body.destinatario : undefined,
+      // Repassado pros dois modelos agora (2026-09-21) — `montarXmlNota`
+      // (lib/fiscal/xml.ts) decide o formato do <dest> por modelo, e ignora
+      // sozinho um documento vazio/ausente na NFC-e.
+      destinatario: body.destinatario,
       // Achado real (WhatsApp do Ramon, 2026-08-24): `<pag>` nunca lia a
       // forma de pagamento real da venda. `payment_details.methods` já
       // existe desde a Task 2 do plano Frente de Caixa — `paymentDetailsAncora`
