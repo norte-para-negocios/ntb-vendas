@@ -7737,6 +7737,20 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'none'} onChange={() => setPOmieMode('none')} />
                             <span className="text-sm text-[var(--text)]">Sem Omie (só neste cardápio)</span>
                         </label>
+                        {/* 2026-09-22, achado real: "Sem Omie" aqui é sobre o PRODUTO —
+                            produto consolidado em variação (pizza, Na Chapa, Moqueca,
+                            Kids, Sobremesas, drinks com Sabor/Marca etc.) nunca tem
+                            omie_codigo próprio de propósito, o código mora em cada
+                            OPÇÃO (ver "Adicionais deste produto" abaixo). Sem este
+                            aviso, "Sem Omie" lia como "essa comida não tem código
+                            nenhum" — gerou a dúvida real "só as bebidas têm código".
+                            A checagem ignora "Sem borda"/"Sem segundo sabor"/etc. */}
+                        {pOmieMode === 'none' && pOptionGroups.some(g => g.options.some(o => o.omie_codigo.trim() && !o.name.trim().toLowerCase().startsWith('sem '))) && (
+                            <p className="ml-6 text-xs text-[var(--info)] bg-[var(--info)]/10 rounded-lg px-2.5 py-1.5">
+                                Este produto não tem código Omie próprio, mas as variações abaixo (em "Adicionais deste
+                                produto") já têm — é assim que a baixa de estoque funciona pra ele.
+                            </p>
+                        )}
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'link'} onChange={() => setPOmieMode('link')} />
                             <span className="text-sm text-[var(--text)]">Vincular a um código Omie já existente</span>
