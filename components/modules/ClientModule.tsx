@@ -17,6 +17,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
+import { visibleOptionGroups } from '@/lib/optionRules';
 import { isCategoryAvailableNow } from '@/lib/schedule';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
@@ -1328,7 +1329,8 @@ const ProductModal: React.FC<{
 
     if (!product) return null; // só null antes do primeiro produto abrir (ver lastProductRef acima)
 
-    const groups = product.option_groups || [];
+    // Grupos escondidos por regra (ex.: pizza Pequena = 1 sabor) somem da tela e do preço.
+    const groups = visibleOptionGroups(product.option_groups || [], selections);
 
     // "Peça também": só sugere produto de categoria disponível agora (mesma
     // regra da vitrine de Destaques) — produto órfão (sem categoria) não tem

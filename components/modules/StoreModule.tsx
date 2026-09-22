@@ -35,6 +35,7 @@ import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
+import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
@@ -1538,7 +1539,8 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
 
     if (!product) return null;
 
-    const groups = product.option_groups || [];
+    // Grupos escondidos por regra (ex.: pizza Pequena = 1 sabor) somem da tela e do preço.
+    const groups = visibleOptionGroups(product.option_groups || [], selections);
 
     const toggleOption = (group: ProductOptionGroup, optionId: string) => {
         setSelections(prev => {
