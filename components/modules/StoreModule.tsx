@@ -13,6 +13,7 @@ import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, 
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
+import { ProductThumb } from '@/components/ProductThumb';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
@@ -1479,6 +1480,16 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
     );
 };
 
+// Mesma paleta do cardápio do cliente (ClientModule.tsx: IFOOD_RED/
+// IFOOD_PURPLE) — 2026-09-22, correção real do pedido "como o cliente vê":
+// a 1ª tentativa (fc08e6f) só copiou a estrutura em linha, não a
+// identidade visual (cor de ação vermelha, aba sublinhada, medalhão).
+// Duplicada aqui de propósito (mesmo princípio já documentado neste
+// arquivo pra outras telas: painéis com público diferente não compartilham
+// componente, só o valor da cor).
+const GARCOM_IFOOD_RED = '#EA1D2C';
+const GARCOM_IFOOD_PURPLE = '#8E1CA8';
+
 const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ storeId, onAddItem }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -1524,27 +1535,43 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     onChange={e => setSearchTerm(e.target.value)}
                     className="bg-[var(--surface-2)]"
                 />
-                <div className="flex items-center gap-2 pb-2">
+                {/* Barra de categorias idêntica ao cardápio do cliente
+                    (ClientModule.tsx): "Categorias" é texto vermelho com
+                    ícone, sem pílula; aba ativa é texto forte + sublinhado
+                    vermelho, não fundo colorido. 2026-09-22: a 1ª versão
+                    (fc08e6f) usava pílulas azuis (--brand) — outra
+                    identidade, não a do cliente. */}
+                <div className="flex items-start gap-2">
                 <button
                     type="button"
                     onClick={() => setShowAllCategories(true)}
-                    className="flex-shrink-0 flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold u-motion u-press-sm border border-[var(--brand)] text-[var(--brand)] bg-[var(--surface)]"
-                    title="Ver todas as categorias"
+                    aria-label="Ver todas as categorias"
+                    className="flex-shrink-0 flex items-center gap-1.5 text-[13px] font-semibold pb-1.5 u-motion u-press-sm"
+                    style={{ color: GARCOM_IFOOD_RED }}
                 >
-                    <LayoutGrid size={14} /> Categorias
+                    <LayoutGrid size={16} /> Categorias
                 </button>
-                <div className="flex-1 min-w-0 flex gap-2 overflow-x-auto no-scrollbar">
-                    {categories.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => setActiveCategory(cat.id)}
-                            className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold u-motion u-press-sm border ${
-                                activeCategory === cat.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'
-                            }`}
-                        >
-                            {cat.name}
-                        </button>
-                    ))}
+                <div className="flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pb-2.5">
+                    {categories.map(cat => {
+                        const isActive = activeCategory === cat.id;
+                        return (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => setActiveCategory(cat.id)}
+                                aria-current={isActive ? 'true' : undefined}
+                                className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
+                            >
+                                {cat.name}
+                                {isActive && (
+                                    <span
+                                        className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
+                                        style={{ backgroundColor: GARCOM_IFOOD_RED }}
+                                    />
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
                 </div>
             </div>
@@ -1554,19 +1581,22 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     <button
                         type="button"
                         onClick={() => { setSearchTerm(''); setActiveCategory(''); setShowAllCategories(false); }}
-                        className={`w-full text-left rounded-xl border px-3 py-3 text-sm font-bold u-motion u-press-sm ${activeCategory === '' ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text)]'}`}
+                        className={`w-full text-left rounded-xl border px-3 py-3 text-sm font-bold u-motion u-press-sm ${activeCategory === '' ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)] text-[var(--text)]'}`}
+                        style={activeCategory === '' ? { color: GARCOM_IFOOD_RED } : undefined}
                     >
                         Ver todos os produtos <span className="font-normal text-[var(--text-muted)]">({products.length})</span>
                     </button>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {categories.map(cat => {
                             const qtd = products.filter(p => p.category_id === cat.id).length;
+                            const isActive = activeCategory === cat.id;
                             return (
                                 <button
                                     key={cat.id}
                                     type="button"
                                     onClick={() => { setSearchTerm(''); setActiveCategory(cat.id); setShowAllCategories(false); }}
-                                    className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${activeCategory === cat.id ? 'border-[var(--brand)] bg-[var(--brand)]/10' : 'border-[var(--border)]'}`}
+                                    className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
+                                    style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
                                 >
                                     <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
                                     <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
@@ -1577,9 +1607,11 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 </div>
             </Modal>
 
-            {/* Mesma linha editorial do cardápio do cliente (nome + descrição +
-                preço, miniatura só quando existe foto) — pedido do dono: o
-                garçom vê o cardápio "como o cliente vê", sem cartão "Sem Foto". */}
+            {/* Mesma linha editorial do cardápio do cliente (medalhão sempre
+                presente — ProductThumb, mesmo componente compartilhado —,
+                preço em --text/roxo de promoção, tempo de preparo). 2026-09-22:
+                a 1ª versão (fc08e6f) tinha só nome+preço em azul, sem
+                medalhão nem tempo — ainda não era "como o cliente vê". */}
             <div className="flex-1 overflow-y-auto py-1 max-h-[60vh]">
                 {filteredProducts.length === 0 && (
                     <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum produto encontrado.</p>
@@ -1587,6 +1619,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 {filteredProducts.map(product => {
                     const effectivePrice = getEffectivePrice(product);
                     const hasActivePromo = effectivePrice < product.price;
+                    const variablePricing = !!product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0));
                     return (
                         <div
                             key={product.id}
@@ -1594,31 +1627,33 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                             tabIndex={0}
                             onClick={() => setSelectedProduct(product)}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProduct(product); } }}
-                            className="flex items-start gap-3 py-3.5 px-1 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                            className="flex items-start gap-3 py-4 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                         >
                             <div className="flex-1 min-w-0">
                                 <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
                                 {product.description && (
                                     <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
                                 )}
-                                <div className="mt-1.5">
-                                    {hasActivePromo ? (
-                                        <span className="flex items-baseline gap-1.5">
-                                            <span className="text-xs text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
-                                            <span className="text-[var(--brand)] font-bold text-sm">R$ {formatBRL(effectivePrice)}</span>
-                                        </span>
-                                    ) : (
-                                        <span className="text-[var(--brand)] font-bold text-sm">
-                                            {product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0)) ? 'A partir de ' : ''}R$ {formatBRL(product.price)}
-                                        </span>
+                                <div className="mt-1.5 flex items-center gap-2">
+                                    <span className="font-bold text-[15px]" style={{ color: hasActivePromo ? GARCOM_IFOOD_PURPLE : 'var(--text)' }}>
+                                        {variablePricing && (
+                                            <span className="font-normal text-[var(--text-muted)] text-[11px] mr-0.5">A partir de</span>
+                                        )}
+                                        {' '}R$ {formatBRL(effectivePrice)}
+                                    </span>
+                                    {hasActivePromo && (
+                                        <span className="text-[var(--text-muted)] line-through text-[13px]">R$ {formatBRL(product.price)}</span>
                                     )}
                                 </div>
+                                {!!product.prep_time_minutes && (
+                                    <div className="mt-1">
+                                        <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                                            <Clock size={11} /> {product.prep_time_minutes} min
+                                        </span>
+                                    </div>
+                                )}
                             </div>
-                            {product.image_url && (
-                                <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-[var(--surface-2)]">
-                                    <Image src={product.image_url} alt={product.name} fill sizes="64px" className="object-cover" />
-                                </div>
-                            )}
+                            <ProductThumb src={product.image_url} name={product.name} size="row" />
                         </div>
                     );
                 })}
