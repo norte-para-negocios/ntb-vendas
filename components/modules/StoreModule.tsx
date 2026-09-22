@@ -15,8 +15,8 @@ import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupOrder, updateCategoryGroupAssignment } from '@/lib/api';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
 import { startOfflineSync, getSyncStatus, onSyncStatusChange, listarAcoesFalhas, reenviarAcaoFalha, descartarAcaoFalha, descreverAcaoFila, explicarDescarteAcao } from '@/lib/offline/sync';
@@ -6932,6 +6932,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // global substitui o scroll interminável de todas as categorias
     // empilhadas. Ver activeCategoryProducts/searchResults mais abaixo.
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+    const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [activeMenuCategoryId, setActiveMenuCategoryId] = useState<string | null>(null);
     const [productSearchTerm, setProductSearchTerm] = useState('');
 
@@ -7105,9 +7106,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         // includeUnavailable=true: o lojista precisa ver e editar opções
         // marcadas como indisponíveis nesta tela (só o cardápio do cliente
         // filtra `available = true`, ver fetchMenu em lib/api.ts).
-        const { categories: c, products: p } = await fetchMenu(storeId, false, true);
+        const { categories: c, products: p, categoryGroups: g } = await fetchMenu(storeId, false, true);
         setCategories(c);
         setProducts(p);
+        setCategoryGroups(g);
     };
 
     const handleDragEnd = async (result: DropResult) => {
@@ -7497,7 +7499,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // Categorias com pelo menos 1 produto — só essas viram aba (uma categoria
     // vazia não tem o que mostrar na navegação de produtos, mas continua
     // existindo/editável no modal de gestão).
-    const productGroupsWithItems = useMemo(
+    const categoriesWithItems = useMemo(
         () => productGroups.filter(cat => products.some(p => groupIdOf(p) === cat.id)),
         [productGroups, products]
     );
@@ -7506,14 +7508,14 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // se a categoria ativa for apagada ou esvaziar, cai pra próxima
     // automaticamente em vez de mostrar uma aba morta.
     useEffect(() => {
-        if (productGroupsWithItems.length === 0) {
+        if (categoriesWithItems.length === 0) {
             if (activeMenuCategoryId !== null) setActiveMenuCategoryId(null);
             return;
         }
-        if (!activeMenuCategoryId || !productGroupsWithItems.some(c => c.id === activeMenuCategoryId)) {
-            setActiveMenuCategoryId(productGroupsWithItems[0].id);
+        if (!activeMenuCategoryId || !categoriesWithItems.some(c => c.id === activeMenuCategoryId)) {
+            setActiveMenuCategoryId(categoriesWithItems[0].id);
         }
-    }, [productGroupsWithItems, activeMenuCategoryId]);
+    }, [categoriesWithItems, activeMenuCategoryId]);
 
     const isSearchingProducts = productSearchTerm.trim().length > 0;
     const productSearchResults = useMemo(() => {
@@ -7711,9 +7713,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     a barra de pílulas enfileirava mal com 8-10 categorias reais). Só
                     aparecem fora do modo de busca, já que buscar mistura produtos de
                     todas as categorias de propósito. */}
-                {!isSearchingProducts && productGroupsWithItems.length > 0 && (
+                {!isSearchingProducts && categoriesWithItems.length > 0 && (
                     <div className="lg:hidden flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
-                        {productGroupsWithItems.map(cat => {
+                        {categoriesWithItems.map(cat => {
                             const count = products.filter(p => groupIdOf(p) === cat.id).length;
                             const isActive = cat.id === activeMenuCategoryId;
                             return (
@@ -7730,10 +7732,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 )}
 
                 <div className="flex flex-col lg:flex-row gap-6">
-                    {!isSearchingProducts && productGroupsWithItems.length > 0 && (
+                    {!isSearchingProducts && categoriesWithItems.length > 0 && (
                         <nav className="hidden lg:block lg:w-56 lg:shrink-0">
                             <ul className="space-y-0.5">
-                                {productGroupsWithItems.map(cat => {
+                                {categoriesWithItems.filter(cat => !cat.group_id).map(cat => {
                                     const count = products.filter(p => groupIdOf(p) === cat.id).length;
                                     const isActive = cat.id === activeMenuCategoryId;
                                     return (
@@ -7745,6 +7747,32 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                 <span className="truncate tracking-[-0.01em]">{cat.name}</span>
                                                 <span className="text-xs opacity-60 shrink-0">{count}</span>
                                             </button>
+                                        </li>
+                                    );
+                                })}
+                                {categoryGroups.map(group => {
+                                    const catsInGroup = categoriesWithItems.filter(cat => cat.group_id === group.id);
+                                    if (catsInGroup.length === 0) return null;
+                                    return (
+                                        <li key={group.id} className="pt-3 first:pt-0">
+                                            <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{group.name}</p>
+                                            <ul className="space-y-0.5">
+                                                {catsInGroup.map(cat => {
+                                                    const count = products.filter(p => groupIdOf(p) === cat.id).length;
+                                                    const isActive = cat.id === activeMenuCategoryId;
+                                                    return (
+                                                        <li key={cat.id}>
+                                                            <button
+                                                                onClick={() => setActiveMenuCategoryId(cat.id)}
+                                                                className={`w-full flex items-center justify-between gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${isActive ? 'border-[var(--brand)] text-[var(--text)] font-bold bg-[var(--surface-2)]/50' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]'}`}
+                                                            >
+                                                                <span className="truncate tracking-[-0.01em]">{cat.name}</span>
+                                                                <span className="text-xs opacity-60 shrink-0">{count}</span>
+                                                            </button>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
                                         </li>
                                     );
                                 })}
