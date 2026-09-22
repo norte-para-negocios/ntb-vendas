@@ -6925,6 +6925,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [newCatName, setNewCatName] = useState('');
+    const [newGroupName, setNewGroupName] = useState('');
 
     // Redesign da navegação do cardápio (2026-09-04, pedido direto do dono):
     // categorias viram um modal de gestão à parte + abas horizontais pra
@@ -7197,6 +7198,20 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     loadMenu();
                 }
             }
+        } else if (type === 'category_group') {
+            const newGroups = [...categoryGroups];
+            const [moved] = newGroups.splice(source.index, 1);
+            newGroups.splice(destination.index, 0, moved);
+
+            const updatedGroups = newGroups.map((g, index) => ({ ...g, order: index + 1 }));
+            setCategoryGroups(updatedGroups);
+
+            try {
+                await updateCategoryGroupOrder(updatedGroups.map(g => ({ id: g.id, order: g.order })));
+            } catch (e) {
+                console.error("Error updating category group order", e);
+                loadMenu();
+            }
         }
     };
 
@@ -7212,6 +7227,30 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const handleDeleteCategory = async (id: string) => {
         if (await confirm({ message: 'Excluir categoria? Produtos nela podem ficar órfãos.', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteCategory(id);
+            loadMenu();
+        }
+    };
+
+    const handleAddCategoryGroup = async () => {
+        if (!newGroupName) return;
+        await createCategoryGroup(storeId, newGroupName);
+        setNewGroupName('');
+        loadMenu();
+    };
+
+    const handleDeleteCategoryGroup = async (id: string) => {
+        if (await confirm({ message: 'Excluir grupo? As categorias dentro dele ficam sem grupo (não são apagadas).', variant: 'danger', confirmLabel: 'Excluir' })) {
+            await deleteCategoryGroup(id);
+            loadMenu();
+        }
+    };
+
+    const handleChangeCategoryGroup = async (categoryId: string, groupId: string | null) => {
+        setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, group_id: groupId } : c));
+        try {
+            await updateCategoryGroupAssignment(categoryId, groupId);
+        } catch (e) {
+            console.error('Error updating category group assignment', e);
             loadMenu();
         }
     };
@@ -7861,53 +7900,103 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 separado da navegação de produtos acima (pedido do dono,
                 2026-09-04: a tela principal era "um monte de chip" antes disso). */}
             <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Gerenciar categorias">
-                <div className="space-y-4">
-                    <div className="flex gap-2">
-                        <Input placeholder="Nova Categoria" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
-                        <Button onClick={handleAddCategory}><Plus size={20}/></Button>
-                    </div>
-                    <DragDropContext onDragEnd={handleDragEnd}>
-                        <Droppable droppableId="categories" direction="horizontal" type="category">
-                            {(provided) => (
-                                <div
-                                    className="flex flex-wrap gap-2"
-                                    {...provided.droppableProps}
-                                    ref={provided.innerRef}
-                                >
-                                    {categories.map((cat, index) => {
-                                        const scheduleLabel = formatScheduleLabel(cat);
-                                        return (
-                                        <Draggable key={cat.id} draggableId={cat.id} index={index}>
-                                            {(provided, snapshot) => (
-                                                <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.draggableProps}
-                                                    className={`bg-[var(--surface-2)] px-3 py-1.5 rounded-lg flex items-center gap-2 group ${snapshot.isDragging ? 'shadow-md ring-2 ring-[var(--brand)] bg-[var(--surface)]' : ''}`}
-                                                >
-                                                    <div {...provided.dragHandleProps} className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-grab active:cursor-grabbing">
-                                                        <GripVertical size={16} />
+                <div className="space-y-5">
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Grupos (opcional)</p>
+                        <div className="flex gap-2 mb-2">
+                            <Input placeholder="Novo Grupo (ex.: Bebidas)" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+                            <Button onClick={handleAddCategoryGroup}><Plus size={20}/></Button>
+                        </div>
+                        <DragDropContext onDragEnd={handleDragEnd}>
+                            <Droppable droppableId="category_groups" direction="horizontal" type="category_group">
+                                {(provided) => (
+                                    <div className="flex flex-wrap gap-2" {...provided.droppableProps} ref={provided.innerRef}>
+                                        {categoryGroups.map((g, index) => (
+                                            <Draggable key={g.id} draggableId={g.id} index={index}>
+                                                {(provided, snapshot) => (
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.draggableProps}
+                                                        className={`bg-[var(--surface-2)] px-3 py-1.5 rounded-lg flex items-center gap-2 group ${snapshot.isDragging ? 'shadow-md ring-2 ring-[var(--brand)] bg-[var(--surface)]' : ''}`}
+                                                    >
+                                                        <div {...provided.dragHandleProps} className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-grab active:cursor-grabbing">
+                                                            <GripVertical size={16} />
+                                                        </div>
+                                                        <span className="font-bold text-[var(--text)]">{g.name}</span>
+                                                        <button onClick={() => handleDeleteCategoryGroup(g.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
+                                                            <X size={14}/>
+                                                        </button>
                                                     </div>
-                                                    <span className="font-bold text-[var(--text)]">{cat.name}</span>
-                                                    {scheduleLabel && (
-                                                        <Badge color="bg-[var(--info)]/10 text-[var(--info)]">{scheduleLabel}</Badge>
-                                                    )}
-                                                    <button onClick={() => openScheduleModal(cat)} className="text-[var(--text-muted)]/50 hover:text-[var(--brand)] opacity-0 group-hover:opacity-100 u-motion u-press">
-                                                        <Clock size={14}/>
-                                                    </button>
-                                                    <button onClick={() => handleDeleteCategory(cat.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
-                                                        <X size={14}/>
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </Draggable>
-                                        );
-                                    })}
-                                    {provided.placeholder}
-                                    {categories.length === 0 && <span className="text-[var(--text-muted)] text-sm italic">Nenhuma categoria criada.</span>}
-                                </div>
-                            )}
-                        </Droppable>
-                    </DragDropContext>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
+                                        {categoryGroups.length === 0 && <span className="text-[var(--text-muted)] text-sm italic">Nenhum grupo criado — categorias soltas continuam funcionando normal.</span>}
+                                    </div>
+                                )}
+                            </Droppable>
+                        </DragDropContext>
+                    </div>
+
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Categorias</p>
+                        <div className="flex gap-2 mb-2">
+                            <Input placeholder="Nova Categoria" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+                            <Button onClick={handleAddCategory}><Plus size={20}/></Button>
+                        </div>
+                        <DragDropContext onDragEnd={handleDragEnd}>
+                            <Droppable droppableId="categories" direction="horizontal" type="category">
+                                {(provided) => (
+                                    <div
+                                        className="flex flex-wrap gap-2"
+                                        {...provided.droppableProps}
+                                        ref={provided.innerRef}
+                                    >
+                                        {categories.map((cat, index) => {
+                                            const scheduleLabel = formatScheduleLabel(cat);
+                                            return (
+                                            <Draggable key={cat.id} draggableId={cat.id} index={index}>
+                                                {(provided, snapshot) => (
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.draggableProps}
+                                                        className={`bg-[var(--surface-2)] px-3 py-1.5 rounded-lg flex items-center gap-2 group ${snapshot.isDragging ? 'shadow-md ring-2 ring-[var(--brand)] bg-[var(--surface)]' : ''}`}
+                                                    >
+                                                        <div {...provided.dragHandleProps} className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-grab active:cursor-grabbing">
+                                                            <GripVertical size={16} />
+                                                        </div>
+                                                        <span className="font-bold text-[var(--text)]">{cat.name}</span>
+                                                        {categoryGroups.length > 0 && (
+                                                            <select
+                                                                value={cat.group_id || ''}
+                                                                onChange={e => handleChangeCategoryGroup(cat.id, e.target.value || null)}
+                                                                className="text-xs bg-[var(--surface)] border border-[var(--border)] rounded px-1.5 py-1 text-[var(--text-muted)]"
+                                                            >
+                                                                <option value="">Sem grupo</option>
+                                                                {categoryGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                                            </select>
+                                                        )}
+                                                        {scheduleLabel && (
+                                                            <Badge color="bg-[var(--info)]/10 text-[var(--info)]">{scheduleLabel}</Badge>
+                                                        )}
+                                                        <button onClick={() => openScheduleModal(cat)} className="text-[var(--text-muted)]/50 hover:text-[var(--brand)] opacity-0 group-hover:opacity-100 u-motion u-press">
+                                                            <Clock size={14}/>
+                                                        </button>
+                                                        <button onClick={() => handleDeleteCategory(cat.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
+                                                            <X size={14}/>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                            );
+                                        })}
+                                        {provided.placeholder}
+                                        {categories.length === 0 && <span className="text-[var(--text-muted)] text-sm italic">Nenhuma categoria criada.</span>}
+                                    </div>
+                                )}
+                            </Droppable>
+                        </DragDropContext>
+                    </div>
                 </div>
             </Modal>
 
