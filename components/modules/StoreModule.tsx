@@ -7645,7 +7645,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             </Modal>
 
             {/* PRODUCT MODAL */}
-            <Modal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} title={editingProduct ? 'Editar Produto' : 'Novo Produto'}>
+            {/* size="lg" (2026-09-22, pedido direto): no tamanho padrão (sm,
+                448px) as listas de opção (Sabor 1/2 de pizza, 15+ linhas com
+                nome+preço+código Omie+disponível cada) ficavam espremidas.
+                Mesmo teto (~85vw/1100px) já usado no modal "Mesa X". */}
+            <Modal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} title={editingProduct ? 'Editar Produto' : 'Novo Produto'} size="lg">
                 <div className="space-y-4">
                     <div className="flex gap-4 items-center">
                          <div className="w-24 h-24 bg-[var(--surface-2)] rounded-lg border-2 border-dashed border-[var(--border)] flex items-center justify-center overflow-hidden relative">
