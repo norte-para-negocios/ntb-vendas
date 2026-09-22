@@ -181,6 +181,12 @@ export interface ProductOption {
   price_delta: number;
   available: boolean; // migration 017 — "acabou o Catupiry" sem apagar a opcao
   order: number;
+  // Integração ntb-vendas -> ntb-estoque (migration 026), mesmo campo já
+  // tipado em `Product` — coluna existe desde sempre em `product_options`
+  // e é gravada corretamente por `syncProductOptionGroups`, mas nunca tinha
+  // sido lida de volta por `fetchMenu` nem exposta no editor (achado real
+  // 2026-09-22: "cadê o código do omie em cada variação").
+  omie_codigo?: string | null;
 }
 
 export interface ProductOptionGroup {

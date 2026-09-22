@@ -6660,7 +6660,16 @@ const CaixaView: React.FC<{
 const UNCATEGORIZED_ID = '__uncategorized__';
 const groupIdOf = (p: Product) => p.category_id ?? UNCATEGORIZED_ID;
 
-interface DraftOption { tempId: string; name: string; price_delta: string; available: boolean }
+// omie_codigo (2026-09-22, achado real): o formulário nunca lia nem
+// mandava esse campo de volta — `groupsToSave` (handleSaveProduct)
+// montava cada opção sem `omie_codigo`, e `syncProductOptionGroups`
+// (lib/api.ts) faz `o.omie_codigo ?? null`, então TODO "Salvar Produto"
+// num produto com grupo de opção apagava silenciosamente o código Omie
+// de cada opção — sem erro nenhum, sem aviso. Só não tinha estourado
+// ainda porque nenhum produto com sabor (Pizza Arretada etc.) tinha sido
+// resalvo pela tela desde que os códigos foram gravados via SQL em
+// 2026-08-27. Corrigido carregando e devolvendo o campo.
+interface DraftOption { tempId: string; name: string; price_delta: string; available: boolean; omie_codigo: string }
 interface DraftOptionGroup {
     tempId: string; name: string; type: 'single' | 'multiple'; required: boolean;
     // min_select/max_select ficam como string no rascunho (mesmo padrão de
@@ -6674,7 +6683,7 @@ const toDraftGroups = (groups?: Product['option_groups']): DraftOptionGroup[] =>
         tempId: g.id, name: g.name, type: g.type, required: g.required,
         min_select: g.min_select != null ? g.min_select.toString() : '',
         max_select: g.max_select != null ? g.max_select.toString() : '',
-        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString(), available: o.available })),
+        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString(), available: o.available, omie_codigo: o.omie_codigo ?? '' })),
     }));
 
 // Soft-cap client-side (achado de robustez 2026-07-05): evita centenas de
@@ -6857,7 +6866,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             toast.error(`Limite de ${MAX_OPTIONS_PER_GROUP} opções por grupo atingido.`);
             return;
         }
-        setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0', available: true }] } : g));
+        setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0', available: true, omie_codigo: '' }] } : g));
     };
     const updateOption = (groupTempId: string, optTempId: string, patch: Partial<DraftOption>) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.map(o => o.tempId === optTempId ? { ...o, ...patch } : o) } : g));
     const removeOption = (groupTempId: string, optTempId: string) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.filter(o => o.tempId !== optTempId) } : g));
@@ -7165,7 +7174,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     name: g.name.trim(), type: g.type, required: g.required,
                     min_select: g.type === 'multiple' ? parseOptionalInt(g.min_select) : null,
                     max_select: g.type === 'multiple' ? parseOptionalInt(g.max_select) : null,
-                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0, available: o.available })),
+                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0, available: o.available, omie_codigo: o.omie_codigo.trim() || null })),
                 }));
             await syncProductOptionGroups(productId, groupsToSave);
 
@@ -7916,6 +7925,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                     onChange={e => updateOption(group.tempId, opt.tempId, { name: e.target.value })} className="flex-1" />
                                                                 <Input placeholder="+R$" type="number" step="0.01" min="0" value={opt.price_delta}
                                                                     onChange={e => updateOption(group.tempId, opt.tempId, { price_delta: e.target.value })} className="w-24" />
+                                                                {/* Código Omie por opção (2026-09-22, achado real: o formulário
+                                                                    apagava esse campo em silêncio a cada Salvar — ver comentário
+                                                                    de DraftOption acima). Visível e editável aqui; vazio = essa
+                                                                    variação não baixa estoque no Omie ao ser vendida. */}
+                                                                <Input placeholder="Cód. Omie" value={opt.omie_codigo}
+                                                                    onChange={e => updateOption(group.tempId, opt.tempId, { omie_codigo: e.target.value })}
+                                                                    title="Código Omie desta variação — vazio não baixa estoque" className="w-28" />
                                                                 <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                                                                     <input type="checkbox" checked={opt.available} onChange={e => updateOption(group.tempId, opt.tempId, { available: e.target.checked })}/> Disponível
                                                                 </label>

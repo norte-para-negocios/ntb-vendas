@@ -403,7 +403,7 @@ async function fetchOptionGroupsByProduct(storeId: string, includeUnavailable = 
       id: g.id, product_id: g.product_id, name: g.name, type: g.type, required: g.required,
       min_select: g.min_select ?? null, max_select: g.max_select ?? null, order: g.order,
       options: (g.product_options || []).map((o: any) => ({
-        id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), available: o.available, order: o.order,
+        id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), available: o.available, order: o.order, omie_codigo: o.omie_codigo ?? null,
       })),
     });
     groupsByProduct.set(g.product_id, list);
