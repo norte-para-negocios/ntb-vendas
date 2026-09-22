@@ -7706,10 +7706,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
                 </div>
 
-                {/* Abas por categoria — só aparecem fora do modo de busca, já que
-                    buscar mistura produtos de todas as categorias de propósito. */}
+                {/* Categorias — lista lateral editorial em telas largas (lg+), pílulas
+                    horizontais em telas estreitas (redesign 2026-09-22, pedido explícito:
+                    a barra de pílulas enfileirava mal com 8-10 categorias reais). Só
+                    aparecem fora do modo de busca, já que buscar mistura produtos de
+                    todas as categorias de propósito. */}
                 {!isSearchingProducts && productGroupsWithItems.length > 0 && (
-                    <div className="flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
+                    <div className="lg:hidden flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
                         {productGroupsWithItems.map(cat => {
                             const count = products.filter(p => groupIdOf(p) === cat.id).length;
                             const isActive = cat.id === activeMenuCategoryId;
@@ -7726,78 +7729,104 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
                 )}
 
-                <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                        {groupSelectMode && selectedGroupProducts.length >= 2 && (
-                            selectedGroupSameCategory ? (
-                                <Button onClick={openGroupModal} className="!bg-[var(--brand)]">
-                                    Agrupar como variações ({selectedGroupProducts.length})
-                                </Button>
-                            ) : (
-                                <span className="text-xs text-[var(--warn)] font-medium">Selecione produtos da mesma categoria</span>
-                            )
-                        )}
-                        <Button
-                            variant={groupSelectMode ? 'secondary' : 'outline'}
-                            onClick={() => { setGroupSelectMode(prev => !prev); setSelectedForGroup(new Set()); }}
-                        >
-                            {groupSelectMode ? 'Cancelar seleção' : 'Agrupar variações'}
-                        </Button>
-                    </div>
-                    <Button onClick={() => openProductModal()}><Plus size={18} className="mr-1"/> Novo Produto</Button>
-                </div>
-                {groupSelectMode && (
-                    <p className="text-xs text-[var(--text-muted)] mb-4">
-                        Selecione 2+ produtos parecidos da mesma categoria (ex.: as variações de um prato) pra
-                        juntar num produto só, com um grupo de escolha. Nenhum produto é apagado — os que
-                        virarem variação ficam ocultos do cardápio, com o histórico de venda preservado.
-                    </p>
-                )}
+                <div className="flex flex-col lg:flex-row gap-6">
+                    {!isSearchingProducts && productGroupsWithItems.length > 0 && (
+                        <nav className="hidden lg:block lg:w-56 lg:shrink-0">
+                            <ul className="space-y-0.5">
+                                {productGroupsWithItems.map(cat => {
+                                    const count = products.filter(p => groupIdOf(p) === cat.id).length;
+                                    const isActive = cat.id === activeMenuCategoryId;
+                                    return (
+                                        <li key={cat.id}>
+                                            <button
+                                                onClick={() => setActiveMenuCategoryId(cat.id)}
+                                                className={`w-full flex items-center justify-between gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${isActive ? 'border-[var(--brand)] text-[var(--text)] font-bold bg-[var(--surface-2)]/50' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]'}`}
+                                            >
+                                                <span className="truncate tracking-[-0.01em]">{cat.name}</span>
+                                                <span className="text-xs opacity-60 shrink-0">{count}</span>
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </nav>
+                    )}
 
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={isSearchingProducts ? 'search' : (activeMenuCategoryId || 'empty')}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.15 }}
-                    >
-                        {isSearchingProducts ? (
-                            productSearchResults.length === 0 ? (
-                                <p className="text-sm text-[var(--text-muted)] italic py-8 text-center">Nenhum produto encontrado para &quot;{productSearchTerm}&quot;.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
-                                    {productSearchResults.map(({ product, categoryLabel }) => (
-                                        <React.Fragment key={product.id}>
-                                            {renderProductCard(product, { categoryLabel })}
-                                        </React.Fragment>
-                                    ))}
-                                </div>
-                            )
-                        ) : activeMenuCategoryId ? (
-                            <DragDropContext onDragEnd={handleDragEnd}>
-                                <Droppable droppableId={activeMenuCategoryId} type="product">
-                                    {(provided) => (
-                                        <div
-                                            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start"
-                                            {...provided.droppableProps}
-                                            ref={provided.innerRef}
-                                        >
-                                            {activeCategoryProducts.map((prod, index) => (
-                                                <Draggable key={prod.id} draggableId={prod.id} index={index}>
-                                                    {(dragProvided, dragSnapshot) => renderProductCard(prod, { dragProvided, dragSnapshot })}
-                                                </Draggable>
-                                            ))}
-                                            {provided.placeholder}
-                                        </div>
-                                    )}
-                                </Droppable>
-                            </DragDropContext>
-                        ) : (
-                            <p className="text-sm text-[var(--text-muted)] italic py-8 text-center">Nenhum produto cadastrado ainda. Clique em &quot;Novo Produto&quot; pra começar.</p>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                                {groupSelectMode && selectedGroupProducts.length >= 2 && (
+                                    selectedGroupSameCategory ? (
+                                        <Button onClick={openGroupModal} className="!bg-[var(--brand)]">
+                                            Agrupar como variações ({selectedGroupProducts.length})
+                                        </Button>
+                                    ) : (
+                                        <span className="text-xs text-[var(--warn)] font-medium">Selecione produtos da mesma categoria</span>
+                                    )
+                                )}
+                                <Button
+                                    variant={groupSelectMode ? 'secondary' : 'outline'}
+                                    onClick={() => { setGroupSelectMode(prev => !prev); setSelectedForGroup(new Set()); }}
+                                >
+                                    {groupSelectMode ? 'Cancelar seleção' : 'Agrupar variações'}
+                                </Button>
+                            </div>
+                            <Button onClick={() => openProductModal()}><Plus size={18} className="mr-1"/> Novo Produto</Button>
+                        </div>
+                        {groupSelectMode && (
+                            <p className="text-xs text-[var(--text-muted)] mb-4">
+                                Selecione 2+ produtos parecidos da mesma categoria (ex.: as variações de um prato) pra
+                                juntar num produto só, com um grupo de escolha. Nenhum produto é apagado — os que
+                                virarem variação ficam ocultos do cardápio, com o histórico de venda preservado.
+                            </p>
                         )}
-                    </motion.div>
-                </AnimatePresence>
+
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={isSearchingProducts ? 'search' : (activeMenuCategoryId || 'empty')}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.15 }}
+                            >
+                                {isSearchingProducts ? (
+                                    productSearchResults.length === 0 ? (
+                                        <p className="text-sm text-[var(--text-muted)] italic py-8 text-center">Nenhum produto encontrado para &quot;{productSearchTerm}&quot;.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+                                            {productSearchResults.map(({ product, categoryLabel }) => (
+                                                <React.Fragment key={product.id}>
+                                                    {renderProductCard(product, { categoryLabel })}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
+                                    )
+                                ) : activeMenuCategoryId ? (
+                                    <DragDropContext onDragEnd={handleDragEnd}>
+                                        <Droppable droppableId={activeMenuCategoryId} type="product">
+                                            {(provided) => (
+                                                <div
+                                                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start"
+                                                    {...provided.droppableProps}
+                                                    ref={provided.innerRef}
+                                                >
+                                                    {activeCategoryProducts.map((prod, index) => (
+                                                        <Draggable key={prod.id} draggableId={prod.id} index={index}>
+                                                            {(dragProvided, dragSnapshot) => renderProductCard(prod, { dragProvided, dragSnapshot })}
+                                                        </Draggable>
+                                                    ))}
+                                                    {provided.placeholder}
+                                                </div>
+                                            )}
+                                        </Droppable>
+                                    </DragDropContext>
+                                ) : (
+                                    <p className="text-sm text-[var(--text-muted)] italic py-8 text-center">Nenhum produto cadastrado ainda. Clique em &quot;Novo Produto&quot; pra começar.</p>
+                                )}
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+                </div>
             </section>
 
             {/* MODAL DE GESTÃO DE CATEGORIAS — criar/reordenar/horário/apagar,
