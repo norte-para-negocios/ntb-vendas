@@ -175,6 +175,16 @@ export interface Category {
   available_from?: string | null;
   available_until?: string | null;
   available_days?: number[] | null; // 0=domingo .. 6=sabado
+  // Grupo de categoria (migration 079) — null = categoria solta (1º nível),
+  // como sempre foi.
+  group_id?: string | null;
+}
+
+export interface CategoryGroup {
+  id: string;
+  store_id: string;
+  name: string;
+  order: number;
 }
 
 export interface ProductOption {
