@@ -124,10 +124,14 @@ Respondido pelo Ramon (WhatsApp):
 - **Aceita cadastrar a chave do Omie** na tela do Vendas ("tem que ser seguro"; o estoque já usa chave por loja).
 - **Não há cliente cadastrado**; o cupom é "tipo supermercado": no final pode-se associar CPF/CNPJ (opcional) → precisa de cliente padrão "Consumidor Final" no Omie e uso do CPF/CNPJ quando informado (testar `cAcaoCliente`/`idCliente`).
 
-Ainda abertas (perguntadas ao Ramon em 2026-09-21):
-1. "Faturamento" = lançamento no financeiro (conta a receber, forma de pagamento, conta corrente) ou nota de saída?
-2. A partir de que dia a JS Sistemas para de emitir e de mandar ao Omie?
-3. Pode-se criar o cliente "Consumidor Final" no Omie?
+Respostas da 2ª rodada (WhatsApp, 2026-09-22):
+- **(1) Faturamento**: confirmado, todos os dados vão pro Omie. Ramon vai mandar amanhã a tela de como a JS Sistemas alimenta hoje ("amanhã lhe envio a tela atual alimenta hj pelo js") — **aguardando esse material** antes de decidir o formato exato do lançamento (conta a receber vs. só nota de saída).
+- **(2) Corte JS → Norte**: confirmado, é total. "Sim, o norte entra e o JS sai" — sem janela de dupla emissão pra se preocupar, o interruptor liga no dia do corte e a JS já não estará mais rodando.
+- **(3) Cliente "Consumidor Final"**: Ramon não respondeu diretamente — mandou pesquisar como a JS faz isso hoje ("Verifique como a JS faz hj") em vez de decidir agora. Ação: investigar o comportamento da JS Sistemas (quando a tela prometida chegar, ou perguntando direto) antes de desenhar o cadastro desse cliente no Omie.
+
+Ainda abertas:
+1. Formato exato do lançamento financeiro — depende da tela que a JS envia.
+2. Como a JS trata hoje o cliente "Consumidor Final"/CPF-CNPJ opcional.
 
 ## 10b. Perguntas antigas (superadas acima)
 

@@ -835,7 +835,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     onClick={() => { setShowProfileModal(true); setIsMobileMenuOpen(false); }}
                     className="flex items-center gap-3 px-4 py-3 border-b border-white/10 hover:bg-white/8 u-motion text-left"
                 >
-                    <div className="w-9 h-9 shrink-0"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
+                    <div className="w-12 h-12 shrink-0"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
                     <div className="min-w-0 flex-1">
                         <p className="text-[13px] font-semibold text-white truncate">{user.name}</p>
                         <p className="text-[11px] text-white/40">Meu Perfil</p>
@@ -922,9 +922,9 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             type="button"
             onClick={() => setShowProfileModal(true)}
             className={`flex items-center px-3 py-3 border-b border-white/8 hover:bg-white/8 u-motion text-left ${isCollapsed ? 'justify-center' : 'gap-3'}`}
-            title="Meu Perfil"
+            title={isCollapsed ? 'Meu Perfil' : undefined}
         >
-            <div className="w-9 h-9 shrink-0"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
+            <div className="w-12 h-12 shrink-0"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
             {!isCollapsed && (
                 <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-semibold text-white truncate">{user.name}</p>
@@ -6395,7 +6395,7 @@ const CaixaView: React.FC<{
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP}>
             <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 shrink-0"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" /></div>
+                    <div className="w-16 h-16 shrink-0"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" /></div>
                     <div className="min-w-0">
                         <p className="text-base font-bold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
                         <p className={`text-xs ${turnoEsquecido ? 'font-bold text-[var(--warn)]' : 'text-[var(--text-muted)]'}`}>
