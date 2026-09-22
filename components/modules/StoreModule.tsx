@@ -1611,8 +1611,12 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 presente — ProductThumb, mesmo componente compartilhado —,
                 preço em --text/roxo de promoção, tempo de preparo). 2026-09-22:
                 a 1ª versão (fc08e6f) tinha só nome+preço em azul, sem
-                medalhão nem tempo — ainda não era "como o cliente vê". */}
-            <div className="flex-1 overflow-y-auto py-1 max-h-[60vh]">
+                medalhão nem tempo — ainda não era "como o cliente vê".
+                Teto de altura (`max-h-[60vh]`) removido no mesmo dia: agora
+                que "Adicionar Pedido" é tela cheia (não modal pequeno), o
+                pai já dá altura real via flex — um teto de viewport aqui
+                sobraria espaço vazio embaixo em telas altas. */}
+            <div className="flex-1 min-h-0 overflow-y-auto py-1">
                 {filteredProducts.length === 0 && (
                     <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum produto encontrado.</p>
                 )}
@@ -3533,7 +3537,13 @@ NOTIFY pgrst, 'reload schema';`;
             </div>
 
             {/* MODAL DA MESA */}
-            <Modal isOpen={!!selectedTable} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number} - ${selectedTable?.current_host_name || 'Lojista'}`} size="lg">
+            {/* 2026-09-22: "Adicionar Pedido" (showMenuMode) saiu deste modal
+                pequeno pra virar tela cheia própria (ver bloco logo abaixo do
+                fechamento deste Modal) — pedido explícito do dono: cardápio
+                do garçom tem que ocupar a tela toda, não uma caixa central.
+                Este modal continua isOpen só pras Views 1/2 (ações rápidas e
+                comanda completa). */}
+            <Modal isOpen={!!selectedTable && !showMenuMode} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number} - ${selectedTable?.current_host_name || 'Lojista'}`} size="lg">
                 <div className="space-y-4">
                     <div className="flex justify-between p-3 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] items-center">
                         <span className="text-[var(--text-muted)] font-medium text-sm">Status Atual</span>
@@ -3551,7 +3561,7 @@ NOTIFY pgrst, 'reload schema';`;
                         </div>
                     </div>
 
-                    {!showFullBill && !showMenuMode ? (
+                    {!showFullBill ? (
                         <>
                              {/* VIEW 1: AÇÕES RÁPIDAS */}
                              {selectedTable?.waiter_requested && (
@@ -3662,73 +3672,6 @@ NOTIFY pgrst, 'reload schema';`;
                                 </Button>
                             )}
                         </>
-                    ) : showMenuMode ? (
-                        <div className="animate-slide-up h-full">
-                            {/* VIEW 3: ADICIONAR ITENS (MENU) */}
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-bold text-[var(--text)] flex items-center gap-2"><UtensilsCrossed size={18}/> Cardápio</h3>
-                                <Button variant="ghost" size="sm" onClick={() => setShowMenuMode(false)} className="underline">Voltar</Button>
-                            </div>
-                            {/* Task 8 (2026-08-30): max-h sozinho não dá altura definida pro
-                                filho (StoreTableMenu usa h-full na raiz) sem flex — sem
-                                flex flex-col aqui, o scroll interno nunca ativa e um cardápio
-                                grande (ex.: Sertão, ~110 produtos) vazaria pra fora da caixa em
-                                vez de respeitar o teto de 70vh. overflow-hidden garante que,
-                                se algo escapar mesmo assim, fica contido, não vaza visualmente. */}
-                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-3 items-start">
-                            <div className="border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-2)] max-h-[70vh] flex flex-col overflow-hidden">
-                                <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
-                            </div>
-                            {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
-                                mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
-                                getTableSummary da comanda completa — atualiza sozinho
-                                (otimista no handleAddItem + Realtime). Scroll próprio. */}
-                            {(() => {
-                                const resumo = selectedTable ? getTableSummary(selectedTable.id) : null;
-                                const itens = resumo?.allItems || [];
-                                return (
-                                    <div className="border border-[var(--border)] rounded-xl bg-[var(--surface)] flex flex-col max-h-[70vh] overflow-hidden">
-                                        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-2)]">
-                                            <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Receipt size={16}/> Já pedido nesta mesa</h4>
-                                            <span className="text-xs text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto min-h-[120px]">
-                                            {itens.length === 0 ? (
-                                                <div className="p-6 text-center text-sm text-[var(--text-muted)]">Nenhum item lançado ainda.</div>
-                                            ) : itens.map(item => (
-                                                <div key={item.id} className="flex items-start justify-between gap-2 p-3 border-b border-[var(--border)] text-sm">
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="font-bold text-[var(--text)] leading-tight">
-                                                            <span className="text-xs text-[var(--text-muted)] mr-1">x{item.quantity}</span>
-                                                            {getOrderItemDisplayName(item)}
-                                                        </div>
-                                                        <div className="text-xs text-[var(--text-muted)] mt-0.5">
-                                                            R$ {formatBRL(item.price_at_time * item.quantity)}
-                                                            {orderFlow !== 'direct_print' && (
-                                                                <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteItem(item.id)}
-                                                        className="text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press flex-shrink-0"
-                                                        title="Cancelar item"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="p-3 border-t border-[var(--border)] bg-[var(--surface-2)] flex items-center justify-between">
-                                            <span className="font-bold text-[var(--text)]">Total</span>
-                                            <span className="font-black text-lg text-[var(--brand)]">R$ {formatBRL(resumo?.total || 0)}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                            </div>
-                        </div>
                     ) : (
                         <div className="animate-slide-up">
                             {/* VIEW 2: COMANDA COMPLETA */}
@@ -3871,6 +3814,81 @@ NOTIFY pgrst, 'reload schema';`;
                     )}
                 </div>
             </Modal>
+
+            {/* "Adicionar Pedido" em tela cheia (2026-09-22, pedido explícito
+                do dono: "quero na tela TODA, botão de sair, 30% da tela na
+                direita como a mesa está, o resto pra escolher no cardápio") —
+                não é mais um Modal pequeno. `fixed inset-0` cobre a viewport
+                inteira por cima de tudo (inclusive da sidebar), com botão de
+                sair explícito na barra superior. Coluna direita ("Já pedido
+                nesta mesa") em `lg:w-[30%]` de verdade (fração da tela, não
+                um teto de px como antes) e o cardápio ocupa o resto. Empilha
+                (cardápio em cima, resumo embaixo) em telas estreitas — 30%
+                de um celular quebraria o layout do resumo. */}
+            {showMenuMode && selectedTable && (() => {
+                const resumo = getTableSummary(selectedTable.id);
+                const itens = resumo.allItems || [];
+                return (
+                    <div className="fixed inset-0 z-50 bg-[var(--surface)] flex flex-col">
+                        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)]">
+                            <h3 className="font-bold text-[var(--text)] flex items-center gap-2 min-w-0">
+                                <UtensilsCrossed size={18} className="flex-shrink-0" />
+                                <span className="truncate">Mesa {selectedTable.number} — Adicionar Pedido</span>
+                            </h3>
+                            <Button variant="secondary" size="sm" onClick={() => setShowMenuMode(false)} className="flex-shrink-0">
+                                <X size={16} className="mr-1.5" /> Sair
+                            </Button>
+                        </div>
+                        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+                            <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden p-3">
+                                <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
+                            </div>
+                            {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
+                                mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
+                                getTableSummary da comanda completa — atualiza sozinho
+                                (otimista no handleAddItem + Realtime). */}
+                            <div className="lg:w-[30%] lg:min-w-[300px] lg:max-w-[420px] flex-shrink-0 border-t lg:border-t-0 lg:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
+                                <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface)] flex-shrink-0">
+                                    <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Receipt size={16}/> Já pedido nesta mesa</h4>
+                                    <span className="text-xs text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
+                                </div>
+                                <div className="flex-1 overflow-y-auto min-h-[120px]">
+                                    {itens.length === 0 ? (
+                                        <div className="p-6 text-center text-sm text-[var(--text-muted)]">Nenhum item lançado ainda.</div>
+                                    ) : itens.map(item => (
+                                        <div key={item.id} className="flex items-start justify-between gap-2 p-3 border-b border-[var(--border)] text-sm bg-[var(--surface)]">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="font-bold text-[var(--text)] leading-tight">
+                                                    <span className="text-xs text-[var(--text-muted)] mr-1">x{item.quantity}</span>
+                                                    {getOrderItemDisplayName(item)}
+                                                </div>
+                                                <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                                                    R$ {formatBRL(item.price_at_time * item.quantity)}
+                                                    {orderFlow !== 'direct_print' && (
+                                                        <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteItem(item.id)}
+                                                className="text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press flex-shrink-0"
+                                                title="Cancelar item"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between flex-shrink-0">
+                                    <span className="font-bold text-[var(--text)]">Total</span>
+                                    <span className="font-black text-lg text-[var(--brand)]">R$ {formatBRL(resumo.total || 0)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* MOVE TABLE MODAL */}
             <Modal isOpen={showMoveTableModal} onClose={() => setShowMoveTableModal(false)} title="Trocar de Mesa">
