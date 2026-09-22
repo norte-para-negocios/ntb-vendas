@@ -1814,6 +1814,9 @@ const uploadToCloudinary = async (file: File): Promise<string> => {
 export const uploadStoreLogo = async (file: File): Promise<string> => uploadToCloudinary(file);
 export const uploadStoreCover = async (file: File): Promise<string> => uploadToCloudinary(file);
 export const uploadProductImage = async (file: File): Promise<string> => uploadToCloudinary(file);
+// "Meu Perfil" (migration 078) — mesmo mecanismo de upload de sempre, só um
+// nome próprio pra deixar claro o que está sendo enviado nos call sites.
+export const uploadUserPhoto = async (file: File): Promise<string> => uploadToCloudinary(file);
 
 // Certificado digital fiscal: NÃO usa Cloudinary (é público/sem controle de
 // acesso). Vai pro bucket privado `store-certificates`, e o upload/remoção

@@ -147,6 +147,9 @@ export interface StoreUser {
   // isTableInJurisdiction) e' generico por role owner/universal, nao por
   // este campo estar presente ou nao.
   assigned_table_ids?: string[] | null;
+  // "Meu Perfil" (migration 078, 2026-09-22) — foto do operador, mostrada no
+  // medalhão do Caixa (ProductThumb já cai pra iniciais quando ausente).
+  photo_url?: string | null;
 }
 
 export interface Table {

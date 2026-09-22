@@ -15,7 +15,7 @@ import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop } from '@/lib/api';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -672,9 +672,12 @@ const SyncStatusBadge: React.FC<{ status: { pending: number; failed: number } }>
   );
 };
 
-const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store } }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user }) => {
+const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store }, onUserUpdate?: (patch: Partial<StoreUser>) => void }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user, onUserUpdate }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // "Meu Perfil" (migration 078, 2026-09-22: "um local de meu login pra
+  // trocar, colocar seu nome, ver seu histórico, colocar sua fotinha").
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const notifications = useStoreNotifications(user.store.id);
 
   // "Procurar atualização" (2026-09-13, cobrança direta do dono: "nem
@@ -790,6 +793,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const bottomNavTabs = visibleTabs.filter(item => ['caixa', 'tables', 'counter', 'kitchen', 'bar'].includes(item.id));
 
   return (
+    <>
     <div className={`min-h-screen bg-[var(--bg)] pb-20 md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
       <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
 
@@ -826,6 +830,17 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                         </button>
                     </div>
                 </div>
+                <button
+                    type="button"
+                    onClick={() => { setShowProfileModal(true); setIsMobileMenuOpen(false); }}
+                    className="flex items-center gap-3 px-4 py-3 border-b border-white/10 hover:bg-white/8 u-motion text-left"
+                >
+                    <div className="w-9 h-9 shrink-0"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-white truncate">{user.name}</p>
+                        <p className="text-[11px] text-white/40">Meu Perfil</p>
+                    </div>
+                </button>
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
                     {visibleTabs.map((item) => (
                         <button
@@ -902,7 +917,22 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
-        
+
+        <button
+            type="button"
+            onClick={() => setShowProfileModal(true)}
+            className={`flex items-center px-3 py-3 border-b border-white/8 hover:bg-white/8 u-motion text-left ${isCollapsed ? 'justify-center' : 'gap-3'}`}
+            title="Meu Perfil"
+        >
+            <div className="w-9 h-9 shrink-0"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
+            {!isCollapsed && (
+                <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-white truncate">{user.name}</p>
+                    <p className="text-[11px] text-white/40">Meu Perfil</p>
+                </div>
+            )}
+        </button>
+
         <nav className={`flex-1 p-3 space-y-1 overflow-y-auto no-scrollbar`}>
           {visibleTabs.map((item) => (
             <button
@@ -1060,7 +1090,132 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
       {children}
     </main>
   </div>
+  <MyProfileModal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)} user={user} onUserUpdate={onUserUpdate} />
+  </>
 );
+};
+
+// "Meu Perfil" (migration 078, 2026-09-22) — nome + foto do operador
+// (medalhão do Caixa) + histórico dos próprios turnos de caixa. Componente
+// separado de StoreLayout (que já é grande) por responsabilidade única.
+const MyProfileModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    user: StoreUser & { store: Store };
+    onUserUpdate?: (patch: Partial<StoreUser>) => void;
+}> = ({ isOpen, onClose, user, onUserUpdate }) => {
+    const [name, setName] = useState(user.name);
+    const [photoUrl, setPhotoUrl] = useState(user.photo_url ?? null);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const [history, setHistory] = useState<CashShiftHistoryRow[] | null>(null);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+    // Reabre sempre limpo com o valor atual (evita mostrar rascunho de uma
+    // abertura anterior cancelada) e carrega o histórico só quando abre —
+    // não é dado que muda a cada segundo, não precisa de Realtime/polling.
+    useEffect(() => {
+        if (!isOpen) return;
+        setName(user.name);
+        setPhotoUrl(user.photo_url ?? null);
+        setIsLoadingHistory(true);
+        // Meu histórico: fetchCashShiftsHistory devolve a loja inteira (só
+        // tem `operator_name`, sem id) — filtra pelo nome deste operador.
+        // Mesmo critério já usado no resto do Caixa pra identificar quem é
+        // quem sem uma FK própria nessa leitura.
+        fetchCashShiftsHistory(user.store.id, 50)
+            .then(rows => setHistory(rows.filter(r => r.operator_name === user.name)))
+            .catch(() => setHistory([]))
+            .finally(() => setIsLoadingHistory(false));
+    }, [isOpen, user.id, user.name, user.store.id, user.photo_url]);
+
+    const handlePickPhoto = () => fileInputRef.current?.click();
+    const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setIsUploadingPhoto(true);
+        try {
+            const url = await uploadUserPhoto(file);
+            setPhotoUrl(url);
+        } catch (err: any) {
+            toast.error('Erro ao enviar a foto: ' + err.message);
+        } finally {
+            setIsUploadingPhoto(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleSave = async () => {
+        if (!name.trim()) { toast.error('Digite um nome.'); return; }
+        setIsSaving(true);
+        try {
+            await updateStoreTeamMember(user.id, { name: name.trim() });
+            // photo_url passa reto (nunca some se undefined) — RPC só grava
+            // quando a chave existe no jsonb (ver migration 078), então o
+            // supabase-js precisa mandar mesmo quando é a mesma string.
+            await supabase.rpc('update_store_user_secure', { p_user_id: user.id, p_updates: { photo_url: photoUrl } });
+            onUserUpdate?.({ name: name.trim(), photo_url: photoUrl });
+            toast.success('Perfil atualizado.');
+            onClose();
+        } catch (err: any) {
+            toast.error('Erro ao salvar: ' + err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Meu Perfil">
+            <div className="space-y-5">
+                <div className="flex items-center gap-4">
+                    <button type="button" onClick={handlePickPhoto} className="relative shrink-0 u-motion u-press-sm" title="Trocar foto">
+                        <div className="w-16 h-16"><ProductThumb src={photoUrl} name={name || user.name} size="store" /></div>
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[var(--brand)] text-white flex items-center justify-center border-2 border-[var(--surface)]">
+                            {isUploadingPhoto ? <RefreshCw size={12} className="animate-spin" /> : <Camera size={12} />}
+                        </div>
+                    </button>
+                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    <div className="flex-1 min-w-0">
+                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Nome</label>
+                        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Seu nome" />
+                    </div>
+                </div>
+
+                <Button onClick={handleSave} isLoading={isSaving} disabled={isUploadingPhoto} className="w-full">
+                    Salvar
+                </Button>
+
+                <div className="pt-2 border-t border-[var(--border)]">
+                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Meu histórico de turnos de caixa</h4>
+                    {isLoadingHistory ? (
+                        <p className="text-sm text-[var(--text-muted)] py-4 text-center">Carregando...</p>
+                    ) : !history || history.length === 0 ? (
+                        <p className="text-sm text-[var(--text-muted)] py-4 text-center">Nenhum turno de caixa seu ainda.</p>
+                    ) : (
+                        <div className="max-h-64 overflow-y-auto space-y-1.5">
+                            {history.map(h => (
+                                <div key={h.id} className="flex items-center justify-between gap-2 p-2.5 bg-[var(--surface-2)] rounded-lg text-sm">
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-[var(--text)]">
+                                            {new Date(h.opened_at).toLocaleDateString('pt-BR')}
+                                        </p>
+                                        <p className="text-xs text-[var(--text-muted)]">
+                                            {h.status === 'open' ? 'Em aberto' : `Diferença: R$ ${formatBRL(h.difference ?? 0)}`}
+                                        </p>
+                                    </div>
+                                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
+                                        {h.status === 'open' ? 'Aberto' : 'Fechado'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </Modal>
+    );
 };
 
 // --- SUB-MODULE: KDS (Kitchen / Bar) ---
@@ -6134,7 +6289,7 @@ const CaixaView: React.FC<{
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP} className="max-w-md mx-auto py-8">
                 <Card className="p-6 text-center border-2 border-[var(--warn)]/30 bg-[var(--warn)]/5">
                     <div className="mx-auto mb-3 w-16 h-16">
-                        <ProductThumb name={loggedUser.name} size="store" />
+                        <ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" />
                     </div>
                     <h3 className="text-lg font-bold text-[var(--text)] mb-1 tracking-[-0.01em]">Abrir caixa, {primeiroNome}</h3>
                     <p className="text-sm text-[var(--text-muted)] mb-6">
@@ -6240,7 +6395,7 @@ const CaixaView: React.FC<{
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP}>
             <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 shrink-0"><ProductThumb name={loggedUser.name} size="store" /></div>
+                    <div className="w-12 h-12 shrink-0"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" /></div>
                     <div className="min-w-0">
                         <p className="text-base font-bold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
                         <p className={`text-xs ${turnoEsquecido ? 'font-bold text-[var(--warn)]' : 'text-[var(--text-muted)]'}`}>
@@ -6284,19 +6439,33 @@ const CaixaView: React.FC<{
                             {rushMode ? '⚡ Modo Rush ligado' : 'Modo Rush'}
                         </button>
                     </div>
-                    <div className={`grid gap-2 ${rushMode ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'}`}>
+                    {/* Liquid glass (2026-09-22, pedido direto: "estilo Apple, liquid
+                        glass, bonito"): backdrop-blur + tinta translúcida um
+                        pouco mais forte que antes (5%→12%) pra sobreviver ao
+                        blur sem ficar chapado, sombra mais funda (material
+                        "mais grosso" — apple-design §12) e um traço claro no
+                        topo (luz batendo no vidro). Cor semântica por urgência
+                        (ok/warn/err conforme minutos ocupados) continua
+                        intacta — é informação, não decoração. */}
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.97 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={SPRING_TAP}
+                        className={`grid gap-2 ${rushMode ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'}`}
+                    >
                         {occupiedTables.map(t => {
                             const colorClass = t.minutesOccupied >= 60
-                                ? 'border-[var(--err)]/40 bg-[var(--err)]/5 text-[var(--err)]'
+                                ? 'border-[var(--err)]/30 bg-[var(--err)]/12 text-[var(--err)]'
                                 : t.minutesOccupied >= 30
-                                    ? 'border-[var(--warn)]/40 bg-[var(--warn)]/5 text-[var(--warn)]'
-                                    : 'border-[var(--ok)]/40 bg-[var(--ok)]/5 text-[var(--ok)]';
+                                    ? 'border-[var(--warn)]/30 bg-[var(--warn)]/12 text-[var(--warn)]'
+                                    : 'border-[var(--ok)]/30 bg-[var(--ok)]/12 text-[var(--ok)]';
+                            const glass = 'backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.08)] border-t-white/40';
                             if (rushMode) {
                                 return (
                                     <button
                                         key={t.id}
                                         onClick={() => onOpenTablePayment(t.id)}
-                                        className={`text-center p-2 rounded-xl border u-motion u-press-sm ${colorClass}`}
+                                        className={`text-center p-2 rounded-xl border border-t-2 u-motion u-press-sm ${colorClass} ${glass}`}
                                     >
                                         <span className="block font-bold text-[var(--text)]">Mesa {t.number}</span>
                                         <span className="block text-xs font-bold text-[var(--text)]">R$ {formatBRL(t.total)}</span>
@@ -6304,7 +6473,7 @@ const CaixaView: React.FC<{
                                 );
                             }
                             return (
-                                <div key={t.id} className={`rounded-xl border overflow-hidden ${colorClass}`}>
+                                <div key={t.id} className={`rounded-xl border border-t-2 overflow-hidden ${colorClass} ${glass}`}>
                                     <button
                                         onClick={() => onOpenTablePayment(t.id)}
                                         className="w-full text-left p-3 u-motion u-press-sm"
@@ -6346,7 +6515,7 @@ const CaixaView: React.FC<{
                                 </div>
                             );
                         })}
-                    </div>
+                    </motion.div>
                 </div>
             )}
 
@@ -8795,6 +8964,23 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         fetchCheckinsHistory(storeId).then(data => { setCheckins(data); setIsLoadingCheckins(false); });
     }, [storeId, activeTab]);
 
+    // "Caixa por operador" (2026-09-22, pedido direto): quem tem acesso a
+    // Administração — dono/universal, é essa mesma tela — vê o caixa de
+    // TODOS os operadores, aberto agora ou histórico, sem precisar logar
+    // como cada um. Mesma sub-aba "Turnos", abaixo do ponto (são conceitos
+    // relacionados mas independentes, ver AGENTS.md/migration 062).
+    const [openCashShiftsAll, setOpenCashShiftsAll] = useState<(CashShift & { operator_name: string | null })[]>([]);
+    const [cashShiftsHistoryAll, setCashShiftsHistoryAll] = useState<CashShiftHistoryRow[]>([]);
+    const [isLoadingCashShiftsAll, setIsLoadingCashShiftsAll] = useState(false);
+    const [selectedOperatorHistory, setSelectedOperatorHistory] = useState<string | null>(null);
+    useEffect(() => {
+        if (activeTab !== 'shifts') return;
+        setIsLoadingCashShiftsAll(true);
+        Promise.all([fetchOpenCashShifts(storeId), fetchCashShiftsHistory(storeId, 100)])
+            .then(([open, hist]) => { setOpenCashShiftsAll(open); setCashShiftsHistoryAll(hist); })
+            .finally(() => setIsLoadingCashShiftsAll(false));
+    }, [storeId, activeTab]);
+
     const handleClearSales = async () => {
         const ok = await confirm({
             title: 'Zerar histórico de vendas',
@@ -9237,6 +9423,97 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                     })}
                                 </tbody>
                             </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* "Caixa por operador" (2026-09-22, pedido direto: "o ADM tem um
+                local de ver caixas de todo mundo... ver histórico de caixa
+                de cada login"). Reaproveita fetchOpenCashShifts (já existia
+                pro dashboard, migration 062) e fetchCashShiftsHistory (já
+                existia pro histórico do próprio operador) — nenhuma RPC nova. */}
+            {activeTab === 'shifts' && (
+                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden mt-4">
+                    <div className="p-4 border-b border-[var(--border)]">
+                        <h3 className="font-bold text-lg text-[var(--text)]">Caixa por operador</h3>
+                        <p className="text-sm text-[var(--text-muted)]">Turno de caixa é individual desde a migration 062 — cada operador abre e fecha o próprio, mesmo com vários ao mesmo tempo.</p>
+                    </div>
+                    {isLoadingCashShiftsAll ? (
+                        <div className="p-8 text-center text-[var(--text-muted)]">Carregando...</div>
+                    ) : (
+                        <div className="p-4 space-y-4">
+                            <div>
+                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+                                    Abertos agora {openCashShiftsAll.length > 0 && `(${openCashShiftsAll.length})`}
+                                </h4>
+                                {openCashShiftsAll.length === 0 ? (
+                                    <p className="text-sm text-[var(--text-muted)]">Nenhum caixa aberto agora.</p>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {openCashShiftsAll.map(s => {
+                                            const abertoEmMs = new Date(s.opened_at).getTime();
+                                            const horas = Math.floor((Date.now() - abertoEmMs) / 3600000);
+                                            const esquecido = horas >= 24;
+                                            const nomeOperador = s.operator_name || 'Conta universal';
+                                            return (
+                                                <button
+                                                    key={s.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedOperatorHistory(nomeOperador)}
+                                                    className={`text-left p-3 rounded-xl border u-motion u-press-sm flex items-center gap-3 ${esquecido ? 'border-[var(--warn)]/40 bg-[var(--warn)]/5' : 'border-[var(--border)] bg-[var(--surface-2)]'}`}
+                                                >
+                                                    <div className="w-9 h-9 shrink-0"><ProductThumb name={nomeOperador} size="cart" /></div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-bold text-sm text-[var(--text)] truncate">{nomeOperador}</p>
+                                                        <p className={`text-xs ${esquecido ? 'text-[var(--warn)] font-semibold' : 'text-[var(--text-muted)]'}`}>
+                                                            {esquecido ? `Aberto há ${Math.floor(horas / 24)}d ${horas % 24}h — esqueceu de fechar?` : `Fundo R$ ${formatBRL(s.opening_float)}`}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Ver histórico de um operador</h4>
+                                <div className="flex gap-2 flex-wrap">
+                                    {Array.from(new Set(cashShiftsHistoryAll.map(h => h.operator_name || 'Conta universal'))).map(nome => (
+                                        <button
+                                            key={nome}
+                                            type="button"
+                                            onClick={() => setSelectedOperatorHistory(prev => prev === nome ? null : nome)}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border u-motion u-press-sm ${selectedOperatorHistory === nome ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                                        >
+                                            {nome}
+                                        </button>
+                                    ))}
+                                </div>
+                                {selectedOperatorHistory && (
+                                    <div className="mt-3 max-h-72 overflow-y-auto space-y-1.5">
+                                        {cashShiftsHistoryAll
+                                            .filter(h => (h.operator_name || 'Conta universal') === selectedOperatorHistory)
+                                            .map(h => (
+                                                <div key={h.id} className="flex items-center justify-between gap-2 p-2.5 bg-[var(--surface-2)] rounded-lg text-sm">
+                                                    <div className="min-w-0">
+                                                        <p className="font-semibold text-[var(--text)]">{new Date(h.opened_at).toLocaleDateString('pt-BR')}</p>
+                                                        <p className="text-xs text-[var(--text-muted)]">
+                                                            {h.status === 'open' ? 'Em aberto' : `Diferença: R$ ${formatBRL(h.difference ?? 0)}`}
+                                                        </p>
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
+                                                        {h.status === 'open' ? 'Aberto' : 'Fechado'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        {cashShiftsHistoryAll.filter(h => (h.operator_name || 'Conta universal') === selectedOperatorHistory).length === 0 && (
+                                            <p className="text-sm text-[var(--text-muted)] py-4 text-center">Nenhum turno encontrado.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -10612,6 +10889,7 @@ export const StoreModule: React.FC = () => {
             onLogout={handleLogout}
             onSwitchStore={handleSwitchStore}
             user={user}
+            onUserUpdate={(patch) => setUser({ ...user, ...patch })}
         >
             {tab === 'caixa' && canAccess('caixa') && (
                 <CaixaView
