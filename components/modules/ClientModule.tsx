@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation, resolverUrlApi } from '@/lib/api';
-import { Category, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
+import { Category, CategoryGroup, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
 import { supabase } from '@/lib/supabaseClient';
@@ -2494,8 +2494,13 @@ function composeFullStoreAddress(config: StoreFiscalConfig | null): string | nul
 export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [hasAccess, setHasAccess] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
+    // Task 5: navegação de 2 níveis (grupo → subcategoria) na barra do topo.
+    // Grupo expandido (fileira de subcategorias visível), independente de
+    // ele "possuir" a categoria ativa ou não — ver activeCategoryGroupId.
+    const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
     // Sheet "Todas as categorias" (pedido do dono, 2026-09-18): a barra só rola pro
     // lado e com 40 categorias fica ruim de navegar.
     const [showAllCategories, setShowAllCategories] = useState(false);
@@ -2662,8 +2667,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
 
         // Pass TRUE to fetch only available products
-        const { categories, products, error: menuError } = await fetchMenu(store.id, true);
+        const { categories, categoryGroups: groups, products, error: menuError } = await fetchMenu(store.id, true);
         setCategories(categories);
+        setCategoryGroups(groups);
         setProducts(products);
         // Acordeão (2026-08-15): cardápio abre com todas as categorias
         // recolhidas, nenhuma expandida por padrão — o cliente toca pra
@@ -3028,6 +3034,45 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         [categories, scheduleNow]
     );
 
+    // Task 5: itens de 1º nível na barra do topo — grupo (se tiver ao menos 1
+    // subcategoria visível) + categoria solta, todos ordenados juntos. A
+    // chave de ordenação do grupo NÃO é `group.order` contra `category.order`
+    // (são duas sequências soltas, gerariam intercalação arbitrária) — é o
+    // menor `order` entre as subcategorias visíveis do grupo (desempate por
+    // `group.order`), então o grupo aparece onde a primeira categoria dele
+    // apareceria na ordem de arrasto do lojista.
+    const topLevelItems = useMemo(() => {
+        type Item =
+            | { key: string; kind: 'category'; category: Category; order: number }
+            | { key: string; kind: 'group'; group: CategoryGroup; order: number };
+        const loose: Item[] = visibleCategories
+            .filter(c => !c.group_id)
+            .map(c => ({ key: c.id, kind: 'category' as const, category: c, order: c.order }));
+        const groupItems: Item[] = categoryGroups
+            .map(g => {
+                const members = visibleCategories.filter(c => c.group_id === g.id);
+                if (members.length === 0) return null;
+                const minOrder = Math.min(...members.map(c => c.order));
+                return { key: g.id, kind: 'group' as const, group: g, order: minOrder };
+            })
+            .filter((item): item is Item & { kind: 'group' } => item !== null);
+        return [...loose, ...groupItems].sort((a, b) => a.order - b.order || (a.kind === 'group' && b.kind === 'group' ? a.group.order - b.group.order : 0));
+    }, [visibleCategories, categoryGroups]);
+
+    // Grupo dono da categoria ativa (null se a categoria ativa for solta ou
+    // nenhuma categoria estiver ativa ainda).
+    const activeCategoryGroupId = useMemo(
+        () => visibleCategories.find(c => c.id === activeCategory)?.group_id ?? null,
+        [visibleCategories, activeCategory]
+    );
+
+    // Fileira de subcategorias do grupo expandido (`activeGroupId`) — só
+    // renderizada quando há um grupo expandido de verdade.
+    const expandedGroupSubcategories = useMemo(
+        () => activeGroupId ? visibleCategories.filter(c => c.group_id === activeGroupId) : [],
+        [visibleCategories, activeGroupId]
+    );
+
     // Task 3: tabs fixas substituem o acordeão — sempre existe uma tab ativa
     // (nunca "nada aberto"). No primeiro paint, `activeCategory` começa ''
     // (nenhuma tab bate), e este efeito a define pra primeira categoria
@@ -3208,9 +3253,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // só é populado quando a faixa de tabs está renderizada (!hasActiveFilter);
     // sem ela, o lookup simplesmente não acha o botão e não faz nada.
     useEffect(() => {
-        const btn = tabButtonRefs.current[activeCategory];
+        // Categoria dentro de um grupo não tem tab própria — centraliza a tab
+        // do grupo dono nesse caso (Task 5).
+        const btn = tabButtonRefs.current[activeCategoryGroupId ?? activeCategory];
         if (btn) btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }, [activeCategory]);
+    }, [activeCategory, activeCategoryGroupId]);
 
     // Failsafe da supressão do spy: além do timeout de segurança em
     // handleTabClick (que SEMPRE limpa, aconteça o que acontecer), usa o
@@ -3262,6 +3309,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         if (!section) return;
         isClickScrollingRef.current = true;
         setActiveCategory(categoryId);
+        setActiveGroupId(null);
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
         if (clickScrollTimeoutRef.current) clearTimeout(clickScrollTimeoutRef.current);
         clickScrollTimeoutRef.current = setTimeout(() => {
@@ -3978,7 +4026,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     filtro ativo, cada seção com resultado já aparece sozinha
                     embaixo, sem precisar de navegação por tab (ver
                     hasActiveFilter e a lista de seções logo abaixo). */}
-                {!hasActiveFilter && visibleCategories.length > 0 && (
+                {!hasActiveFilter && topLevelItems.length > 0 && (
                     <div className="flex items-start gap-2 pl-4">
                     <button
                         type="button"
@@ -3990,27 +4038,60 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         <LayoutGrid size={16} /> Categorias
                     </button>
                     <div role="group" aria-label="Categorias do cardápio" className="flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pr-4 pb-2.5">
-                        {visibleCategories.map(cat => {
-                            const isActive = activeCategory === cat.id;
+                        {topLevelItems.map(item => {
+                            if (item.kind === 'category') {
+                                const cat = item.category;
+                                const isActive = activeCategory === cat.id;
+                                return (
+                                    <button
+                                        key={item.key}
+                                        type="button"
+                                        ref={el => { tabButtonRefs.current[cat.id] = el; }}
+                                        onClick={() => handleTabClick(cat.id)}
+                                        aria-current={isActive ? 'true' : undefined}
+                                        // Sublinhado da aba ativa: AÇÃO na paleta iFood (correção
+                                        // 2026-08-21). Virou um `motion.div` com `layoutId`
+                                        // compartilhado (2026-09-10) em vez de border-b estático —
+                                        // desliza de uma aba pra outra (padrão iFood/Uber Eats de
+                                        // verdade) em vez de sumir e reaparecer na aba nova. Mesmo
+                                        // SPRING_TAP já validado com o usuário (lib/motion.ts) —
+                                        // não é preset novo.
+                                        className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
+                                    >
+                                        {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
+                                        {cat.name}
+                                        {isActive && (
+                                            <motion.div
+                                                layoutId="categoryTabUnderline"
+                                                className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
+                                                style={{ backgroundColor: IFOOD_RED }}
+                                                transition={SPRING_TAP}
+                                            />
+                                        )}
+                                    </button>
+                                );
+                            }
+                            // Grupo: tocar expande/recolhe a fileira de subcategorias
+                            // (não navega sozinho — grupo não tem seção própria no
+                            // scroll). Sublinhado só aparece quando o grupo é DONO da
+                            // categoria ativa (activeCategoryGroupId), nunca só por
+                            // estar expandido (`activeGroupId`) — dois elementos com o
+                            // mesmo layoutId ao mesmo tempo geram glitch de animação.
+                            const group = item.group;
+                            const isExpanded = activeGroupId === group.id;
+                            const ownsActiveCategory = activeCategoryGroupId === group.id;
+                            const isBold = isExpanded || ownsActiveCategory;
                             return (
                                 <button
-                                    key={cat.id}
+                                    key={item.key}
                                     type="button"
-                                    ref={el => { tabButtonRefs.current[cat.id] = el; }}
-                                    onClick={() => handleTabClick(cat.id)}
-                                    aria-current={isActive ? 'true' : undefined}
-                                    // Sublinhado da aba ativa: AÇÃO na paleta iFood (correção
-                                    // 2026-08-21). Virou um `motion.div` com `layoutId`
-                                    // compartilhado (2026-09-10) em vez de border-b estático —
-                                    // desliza de uma aba pra outra (padrão iFood/Uber Eats de
-                                    // verdade) em vez de sumir e reaparecer na aba nova. Mesmo
-                                    // SPRING_TAP já validado com o usuário (lib/motion.ts) —
-                                    // não é preset novo.
-                                    className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
+                                    ref={el => { tabButtonRefs.current[group.id] = el; }}
+                                    onClick={() => setActiveGroupId(prev => prev === group.id ? null : group.id)}
+                                    aria-expanded={isExpanded}
+                                    className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isBold ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
                                 >
-                                    {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
-                                    {cat.name}
-                                    {isActive && (
+                                    {group.name}
+                                    {ownsActiveCategory && (
                                         <motion.div
                                             layoutId="categoryTabUnderline"
                                             className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
@@ -4024,22 +4105,66 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     </div>
                     </div>
                 )}
-            </div>
 
-            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet">
-                <div className="grid grid-cols-2 gap-2">
-                    {visibleCategories.map(cat => {
-                        const qtd = (productsByCategory[cat.id] || []).length;
-                        return (
+                {!hasActiveFilter && activeGroupId && expandedGroupSubcategories.length > 0 && (
+                    <div className="flex-1 min-w-0 flex gap-4 overflow-x-auto no-scrollbar pl-4 pr-4 pb-2 -mt-1">
+                        {expandedGroupSubcategories.map(cat => (
                             <button
                                 key={cat.id}
                                 type="button"
-                                onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
-                                className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
+                                onClick={() => handleTabClick(cat.id)}
+                                className="flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap u-motion bg-[var(--surface-2)] text-[var(--text)]"
                             >
-                                <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
-                                <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                {cat.name}
                             </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet">
+                <div className="space-y-4">
+                    {visibleCategories.filter(c => !c.group_id).length > 0 && (
+                        <div className="grid grid-cols-2 gap-2">
+                            {visibleCategories.filter(c => !c.group_id).map(cat => {
+                                const qtd = (productsByCategory[cat.id] || []).length;
+                                return (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
+                                        className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
+                                    >
+                                        <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
+                                        <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {categoryGroups.map(group => {
+                        const catsInGroup = visibleCategories.filter(c => c.group_id === group.id);
+                        if (catsInGroup.length === 0) return null;
+                        return (
+                            <div key={group.id}>
+                                <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{group.name}</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {catsInGroup.map(cat => {
+                                        const qtd = (productsByCategory[cat.id] || []).length;
+                                        return (
+                                            <button
+                                                key={cat.id}
+                                                type="button"
+                                                onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
+                                                className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
+                                            >
+                                                <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
+                                                <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         );
                     })}
                 </div>
