@@ -6120,16 +6120,23 @@ const CaixaView: React.FC<{
     }
 
     // Sem turno aberto — Passo 2 do brief: destaque total, é o primeiro
-    // lugar que o operador vê ao entrar.
+    // lugar que o operador vê ao entrar. 2026-09-22 (pedido direto: "caixa
+    // individual, login por pessoa, fica bonito no topo caixa de tal
+    // pessoa"): personalizado com nome + medalhão de quem vai abrir —
+    // ProductThumb (mesmo componente/paleta do resto do app, hue por hash
+    // do nome) em vez de inventar um avatar novo.
     if (!shift) {
+        const primeiroNome = loggedUser.name.trim().split(/\s+/)[0];
         return (
-            <div className="max-w-md mx-auto py-8">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={SPRING_TAP} className="max-w-md mx-auto py-8">
                 <Card className="p-6 text-center border-2 border-[var(--warn)]/30 bg-[var(--warn)]/5">
-                    <Wallet size={40} className="mx-auto mb-3 text-[var(--warn)]" />
-                    <h3 className="text-lg font-bold text-[var(--text)] mb-1">Nenhum turno de caixa aberto</h3>
+                    <div className="mx-auto mb-3 w-16 h-16">
+                        <ProductThumb name={loggedUser.name} size="store" />
+                    </div>
+                    <h3 className="text-lg font-bold text-[var(--text)] mb-1">Abrir caixa, {primeiroNome}</h3>
                     <p className="text-sm text-[var(--text-muted)] mb-6">
-                        Abra o caixa informando o fundo de troco (dinheiro físico já na gaveta) pra começar a
-                        receber pagamentos.
+                        Informe o fundo de troco (dinheiro físico já na gaveta) pra começar a receber pagamentos —
+                        o turno fica só seu, outros operadores podem abrir o deles ao mesmo tempo.
                     </p>
                     <div className="text-left space-y-3">
                         <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
@@ -6189,35 +6196,45 @@ const CaixaView: React.FC<{
                 </div>
                 {closedResultModal}
                 {historyModals}
-            </div>
+            </motion.div>
         );
     }
 
     // Turno aberto — Passo 1: fila consolidada; resumo + Fechar Caixa.
+    // Duração do turno formatada ("2h 14min" / "38min") — usa o mesmo `now`
+    // que já reticka a cada 30s pra fila (declarado no topo do componente),
+    // sem intervalo novo só pra isto.
+    const minutosAbertos = Math.max(0, Math.floor((now - new Date(shift.opened_at).getTime()) / 60000));
+    const duracaoLabel = minutosAbertos >= 60 ? `${Math.floor(minutosAbertos / 60)}h ${minutosAbertos % 60}min` : `${minutosAbertos}min`;
+
     return (
         <div className="space-y-6">
-            <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-[var(--ok)]/10 flex items-center justify-center text-[var(--ok)] shrink-0">
-                        <Wallet size={20} />
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold text-[var(--text)]">
-                            Caixa aberto desde {new Date(shift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+            {/* 2026-09-22 (pedido direto: "caixa individual, fica bonito no topo
+                caixa de tal pessoa"): o nome do operador virou o título
+                principal do cabeçalho (antes era só "Caixa aberto desde HH:MM",
+                sem dizer de quem — cada operador tem o próprio turno desde a
+                migration 062, mas a tela nunca mostrava isso). Medalhão via
+                ProductThumb, mesma paleta/hash do resto do app. */}
+            <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-12 h-12 shrink-0"><ProductThumb name={loggedUser.name} size="store" /></div>
+                    <div className="min-w-0">
+                        <p className="text-base font-bold text-[var(--text)] truncate">Caixa de {loggedUser.name}</p>
                         <p className="text-xs text-[var(--text-muted)]">
-                            Fundo de troco: R$ {formatBRL(shift.opening_float)}
+                            Aberto às {new Date(shift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {' · '}{duracaoLabel}
+                            {' · '}Fundo R$ {formatBRL(shift.opening_float)}
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     <Button onClick={() => handleOpenMovementModal('sangria')} variant="outline" className="shrink-0">
                         <TrendingDown size={16} className="mr-2" /> Sangria
                     </Button>
                     <Button onClick={() => handleOpenMovementModal('suprimento')} variant="outline" className="shrink-0">
                         <TrendingUp size={16} className="mr-2" /> Suprimento
                     </Button>
-                    <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0">
+                    <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0 border-[var(--err)]/30 text-[var(--err)] hover:bg-[var(--err)]/5">
                         <Lock size={16} className="mr-2" /> Fechar Caixa
                     </Button>
                     <Button onClick={handleOpenHistory} variant="ghost" className="shrink-0" title="Ver histórico de turnos">
@@ -6462,7 +6479,7 @@ const CaixaView: React.FC<{
             <Modal
                 isOpen={showCloseModal}
                 onClose={() => { if (!isClosingShift) setShowCloseModal(false); }}
-                title="Fechar Caixa"
+                title={`Fechar caixa de ${loggedUser.name}`}
                 size="md"
             >
                 {isLoadingSummary ? (
