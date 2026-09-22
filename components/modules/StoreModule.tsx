@@ -1647,15 +1647,18 @@ const GARCOM_IFOOD_PURPLE = '#8E1CA8';
 
 const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ storeId, onAddItem }) => {
     const [categories, setCategories] = useState<Category[]>([]);
+    const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
+    const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showAllCategories, setShowAllCategories] = useState(false);
 
     useEffect(() => {
-        fetchMenu(storeId, true).then(({ categories, products }) => {
+        fetchMenu(storeId, true).then(({ categories, categoryGroups, products }) => {
             setCategories(categories);
+            setCategoryGroups(categoryGroups);
             setProducts(products);
             if (categories.length > 0) setActiveCategory(categories[0].id);
         });
@@ -1680,6 +1683,49 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
         }
         return prods;
     }, [products, activeCategory, searchTerm]);
+
+    // Grupo→subcategoria (2026-09-22): mesma lógica do cliente
+    // (ClientModule.tsx), adaptada ao fluxo sem scroll-spy deste componente
+    // (clicar só troca o filtro, não rola a tela). Posição do grupo na
+    // barra = menor `order` entre suas categorias-membro (desempate pelo
+    // `order` do próprio grupo), nunca comparando `group.order` direto
+    // contra `category.order` (escalas diferentes). Grupo sem nenhuma
+    // categoria-membro não entra na barra.
+    const topLevelItems = useMemo(() => {
+        type Item = { key: string; kind: 'category'; category: Category; order: number } | { key: string; kind: 'group'; group: CategoryGroup; order: number };
+        const loose: Item[] = categories
+            .filter(c => !c.group_id)
+            .map(c => ({ key: c.id, kind: 'category' as const, category: c, order: c.order }));
+        const groups: Item[] = categoryGroups
+            .filter(g => categories.some(c => c.group_id === g.id))
+            .map(g => {
+                const memberOrders = categories.filter(c => c.group_id === g.id).map(c => c.order);
+                const minMemberOrder = Math.min(...memberOrders);
+                return { key: g.id, kind: 'group' as const, group: g, order: minMemberOrder };
+            });
+        return [...loose, ...groups].sort((a, b) => {
+            if (a.order !== b.order) return a.order - b.order;
+            const aGroupOrder = a.kind === 'group' ? a.group.order : a.order;
+            const bGroupOrder = b.kind === 'group' ? b.group.order : b.order;
+            return aGroupOrder - bGroupOrder;
+        });
+    }, [categories, categoryGroups]);
+
+    const activeCategoryGroupId = useMemo(
+        () => categories.find(c => c.id === activeCategory)?.group_id ?? null,
+        [categories, activeCategory]
+    );
+
+    const expandedGroupSubcategories = useMemo(
+        () => activeGroupId ? categories.filter(c => c.group_id === activeGroupId) : [],
+        [categories, activeGroupId]
+    );
+
+    const selectSubcategory = (categoryId: string) => {
+        setSearchTerm('');
+        setActiveCategory(categoryId);
+        setActiveGroupId(null);
+    };
 
     return (
         <div className="flex flex-col h-full min-h-[400px]">
@@ -1707,18 +1753,43 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     <LayoutGrid size={16} /> Categorias
                 </button>
                 <div className="flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pb-2.5">
-                    {categories.map(cat => {
-                        const isActive = activeCategory === cat.id;
+                    {topLevelItems.map(item => {
+                        if (item.kind === 'category') {
+                            const cat = item.category;
+                            const isActive = activeCategory === cat.id;
+                            return (
+                                <button
+                                    key={item.key}
+                                    type="button"
+                                    onClick={() => selectSubcategory(cat.id)}
+                                    aria-current={isActive ? 'true' : undefined}
+                                    className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
+                                >
+                                    {cat.name}
+                                    {isActive && (
+                                        <span
+                                            className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
+                                            style={{ backgroundColor: GARCOM_IFOOD_RED }}
+                                        />
+                                    )}
+                                </button>
+                            );
+                        }
+                        const group = item.group;
+                        const ownsActive = activeCategoryGroupId === group.id;
+                        const isExpanded = activeGroupId === group.id;
+                        const isEmphasized = ownsActive || isExpanded;
                         return (
                             <button
-                                key={cat.id}
+                                key={item.key}
                                 type="button"
-                                onClick={() => setActiveCategory(cat.id)}
-                                aria-current={isActive ? 'true' : undefined}
-                                className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
+                                onClick={() => setActiveGroupId(prev => prev === group.id ? null : group.id)}
+                                aria-current={ownsActive ? 'true' : undefined}
+                                aria-expanded={isExpanded}
+                                className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isEmphasized ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
                             >
-                                {cat.name}
-                                {isActive && (
+                                {group.name}
+                                {ownsActive && (
                                     <span
                                         className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
                                         style={{ backgroundColor: GARCOM_IFOOD_RED }}
@@ -1729,36 +1800,79 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     })}
                 </div>
                 </div>
+                {activeGroupId && expandedGroupSubcategories.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mt-1">
+                        {expandedGroupSubcategories.map(cat => (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => selectSubcategory(cat.id)}
+                                className="flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap u-motion bg-[var(--surface-2)] text-[var(--text)]"
+                            >
+                                {cat.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias">
-                <div className="space-y-3">
+                <div className="space-y-4">
                     <button
                         type="button"
-                        onClick={() => { setSearchTerm(''); setActiveCategory(''); setShowAllCategories(false); }}
+                        onClick={() => { setSearchTerm(''); setActiveCategory(''); setActiveGroupId(null); setShowAllCategories(false); }}
                         className={`w-full text-left rounded-xl border px-3 py-3 text-sm font-bold u-motion u-press-sm ${activeCategory === '' ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)] text-[var(--text)]'}`}
                         style={activeCategory === '' ? { color: GARCOM_IFOOD_RED } : undefined}
                     >
                         Ver todos os produtos <span className="font-normal text-[var(--text-muted)]">({products.length})</span>
                     </button>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {categories.map(cat => {
-                            const qtd = products.filter(p => p.category_id === cat.id).length;
-                            const isActive = activeCategory === cat.id;
-                            return (
-                                <button
-                                    key={cat.id}
-                                    type="button"
-                                    onClick={() => { setSearchTerm(''); setActiveCategory(cat.id); setShowAllCategories(false); }}
-                                    className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
-                                    style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
-                                >
-                                    <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
-                                    <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {categories.filter(c => !c.group_id).length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {categories.filter(c => !c.group_id).map(cat => {
+                                const qtd = products.filter(p => p.category_id === cat.id).length;
+                                const isActive = activeCategory === cat.id;
+                                return (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
+                                        className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
+                                        style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
+                                    >
+                                        <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
+                                        <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {categoryGroups.map(group => {
+                        const catsInGroup = categories.filter(c => c.group_id === group.id);
+                        if (catsInGroup.length === 0) return null;
+                        return (
+                            <div key={group.id}>
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{group.name}</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {catsInGroup.map(cat => {
+                                        const qtd = products.filter(p => p.category_id === cat.id).length;
+                                        const isActive = activeCategory === cat.id;
+                                        return (
+                                            <button
+                                                key={cat.id}
+                                                type="button"
+                                                onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
+                                                className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
+                                                style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
+                                            >
+                                                <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
+                                                <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </Modal>
 
