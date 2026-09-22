@@ -6127,13 +6127,16 @@ const CaixaView: React.FC<{
     // do nome) em vez de inventar um avatar novo.
     if (!shift) {
         const primeiroNome = loggedUser.name.trim().split(/\s+/)[0];
+        // Materializa (escala+opacidade), não desliza — mesmo padrão já
+        // validado neste arquivo pra cards que "chegam" na tela (ex.:
+        // TablesView, grid de mesas) em vez de inventar uma 3ª entrada.
         return (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={SPRING_TAP} className="max-w-md mx-auto py-8">
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP} className="max-w-md mx-auto py-8">
                 <Card className="p-6 text-center border-2 border-[var(--warn)]/30 bg-[var(--warn)]/5">
                     <div className="mx-auto mb-3 w-16 h-16">
                         <ProductThumb name={loggedUser.name} size="store" />
                     </div>
-                    <h3 className="text-lg font-bold text-[var(--text)] mb-1">Abrir caixa, {primeiroNome}</h3>
+                    <h3 className="text-lg font-bold text-[var(--text)] mb-1 tracking-[-0.01em]">Abrir caixa, {primeiroNome}</h3>
                     <p className="text-sm text-[var(--text-muted)] mb-6">
                         Informe o fundo de troco (dinheiro físico já na gaveta) pra começar a receber pagamentos —
                         o turno fica só seu, outros operadores podem abrir o deles ao mesmo tempo.
@@ -6215,11 +6218,12 @@ const CaixaView: React.FC<{
                 sem dizer de quem — cada operador tem o próprio turno desde a
                 migration 062, mas a tela nunca mostrava isso). Medalhão via
                 ProductThumb, mesma paleta/hash do resto do app. */}
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP}>
             <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="w-12 h-12 shrink-0"><ProductThumb name={loggedUser.name} size="store" /></div>
                     <div className="min-w-0">
-                        <p className="text-base font-bold text-[var(--text)] truncate">Caixa de {loggedUser.name}</p>
+                        <p className="text-base font-bold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
                         <p className="text-xs text-[var(--text-muted)]">
                             Aberto às {new Date(shift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             {' · '}{duracaoLabel}
@@ -6245,6 +6249,7 @@ const CaixaView: React.FC<{
                     </Button>
                 </div>
             </Card>
+            </motion.div>
 
             {occupiedTables.length > 0 && (
                 <div className="mb-6">
