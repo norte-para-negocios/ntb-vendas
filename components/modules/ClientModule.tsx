@@ -18,6 +18,7 @@ import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, g
 import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { isCategoryAvailableNow } from '@/lib/schedule';
+import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
@@ -3034,30 +3035,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         [categories, scheduleNow]
     );
 
-    // Task 5: itens de 1º nível na barra do topo — grupo (se tiver ao menos 1
-    // subcategoria visível) + categoria solta, todos ordenados juntos. A
-    // chave de ordenação do grupo NÃO é `group.order` contra `category.order`
-    // (são duas sequências soltas, gerariam intercalação arbitrária) — é o
-    // menor `order` entre as subcategorias visíveis do grupo (desempate por
-    // `group.order`), então o grupo aparece onde a primeira categoria dele
-    // apareceria na ordem de arrasto do lojista.
-    const topLevelItems = useMemo(() => {
-        type Item =
-            | { key: string; kind: 'category'; category: Category; order: number }
-            | { key: string; kind: 'group'; group: CategoryGroup; order: number };
-        const loose: Item[] = visibleCategories
-            .filter(c => !c.group_id)
-            .map(c => ({ key: c.id, kind: 'category' as const, category: c, order: c.order }));
-        const groupItems: Item[] = categoryGroups
-            .map(g => {
-                const members = visibleCategories.filter(c => c.group_id === g.id);
-                if (members.length === 0) return null;
-                const minOrder = Math.min(...members.map(c => c.order));
-                return { key: g.id, kind: 'group' as const, group: g, order: minOrder };
-            })
-            .filter((item): item is Item & { kind: 'group' } => item !== null);
-        return [...loose, ...groupItems].sort((a, b) => a.order - b.order || (a.kind === 'group' && b.kind === 'group' ? a.group.order - b.group.order : 0));
-    }, [visibleCategories, categoryGroups]);
+    // Task 5 / Fix I2 (2026-09-22): itens de 1º nível na barra do topo —
+    // grupo (se tiver ao menos 1 subcategoria visível) + categoria solta,
+    // todos ordenados juntos. Fonte única de ordenação: buildTopLevelItems
+    // (lib/categoryGroups.ts), a mesma usada pela sheet "Categorias" logo
+    // abaixo e pelas 3 outras telas que navegam categoria (garçom + sidebar
+    // do lojista) — nunca reimplementar essa intercalação aqui.
+    const topLevelItems = useMemo(() => buildTopLevelItems(visibleCategories, categoryGroups), [visibleCategories, categoryGroups]);
 
     // Grupo dono da categoria ativa (null se a categoria ativa for solta ou
     // nenhuma categoria estiver ativa ainda).
@@ -3066,12 +3050,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         [visibleCategories, activeCategory]
     );
 
-    // Fileira de subcategorias do grupo expandido (`activeGroupId`) — só
-    // renderizada quando há um grupo expandido de verdade.
-    const expandedGroupSubcategories = useMemo(
-        () => activeGroupId ? visibleCategories.filter(c => c.group_id === activeGroupId) : [],
-        [visibleCategories, activeGroupId]
-    );
+    // Fileira de subcategorias do grupo expandido (`activeGroupId`) — usa as
+    // categorias-membro já resolvidas/ordenadas por buildTopLevelItems (nunca
+    // refiltra visibleCategories aqui, pra nunca divergir da ordem da barra).
+    const expandedGroupSubcategories = useMemo(() => {
+        if (!activeGroupId) return [];
+        const item = topLevelItems.find(i => i.kind === 'group' && i.group.id === activeGroupId);
+        return item && item.kind === 'group' ? item.categories : [];
+    }, [topLevelItems, activeGroupId]);
 
     // Task 3: tabs fixas substituem o acordeão — sempre existe uma tab ativa
     // (nunca "nada aberto"). No primeiro paint, `activeCategory` começa ''
@@ -4044,7 +4030,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 const isActive = activeCategory === cat.id;
                                 return (
                                     <button
-                                        key={item.key}
+                                        key={cat.id}
                                         type="button"
                                         ref={el => { tabButtonRefs.current[cat.id] = el; }}
                                         onClick={() => handleTabClick(cat.id)}
@@ -4083,13 +4069,15 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             const isBold = isExpanded || ownsActiveCategory;
                             return (
                                 <button
-                                    key={item.key}
+                                    key={group.id}
                                     type="button"
                                     ref={el => { tabButtonRefs.current[group.id] = el; }}
                                     onClick={() => setActiveGroupId(prev => prev === group.id ? null : group.id)}
                                     aria-expanded={isExpanded}
+                                    aria-current={ownsActiveCategory ? 'true' : undefined}
                                     className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isBold ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
                                 >
+                                    {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
                                     {group.name}
                                     {ownsActiveCategory && (
                                         <motion.div
@@ -4108,65 +4096,75 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
                 {!hasActiveFilter && activeGroupId && expandedGroupSubcategories.length > 0 && (
                     <div className="flex-1 min-w-0 flex gap-4 overflow-x-auto no-scrollbar pl-4 pr-4 pb-2 -mt-1">
-                        {expandedGroupSubcategories.map(cat => (
-                            <button
-                                key={cat.id}
-                                type="button"
-                                onClick={() => handleTabClick(cat.id)}
-                                className="flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap u-motion bg-[var(--surface-2)] text-[var(--text)]"
-                            >
-                                {cat.name}
-                            </button>
-                        ))}
+                        {expandedGroupSubcategories.map(cat => {
+                            const isActiveSub = activeCategory === cat.id;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => handleTabClick(cat.id)}
+                                    aria-current={isActiveSub ? 'true' : undefined}
+                                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion bg-[var(--surface-2)] ${isActiveSub ? 'font-semibold' : 'font-medium text-[var(--text)]'}`}
+                                    style={isActiveSub ? { color: IFOOD_RED } : undefined}
+                                >
+                                    {cat.name}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>
 
             <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet">
                 <div className="space-y-4">
-                    {visibleCategories.filter(c => !c.group_id).length > 0 && (
-                        <div className="grid grid-cols-2 gap-2">
-                            {visibleCategories.filter(c => !c.group_id).map(cat => {
-                                const qtd = (productsByCategory[cat.id] || []).length;
-                                return (
-                                    <button
-                                        key={cat.id}
-                                        type="button"
-                                        onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
-                                        className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
-                                    >
-                                        <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
-                                        <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                    {categoryGroups.map(group => {
-                        const catsInGroup = visibleCategories.filter(c => c.group_id === group.id);
-                        if (catsInGroup.length === 0) return null;
-                        return (
-                            <div key={group.id}>
-                                <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{group.name}</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {catsInGroup.map(cat => {
-                                        const qtd = (productsByCategory[cat.id] || []).length;
-                                        return (
-                                            <button
-                                                key={cat.id}
-                                                type="button"
-                                                onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
-                                                className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
-                                            >
-                                                <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
-                                                <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
-                                            </button>
-                                        );
-                                    })}
+                    {/* Fix I2 (2026-09-22): mesma ordem intercalada de topLevelItems
+                        (loose + grupo), não mais "todas as soltas primeiro". Categorias
+                        soltas consecutivas continuam agrupadas numa única grade de 2
+                        colunas; um grupo entra como cabeçalho + grade própria. */}
+                    {(() => {
+                        const renderCategoryButton = (cat: Category) => {
+                            const qtd = (productsByCategory[cat.id] || []).length;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
+                                    className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
+                                >
+                                    <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
+                                    <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                </button>
+                            );
+                        };
+                        const nodes: React.ReactNode[] = [];
+                        let looseBuffer: Category[] = [];
+                        const flushLoose = () => {
+                            if (looseBuffer.length === 0) return;
+                            nodes.push(
+                                <div key={`loose-${nodes.length}`} className="grid grid-cols-2 gap-2">
+                                    {looseBuffer.map(renderCategoryButton)}
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                            looseBuffer = [];
+                        };
+                        topLevelItems.forEach((item: TopLevelItem) => {
+                            if (item.kind === 'category') {
+                                looseBuffer.push(item.category);
+                                return;
+                            }
+                            flushLoose();
+                            nodes.push(
+                                <div key={item.group.id}>
+                                    <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{item.group.name}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {item.categories.map(renderCategoryButton)}
+                                    </div>
+                                </div>
+                            );
+                        });
+                        flushLoose();
+                        return nodes;
+                    })()}
                 </div>
             </Modal>
 

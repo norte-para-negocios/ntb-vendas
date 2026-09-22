@@ -15,7 +15,8 @@ import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupOrder, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -1686,40 +1687,21 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 
     // Grupo→subcategoria (2026-09-22): mesma lógica do cliente
     // (ClientModule.tsx), adaptada ao fluxo sem scroll-spy deste componente
-    // (clicar só troca o filtro, não rola a tela). Posição do grupo na
-    // barra = menor `order` entre suas categorias-membro (desempate pelo
-    // `order` do próprio grupo), nunca comparando `group.order` direto
-    // contra `category.order` (escalas diferentes). Grupo sem nenhuma
-    // categoria-membro não entra na barra.
-    const topLevelItems = useMemo(() => {
-        type Item = { key: string; kind: 'category'; category: Category; order: number } | { key: string; kind: 'group'; group: CategoryGroup; order: number };
-        const loose: Item[] = categories
-            .filter(c => !c.group_id)
-            .map(c => ({ key: c.id, kind: 'category' as const, category: c, order: c.order }));
-        const groups: Item[] = categoryGroups
-            .filter(g => categories.some(c => c.group_id === g.id))
-            .map(g => {
-                const memberOrders = categories.filter(c => c.group_id === g.id).map(c => c.order);
-                const minMemberOrder = Math.min(...memberOrders);
-                return { key: g.id, kind: 'group' as const, group: g, order: minMemberOrder };
-            });
-        return [...loose, ...groups].sort((a, b) => {
-            if (a.order !== b.order) return a.order - b.order;
-            const aGroupOrder = a.kind === 'group' ? a.group.order : a.order;
-            const bGroupOrder = b.kind === 'group' ? b.group.order : b.order;
-            return aGroupOrder - bGroupOrder;
-        });
-    }, [categories, categoryGroups]);
+    // (clicar só troca o filtro, não rola a tela). Fix I2 da revisão final:
+    // fonte única de ordenação via buildTopLevelItems (lib/categoryGroups.ts),
+    // mesma usada pelas outras 4 telas que navegam categoria.
+    const topLevelItems = useMemo(() => buildTopLevelItems(categories, categoryGroups), [categories, categoryGroups]);
 
     const activeCategoryGroupId = useMemo(
         () => categories.find(c => c.id === activeCategory)?.group_id ?? null,
         [categories, activeCategory]
     );
 
-    const expandedGroupSubcategories = useMemo(
-        () => activeGroupId ? categories.filter(c => c.group_id === activeGroupId) : [],
-        [categories, activeGroupId]
-    );
+    const expandedGroupSubcategories = useMemo(() => {
+        if (!activeGroupId) return [];
+        const item = topLevelItems.find(i => i.kind === 'group' && i.group.id === activeGroupId);
+        return item && item.kind === 'group' ? item.categories : [];
+    }, [topLevelItems, activeGroupId]);
 
     const selectSubcategory = (categoryId: string) => {
         setSearchTerm('');
@@ -1759,7 +1741,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                             const isActive = activeCategory === cat.id;
                             return (
                                 <button
-                                    key={item.key}
+                                    key={cat.id}
                                     type="button"
                                     onClick={() => { setActiveCategory(cat.id); setActiveGroupId(null); }}
                                     aria-current={isActive ? 'true' : undefined}
@@ -1781,7 +1763,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         const isEmphasized = ownsActive || isExpanded;
                         return (
                             <button
-                                key={item.key}
+                                key={group.id}
                                 type="button"
                                 onClick={() => setActiveGroupId(prev => prev === group.id ? null : group.id)}
                                 aria-current={ownsActive ? 'true' : undefined}
@@ -1802,16 +1784,21 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 </div>
                 {activeGroupId && expandedGroupSubcategories.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mt-1">
-                        {expandedGroupSubcategories.map(cat => (
-                            <button
-                                key={cat.id}
-                                type="button"
-                                onClick={() => selectSubcategory(cat.id)}
-                                className="flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap u-motion bg-[var(--surface-2)] text-[var(--text)]"
-                            >
-                                {cat.name}
-                            </button>
-                        ))}
+                        {expandedGroupSubcategories.map(cat => {
+                            const isActiveSub = activeCategory === cat.id;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => selectSubcategory(cat.id)}
+                                    aria-current={isActiveSub ? 'true' : undefined}
+                                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion bg-[var(--surface-2)] ${isActiveSub ? 'font-semibold' : 'font-medium text-[var(--text)]'}`}
+                                    style={isActiveSub ? { color: GARCOM_IFOOD_RED } : undefined}
+                                >
+                                    {cat.name}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -1826,53 +1813,56 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     >
                         Ver todos os produtos <span className="font-normal text-[var(--text-muted)]">({products.length})</span>
                     </button>
-                    {categories.filter(c => !c.group_id).length > 0 && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {categories.filter(c => !c.group_id).map(cat => {
-                                const qtd = products.filter(p => p.category_id === cat.id).length;
-                                const isActive = activeCategory === cat.id;
-                                return (
-                                    <button
-                                        key={cat.id}
-                                        type="button"
-                                        onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
-                                        className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
-                                        style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
-                                    >
-                                        <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
-                                        <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                    {categoryGroups.map(group => {
-                        const catsInGroup = categories.filter(c => c.group_id === group.id);
-                        if (catsInGroup.length === 0) return null;
-                        return (
-                            <div key={group.id}>
-                                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{group.name}</p>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    {catsInGroup.map(cat => {
-                                        const qtd = products.filter(p => p.category_id === cat.id).length;
-                                        const isActive = activeCategory === cat.id;
-                                        return (
-                                            <button
-                                                key={cat.id}
-                                                type="button"
-                                                onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
-                                                className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
-                                                style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
-                                            >
-                                                <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
-                                                <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
-                                            </button>
-                                        );
-                                    })}
+                    {/* Fix I2 (2026-09-22): mesma ordem intercalada de topLevelItems
+                        (loose + grupo) usada na barra acima — nunca "todas as soltas
+                        primeiro". Categorias soltas consecutivas ficam numa única grade. */}
+                    {(() => {
+                        const renderCategoryButton = (cat: Category) => {
+                            const qtd = products.filter(p => p.category_id === cat.id).length;
+                            const isActive = activeCategory === cat.id;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
+                                    aria-current={isActive ? 'true' : undefined}
+                                    className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
+                                    style={isActive ? { color: GARCOM_IFOOD_RED } : undefined}
+                                >
+                                    <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
+                                    <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                </button>
+                            );
+                        };
+                        const nodes: React.ReactNode[] = [];
+                        let looseBuffer: Category[] = [];
+                        const flushLoose = () => {
+                            if (looseBuffer.length === 0) return;
+                            nodes.push(
+                                <div key={`loose-${nodes.length}`} className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {looseBuffer.map(renderCategoryButton)}
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                            looseBuffer = [];
+                        };
+                        topLevelItems.forEach((item: TopLevelItem) => {
+                            if (item.kind === 'category') {
+                                looseBuffer.push(item.category);
+                                return;
+                            }
+                            flushLoose();
+                            nodes.push(
+                                <div key={item.group.id}>
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{item.group.name}</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {item.categories.map(renderCategoryButton)}
+                                    </div>
+                                </div>
+                            );
+                        });
+                        flushLoose();
+                        return nodes;
+                    })()}
                 </div>
             </Modal>
 
@@ -7312,20 +7302,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     loadMenu();
                 }
             }
-        } else if (type === 'category_group') {
-            const newGroups = [...categoryGroups];
-            const [moved] = newGroups.splice(source.index, 1);
-            newGroups.splice(destination.index, 0, moved);
-
-            const updatedGroups = newGroups.map((g, index) => ({ ...g, order: index + 1 }));
-            setCategoryGroups(updatedGroups);
-
-            try {
-                await updateCategoryGroupOrder(updatedGroups.map(g => ({ id: g.id, order: g.order })));
-            } catch (e) {
-                console.error("Error updating category group order", e);
-                loadMenu();
-            }
         }
     };
 
@@ -7347,15 +7323,31 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     const handleAddCategoryGroup = async () => {
         if (!newGroupName) return;
-        await createCategoryGroup(storeId, newGroupName);
-        setNewGroupName('');
-        loadMenu();
+        try {
+            await createCategoryGroup(storeId, newGroupName);
+            setNewGroupName('');
+            loadMenu();
+        } catch (e: any) {
+            console.error('Error creating category group', e);
+            toast.error('Erro ao criar grupo: ' + (e.message || 'Tente novamente.'));
+        }
     };
 
     const handleDeleteCategoryGroup = async (id: string) => {
-        if (await confirm({ message: 'Excluir grupo? As categorias dentro dele ficam sem grupo (não são apagadas).', variant: 'danger', confirmLabel: 'Excluir' })) {
-            await deleteCategoryGroup(id);
-            loadMenu();
+        // Fix minor da revisão final (2026-09-22): mensagem de confirmação
+        // mostra quantas categorias ficam sem grupo, não é só um aviso genérico.
+        const affectedCount = categories.filter(c => c.group_id === id).length;
+        const message = affectedCount > 0
+            ? `Excluir grupo? ${affectedCount} ${affectedCount === 1 ? 'categoria vai ficar' : 'categorias vão ficar'} sem grupo (não ${affectedCount === 1 ? 'é apagada' : 'são apagadas'}).`
+            : 'Excluir grupo?';
+        if (await confirm({ message, variant: 'danger', confirmLabel: 'Excluir' })) {
+            try {
+                await deleteCategoryGroup(id);
+                loadMenu();
+            } catch (e: any) {
+                console.error('Error deleting category group', e);
+                toast.error('Erro ao excluir grupo: ' + (e.message || 'Tente novamente.'));
+            }
         }
     };
 
@@ -7363,8 +7355,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, group_id: groupId } : c));
         try {
             await updateCategoryGroupAssignment(categoryId, groupId);
-        } catch (e) {
+        } catch (e: any) {
             console.error('Error updating category group assignment', e);
+            toast.error('Erro ao mudar o grupo da categoria: ' + (e.message || 'Tente novamente.'));
             loadMenu();
         }
     };
@@ -7888,47 +7881,43 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     {!isSearchingProducts && categoriesWithItems.length > 0 && (
                         <nav className="hidden lg:block lg:w-56 lg:shrink-0">
                             <ul className="space-y-0.5">
-                                {categoriesWithItems.filter(cat => !cat.group_id).map(cat => {
-                                    const count = products.filter(p => groupIdOf(p) === cat.id).length;
-                                    const isActive = cat.id === activeMenuCategoryId;
+                                {/* Fix I2 (2026-09-22): mesma fonte de ordenação (buildTopLevelItems)
+                                    das outras 4 telas. "Sem categoria" (UNCATEGORIZED_ID) é excluída do
+                                    input e sempre anexada por último, como já era antes da feature de
+                                    grupos — nunca entra na intercalação por order. */}
+                                {(() => {
+                                    const realCategories = categoriesWithItems.filter(cat => cat.id !== UNCATEGORIZED_ID);
+                                    const uncategorized = categoriesWithItems.find(cat => cat.id === UNCATEGORIZED_ID);
+                                    const items = buildTopLevelItems(realCategories, categoryGroups);
+                                    const renderCategoryLi = (cat: Category) => {
+                                        const count = products.filter(p => groupIdOf(p) === cat.id).length;
+                                        const isActive = cat.id === activeMenuCategoryId;
+                                        return (
+                                            <li key={cat.id}>
+                                                <button
+                                                    onClick={() => setActiveMenuCategoryId(cat.id)}
+                                                    className={`w-full flex items-center justify-between gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${isActive ? 'border-[var(--brand)] text-[var(--text)] font-bold bg-[var(--surface-2)]/50' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]'}`}
+                                                >
+                                                    <span className="truncate tracking-[-0.01em]">{cat.name}</span>
+                                                    <span className="text-xs opacity-60 shrink-0">{count}</span>
+                                                </button>
+                                            </li>
+                                        );
+                                    };
                                     return (
-                                        <li key={cat.id}>
-                                            <button
-                                                onClick={() => setActiveMenuCategoryId(cat.id)}
-                                                className={`w-full flex items-center justify-between gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${isActive ? 'border-[var(--brand)] text-[var(--text)] font-bold bg-[var(--surface-2)]/50' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]'}`}
-                                            >
-                                                <span className="truncate tracking-[-0.01em]">{cat.name}</span>
-                                                <span className="text-xs opacity-60 shrink-0">{count}</span>
-                                            </button>
-                                        </li>
+                                        <>
+                                            {items.map((item: TopLevelItem) => item.kind === 'category' ? renderCategoryLi(item.category) : (
+                                                <li key={item.group.id} className="pt-3 first:pt-0">
+                                                    <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{item.group.name}</p>
+                                                    <ul className="space-y-0.5">
+                                                        {item.categories.map(renderCategoryLi)}
+                                                    </ul>
+                                                </li>
+                                            ))}
+                                            {uncategorized && renderCategoryLi(uncategorized)}
+                                        </>
                                     );
-                                })}
-                                {categoryGroups.map(group => {
-                                    const catsInGroup = categoriesWithItems.filter(cat => cat.group_id === group.id);
-                                    if (catsInGroup.length === 0) return null;
-                                    return (
-                                        <li key={group.id} className="pt-3 first:pt-0">
-                                            <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{group.name}</p>
-                                            <ul className="space-y-0.5">
-                                                {catsInGroup.map(cat => {
-                                                    const count = products.filter(p => groupIdOf(p) === cat.id).length;
-                                                    const isActive = cat.id === activeMenuCategoryId;
-                                                    return (
-                                                        <li key={cat.id}>
-                                                            <button
-                                                                onClick={() => setActiveMenuCategoryId(cat.id)}
-                                                                className={`w-full flex items-center justify-between gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${isActive ? 'border-[var(--brand)] text-[var(--text)] font-bold bg-[var(--surface-2)]/50' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]'}`}
-                                                            >
-                                                                <span className="truncate tracking-[-0.01em]">{cat.name}</span>
-                                                                <span className="text-xs opacity-60 shrink-0">{count}</span>
-                                                            </button>
-                                                        </li>
-                                                    );
-                                                })}
-                                            </ul>
-                                        </li>
-                                    );
-                                })}
+                                })()}
                             </ul>
                         </nav>
                     )}
@@ -8021,35 +8010,24 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <Input placeholder="Novo Grupo (ex.: Bebidas)" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
                             <Button onClick={handleAddCategoryGroup}><Plus size={20}/></Button>
                         </div>
-                        <DragDropContext onDragEnd={handleDragEnd}>
-                            <Droppable droppableId="category_groups" direction="horizontal" type="category_group">
-                                {(provided) => (
-                                    <div className="flex flex-wrap gap-2" {...provided.droppableProps} ref={provided.innerRef}>
-                                        {categoryGroups.map((g, index) => (
-                                            <Draggable key={g.id} draggableId={g.id} index={index}>
-                                                {(provided, snapshot) => (
-                                                    <div
-                                                        ref={provided.innerRef}
-                                                        {...provided.draggableProps}
-                                                        className={`bg-[var(--surface-2)] px-3 py-1.5 rounded-lg flex items-center gap-2 group ${snapshot.isDragging ? 'shadow-md ring-2 ring-[var(--brand)] bg-[var(--surface)]' : ''}`}
-                                                    >
-                                                        <div {...provided.dragHandleProps} className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-grab active:cursor-grabbing">
-                                                            <GripVertical size={16} />
-                                                        </div>
-                                                        <span className="font-bold text-[var(--text)]">{g.name}</span>
-                                                        <button onClick={() => handleDeleteCategoryGroup(g.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
-                                                            <X size={14}/>
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
-                                        {categoryGroups.length === 0 && <span className="text-[var(--text-muted)] text-sm italic">Nenhum grupo criado — categorias soltas continuam funcionando normal.</span>}
-                                    </div>
-                                )}
-                            </Droppable>
-                        </DragDropContext>
+                        {/* Fix I2 (2026-09-22): drag-and-drop de grupo removido — a posição
+                            de um grupo não é mais controlada por `category_groups.order`
+                            arrastado aqui, e sim derivada da primeira categoria-membro dele
+                            (ver buildTopLevelItems). Chips continuam só com nome + excluir. */}
+                        <div className="flex flex-wrap gap-2">
+                            {categoryGroups.map(g => (
+                                <div key={g.id} className="bg-[var(--surface-2)] px-3 py-1.5 rounded-lg flex items-center gap-2 group">
+                                    <span className="font-bold text-[var(--text)]">{g.name}</span>
+                                    <button onClick={() => handleDeleteCategoryGroup(g.id)} className="text-[var(--text-muted)]/50 hover:text-[var(--err)] opacity-0 group-hover:opacity-100 u-motion u-press">
+                                        <X size={14}/>
+                                    </button>
+                                </div>
+                            ))}
+                            {categoryGroups.length === 0 && <span className="text-[var(--text-muted)] text-sm italic">Nenhum grupo criado — categorias soltas continuam funcionando normal.</span>}
+                        </div>
+                        {categoryGroups.length > 0 && (
+                            <p className="text-[11px] text-[var(--text-muted)] mt-1.5">A posição de cada grupo segue a da primeira categoria dele — arraste as categorias abaixo pra reordenar.</p>
+                        )}
                     </div>
 
                     <div>

@@ -200,7 +200,10 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true) => {
   if (onlyAvailable) prods = prods.filter(p => p.available);
   // option_groups vazio: mock nao simula adicionais de verdade, so precisa
   // bater com a assinatura que ClientModule.tsx espera (Product.option_groups).
-  return { categories: cats, products: prods.map(p => ({ ...p, option_groups: [] })) };
+  // categoryGroups: [] — mock não simula grupos de categoria de verdade,
+  // só precisa bater com a assinatura nova que os 3 consumidores esperam
+  // (fetchMenu real de lib/api.ts devolve `categoryGroups` desde 2026-09-22).
+  return { categories: cats, products: prods.map(p => ({ ...p, option_groups: [] })), categoryGroups: [] };
 };
 
 // No-op: mock nao persiste grupos/opcoes de verdade, so precisa nao quebrar

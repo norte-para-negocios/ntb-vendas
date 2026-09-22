@@ -450,6 +450,21 @@ async function fetchProductRecommendationsByStore(storeId: string): Promise<Map<
   return recommendedByProduct;
 }
 
+// Fix I1 da revisão final (2026-09-22): normaliza toda categoria cujo
+// `group_id` não bate com nenhum grupo REALMENTE devolvido nesta chamada —
+// vira `group_id: null` (categoria solta) em vez de sumir da tela. Sem
+// isso, uma categoria agrupada desaparecia inteira (produtos incluídos)
+// sempre que `categoryGroups` vinha vazio/incompleto por qualquer motivo
+// não relacionado à categoria em si: cache offline (nunca guarda grupos,
+// sempre devolve `categoryGroups: []`), falha isolada na query de
+// `category_groups`, ou uma corrida onde um grupo foi apagado entre a
+// leitura de categorias e a de grupos. Aplicado em TODO caminho de retorno
+// de `fetchMenu` abaixo — nunca um `return` novo pode pular esta chamada.
+function normalizeCategoriesAgainstGroups(categories: Category[], groups: CategoryGroup[]): Category[] {
+  const groupIds = new Set(groups.map(g => g.id));
+  return categories.map(c => (c.group_id && !groupIds.has(c.group_id)) ? { ...c, group_id: null } : c);
+}
+
 export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<{ categories: Category[]; products: Product[]; categoryGroups: CategoryGroup[]; error?: 'network' }> => {
   try {
     const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
@@ -497,10 +512,11 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
       if (fallbackProds.error || cats.error) {
         console.error('Error fetching menu (fallback):', fallbackProds.error || cats.error);
         const cached = await getCachedMenu(storeId);
-        if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[], categoryGroups: [] };
-        return { categories: cats.data || [], products: fallbackProds.data || [], categoryGroups: catGroups.data || [], error: 'network' };
+        if (cached) return { categories: normalizeCategoriesAgainstGroups(cached.categories as Category[], []), products: cached.products as Product[], categoryGroups: [] };
+        const fallbackGroups = catGroups.data || [];
+        return { categories: normalizeCategoriesAgainstGroups(cats.data || [], fallbackGroups), products: fallbackProds.data || [], categoryGroups: fallbackGroups, error: 'network' };
       }
-      const fallbackResult = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)), categoryGroups: catGroups.data || [] };
+      const fallbackResult = { categories: normalizeCategoriesAgainstGroups(cats.data || [], catGroups.data || []), products: resolveRecommended(mergeOptionGroups(fallbackProds.data || [], groupsByProduct)), categoryGroups: catGroups.data || [] };
       setCachedMenu(storeId, fallbackResult.categories, fallbackResult.products).catch(() => {});
       return fallbackResult;
     }
@@ -508,17 +524,19 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
     if (cats.error || prods.error) {
       console.error('Error fetching menu:', cats.error || prods.error);
       const cached = await getCachedMenu(storeId);
-      if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[], categoryGroups: [] };
-      return { categories: cats.data || [], products: prods.data || [], categoryGroups: catGroups.data || [], error: 'network' };
+      if (cached) return { categories: normalizeCategoriesAgainstGroups(cached.categories as Category[], []), products: cached.products as Product[], categoryGroups: [] };
+      const errorGroups = catGroups.data || [];
+      return { categories: normalizeCategoriesAgainstGroups(cats.data || [], errorGroups), products: prods.data || [], categoryGroups: errorGroups, error: 'network' };
     }
 
-    const result = { categories: cats.data || [], products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)), categoryGroups: catGroups.data || [] };
+    const resultGroups = catGroups.data || [];
+    const result = { categories: normalizeCategoriesAgainstGroups(cats.data || [], resultGroups), products: resolveRecommended(mergeOptionGroups(prods.data || [], groupsByProduct)), categoryGroups: resultGroups };
     setCachedMenu(storeId, result.categories, result.products).catch(() => {});
     return result;
   } catch (error) {
     console.error('Error fetching menu:', error);
     const cached = await getCachedMenu(storeId);
-    if (cached) return { categories: cached.categories as Category[], products: cached.products as Product[], categoryGroups: [] };
+    if (cached) return { categories: normalizeCategoriesAgainstGroups(cached.categories as Category[], []), products: cached.products as Product[], categoryGroups: [] };
     return { categories: [], products: [], categoryGroups: [], error: 'network' };
   }
 };
@@ -750,18 +768,6 @@ export const createCategoryGroup = async (storeId: string, name: string) => {
 export const deleteCategoryGroup = async (id: string) => {
   const { error } = await supabase.from('category_groups').delete().eq('id', id);
   if (error) throw error;
-};
-
-// Loop de update simples (não RPC): diferente de update_categories_order/
-// update_products_order (que existem por causa do upsert com colunas NOT
-// NULL omitidas, ver migration 005), aqui é update puro por id — sem
-// problema de upsert, e o volume de grupos por loja é sempre pequeno
-// (poucas unidades), então atomicidade não é crítica.
-export const updateCategoryGroupOrder = async (updates: { id: string; order: number }[]) => {
-  for (const u of updates) {
-    const { error } = await supabase.from('category_groups').update({ order: u.order }).eq('id', u.id);
-    if (error) throw error;
-  }
 };
 
 export const updateCategoryGroupAssignment = async (categoryId: string, groupId: string | null) => {
