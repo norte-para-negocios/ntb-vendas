@@ -50,7 +50,7 @@ export function ToastViewport() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none"
+      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-4 md:bottom-4 z-[100] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none"
     >
       {items.map((t) => {
         const { icon: Icon, color } = VARIANT[t.variant];
