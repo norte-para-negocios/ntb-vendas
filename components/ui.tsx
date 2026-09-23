@@ -373,7 +373,7 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${resolvedWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90dvh] flex flex-col ${
+              className={`w-full ${resolvedWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden u-sheet-h flex flex-col ${
                 surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
               }`}
               style={
@@ -442,7 +442,7 @@ export const Modal: React.FC<{
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={SPRING_SHEET}
-            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-none`}
+            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col u-modal-h`}
             style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] flex-shrink-0">
@@ -451,7 +451,7 @@ export const Modal: React.FC<{
                 onClick={onClose}
                 className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-2.5 sm:p-1 rounded-[var(--r-sm)] u-motion"
               >
-                <X size={18} />
+                <X size={16} className="max-sm:size-[18px]" />
               </button>
             </div>
             <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]">{children}</div>

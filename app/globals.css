@@ -489,3 +489,9 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .u-grow-in, .u-soft-bounce { animation: none; }
 }
+
+/* Altura máxima de janela com fallback pra vh (browser sem dvh descarta a 2ª declaração). */
+@media (max-width: 639.98px) {
+  .u-modal-h { max-height: 92vh; max-height: 92dvh; }
+}
+.u-sheet-h { max-height: 90vh; max-height: 90dvh; }
