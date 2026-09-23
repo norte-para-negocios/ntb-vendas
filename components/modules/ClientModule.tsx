@@ -1163,7 +1163,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
                         whileTap={{ scale: 0.88 }}
                         transition={SPRING_TAP}
-                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center"
+                        className="absolute hit-44 -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center"
                         style={{ color: ACTION_FG }}
                     >
                         <Plus size={15} />

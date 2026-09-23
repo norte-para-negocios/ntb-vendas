@@ -495,3 +495,15 @@ html {
   .u-modal-h { max-height: 92vh; max-height: 92dvh; }
 }
 .u-sheet-h { max-height: 90vh; max-height: 90dvh; }
+
+/* Área de toque mínima de 44x44px sem mudar o desenho. O elemento precisa ser posicionado
+   (relative/absolute/fixed/sticky) — use a classe `relative` junto quando ele não for. */
+.hit-44::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}

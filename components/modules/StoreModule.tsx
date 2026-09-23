@@ -1593,9 +1593,9 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                 <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
                     <span className="text-sm font-bold text-[var(--text)]">Quantidade</span>
                     <div className="flex items-center gap-4 bg-[var(--surface)] px-2 py-1 rounded-lg shadow-sm border border-[var(--border)]">
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Minus size={18} /></button>
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 grid place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Minus size={18} /></button>
                         <span className="font-bold text-lg w-8 text-center">{qty}</span>
-                        <button onClick={() => setQty(qty + 1)} className="p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Plus size={18} /></button>
+                        <button onClick={() => setQty(qty + 1)} className="min-w-11 min-h-11 grid place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Plus size={18} /></button>
                     </div>
                 </div>
 
@@ -2041,7 +2041,7 @@ const PaymentCaptureFields: React.FC<{
                         <button
                             key={id}
                             onClick={() => onBrandChange(currentBrand === id ? '' : id)}
-                            className={`py-2 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
+                            className={`py-3 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
                                 currentBrand === id
                                 ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
                                 : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
@@ -2088,7 +2088,7 @@ const PaymentCaptureFields: React.FC<{
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="font-mono font-bold">R$ {formatBRL(p.amount)}</span>
-                                <button onClick={() => onRemovePayment(idx)} className="text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
+                                <button onClick={() => onRemovePayment(idx)} className="relative hit-44 text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
                                     <Trash2 size={16} />
                                 </button>
                             </div>
@@ -3675,7 +3675,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         <button
                                             onClick={(e) => togglePin(e, table.id, inJurisdiction)}
                                             disabled={!inJurisdiction}
-                                            className="text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
+                                            className="relative hit-44 text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
                                             title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
                                         >
                                             {visiblePins.has(table.id) ? <EyeOff size={11} /> : <Eye size={11} />}
@@ -3695,7 +3695,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 handleBlockToggle(e, table, inJurisdiction);
                                             }}
                                             disabled={(!isBlocked && hasOrders) || !inJurisdiction}
-                                            className={`ml-auto p-1.5 rounded-lg u-motion u-press z-10 shrink-0 ${
+                                            className={`relative hit-44 ml-auto p-1.5 rounded-lg u-motion u-press z-10 shrink-0 ${
                                                 isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
                                                 (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
                                                 'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
@@ -3783,7 +3783,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <Button
                                         onClick={(e) => { e.stopPropagation(); if (!inJurisdiction) return; handleDismissWaiter(table.id); }}
                                         disabled={!inJurisdiction}
-                                        className="w-full h-8 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
+                                        className="relative hit-44 w-full min-h-11 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
                                     >
                                         <BellRing size={14} className="mr-1"/> ATENDER GARÇOM
                                     </Button>
@@ -4132,7 +4132,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteItem(item.id)}
-                                                className="text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press flex-shrink-0"
+                                                className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press flex-shrink-0"
                                                 title="Cancelar item"
                                             >
                                                 <Trash2 size={16} />
@@ -4197,10 +4197,10 @@ NOTIFY pgrst, 'reload schema';`;
                 <div className="space-y-4">
                     {/* Tabs */}
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-lg">
-                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Wallet size={14}/> Pagamento
                         </button>
-                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Users size={14}/> Dividir igual
                         </button>
                         {/* Reunião 2026-09-10 (min 32:14): pediram "emitir nota fiscal
@@ -4208,10 +4208,10 @@ NOTIFY pgrst, 'reload schema';`;
                             (migration 055), mas com o rótulo "Por Cliente" ninguém
                             associou, e quem estava dividindo a conta ficou na aba ao
                             lado achando que não existia ("não entendi nada disso aqui"). */}
-                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <List size={14}/> Por pessoa
                         </button>
-                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-1.5 text-xs font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Calculator size={14}/> Calculadora
                         </button>
                     </div>
