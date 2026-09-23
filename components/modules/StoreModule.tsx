@@ -797,7 +797,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
   return (
     <>
-    <div className={`min-h-dvh bg-[var(--bg)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
+    <div className={`min-h-screen supports-[height:100dvh]:min-h-dvh bg-[var(--bg)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
       <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
 
       {/* Mobile Header */}
@@ -11113,7 +11113,7 @@ export const StoreModule: React.FC = () => {
     if (isRestoringSession) {
         return (
             <MotionConfig reducedMotion="user">
-                <div className="force-light auth-shell min-h-dvh flex items-center justify-center bg-[var(--bg)] p-4">
+                <div className="force-light auth-shell min-h-screen supports-[height:100dvh]:min-h-dvh flex items-center justify-center bg-[var(--bg)] p-4">
                     <div className="auth-mesh" />
                     <div className="auth-grain" />
                     <div className="relative z-[1] flex flex-col items-center gap-3 text-[var(--text-muted)]">

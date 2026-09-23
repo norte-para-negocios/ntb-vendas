@@ -4247,7 +4247,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
             {/* Floating Cart Button + Status da Mesa (empilham: Comanda em cima, Status embaixo) */}
             {!isWaitingBill && (
-                <div className="fixed bottom-4 left-4 right-4 z-40 flex flex-col gap-3">
+                <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-40 flex flex-col gap-3">
                     <AnimatePresence>
                         {cart.length > 0 && (
                             <motion.div
@@ -4305,7 +4305,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
             {/* Locked State Footer */}
             {isWaitingBill && (
-                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--ink)] text-white p-4 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]" style={{boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'}}>
+                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--ink)] text-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]" style={{boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'}}>
                     <div className="flex justify-between items-center max-w-lg mx-auto">
                         <div className="flex items-center gap-3">
                             <Lock className="text-[var(--warn)]" size={18}/>

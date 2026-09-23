@@ -41,7 +41,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="relative min-h-dvh flex flex-col items-center justify-center overflow-hidden p-6 text-center" style={{ background: BG }}>
+    <div className="relative min-h-screen supports-[height:100dvh]:min-h-dvh flex flex-col items-center justify-center overflow-hidden p-6 text-center" style={{ background: BG }}>
       {/* Forma decorativa curva, mesmo recurso do fundo do hero institucional */}
       <svg className="absolute bottom-0 right-0 w-[70%] h-auto opacity-80 pointer-events-none" viewBox="0 0 1443 912" fill="none" preserveAspectRatio="xMaxYMax slice">
         <path d="M1443 203.5C1443 203.5 1156.08 94.5 868.5 293.5C580.92 492.5 558.996 755 582.5 911.5H1443V203.5Z" fill={BG_SHAPE} />
