@@ -1052,7 +1052,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     {bottomNavTabs.length > 0 && (
         <div className="fixed bottom-0 left-0 w-full bg-[var(--ink)] border-t border-white/8 flex justify-around px-2 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-40">
            {bottomNavTabs.map(item => (
-            <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center gap-1 text-[10px] font-medium px-3 py-1.5 rounded-[var(--r-md)] u-motion ${currentTab === item.id ? 'text-white' : 'text-white/40'}`}>
+            <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center gap-1 text-[11px] font-medium px-3 py-1.5 rounded-[var(--r-md)] u-motion ${currentTab === item.id ? 'text-white' : 'text-white/65'}`}>
               <div className="relative">
                   <item.icon size={20} />
                   {!!item.count && item.count > 0 && (
@@ -1061,7 +1061,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                        </div>
                   )}
               </div>
-              <span className="truncate max-w-[56px] text-center">
+              <span className="truncate max-w-[72px] text-center">
                   {item.id === 'caixa' ? 'Caixa' :
                    item.id === 'tables' ? 'Mesas' :
                    item.id === 'kitchen' ? 'Cozinha' :
