@@ -613,7 +613,7 @@ const OrderTracker: React.FC<{ orderId: string, onReset: () => void, onLogout: (
                                          value={ratingComment}
                                          onChange={(e) => setRatingComment(e.target.value)}
                                          placeholder="Comentário (opcional)"
-                                         className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none mb-3"
+                                         className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none mb-3 max-sm:text-base"
                                          rows={2}
                                      />
                                  )}
@@ -984,7 +984,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                             <div>
                                 <label className="text-[13px] font-medium text-[var(--text-muted)] mb-1 block">Onde você está?</label>
                                 <select
-                                    className="w-full px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-sm focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] outline-none u-motion"
+                                    className="w-full px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-sm focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] outline-none u-motion max-sm:text-base"
                                     value={tableId}
                                     onChange={e => setTableId(e.target.value)}
                                 >
@@ -1574,7 +1574,7 @@ const ProductModal: React.FC<{
                         placeholder="Ex: tirar a cebola, maionese à parte etc."
                         value={notes}
                         onChange={e => setNotes(e.target.value)}
-                        className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all"
+                        className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all max-sm:text-base"
                     />
                 </div>
 

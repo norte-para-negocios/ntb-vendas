@@ -600,7 +600,7 @@ export const StoreDashboardView: React.FC<{
                     <h2 className="text-xl font-bold text-[var(--text)]">Por Período</h2>
                     <div className="flex flex-wrap items-center gap-2">
                         <select
-                            className="px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)] outline-none transition-all text-sm"
+                            className="px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)] outline-none transition-all text-sm max-sm:text-base"
                             value={periodType}
                             onChange={(e) => setPeriodType(e.target.value as any)}
                         >

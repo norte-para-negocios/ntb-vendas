@@ -1277,7 +1277,7 @@ export const AdminModule: React.FC = () => {
                     <label className="text-sm font-semibold text-[var(--text)]">Link de Acesso (Slug)</label>
                     <div className="flex items-center group">
                         <span className="bg-[var(--surface-2)] border border-r-0 border-[var(--border)] rounded-l-lg px-3 py-2 text-sm text-[var(--text-muted)]">site.com/c/</span>
-                        <input className="w-full rounded-r-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[var(--brand)]/30 outline-none" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
+                        <input className="w-full rounded-r-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[var(--brand)]/30 outline-none max-sm:text-base" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
                     </div>
                 </div>
               </div>
@@ -1594,7 +1594,7 @@ export const AdminModule: React.FC = () => {
                                   <div className="flex flex-col gap-1.5">
                                       <label className="text-sm font-semibold text-[var(--text)]">Tipo</label>
                                       <select
-                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                         value={fiscalTipoPessoa}
                                         onChange={e => setFiscalTipoPessoa(e.target.value as 'juridica' | 'fisica')}
                                       >
@@ -1644,7 +1644,7 @@ export const AdminModule: React.FC = () => {
                           <div className="flex flex-col gap-1.5">
                               <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
                               <select
-                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                 value={fiscalAmbiente}
                                 onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
                               >
@@ -1656,7 +1656,7 @@ export const AdminModule: React.FC = () => {
                           <div className="flex flex-col gap-1.5">
                               <label className="text-sm font-semibold text-[var(--text)]">Modelo de emissão automática</label>
                               <select
-                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                 value={fiscalModeloEmissaoAutomatica}
                                 onChange={e => setFiscalModeloEmissaoAutomatica(e.target.value as 'nenhuma' | 'nfce' | 'nfe')}
                               >
@@ -1682,7 +1682,7 @@ export const AdminModule: React.FC = () => {
                                   <div className="flex flex-col gap-1.5">
                                       <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
                                       <textarea
-                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                         rows={2}
                                         value={fiscalObservacaoNfe}
                                         onChange={e => setFiscalObservacaoNfe(e.target.value)}
@@ -1748,7 +1748,7 @@ export const AdminModule: React.FC = () => {
                               <div className="flex flex-col gap-1.5">
                                   <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
                                   <textarea
-                                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                     rows={2}
                                     value={fiscalObservacaoPedido}
                                     onChange={e => setFiscalObservacaoPedido(e.target.value)}
@@ -1834,7 +1834,7 @@ export const AdminModule: React.FC = () => {
                             min="1"
                             value={tableCount}
                             onChange={e => setTableCount(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40"
+                            className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40 max-sm:text-base"
                         />
                         {/* Achado real (2026-08-27): o texto antigo aqui dizia o
                             OPOSTO do que sync_store_tables_secure realmente faz —
@@ -1890,7 +1890,7 @@ export const AdminModule: React.FC = () => {
                   <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-semibold text-[var(--text)]">Vincular à Loja</label>
                       <select
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                         value={userStoreId}
                         onChange={e => setUserStoreId(e.target.value)}
                       >

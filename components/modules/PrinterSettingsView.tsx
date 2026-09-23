@@ -369,7 +369,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 <select
                   value={usbSystemName}
                   onChange={(e) => setUsbSystemName(e.target.value)}
-                  className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
+                  className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
                 >
                   <option value="">Selecione...</option>
                   {discoveredPrinters.map((p) => (
@@ -445,7 +445,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 <select
                   value={printer.paper_width_mm ?? 80}
                   onChange={(e) => handleChangePaperWidth(printer, Number(e.target.value) as PrinterConfig['paper_width_mm'])}
-                  className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs font-semibold text-[var(--text)]"
+                  className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs font-semibold text-[var(--text)] max-sm:text-base"
                   title="Tamanho do papel"
                 >
                   <option value={58}>58mm</option>

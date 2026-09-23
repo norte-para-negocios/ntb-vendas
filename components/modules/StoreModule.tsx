@@ -7861,7 +7861,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 placeholder="Buscar produto..."
                                 value={productSearchTerm}
                                 onChange={e => setProductSearchTerm(e.target.value)}
-                                className="pl-9 pr-3 py-2 w-full sm:w-64 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)]"
+                                className="pl-9 pr-3 py-2 w-full sm:w-64 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)] max-sm:text-base"
                             />
                         </div>
                         <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)}>
@@ -8111,7 +8111,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                             <select
                                                                 value={cat.group_id || ''}
                                                                 onChange={e => handleChangeCategoryGroup(cat.id, e.target.value || null)}
-                                                                className="text-xs bg-[var(--surface)] border border-[var(--border)] rounded px-1.5 py-1 text-[var(--text-muted)]"
+                                                                className="text-xs bg-[var(--surface)] border border-[var(--border)] rounded px-1.5 py-1 text-[var(--text-muted)] max-sm:text-base"
                                                             >
                                                                 <option value="">Sem grupo</option>
                                                                 {categoryGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -8178,7 +8178,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             Descrição (opcional) — conte a história desse prato: origem, por que é especial, há quanto tempo está no cardápio
                         </label>
                         <textarea
-                            className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all"
+                            className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all max-sm:text-base"
                             rows={3}
                             value={pDesc}
                             onChange={e => setPDesc(e.target.value)}
@@ -8200,7 +8200,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div className="grid grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Categoria</label>
-                            <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30" value={pCat} onChange={e => setPCat(e.target.value)}>
+                            <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pCat} onChange={e => setPCat(e.target.value)}>
                                 <option value="" disabled>Selecione...</option>
                                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
@@ -8210,7 +8210,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div className="grid grid-cols-2 gap-4">
                          <div className="flex flex-col gap-1.5">
                              <label className="text-sm font-semibold text-[var(--text)]">Destino do Pedido</label>
-                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30" value={pDestination} onChange={e => setPDestination(e.target.value as 'kitchen' | 'bar')}>
+                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pDestination} onChange={e => setPDestination(e.target.value as 'kitchen' | 'bar')}>
                                  <option value="kitchen">Cozinha</option>
                                  <option value="bar">Bar</option>
                              </select>
@@ -8775,7 +8775,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     
                     <div>
                         <label className="text-sm font-semibold text-[var(--text)] mb-1 block">Função</label>
-                        <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm" value={role} onChange={e => setRole(e.target.value)}>
+                        <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm max-sm:text-base" value={role} onChange={e => setRole(e.target.value)}>
                             <option value="waiter">Garçom</option>
                             <option value="cashier">Caixa</option>
                             <option value="cook">Cozinheiro</option>
@@ -9891,7 +9891,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
                             <select
-                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 disabled:opacity-60 disabled:cursor-not-allowed max-sm:text-base"
                               value={fiscalAmbiente}
                               onChange={e => setFiscalAmbiente(e.target.value as 'homologacao' | 'producao')}
                               disabled={store.is_test}
@@ -9907,7 +9907,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Modelo de emissão automática</label>
                             <select
-                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                               value={fiscalModeloEmissaoAutomatica}
                               onChange={e => setFiscalModeloEmissaoAutomatica(e.target.value as 'nenhuma' | 'nfce' | 'nfe')}
                             >
@@ -9939,7 +9939,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
                                     <textarea
-                                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                       rows={2}
                                       value={fiscalObservacaoNfe}
                                       onChange={e => setFiscalObservacaoNfe(e.target.value)}
@@ -10007,7 +10007,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
                             <textarea
-                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                               rows={2}
                               value={fiscalObservacaoPedido}
                               onChange={e => setFiscalObservacaoPedido(e.target.value)}
@@ -10027,7 +10027,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-sm font-semibold text-[var(--text)]">Tipo</label>
                                 <select
-                                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base"
                                   value={fiscalTipoPessoa}
                                   onChange={e => setFiscalTipoPessoa(e.target.value as 'juridica' | 'fisica')}
                                 >
@@ -10766,7 +10766,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
                         <div className="flex items-center gap-2 flex-wrap">
                             <select
-                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] max-sm:text-base"
                                 value={tipoFilter}
                                 onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
                             >
@@ -10775,7 +10775,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <option value="65">Só NFC-e</option>
                             </select>
                             <select
-                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] max-sm:text-base"
                                 value={ambienteFilter}
                                 onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
                             >
