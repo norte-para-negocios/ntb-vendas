@@ -256,16 +256,15 @@ export function montarXmlNota(params: MontarXmlParams): {
     vProdTotal += Number((item.qCom * item.vUnCom).toFixed(2));
   }
 
-  // NFC-e (modelo 65): documento opcional do consumidor, SEM endereço/
-  // xNome/indIEDest — nada disso é exigido pra NFC-e anônima com CPF/CNPJ
-  // informado (diferente da NF-e, ver bug #3 no AGENTS.md sobre <enderDest>
-  // ser obrigatório especificamente pro modelo 55 na SEFAZ-BA). Doc vazio
-  // (string sem dígitos) continua sem <dest> nenhum — mesmo comportamento
-  // de sempre pro cupom anônimo. Nunca testado contra a SEFAZ de verdade
-  // ainda — validar em homologação antes de habilitar em produção.
+  // NFC-e (modelo 65): documento opcional do consumidor, sem endereço/xNome.
+  // `indIEDest` é OBRIGATÓRIO no <dest> pelo schema NF-e 4.00 (TNFe/dest),
+  // e pra NFC-e é sempre 9 (não contribuinte) — sem ele a SEFAZ rejeita com
+  // cStat=225 "Falha no Schema XML (Elemento: .../infNFe/dest/)", achado
+  // real em homologação no Sertão (2026-09-22). Doc vazio continua sem
+  // <dest> nenhum (cupom anônimo).
   const destDocNFCe = modelo === '65' ? (destinatario?.cpfCnpj ?? '').replace(/\D/g, '') : '';
   const destXmlNFCe = destDocNFCe
-    ? `<dest><${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}>${destDocNFCe}</${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}></dest>`
+    ? `<dest><${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}>${destDocNFCe}</${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}><indIEDest>9</indIEDest></dest>`
     : '';
 
   const destXml = modelo === '55' && destinatario
