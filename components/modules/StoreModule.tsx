@@ -1593,9 +1593,9 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                 <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
                     <span className="text-sm font-bold text-[var(--text)]">Quantidade</span>
                     <div className="flex items-center gap-4 bg-[var(--surface)] px-2 py-1 rounded-lg shadow-sm border border-[var(--border)]">
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 grid place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Minus size={18} /></button>
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="max-sm:min-w-11 max-sm:min-h-11 max-sm:grid max-sm:place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Minus size={18} /></button>
                         <span className="font-bold text-lg w-8 text-center">{qty}</span>
-                        <button onClick={() => setQty(qty + 1)} className="min-w-11 min-h-11 grid place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Plus size={18} /></button>
+                        <button onClick={() => setQty(qty + 1)} className="max-sm:min-w-11 max-sm:min-h-11 max-sm:grid max-sm:place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Plus size={18} /></button>
                     </div>
                 </div>
 
@@ -2041,7 +2041,7 @@ const PaymentCaptureFields: React.FC<{
                         <button
                             key={id}
                             onClick={() => onBrandChange(currentBrand === id ? '' : id)}
-                            className={`py-3 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
+                            className={`py-2 max-sm:py-3 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
                                 currentBrand === id
                                 ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
                                 : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
@@ -2088,7 +2088,7 @@ const PaymentCaptureFields: React.FC<{
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="font-mono font-bold">R$ {formatBRL(p.amount)}</span>
-                                <button onClick={() => onRemovePayment(idx)} className="relative hit-44 text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
+                                <button onClick={() => onRemovePayment(idx)} className="max-sm:p-2.5 text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
                                     <Trash2 size={16} />
                                 </button>
                             </div>
@@ -3783,7 +3783,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <Button
                                         onClick={(e) => { e.stopPropagation(); if (!inJurisdiction) return; handleDismissWaiter(table.id); }}
                                         disabled={!inJurisdiction}
-                                        className="relative hit-44 w-full min-h-11 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
+                                        className="w-full max-sm:min-h-11 sm:h-8 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
                                     >
                                         <BellRing size={14} className="mr-1"/> ATENDER GARÇOM
                                     </Button>
@@ -4197,10 +4197,10 @@ NOTIFY pgrst, 'reload schema';`;
                 <div className="space-y-4">
                     {/* Tabs */}
                     <div className="flex p-1 bg-[var(--surface-2)] rounded-lg">
-                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Wallet size={14}/> Pagamento
                         </button>
-                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Users size={14}/> Dividir igual
                         </button>
                         {/* Reunião 2026-09-10 (min 32:14): pediram "emitir nota fiscal
@@ -4208,10 +4208,10 @@ NOTIFY pgrst, 'reload schema';`;
                             (migration 055), mas com o rótulo "Por Cliente" ninguém
                             associou, e quem estava dividindo a conta ficou na aba ao
                             lado achando que não existia ("não entendi nada disso aqui"). */}
-                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <List size={14}/> Por pessoa
                         </button>
-                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
+                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
                             <Calculator size={14}/> Calculadora
                         </button>
                     </div>
