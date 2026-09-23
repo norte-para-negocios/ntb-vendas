@@ -836,7 +836,7 @@ const ReservationModal: React.FC<{ isOpen: boolean; onClose: () => void; storeId
             ) : (
                 <div className="space-y-3">
                     <Input label="Seu nome" value={name} onChange={e => setName(e.target.value)} placeholder="Como podemos te chamar?" />
-                    <Input label="Telefone (WhatsApp)" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                    <Input label="Telefone (WhatsApp)" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
                     <div className="grid grid-cols-2 gap-3">
                         <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
                         <Input label="Horário" type="time" value={time} onChange={e => setTime(e.target.value)} />
@@ -3944,7 +3944,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             type="text"
                             aria-label={`Buscar em ${currentStore.name}`}
                             placeholder={`Buscar em ${currentStore.name}`}
-                            className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border border-transparent text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border)] transition-colors"
+                            className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border border-transparent text-base text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border)] transition-colors"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />

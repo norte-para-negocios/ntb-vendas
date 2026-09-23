@@ -1740,7 +1740,7 @@ export const AdminModule: React.FC = () => {
                           <div className="pt-4 border-t border-[var(--border)] space-y-4">
                               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Dados gerais</p>
                               <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
-                              <Input label="Telefone" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
+                              <Input label="Telefone" inputMode="tel" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
                               <div className="grid grid-cols-2 gap-4">
                                   <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
                                   <Input label="CNPJ Autorizado" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />

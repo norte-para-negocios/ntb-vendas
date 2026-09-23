@@ -2060,6 +2060,7 @@ const PaymentCaptureFields: React.FC<{
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
                 <input
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     step="0.01"
                     className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
@@ -4258,7 +4259,9 @@ NOTIFY pgrst, 'reload schema';`;
                                         </p>
                                         <input
                                             type="text"
-                                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                            inputMode="numeric"
+                                            autoComplete="off"
+                                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                                             placeholder="CPF ou CNPJ do cliente"
                                             value={paymentDestCpfCnpj}
                                             onChange={(e) => setPaymentDestCpfCnpj(e.target.value)}
@@ -4266,7 +4269,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         {nfeModeloAtivo && (
                                             <input
                                                 type="text"
-                                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                                                 placeholder="Nome do cliente"
                                                 value={paymentDestNome}
                                                 onChange={(e) => setPaymentDestNome(e.target.value)}
@@ -5457,7 +5460,9 @@ const CounterView: React.FC<{
                         </p>
                         <input
                             type="text"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                             placeholder="CPF ou CNPJ do cliente"
                             value={destCpfCnpj}
                             onChange={(e) => setDestCpfCnpj(e.target.value)}
@@ -5465,7 +5470,7 @@ const CounterView: React.FC<{
                         {nfeModeloAtivo && (
                             <input
                                 type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                                 placeholder="Nome do cliente"
                                 value={destNome}
                                 onChange={(e) => setDestNome(e.target.value)}
@@ -5526,7 +5531,9 @@ const CounterView: React.FC<{
                             </p>
                             <input
                                 type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                inputMode="numeric"
+                                autoComplete="off"
+                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                                 placeholder="CPF ou CNPJ do cliente"
                                 value={destCpfCnpj}
                                 onChange={(e) => setDestCpfCnpj(e.target.value)}
@@ -5534,7 +5541,7 @@ const CounterView: React.FC<{
                             {nfeModeloAtivo && (
                                 <input
                                     type="text"
-                                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                                     placeholder="Nome do cliente"
                                     value={destNome}
                                     onChange={(e) => setDestNome(e.target.value)}
@@ -6408,6 +6415,7 @@ const CaixaView: React.FC<{
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 min="0"
                                 step="0.01"
                                 className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
@@ -6739,6 +6747,7 @@ const CaixaView: React.FC<{
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 min="0.01"
                                 step="0.01"
                                 autoFocus
@@ -8176,10 +8185,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         />
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Input label="Preço (R$)" type="number" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
+                        <Input label="Preço (R$)" type="number" inputMode="decimal" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
                         <Input
                             label="Preço promocional (opcional)"
                             type="number"
+                            inputMode="decimal"
                             step="0.01"
                             min="0"
                             placeholder="Deixe em branco pra não ter promoção"
@@ -8195,7 +8205,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
-                         <Input label="Tempo Preparo (min)" type="number" min="0" value={pTime} onChange={e => setPTime(e.target.value)} />
+                         <Input label="Tempo Preparo (min)" type="number" inputMode="numeric" min="0" value={pTime} onChange={e => setPTime(e.target.value)} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                          <div className="flex flex-col gap-1.5">
@@ -8405,9 +8415,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 </p>
                                 {group.type === 'multiple' && (
                                     <div className="flex gap-2 items-center">
-                                        <Input placeholder="Mínimo" type="number" min="0" value={group.min_select}
+                                        <Input placeholder="Mínimo" type="number" inputMode="numeric" min="0" value={group.min_select}
                                             onChange={e => updateOptionGroup(group.tempId, { min_select: e.target.value })} className="w-24" />
-                                        <Input placeholder="Máximo" type="number" min="0" value={group.max_select}
+                                        <Input placeholder="Máximo" type="number" inputMode="numeric" min="0" value={group.max_select}
                                             onChange={e => updateOptionGroup(group.tempId, { max_select: e.target.value })} className="w-24" />
                                         <span className="text-xs text-[var(--text-muted)]">Vazio = sem limite de seleção</span>
                                     </div>
@@ -8429,7 +8439,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                 </div>
                                                                 <Input placeholder='Opção (ex: "Catupiry")' value={opt.name}
                                                                     onChange={e => updateOption(group.tempId, opt.tempId, { name: e.target.value })} className="flex-1" />
-                                                                <Input placeholder="+R$" type="number" step="0.01" min="0" value={opt.price_delta}
+                                                                <Input placeholder="+R$" type="number" inputMode="decimal" step="0.01" min="0" value={opt.price_delta}
                                                                     onChange={e => updateOption(group.tempId, opt.tempId, { price_delta: e.target.value })} className="w-24" />
                                                                 {/* Código Omie por opção (2026-09-22, achado real: o formulário
                                                                     apagava esse campo em silêncio a cada Salvar — ver comentário
@@ -9922,8 +9932,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Input type="number" label="Série" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
-                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
                                 <div className="flex flex-col gap-1.5">
@@ -9942,8 +9952,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Input type="number" label="Série" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
-                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
                                 <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
@@ -9971,14 +9981,14 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="grid grid-cols-2 gap-4 mt-3">
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
-                                    <Input type="number" label="Série" className="font-mono" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
-                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
                                     <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
-                                    <Input type="number" label="Série" className="font-mono" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
-                                    <Input type="number" label="Último número emitido" className="font-mono" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
                                     <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
                                 </div>
                             </div>
@@ -9989,9 +9999,9 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 <Collapsible title="Dados Gerais" defaultOpen={false}>
                     <div className="space-y-4">
                         <Input label="Inscrição municipal" className="font-mono" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
-                        <Input label="Telefone" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
+                        <Input label="Telefone" inputMode="tel" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
                         <div className="grid grid-cols-2 gap-4">
-                            <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
+                            <Input type="number" inputMode="numeric" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
                             <Input label="CNPJ Autorizado" className="font-mono" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -10196,21 +10206,21 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                     <div className="flex gap-2">
                                         <div className="flex-1">
                                             <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Min Itens</label>
-                                            <Input type="number" min="0" value={filterMinItems} onChange={e => setFilterMinItems(e.target.value)} />
+                                            <Input type="number" inputMode="numeric" min="0" value={filterMinItems} onChange={e => setFilterMinItems(e.target.value)} />
                                         </div>
                                         <div className="flex-1">
                                             <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Max Itens</label>
-                                            <Input type="number" min="0" value={filterMaxItems} onChange={e => setFilterMaxItems(e.target.value)} />
+                                            <Input type="number" inputMode="numeric" min="0" value={filterMaxItems} onChange={e => setFilterMaxItems(e.target.value)} />
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
                                         <div className="flex-1">
                                             <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Min Total (R$)</label>
-                                            <Input type="number" min="0" step="0.01" value={filterMinTotal} onChange={e => setFilterMinTotal(e.target.value)} />
+                                            <Input type="number" inputMode="decimal" min="0" step="0.01" value={filterMinTotal} onChange={e => setFilterMinTotal(e.target.value)} />
                                         </div>
                                         <div className="flex-1">
                                             <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Max Total (R$)</label>
-                                            <Input type="number" min="0" step="0.01" value={filterMaxTotal} onChange={e => setFilterMaxTotal(e.target.value)} />
+                                            <Input type="number" inputMode="decimal" min="0" step="0.01" value={filterMaxTotal} onChange={e => setFilterMaxTotal(e.target.value)} />
                                         </div>
                                     </div>
                                     <div className="flex items-end">
@@ -10896,14 +10906,16 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         </p>
                         <input
                             type="text"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                             placeholder="CPF ou CNPJ do cliente"
                             value={retryDestCpfCnpj}
                             onChange={(e) => setRetryDestCpfCnpj(e.target.value)}
                         />
                         <input
                             type="text"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-sm"
+                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
                             placeholder="Nome do cliente"
                             value={retryDestNome}
                             onChange={(e) => setRetryDestNome(e.target.value)}
