@@ -3695,7 +3695,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 handleBlockToggle(e, table, inJurisdiction);
                                             }}
                                             disabled={(!isBlocked && hasOrders) || !inJurisdiction}
-                                            className={`relative hit-44 ml-auto p-1.5 rounded-lg u-motion u-press z-10 shrink-0 ${
+                                            className={`relative hit-44 ml-auto p-1.5 rounded-lg u-motion u-press z-10 shrink-0 disabled:pointer-events-none ${
                                                 isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
                                                 (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
                                                 'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'

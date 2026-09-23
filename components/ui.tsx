@@ -64,7 +64,7 @@ export const Input: React.FC<
       )}
       <input
         id={inputId}
-        className={`w-full rounded-[var(--r-md)] border bg-[var(--surface)] px-3 py-2 text-base sm:text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all ${
+        className={`w-full rounded-[var(--r-md)] border bg-[var(--surface)] px-3 py-2 text-sm max-sm:text-base text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all ${
           error ? 'border-[var(--err)]' : 'border-[var(--border)]'
         } ${className}`}
         {...props}

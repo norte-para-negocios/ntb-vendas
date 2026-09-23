@@ -3944,7 +3944,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             type="text"
                             aria-label={`Buscar em ${currentStore.name}`}
                             placeholder={`Buscar em ${currentStore.name}`}
-                            className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border border-transparent text-base text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border)] transition-colors"
+                            className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border border-transparent text-base sm:text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border)] transition-colors"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
