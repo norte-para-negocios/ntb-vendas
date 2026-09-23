@@ -22,6 +22,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#484DB5',
+  // viewport-fit=cover: sem isso todo env(safe-area-inset-*) vale 0 e a barra
+  // inferior/carrinho encostam no gesto de home do iPhone (auditoria 2026-09-23).
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

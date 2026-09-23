@@ -797,7 +797,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
   return (
     <>
-    <div className={`min-h-screen bg-[var(--bg)] pb-20 md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
+    <div className={`min-h-dvh bg-[var(--bg)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
       <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
 
       {/* Mobile Header */}
@@ -1050,7 +1050,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
     {/* Mobile Bottom Nav */}
     {bottomNavTabs.length > 0 && (
-        <div className="fixed bottom-0 left-0 w-full bg-[var(--ink)] border-t border-white/8 flex justify-around px-2 pt-2 pb-4 md:hidden z-40">
+        <div className="fixed bottom-0 left-0 w-full bg-[var(--ink)] border-t border-white/8 flex justify-around px-2 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-40">
            {bottomNavTabs.map(item => (
             <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center gap-1 text-[10px] font-medium px-3 py-1.5 rounded-[var(--r-md)] u-motion ${currentTab === item.id ? 'text-white' : 'text-white/40'}`}>
               <div className="relative">
@@ -11113,7 +11113,7 @@ export const StoreModule: React.FC = () => {
     if (isRestoringSession) {
         return (
             <MotionConfig reducedMotion="user">
-                <div className="force-light auth-shell min-h-screen flex items-center justify-center bg-[var(--bg)] p-4">
+                <div className="force-light auth-shell min-h-dvh flex items-center justify-center bg-[var(--bg)] p-4">
                     <div className="auth-mesh" />
                     <div className="auth-grain" />
                     <div className="relative z-[1] flex flex-col items-center gap-3 text-[var(--text-muted)]">
