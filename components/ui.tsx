@@ -144,6 +144,20 @@ export const Collapsible: React.FC<{
 const MODAL_FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Trava o scroll do <body> enquanto houver algum modal aberto. Por contagem:
+// modais aninhados (Mesa X → Receber Pagamento) só liberam o body quando o
+// ÚLTIMO fecha.
+let bodyScrollLocks = 0;
+const useBodyScrollLock = (active: boolean) => {
+  React.useEffect(() => {
+    if (!active) return;
+    if (bodyScrollLocks++ === 0) document.body.style.overflow = 'hidden';
+    return () => {
+      if (--bodyScrollLocks === 0) document.body.style.overflow = '';
+    };
+  }, [active]);
+};
+
 export const Modal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -252,6 +266,8 @@ export const Modal: React.FC<{
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
 
+  useBodyScrollLock(isOpen);
+
   React.useEffect(() => {
     if (!isOpen) return;
 
@@ -357,7 +373,7 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${resolvedWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90vh] flex flex-col ${
+              className={`w-full ${resolvedWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden max-h-[90dvh] flex flex-col ${
                 surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
               }`}
               style={
@@ -413,7 +429,7 @@ export const Modal: React.FC<{
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] p-0 sm:p-4"
         >
           <motion.div
             key="panel"
@@ -426,19 +442,19 @@ export const Modal: React.FC<{
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={SPRING_SHEET}
-            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-[var(--r-lg)] overflow-hidden`}
+            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-none`}
             style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] flex-shrink-0">
               <h3 id={titleId} className="text-[15px] font-semibold text-[var(--text)]">{title}</h3>
               <button
                 onClick={onClose}
-                className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-1 rounded-[var(--r-sm)] u-motion"
+                className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-2.5 sm:p-1 rounded-[var(--r-sm)] u-motion"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
-            <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
+            <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]">{children}</div>
           </motion.div>
         </motion.div>
       )}
