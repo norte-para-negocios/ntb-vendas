@@ -4073,7 +4073,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     key={group.id}
                                     type="button"
                                     ref={el => { tabButtonRefs.current[group.id] = el; }}
-                                    onClick={() => setActiveGroupId(prev => prev === group.id ? null : group.id)}
+                                    onClick={() => {
+                                        if (isExpanded) { setActiveGroupId(null); return; }
+                                        setActiveGroupId(group.id);
+                                        if (!ownsActiveCategory && item.categories[0]) handleTabClick(item.categories[0].id);
+                                    }}
                                     aria-expanded={isExpanded}
                                     aria-current={ownsActiveCategory ? 'true' : undefined}
                                     className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isBold ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
