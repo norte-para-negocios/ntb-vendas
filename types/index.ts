@@ -327,6 +327,10 @@ export interface StoreFiscalConfig {
   modelo_emissao_automatica: 'nenhuma' | 'nfce' | 'nfe';
   nfe_serie: number | null;
   nfce_serie: number | null;
+  nfce_serie_producao?: number | null;
+  nfce_ultimo_numero_producao?: number;
+  nfe_serie_producao?: number | null;
+  nfe_ultimo_numero_producao?: number;
   cte_serie: number | null;
   mdfe_serie: number | null;
   nfe_ultimo_numero: number;

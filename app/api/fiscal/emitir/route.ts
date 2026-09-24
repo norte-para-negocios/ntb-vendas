@@ -462,9 +462,25 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ skipped: true, reason: 'Loja sem emissão automática configurada' });
   }
   const modelo: '55' | '65' = config.modelo_emissao_automatica === 'nfe' ? '55' : '65';
-  const serie = modelo === '55' ? config.nfe_serie : config.nfce_serie;
+  // Série do AMBIENTE atual (migration 086): produção tem série/contador próprios.
+  const emProducao = config.ambiente === 'producao';
+  const serie = modelo === '55'
+    ? (emProducao ? config.nfe_serie_producao : config.nfe_serie)
+    : (emProducao ? config.nfce_serie_producao : config.nfce_serie);
   if (!serie) {
-    return NextResponse.json({ skipped: true, reason: `Série do modelo ${modelo} não configurada` });
+    return NextResponse.json({ skipped: true, reason: `Série de ${emProducao ? 'PRODUÇÃO' : 'homologação'} do modelo ${modelo} não configurada` });
+  }
+  if (modelo === '65') {
+    const { data: cscCheck } = await admin
+      .from('store_fiscal_config_secrets')
+      .select('csc_homologacao, cscid_homologacao, csc_producao, cscid_producao')
+      .eq('store_id', storeId)
+      .maybeSingle();
+    const temCsc = emProducao ? (cscCheck?.csc_producao && cscCheck?.cscid_producao) : (cscCheck?.csc_homologacao && cscCheck?.cscid_homologacao);
+    if (!temCsc) {
+      // Antes de gastar número: sem CSC do ambiente a nota nunca sai.
+      return NextResponse.json({ ok: false, reason: `CSC de ${emProducao ? 'PRODUÇÃO' : 'homologação'} não cadastrado` });
+    }
   }
 
   // 3. Certificado + senha + cadeia (metadados agora; o download/extração do
@@ -933,6 +949,18 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       motivo_erro: motivo,
     });
     if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (rejeição/erro de transmissão):', insertErr);
+    // Número já usado na SEFAZ (outro sistema emitiu nessa série antes):
+    // 539 = duplicidade com diferença na chave, 204 = duplicidade. Nada foi
+    // autorizado com ESTE número por nós, então tenta de novo com o próximo
+    // (o contador já avançou). Limite de tentativas pra nunca entrar em loop.
+    const tentativa = Number(request.headers.get('x-ntb-tentativa-numero') || '0');
+    if ((resposta.cStat === '539' || resposta.cStat === '204') && tentativa < 50) {
+      return fetch(new URL('/api/fiscal/emitir', request.nextUrl.origin), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ntb-tentativa-numero': String(tentativa + 1) },
+        body: JSON.stringify(body),
+      }).then(async (r) => NextResponse.json(await r.json().catch(() => ({ ok: false })), { status: r.status }));
+    }
     return NextResponse.json({ ok: false, cStat: resposta.cStat, xMotivo: resposta.xMotivo });
   }
 

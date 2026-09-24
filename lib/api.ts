@@ -1928,6 +1928,10 @@ export interface UpdateStoreFiscalConfigParams {
   mdfeSerie?: number;
   nfeUltimoNumero?: number;
   nfceUltimoNumero?: number;
+  nfceSerieProducao?: number;
+  nfceUltimoNumeroProducao?: number;
+  nfeSerieProducao?: number;
+  nfeUltimoNumeroProducao?: number;
   cteUltimoNumero?: number;
   mdfeUltimoNumero?: number;
   inscricaoMunicipal?: string;

@@ -9041,6 +9041,11 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     const [fiscalMdfeSerie, setFiscalMdfeSerie] = useState('');
     const [fiscalNfeUltimoNumero, setFiscalNfeUltimoNumero] = useState('');
     const [fiscalNfceUltimoNumero, setFiscalNfceUltimoNumero] = useState('');
+    const [fiscalNfceSerieProd, setFiscalNfceSerieProd] = useState('');
+    const [fiscalNfceUltimoNumeroProd, setFiscalNfceUltimoNumeroProd] = useState('');
+    const [fiscalNfeSerieProd, setFiscalNfeSerieProd] = useState('');
+    const [fiscalNfeUltimoNumeroProd, setFiscalNfeUltimoNumeroProd] = useState('');
+    const [prontidao, setProntidao] = useState<{ certificadoValido: boolean; certificadoVenceEm: string | null; cscHomologacao: boolean; cscProducao: boolean; serieHomologacao: number | null; serieProducao: number | null } | null>(null);
     const [fiscalCteUltimoNumero, setFiscalCteUltimoNumero] = useState('');
     const [fiscalMdfeUltimoNumero, setFiscalMdfeUltimoNumero] = useState('');
     const [fiscalInscricaoMunicipal, setFiscalInscricaoMunicipal] = useState('');
@@ -9078,6 +9083,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
 
     const loadFiscalData = async () => {
         setCertStatus(await fetchStoreCertificateStatus(storeId));
+        fetch(resolverUrlApi(`/api/fiscal/prontidao?storeId=${storeId}`)).then((r) => r.json()).then((j) => { if (j?.ok) setProntidao(j); }).catch(() => {});
 
         const fiscalConfig = await fetchStoreFiscalConfig(storeId);
         if (fiscalConfig) {
@@ -9089,6 +9095,10 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             setFiscalMdfeSerie(fiscalConfig.mdfe_serie != null ? String(fiscalConfig.mdfe_serie) : '');
             setFiscalNfeUltimoNumero(String(fiscalConfig.nfe_ultimo_numero ?? 0));
             setFiscalNfceUltimoNumero(String(fiscalConfig.nfce_ultimo_numero ?? 0));
+            setFiscalNfceSerieProd(fiscalConfig.nfce_serie_producao != null ? String(fiscalConfig.nfce_serie_producao) : '');
+            setFiscalNfceUltimoNumeroProd(String(fiscalConfig.nfce_ultimo_numero_producao ?? 0));
+            setFiscalNfeSerieProd(fiscalConfig.nfe_serie_producao != null ? String(fiscalConfig.nfe_serie_producao) : '');
+            setFiscalNfeUltimoNumeroProd(String(fiscalConfig.nfe_ultimo_numero_producao ?? 0));
             setFiscalCteUltimoNumero(String(fiscalConfig.cte_ultimo_numero ?? 0));
             setFiscalMdfeUltimoNumero(String(fiscalConfig.mdfe_ultimo_numero ?? 0));
             setFiscalInscricaoMunicipal(fiscalConfig.inscricao_municipal || '');
@@ -9199,6 +9209,10 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             if (fiscalMdfeSerie) params.mdfeSerie = Number(fiscalMdfeSerie);
             if (fiscalNfeUltimoNumero) params.nfeUltimoNumero = Number(fiscalNfeUltimoNumero);
             if (fiscalNfceUltimoNumero) params.nfceUltimoNumero = Number(fiscalNfceUltimoNumero);
+            if (fiscalNfceSerieProd) params.nfceSerieProducao = Number(fiscalNfceSerieProd);
+            if (fiscalNfceUltimoNumeroProd) params.nfceUltimoNumeroProducao = Number(fiscalNfceUltimoNumeroProd);
+            if (fiscalNfeSerieProd) params.nfeSerieProducao = Number(fiscalNfeSerieProd);
+            if (fiscalNfeUltimoNumeroProd) params.nfeUltimoNumeroProducao = Number(fiscalNfeUltimoNumeroProd);
             if (fiscalCteUltimoNumero) params.cteUltimoNumero = Number(fiscalCteUltimoNumero);
             if (fiscalMdfeUltimoNumero) params.mdfeUltimoNumero = Number(fiscalMdfeUltimoNumero);
             if (fiscalInscricaoMunicipal) params.inscricaoMunicipal = fiscalInscricaoMunicipal;
@@ -9234,6 +9248,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             if (!result.success) throw new Error(result.message);
 
             toast.success('Configuração fiscal salva com sucesso!');
+            fetch(resolverUrlApi(`/api/fiscal/prontidao?storeId=${storeId}`)).then((r) => r.json()).then((j) => { if (j?.ok) setProntidao(j); }).catch(() => {});
             // Limpa só os campos de CSC (senão o lojista vê a "senha" na tela
             // depois de salvar — mesmo tratamento que certPassword recebe em
             // handleSaveCertificate).
@@ -10000,6 +10015,30 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             </p>
                         </div>
 
+                        {prontidao && (() => {
+                            const itens = [
+                                { ok: prontidao.certificadoValido, txt: prontidao.certificadoValido ? `Certificado digital válido${prontidao.certificadoVenceEm ? ` (vence ${new Date(prontidao.certificadoVenceEm).toLocaleDateString('pt-BR')})` : ''}` : 'Certificado digital ausente ou vencido' },
+                                ...(fiscalModeloEmissaoAutomatica === 'nfce' ? [
+                                    { ok: prontidao.cscHomologacao, txt: prontidao.cscHomologacao ? 'CSC de homologação cadastrado' : 'CSC de homologação faltando' },
+                                    { ok: prontidao.cscProducao, txt: prontidao.cscProducao ? 'CSC de produção cadastrado' : 'CSC de produção faltando (pegar no site da SEFAZ)' },
+                                ] : []),
+                                { ok: prontidao.serieProducao != null, txt: prontidao.serieProducao != null ? `Série de produção: ${prontidao.serieProducao}` : 'Série de produção não definida' },
+                            ];
+                            const prontoProducao = itens.every((i) => i.ok);
+                            return (
+                                <div className={`p-4 rounded-xl border ${prontoProducao ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30' : 'bg-[var(--surface-2)] border-[var(--border)]'}`}>
+                                    <p className="text-sm font-bold text-[var(--text)] mb-2">{prontoProducao ? '✅ Pronto para emitir em produção' : 'Para emitir em produção falta:'}</p>
+                                    <ul className="space-y-1">
+                                        {itens.map((i) => (
+                                            <li key={i.txt} className={`text-sm flex items-center gap-2 ${i.ok ? 'text-[var(--ok)]' : 'text-[var(--warn)]'}`}>
+                                                {i.ok ? <CheckCircle size={14} /> : <AlertCircle size={14} />} {i.txt}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            );
+                        })()}
+
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Ambiente</label>
                             <select
@@ -10044,10 +10083,14 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série — homologação" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número — homologação" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
                                 </div>
-                                <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
+                                <p className="text-xs text-[var(--text-muted)] -mt-2">↑ Homologação (testes). Deixe 0 se nunca emitiu.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <Input type="number" inputMode="numeric" label="Série — PRODUÇÃO" className="font-mono" value={fiscalNfeSerieProd} onChange={e => setFiscalNfeSerieProd(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido — PRODUÇÃO" className="font-mono" value={fiscalNfeUltimoNumeroProd} onChange={e => setFiscalNfeUltimoNumeroProd(e.target.value)} />
+                                </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
                                     <textarea
@@ -10064,10 +10107,15 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série — homologação" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número — homologação" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
                                 </div>
-                                <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
+                                <p className="text-xs text-[var(--text-muted)] -mt-2">↑ Homologação (testes). Deixe 0 se nunca emitiu.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <Input type="number" inputMode="numeric" label="Série — PRODUÇÃO" className="font-mono" placeholder="Ex: 2" value={fiscalNfceSerieProd} onChange={e => setFiscalNfceSerieProd(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido — PRODUÇÃO" className="font-mono" value={fiscalNfceUltimoNumeroProd} onChange={e => setFiscalNfceUltimoNumeroProd(e.target.value)} />
+                                </div>
+                                <p className="text-xs text-[var(--text-muted)] -mt-2">Produção tem numeração própria. Se a loja já emitia nota por outro sistema, use uma série que ele não usava (ou informe o último número dele). Se o número já tiver sido usado, o sistema pula sozinho pro próximo.</p>
                                 <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">

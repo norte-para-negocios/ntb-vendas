@@ -11,6 +11,8 @@ export interface ConfigFiscalLoja {
   ambiente: 'homologacao' | 'producao';
   nfe_serie: number | null;
   nfce_serie: number | null;
+  nfe_serie_producao?: number | null;
+  nfce_serie_producao?: number | null;
   inscricao_estadual: string | null;
   razao_social: string | null;
   endereco_logradouro: string | null;

@@ -177,6 +177,14 @@ export async function POST(req: NextRequest) {
     if (nfeUltimoNumero !== undefined) configFields.nfe_ultimo_numero = nfeUltimoNumero;
     const nfceUltimoNumero = readOptionalInt(form, 'nfceUltimoNumero');
     if (nfceUltimoNumero !== undefined) configFields.nfce_ultimo_numero = nfceUltimoNumero;
+    const nfceSerieProducao = readOptionalInt(form, 'nfceSerieProducao');
+    if (nfceSerieProducao !== undefined) configFields.nfce_serie_producao = nfceSerieProducao;
+    const nfceUltimoNumeroProducao = readOptionalInt(form, 'nfceUltimoNumeroProducao');
+    if (nfceUltimoNumeroProducao !== undefined) configFields.nfce_ultimo_numero_producao = nfceUltimoNumeroProducao;
+    const nfeSerieProducao = readOptionalInt(form, 'nfeSerieProducao');
+    if (nfeSerieProducao !== undefined) configFields.nfe_serie_producao = nfeSerieProducao;
+    const nfeUltimoNumeroProducao = readOptionalInt(form, 'nfeUltimoNumeroProducao');
+    if (nfeUltimoNumeroProducao !== undefined) configFields.nfe_ultimo_numero_producao = nfeUltimoNumeroProducao;
     const cteUltimoNumero = readOptionalInt(form, 'cteUltimoNumero');
     if (cteUltimoNumero !== undefined) configFields.cte_ultimo_numero = cteUltimoNumero;
     const mdfeUltimoNumero = readOptionalInt(form, 'mdfeUltimoNumero');
