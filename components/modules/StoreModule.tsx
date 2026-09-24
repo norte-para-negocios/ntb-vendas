@@ -16,7 +16,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui'
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -444,6 +444,17 @@ function useWatchedTables(storeId: string | undefined): Set<string> {
 // clique (enquanto o gesto ainda vale), mostrando "Gerando cupom fiscal...",
 // e só troca de endereço quando o PDF existe. Se ainda assim vier bloqueada,
 // cai num aviso claro em vez de não fazer nada.
+const avisarFalhaNotaFiscal = async (storeId: string, alvo: { orderId?: string; tableId?: string }) => {
+    const r = await descreverFalhaFiscalDaVenda(storeId, alvo).catch(() => null);
+    if (r?.status === 'pendente') {
+        toast.warning('Nota fiscal pendente: falta o CPF/CNPJ do cliente. Informe em Administração → Notas Fiscais e clique em Reemitir.');
+    } else if (r?.status === 'rejeitada' || r?.status === 'erro') {
+        toast.error(`Nota fiscal rejeitada: ${(r.motivo || 'sem detalhe').slice(0, 140)}`);
+    } else {
+        toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
+    }
+};
+
 const abrirCupomFiscalQuandoSair = (
     storeId: string,
     storeName: string,
@@ -487,9 +498,10 @@ const abrirCupomFiscalQuandoSair = (
         aguardarNotaFiscalDaVenda(storeId, alvo)
             .then(async (resultado) => {
                 if (!resultado) {
-                    toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
+                    avisarFalhaNotaFiscal(storeId, alvo);
                     return;
                 }
+                if (resultado?.nota.status === 'autorizada') toast.success(`Nota fiscal autorizada${resultado.nota.numero ? ` (nº ${resultado.nota.numero})` : ''}.`);
                 // Contingência: 2 vias físicas (cliente + estabelecimento) —
                 // pedido explícito do dono (2026-09-15), já que o documento
                 // não tem protocolo/QR ainda e o cliente precisa sair com o
@@ -535,6 +547,7 @@ const abrirCupomFiscalQuandoSair = (
     }
     aguardarNotaFiscalDaVenda(storeId, alvo)
         .then((resultado) => {
+            if (resultado?.nota.status === 'autorizada') toast.success(`Nota fiscal autorizada${resultado.nota.numero ? ` (nº ${resultado.nota.numero})` : ''}.`);
             if (resultado) imprimirResumoTextoNoCaixa(resultado.nota);
             if (resultado && janela && !janela.closed) {
                 janela.location.href = resultado.pdfUrl;
@@ -552,7 +565,7 @@ const abrirCupomFiscalQuandoSair = (
                 toast.error('O cupom fiscal saiu, mas o navegador bloqueou a janela. Abra por Administração → Notas Fiscais.');
             } else {
                 if (janela && !janela.closed) janela.close();
-                toast.error('A nota fiscal ainda não voltou autorizada — imprima por Administração → Notas Fiscais quando ela sair.');
+                avisarFalhaNotaFiscal(storeId, alvo);
             }
         })
         .catch((e) => {

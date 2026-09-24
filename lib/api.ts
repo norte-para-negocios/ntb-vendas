@@ -2143,13 +2143,30 @@ export const aguardarNotaFiscalDaVenda = async (
       // função esperar o timeout inteiro (12s) sem motivo antes de
       // devolver null — a mesma coisa acontecia mais rápido tratando os
       // dois estados terminais juntos.
-      if (daVenda?.status === 'erro' || daVenda?.status === 'rejeitada') return null;
+      if (daVenda?.status === 'erro' || daVenda?.status === 'rejeitada' || daVenda?.status === 'pendente') return null;
     } catch {
       // Rede instável não pode travar o fechamento — tenta de novo até o teto.
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   return null;
+};
+
+// Só lê: devolve o estado da nota MAIS RECENTE desta venda (criada de agora em
+// diante) pra o operador saber por que o cupom não abriu. null = ainda não
+// existe (SEFAZ demorando).
+export const descreverFalhaFiscalDaVenda = async (
+  storeId: string,
+  alvo: { orderId?: string; tableId?: string },
+): Promise<{ status: string; motivo: string | null } | null> => {
+  const inicio = Date.now() - 60000;
+  const notas = await fetchFiscalNotas(storeId);
+  const nota = notas
+    .filter((n: any) => !n.pessoa_identificador)
+    .filter((n: any) => (alvo.orderId ? n.order_id === alvo.orderId : n.table_id === alvo.tableId))
+    .filter((n: any) => new Date(n.created_at).getTime() >= inicio)
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] as any;
+  return nota ? { status: nota.status, motivo: nota.motivo_erro ?? null } : null;
 };
 
 // Signed URL sob demanda pro XML/PDF de uma nota — o bucket
