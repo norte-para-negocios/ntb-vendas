@@ -4075,8 +4075,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     ref={el => { tabButtonRefs.current[group.id] = el; }}
                                     onClick={() => {
                                         if (isExpanded) { setActiveGroupId(null); return; }
+                                        if (item.categories[0]) handleTabClick(item.categories[0].id);
                                         setActiveGroupId(group.id);
-                                        if (!ownsActiveCategory && item.categories[0]) handleTabClick(item.categories[0].id);
                                     }}
                                     aria-expanded={isExpanded}
                                     aria-current={ownsActiveCategory ? 'true' : undefined}
