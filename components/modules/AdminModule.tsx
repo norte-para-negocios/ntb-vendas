@@ -961,7 +961,18 @@ export const AdminModule: React.FC = () => {
   // não um único wrap externo cobrindo tudo.
   return (
     <MotionConfig reducedMotion="user">
-    <div className="min-h-screen bg-[var(--bg)] flex">
+    <div className="min-h-screen supports-[height:100dvh]:min-h-dvh bg-[var(--bg)] flex max-md:flex-col">
+      {/* Barra superior (celular) — a sidebar só existe a partir de md */}
+      <header className="md:hidden bg-[var(--ink)] text-white px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 sticky top-0 z-30">
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-lg font-bold">Master Admin</h1>
+          <ThemeToggle variant="sidebar" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setView('stores')} className={`flex items-center justify-center gap-2 min-h-11 rounded-lg text-sm font-semibold u-motion ${view === 'stores' ? 'bg-[var(--brand)] text-white' : 'bg-white/10 text-white/70'}`}><StoreIcon size={18} /> Lojas</button>
+          <button onClick={() => setView('users')} className={`flex items-center justify-center gap-2 min-h-11 rounded-lg text-sm font-semibold u-motion ${view === 'users' ? 'bg-[var(--brand)] text-white' : 'bg-white/10 text-white/70'}`}><Users size={18} /> Lojistas</button>
+        </div>
+      </header>
       {/* Sidebar */}
       <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:flex md:flex-col">
         <div className="flex items-center justify-between mb-8">
@@ -979,10 +990,10 @@ export const AdminModule: React.FC = () => {
       </aside>
 
       {/* Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <div className="flex justify-between items-center mb-8">
+      <main className="flex-1 min-w-0 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 md:p-10 overflow-y-auto">
+        <div className="flex justify-between items-center mb-8 max-sm:flex-col max-sm:items-stretch max-sm:gap-3 max-sm:mb-5">
           <div>
-            <h2 className="text-3xl font-bold text-[var(--text)]">
+            <h2 className="text-3xl max-sm:text-2xl font-bold text-[var(--text)]">
                 {view === 'stores' ? 'Gestão de Lojas' : 'Gestão de Lojistas'}
             </h2>
             <p className="text-[var(--text-muted)] mt-1">Gerencie os {view === 'stores' ? 'estabelecimentos' : 'acessos dos clientes'} da plataforma.</p>
@@ -1119,7 +1130,7 @@ export const AdminModule: React.FC = () => {
                         <p>Nenhum usuário cadastrado. Adicione um gestor para uma loja.</p>
                      </Card>
                 ) : (
-                    <div className="bg-[var(--surface)] rounded-xl shadow-sm border border-[var(--border)] overflow-hidden">
+                    <div className="bg-[var(--surface)] rounded-xl shadow-sm border border-[var(--border)] overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] text-xs uppercase font-bold">
                                 <tr>
@@ -1248,7 +1259,7 @@ export const AdminModule: React.FC = () => {
 
               <div className="space-y-4">
                 <Input label="Nome do Estabelecimento" placeholder="Ex: Hamburgueria Top" value={name} onChange={handleNameChange} />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <Input label="CNPJ" placeholder="00.000.000/0000-00" value={cnpj} onChange={e => setCnpj(e.target.value)} />
                      <div className="flex flex-col gap-1.5">
                          {periodMonths === null ? (
@@ -1561,7 +1572,7 @@ export const AdminModule: React.FC = () => {
                               <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
                               <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
                           </label>
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <Input type="date" label="Validade do certificado" value={certExpiresAt} onChange={e => setCertExpiresAt(e.target.value)} />
                               <Input type="password" label="Senha do certificado" placeholder="Deixe em branco pra manter a atual" value={certPassword} onChange={e => setCertPassword(e.target.value)} />
                           </div>
@@ -1586,11 +1597,11 @@ export const AdminModule: React.FC = () => {
 
                           <div className="space-y-3">
                               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Identificação da empresa</p>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="Razão Social" placeholder="Opcional" value={fiscalRazaoSocial} onChange={e => setFiscalRazaoSocial(e.target.value)} />
                                   <Input label="Nome Fantasia" placeholder="Opcional" value={fiscalNomeFantasia} onChange={e => setFiscalNomeFantasia(e.target.value)} />
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <div className="flex flex-col gap-1.5">
                                       <label className="text-sm font-semibold text-[var(--text)]">Tipo</label>
                                       <select
@@ -1606,15 +1617,15 @@ export const AdminModule: React.FC = () => {
                               </div>
 
                               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Endereço</p>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="Logradouro" placeholder="Opcional" value={fiscalEnderecoLogradouro} onChange={e => setFiscalEnderecoLogradouro(e.target.value)} />
                                   <Input label="Número" placeholder="Opcional" value={fiscalEnderecoNumero} onChange={e => setFiscalEnderecoNumero(e.target.value)} />
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="Complemento" placeholder="Opcional" value={fiscalEnderecoComplemento} onChange={e => setFiscalEnderecoComplemento(e.target.value)} />
                                   <Input label="Bairro" placeholder="Opcional" value={fiscalEnderecoBairro} onChange={e => setFiscalEnderecoBairro(e.target.value)} />
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="Cidade" placeholder="Opcional" value={fiscalEnderecoCidade} onChange={e => setFiscalEnderecoCidade(e.target.value)} />
                                   <Input label="UF" placeholder="Ex: BA" maxLength={2} value={fiscalEnderecoUf} onChange={e => setFiscalEnderecoUf(e.target.value.toUpperCase())} />
                               </div>
@@ -1626,15 +1637,15 @@ export const AdminModule: React.FC = () => {
                                   <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Padrões de impostos</p>
                                   <p className="text-xs text-[var(--text-muted)]">Códigos conforme tabela da contabilidade/SEFAZ.</p>
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="CST/CSOSN Padrão" placeholder="Opcional" value={fiscalCstCsosnPadrao} onChange={e => setFiscalCstCsosnPadrao(e.target.value)} />
                                   <Input label="CST/PIS Padrão" placeholder="Opcional" value={fiscalCstPisPadrao} onChange={e => setFiscalCstPisPadrao(e.target.value)} />
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="CST/COFINS Padrão" placeholder="Opcional" value={fiscalCstCofinsPadrao} onChange={e => setFiscalCstCofinsPadrao(e.target.value)} />
                                   <Input label="CST/IPI Padrão" placeholder="Opcional" value={fiscalCstIpiPadrao} onChange={e => setFiscalCstIpiPadrao(e.target.value)} />
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input label="Frete Padrão" placeholder="Opcional" value={fiscalFretePadrao} onChange={e => setFiscalFretePadrao(e.target.value)} />
                                   <Input label="Tipo de Pagamento Padrão" placeholder="Opcional" value={fiscalTipoPagamentoPadrao} onChange={e => setFiscalTipoPagamentoPadrao(e.target.value)} />
                               </div>
@@ -1674,7 +1685,7 @@ export const AdminModule: React.FC = () => {
                           {fiscalModeloEmissaoAutomatica === 'nfe' && (
                               <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                   <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
-                                  <div className="grid grid-cols-2 gap-4">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                       <Input type="number" label="Série" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
                                       <Input type="number" label="Último número emitido" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
                                   </div>
@@ -1694,13 +1705,13 @@ export const AdminModule: React.FC = () => {
                           {fiscalModeloEmissaoAutomatica === 'nfce' && (
                               <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                   <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
-                                  <div className="grid grid-cols-2 gap-4">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                       <Input type="number" label="Série" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
                                       <Input type="number" label="Último número emitido" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
                                   </div>
                                   <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
                                   <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
-                                  <div className="grid grid-cols-2 gap-4">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                       <div className="space-y-2">
                                           <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
                                           <Input type="password" label="CSC" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
@@ -1721,7 +1732,7 @@ export const AdminModule: React.FC = () => {
 
                           <details className="border border-[var(--border)] rounded-lg p-3">
                               <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Outros documentos — CT-e / MDF-e (avançado)</summary>
-                              <div className="grid grid-cols-2 gap-4 mt-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                                   <div className="space-y-2">
                                       <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
                                       <Input type="number" label="Série" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
@@ -1741,7 +1752,7 @@ export const AdminModule: React.FC = () => {
                               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Dados gerais</p>
                               <Input label="Inscrição municipal" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
                               <Input label="Telefone" inputMode="tel" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <Input type="number" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
                                   <Input label="CNPJ Autorizado" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
                               </div>
@@ -1793,7 +1804,7 @@ export const AdminModule: React.FC = () => {
                               </button>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <Input
                                   label="URL do NTB Estoque"
                                   placeholder="https://app-estoque.norteparanegocios.com.br"
@@ -1818,7 +1829,7 @@ export const AdminModule: React.FC = () => {
                   </>
               )}
               <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
                           <Coffee size={24} /> <span className="font-bold text-sm">Apenas Balcão</span>
                       </button>

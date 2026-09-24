@@ -3909,6 +3909,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <Input
                                     label="Nome do cliente (opcional)"
                                     placeholder="Ex.: Família Silva"
+                                    maxLength={40}
                                     value={hostNameInput}
                                     onChange={e => setHostNameInput(e.target.value)}
                                 />
@@ -7862,7 +7863,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input
                             label="URL do NTB Estoque"
                             placeholder="https://app-estoque.norteparanegocios.com.br"
@@ -8235,7 +8236,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             onChange={e => setPPromoPrice(e.target.value)}
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Categoria</label>
                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pCat} onChange={e => setPCat(e.target.value)}>
@@ -8245,7 +8246,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         </div>
                          <Input label="Tempo Preparo (min)" type="number" inputMode="numeric" min="0" value={pTime} onChange={e => setPTime(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                          <div className="flex flex-col gap-1.5">
                              <label className="text-sm font-semibold text-[var(--text)]">Destino do Pedido</label>
                              <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pDestination} onChange={e => setPDestination(e.target.value as 'kitchen' | 'bar')}>
@@ -8526,7 +8527,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
                     {!scheduleAllDay && (
                         <>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Input label="Das" type="time" value={scheduleFrom} onChange={e => setScheduleFrom(e.target.value)} />
                                 <Input label="Até" type="time" value={scheduleUntil} onChange={e => setScheduleUntil(e.target.value)} />
                             </div>
@@ -9634,7 +9635,27 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row gap-6">
-                <nav className="w-full md:w-56 flex-shrink-0 space-y-5">
+                <div role="tablist" aria-label="Administração" className="md:hidden -mx-4 px-4 overflow-x-auto flex gap-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {ADMIN_NAV_GROUPS.flatMap((g) => g.tabs).map((tab) => (
+                        <button
+                            key={tab.id}
+                            role="tab"
+                            aria-selected={activeTab === tab.id}
+                            onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                            className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap flex items-center gap-1.5 border u-motion ${
+                                activeTab === tab.id
+                                    ? 'bg-[var(--brand)] text-white border-[var(--brand)]'
+                                    : tab.sensitive
+                                        ? 'text-[var(--warn)] border-[var(--warn)]/40 bg-[var(--surface)]'
+                                        : 'text-[var(--text-muted)] border-[var(--border)] bg-[var(--surface)]'
+                            }`}
+                        >
+                            {tab.sensitive && <Lock size={12} />}
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+                <nav className="w-full md:w-56 flex-shrink-0 space-y-5 max-md:hidden">
                     {ADMIN_NAV_GROUPS.map((group) => (
                         <div key={group.label}>
                             <p className="px-3 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -9867,7 +9888,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <Upload size={16} /> {certFile ? certFile.name : 'Escolher arquivo (.pfx/.p12)'}
                             <input type="file" className="hidden" accept=".pfx,.p12" onChange={handleCertFileChange} />
                         </label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input type="date" label="Validade do certificado" value={certExpiresAt} onChange={e => setCertExpiresAt(e.target.value)} />
                             <Input type="password" label="Senha do certificado" placeholder="Deixe em branco pra manter a atual" value={certPassword} onChange={e => setCertPassword(e.target.value)} />
                         </div>
@@ -9890,7 +9911,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             Pra lojas que não usam o NTB Estoque: registra a NFC-e autorizada direto na Omie, sem passar por outra integração.
                             Se a loja tiver integração com o NTB Estoque ativa, ela sempre tem prioridade sobre esta.
                         </p>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input
                                 label="App Key da Omie"
                                 placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Key da conta Omie da loja'}
@@ -9969,7 +9990,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         {fiscalModeloEmissaoAutomatica === 'nfe' && (
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
                                     <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
                                 </div>
@@ -9989,13 +10010,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         {fiscalModeloEmissaoAutomatica === 'nfce' && (
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
                                     <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] -mt-2">Deixe 0 se nunca emitiu.</p>
                                 <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
                                         <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
@@ -10016,7 +10037,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
 
                         <details className="border border-[var(--border)] rounded-lg p-3">
                             <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Outros documentos — CT-e / MDF-e (avançado)</summary>
-                            <div className="grid grid-cols-2 gap-4 mt-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
                                     <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
@@ -10038,7 +10059,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     <div className="space-y-4">
                         <Input label="Inscrição municipal" className="font-mono" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
                         <Input label="Telefone" inputMode="tel" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input type="number" inputMode="numeric" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
                             <Input label="CNPJ Autorizado" className="font-mono" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
                         </div>
@@ -10057,11 +10078,11 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 {/* Identificação da empresa (migration 025) */}
                 <Collapsible title="Identificação da Empresa" defaultOpen={false}>
                     <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="Razão Social" placeholder="Opcional" value={fiscalRazaoSocial} onChange={e => setFiscalRazaoSocial(e.target.value)} />
                             <Input label="Nome Fantasia" placeholder="Opcional" value={fiscalNomeFantasia} onChange={e => setFiscalNomeFantasia(e.target.value)} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-sm font-semibold text-[var(--text)]">Tipo</label>
                                 <select
@@ -10076,11 +10097,11 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <Input label="Inscrição Estadual" className="font-mono" placeholder="Opcional" value={fiscalInscricaoEstadual} onChange={e => setFiscalInscricaoEstadual(e.target.value)} />
                         </div>
                         <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Endereço</p>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="Logradouro" placeholder="Opcional" value={fiscalEnderecoLogradouro} onChange={e => setFiscalEnderecoLogradouro(e.target.value)} />
                             <Input label="Número" placeholder="Opcional" value={fiscalEnderecoNumero} onChange={e => setFiscalEnderecoNumero(e.target.value)} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="Complemento" placeholder="Opcional" value={fiscalEnderecoComplemento} onChange={e => setFiscalEnderecoComplemento(e.target.value)} />
                             <Input label="Bairro" placeholder="Opcional" value={fiscalEnderecoBairro} onChange={e => setFiscalEnderecoBairro(e.target.value)} />
                         </div>
@@ -10097,15 +10118,15 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 <Collapsible title="Padrões de Impostos" defaultOpen={false}>
                     <div className="space-y-3">
                         <p className="text-xs text-[var(--text-muted)]">Códigos conforme tabela da contabilidade/SEFAZ.</p>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="CST/CSOSN Padrão" placeholder="Ex: 102" value={fiscalCstCsosnPadrao} onChange={e => setFiscalCstCsosnPadrao(e.target.value)} />
                             <Input label="CST/PIS Padrão" placeholder="Ex: 49" value={fiscalCstPisPadrao} onChange={e => setFiscalCstPisPadrao(e.target.value)} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="CST/COFINS Padrão" placeholder="Ex: 49" value={fiscalCstCofinsPadrao} onChange={e => setFiscalCstCofinsPadrao(e.target.value)} />
                             <Input label="CST/IPI Padrão" placeholder="Ex: 53" value={fiscalCstIpiPadrao} onChange={e => setFiscalCstIpiPadrao(e.target.value)} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="Frete Padrão" placeholder="Ex: 9 - Sem frete" value={fiscalFretePadrao} onChange={e => setFiscalFretePadrao(e.target.value)} />
                             <Input label="Tipo de Pagamento Padrão" placeholder="Ex: 01 - Dinheiro" value={fiscalTipoPagamentoPadrao} onChange={e => setFiscalTipoPagamentoPadrao(e.target.value)} />
                         </div>
@@ -10440,7 +10461,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             <Modal isOpen={!!selectedOrderDetails} onClose={() => setSelectedOrderDetails(null)} title="Detalhes da Venda">
                 {selectedOrderDetails && (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                             <div>
                                 <p className="text-[var(--text-muted)]">Data e Hora</p>
                                 <p className="font-medium text-[var(--text)]">
