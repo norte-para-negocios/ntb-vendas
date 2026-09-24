@@ -16,15 +16,16 @@ import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui'
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
 import { startOfflineSync, getSyncStatus, onSyncStatusChange, listarAcoesFalhas, reenviarAcaoFalha, descartarAcaoFalha, descreverAcaoFila, explicarDescarteAcao } from '@/lib/offline/sync';
 import type { QueuedAction } from '@/lib/offline/types';
 import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
+import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -3446,7 +3447,12 @@ NOTIFY pgrst, 'reload schema';`;
             // a comanda direto na impressora de rede do destino e deixa uma marca pra
             // não sair em dobro quando o pedido sincronizar.
             if (result.orderId && String(result.orderId).startsWith('local_')) {
-                const destino: 'kitchen' | 'bar' = product.destination === 'bar' ? 'bar' : 'kitchen';
+                // Setor do item (produto ?? categoria) e o destino dele, pelo cache local.
+                const menuCache: any = await getCachedMenu(storeId).catch(() => null);
+                const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === product.category_id);
+                const setorId: string | null = product.sector_id || catDoProduto?.sector_id || null;
+                const setor = setorId ? (await fetchPrintSectors(storeId)).find((x) => x.id === setorId) : undefined;
+                const destino: 'kitchen' | 'bar' = setor ? setor.base : (product.destination === 'bar' ? 'bar' : 'kitchen');
                 const conteudo = buildKitchenTicketText({
                     kind: destino === 'bar' ? 'BAR' : 'COZINHA',
                     storeName: store.name,
@@ -3461,7 +3467,7 @@ NOTIFY pgrst, 'reload schema';`;
                 });
                 const sig = `${selectedTable.number}|${product.id}|${qty}|${optimisticNotes}`;
                 // Não espera a impressão: o garçom continua lançando enquanto imprime.
-                printOfflineOrderTicket({ storeId, destination: destino, title: `${qty}x ${product.name} — Mesa ${selectedTable.number}`, content: conteudo, sig })
+                printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${qty}x ${product.name} — Mesa ${selectedTable.number}`, content: conteudo, sig })
                     .catch(() => 0)
                     .then((impressas) => {
                         if (impressas > 0) toast.info('Sem internet: comanda impressa direto na impressora.');
@@ -7139,6 +7145,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // empilhadas. Ver activeCategoryProducts/searchResults mais abaixo.
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
+    const [printSectors, setPrintSectors] = useState<PrintSector[]>([]);
     // Grupos da lista lateral começam fechados (sanfona); o grupo da categoria ativa abre sozinho.
     const [openSidebarGroups, setOpenSidebarGroups] = useState<Set<string>>(new Set());
     const [activeMenuCategoryId, setActiveMenuCategoryId] = useState<string | null>(null);
@@ -7161,6 +7168,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pCat, setPCat] = useState('');
     const [pTime, setPTime] = useState('15');
     const [pDestination, setPDestination] = useState<'kitchen' | 'bar'>('kitchen');
+    const [pSector, setPSector] = useState('');
     // NCM (migration 032/033) — classificacao fiscal do produto. Texto livre
     // (o codigo tem digitos e as vezes pontuacao), mesmo padrao dos outros
     // campos de texto opcionais deste form (nao ha catalogo fechado, ao
@@ -7318,6 +7326,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         setCategories(c);
         setProducts(p);
         setCategoryGroups(g);
+        fetchPrintSectors(storeId).then(setPrintSectors).catch(() => {});
     };
 
     const handleDragEnd = async (result: DropResult) => {
@@ -7454,6 +7463,16 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         }
     };
 
+    const handleChangeCategorySector = async (categoryId: string, sectorId: string | null) => {
+        setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, sector_id: sectorId } : c));
+        try {
+            await updateCategorySector(categoryId, sectorId);
+        } catch (e: any) {
+            toast.error('Erro ao mudar o setor da categoria: ' + (e.message || 'Tente novamente.'));
+            loadMenu();
+        }
+    };
+
     const handleChangeCategoryGroup = async (categoryId: string, groupId: string | null) => {
         setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, group_id: groupId } : c));
         try {
@@ -7507,6 +7526,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTime(product.prep_time_minutes.toString());
             setPPreview(product.image_url);
             setPDestination(product.destination || 'kitchen');
+            setPSector(product.sector_id || '');
             setPOptionGroups(toDraftGroups(product.option_groups));
             setPPromoPrice(product.promo_price != null ? product.promo_price.toString() : '');
             setPFeatured(product.featured ?? false);
@@ -7530,6 +7550,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTime('15');
             setPPreview(null);
             setPDestination('kitchen');
+            setPSector('');
             setPOptionGroups([]);
             setPPromoPrice('');
             setPFeatured(false);
@@ -7604,6 +7625,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 productId = editingProduct.id;
             } else {
                 productId = await createProduct(storeId, pCat, productData);
+            }
+
+            if ((pSector || '') !== (editingProduct?.sector_id || '')) {
+                try { await updateProductSector(productId, storeId, pSector || null); }
+                catch (e: any) { toast.error('Produto salvo, mas o setor não foi salvo: ' + (e.message || '')); }
             }
 
             if (isNewProduct && pOmieMode === 'create') {
@@ -8209,6 +8235,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                 {categoryGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                                                             </select>
                                                         )}
+                                                        {printSectors.length > 0 && (
+                                                            <select
+                                                                value={cat.sector_id || ''}
+                                                                onChange={e => handleChangeCategorySector(cat.id, e.target.value || null)}
+                                                                title="Pra qual setor (impressora) os itens desta categoria vão"
+                                                                className="text-xs bg-[var(--surface)] border border-[var(--border)] rounded px-1.5 py-1 text-[var(--text-muted)] max-sm:text-base"
+                                                            >
+                                                                <option value="">Setor padrão</option>
+                                                                {printSectors.map(st => <option key={st.id} value={st.id}>→ {st.name}</option>)}
+                                                            </select>
+                                                        )}
                                                         {scheduleLabel && (
                                                             <Badge color="bg-[var(--info)]/10 text-[var(--info)]">{scheduleLabel}</Badge>
                                                         )}
@@ -8302,10 +8339,19 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                          <div className="flex flex-col gap-1.5">
                              <label className="text-sm font-semibold text-[var(--text)]">Destino do Pedido</label>
-                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pDestination} onChange={e => setPDestination(e.target.value as 'kitchen' | 'bar')}>
+                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pSector || pDestination} onChange={e => {
+                                 const v = e.target.value;
+                                 if (v === 'kitchen' || v === 'bar') { setPDestination(v); setPSector(''); }
+                                 else { const st = printSectors.find(x => x.id === v); setPSector(v); if (st) setPDestination(st.base); }
+                             }}>
                                  <option value="kitchen">Cozinha</option>
                                  <option value="bar">Bar</option>
+                                 {printSectors.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
                              </select>
+                             {!pSector && (() => {
+                                 const setorCat = printSectors.find(x => x.id === categories.find(c => c.id === pCat)?.sector_id);
+                                 return setorCat ? <p className="text-xs text-[var(--text-muted)]">A categoria manda pra <b>{setorCat.name}</b>. Escolha outro setor aqui só se este produto for diferente.</p> : null;
+                             })()}
                          </div>
                          <Input
                              label="NCM (opcional)"

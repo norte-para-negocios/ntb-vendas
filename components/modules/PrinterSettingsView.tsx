@@ -28,15 +28,16 @@
 // finge que "enfileirou" é o mesmo que "imprimiu".
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
+  fetchPrintSectors, createPrintSector, deletePrintSector,
   enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters, fetchPrintAgentStatus, updateStoreConfig,
 } from '@/lib/api';
 import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
-import { PrinterConfig, PrintJob, Store } from '@/types';
+import { PrinterConfig, PrintJob, PrintSector, Store } from '@/types';
 
 const CONNECTION_LABELS: Record<PrinterConfig['connection_type'], string> = {
   browser_default: 'Impressora do sistema (padrão do computador)',
@@ -117,12 +118,16 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // que pode estar errado). `null` = agente nunca rodou nesta loja.
   const [agentStatus, setAgentStatus] = useState<{ lastSeenAt: string; printersLoaded: number } | null>(null);
 
+  const [setores, setSetores] = useState<PrintSector[]>([]);
+  const [novoSetorNome, setNovoSetorNome] = useState('');
+  const [novoSetorBase, setNovoSetorBase] = useState<'kitchen' | 'bar'>('kitchen');
   const [maquina, setMaquina] = useState<{ hostname: string; impressoras: string[] } | null>(null);
   useEffect(() => {
     window.electronApp?.localPrinters?.().then(setMaquina).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
+    fetchPrintSectors(store.id).then(setSetores).catch(() => {});
     const [printerList, jobList, discovered, agent] = await Promise.all([
       fetchPrinterConfigs(store.id),
       fetchRecentPrintJobs(store.id, 30),
@@ -472,6 +477,52 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         </Card>
       )}
 
+      <Card className="p-4 space-y-3">
+        <div>
+          <p className="text-sm font-bold text-[var(--text)]">Setores de produção</p>
+          <p className="text-xs text-[var(--text-muted)]">Cozinha e Bar já existem. Crie outros (ex.: Pizzaria), escolha em Cardápio → Gerenciar categorias quais categorias vão pra cada setor, e aqui embaixo qual impressora é de cada setor.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]">Cozinha (padrão)</span>
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]">Bar (padrão)</span>
+          {setores.map((st) => (
+            <span key={st.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-xs font-semibold bg-[var(--brand)]/10 text-[var(--brand)] border border-[var(--brand)]/30">
+              {st.name} <span className="font-normal opacity-70">({st.base === 'bar' ? 'bar' : 'cozinha'})</span>
+              <button
+                type="button"
+                aria-label={`Excluir setor ${st.name}`}
+                className="relative hit-44 p-1 rounded-full hover:bg-[var(--err)]/10 text-[var(--err)]"
+                onClick={async () => {
+                  if (!window.confirm(`Excluir o setor "${st.name}"? Os produtos dele voltam pra ${st.base === 'bar' ? 'o Bar' : 'a Cozinha'}.`)) return;
+                  try { await deletePrintSector(st.id); toast.success('Setor excluído.'); load(); } catch (e: any) { toast.error(e?.message || 'Erro ao excluir.'); }
+                }}
+              ><X size={12} /></button>
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[160px]">
+            <Input label="Novo setor" placeholder="Ex: Pizzaria" value={novoSetorNome} onChange={(e) => setNovoSetorNome(e.target.value)} maxLength={30} />
+          </div>
+          <select
+            value={novoSetorBase}
+            onChange={(e) => setNovoSetorBase(e.target.value as 'kitchen' | 'bar')}
+            className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
+            title="Em qual fluxo o setor entra (tela da cozinha ou do bar)"
+          >
+            <option value="kitchen">Comida (cozinha)</option>
+            <option value="bar">Bebida (bar)</option>
+          </select>
+          <Button
+            onClick={async () => {
+              const nome = novoSetorNome.trim();
+              if (!nome) { toast.error('Digite o nome do setor.'); return; }
+              try { await createPrintSector(store.id, nome, novoSetorBase); setNovoSetorNome(''); toast.success(`Setor "${nome}" criado.`); load(); } catch (e: any) { toast.error(e?.message || 'Erro ao criar.'); }
+            }}
+          >Criar setor</Button>
+        </div>
+      </Card>
+
       {printers.length === 0 && !showAddForm ? (
         <p className="text-sm text-[var(--text-muted)] text-center py-6">Nenhuma impressora cadastrada ainda.</p>
       ) : (
@@ -555,6 +606,24 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                     />
                     Margem embaixo
                   </label>
+                )}
+                {printer.destination !== 'receipt' && (
+                  <select
+                    value={printer.sector_id || ''}
+                    onChange={async (e) => {
+                      const r = await updatePrinterConfig(printer.id, { sector_id: e.target.value || null });
+                      if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
+                      toast.success('Setor da impressora salvo.');
+                      load();
+                    }}
+                    className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs font-semibold text-[var(--text)] max-sm:text-base"
+                    title="Qual setor esta impressora atende"
+                  >
+                    <option value="">{printer.destination === 'bar' ? 'Setor: Bar' : printer.destination === 'all' ? 'Setor: padrão' : 'Setor: Cozinha'}</option>
+                    {setores.filter((st) => printer.destination === 'all' || st.base === printer.destination).map((st) => (
+                      <option key={st.id} value={st.id}>Setor: {st.name}</option>
+                    ))}
+                  </select>
                 )}
                 <select
                   value={printer.paper_width_mm ?? 80}

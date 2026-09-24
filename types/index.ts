@@ -169,6 +169,8 @@ export interface Category {
   store_id: string;
   name: string;
   order: number;
+  // Setor de produção (migration 087) — null = padrão (Cozinha/Bar pelo destino).
+  sector_id?: string | null;
   icon?: string;
   // Cardapio por horario/turno (migration 018) — NULL nos 3 = sempre
   // disponivel. Ver lib/schedule.ts (isCategoryAvailableNow/formatScheduleLabel).
@@ -216,6 +218,8 @@ export interface ProductOptionGroup {
 
 export interface Product {
   id: string;
+  // Setor próprio do produto; null = usa o da categoria (migration 087).
+  sector_id?: string | null;
   category_id: string | null; // FK is `on delete set null` — categoria excluida deixa o produto orfao
   store_id: string;
   name: string;
@@ -268,6 +272,8 @@ export interface Order {
 
 export interface OrderItem {
   id: string;
+  // Setor resolvido (produto ?? categoria), vindo de fetch_kitchen_orders_secure.
+  sector_id?: string | null;
   order_id: string;
   product_id: string;
   product: Product;
@@ -429,8 +435,18 @@ export interface TableReservation {
 // migration 061. connection_type='browser_default' é só metadado (a
 // impressão continua sendo window.print(), via CaixaPrintStation.tsx);
 // 'network'/'usb' são consumidas pelo agente local (print-agent/).
+export interface PrintSector {
+  id: string;
+  store_id: string;
+  name: string;
+  base: 'kitchen' | 'bar';
+  created_at: string;
+}
+
 export interface PrinterConfig {
   id: string;
+  // Setor que esta impressora atende (migration 087); null = itens sem setor.
+  sector_id?: string | null;
   store_id: string;
   name: string;
   connection_type: 'browser_default' | 'network' | 'usb';

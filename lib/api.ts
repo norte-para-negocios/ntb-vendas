@@ -1,5 +1,5 @@
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
-import { Store, Table, Product, Category, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
+import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
@@ -780,6 +780,36 @@ export const updateCategoryGroupAssignment = async (categoryId: string, groupId:
   const { error } = await supabase.from('categories').update({ group_id: groupId }).eq('id', categoryId);
   if (error) throw error;
 };
+
+// Setores de produção (migration 087): ex. Pizzaria, além de Cozinha/Bar.
+export const fetchPrintSectors = async (storeId: string): Promise<PrintSector[]> => {
+  const { data, error } = await supabase.from('print_sectors').select('*').eq('store_id', storeId).order('created_at');
+  if (error) {
+    try { return JSON.parse(localStorage.getItem(`ntb-sectors-cache:${storeId}`) || '[]'); } catch { return []; }
+  }
+  try { localStorage.setItem(`ntb-sectors-cache:${storeId}`, JSON.stringify(data || [])); } catch { /* sem cache */ }
+  return data || [];
+};
+export const createPrintSector = async (storeId: string, name: string, base: 'kitchen' | 'bar') => {
+  const { error } = await supabase.from('print_sectors').insert({ store_id: storeId, name, base });
+  if (error) throw error;
+};
+export const deletePrintSector = async (id: string) => {
+  const { error } = await supabase.from('print_sectors').delete().eq('id', id);
+  if (error) throw error;
+};
+export const updateCategorySector = async (categoryId: string, sectorId: string | null) => {
+  const { error } = await supabase.from('categories').update({ sector_id: sectorId }).eq('id', categoryId);
+  if (error) throw error;
+};
+export const updateProductSector = async (productId: string, storeId: string, sectorId: string | null) => {
+  const { error } = await supabase.rpc('set_product_sector_secure', { p_product_id: productId, p_store_id: storeId, p_sector_id: sectorId });
+  if (error) throw error;
+};
+// Impressora atende o item? Mesmo destino (ou 'all') E mesmo setor
+// (impressora sem setor = só itens sem setor).
+export const printerServesSector = (printer: { sector_id?: string | null }, itemSectorId: string | null | undefined) =>
+  (printer.sector_id || null) === (itemSectorId || null);
 
 export const updateProductOrder = async (updates: { id: string; order: number }[]) => {
   const { error } = await supabase.rpc('update_products_order', { p_updates: updates });
@@ -2672,7 +2702,7 @@ export const createPrinterConfig = async (params: {
   return { success: true };
 };
 
-export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode' | 'machine_names' | 'bottom_margin'>>): Promise<{ success: boolean; message?: string }> => {
+export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode' | 'machine_names' | 'bottom_margin' | 'sector_id'>>): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').update(updates).eq('id', id);
   if (error) { console.error('Error updating printer config:', error); return { success: false, message: error.message }; }
   return { success: true };
@@ -2778,8 +2808,10 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
 // de rede do destino (cache local) e registra no histórico com uma chave
 // "offline:<assinatura>#<impressora>" — a Estação de Impressão usa essas chaves
 // pra não imprimir de novo o mesmo item quando o pedido sincronizar.
-export const printOfflineOrderTicket = async (params: { storeId: string; destination: 'kitchen' | 'bar'; title: string; content: string; sig: string }): Promise<number> => {
-  const printers = readCachedPrinters(params.storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
+export const printOfflineOrderTicket = async (params: { storeId: string; destination: 'kitchen' | 'bar'; sectorId?: string | null; title: string; content: string; sig: string }): Promise<number> => {
+  const doDestino = readCachedPrinters(params.storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
+  const doSetor = doDestino.filter((p) => (p.sector_id || null) === (params.sectorId || null));
+  const printers = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
   let ok = 0;
   for (const printer of printers) {
     const feito = await printDirectOffline({ storeId: params.storeId, printerConfigId: printer.id, destination: params.destination, title: params.title, content: params.content, dedupeKey: `offline:${crypto.randomUUID()}:${printer.id}:${params.sig}` });

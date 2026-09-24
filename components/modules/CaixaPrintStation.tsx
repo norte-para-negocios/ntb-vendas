@@ -101,7 +101,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
-import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs } from '@/lib/api';
+import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText } from '@/lib/print';
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -684,7 +684,11 @@ async function reconcileDestination(
     // (rede fora, tabela sem linha) não pode interromper nem marcar
     // falha no caminho window.print() já testado, que segue seu próprio
     // rastreamento de erro logo abaixo.
-    const printersForItem = matchingNetworkPrinters(networkPrinters, destination);
+    // Setor (migration 087): só as impressoras do setor do item; se nenhuma
+    // impressora atende aquele setor, cai nas do destino sem setor (nunca some).
+    const doDestino = matchingNetworkPrinters(networkPrinters, destination);
+    const doSetor = doDestino.filter((p) => printerServesSector(p, (item as any).sector_id));
+    const printersForItem = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
     if (printersForItem.length > 0) {
       const { client: netClient, observation: netObservation } = parseItemNote(item.notes || '');
       const content = buildKitchenTicketText({
