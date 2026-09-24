@@ -2751,7 +2751,7 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
   if (params.content.startsWith('@@PDF@@')) return false;
   const printer = readCachedPrinters(params.storeId).find((p) => p.id === params.printerConfigId);
   if (!printer) return false;
-  if (printer.bottom_margin) params = { ...params, content: `${params.content.replace(/\s+$/, '')}\n${'\n'.repeat(3)}.` };
+  if (printer.bottom_margin) params = { ...params, content: `${params.content.replace(/\s+$/, '')}\n${'\n'.repeat(2)}.` };
   let r: { ok: boolean; reason?: string };
   if (printer.connection_type === 'network' && printer.ip_address) {
     r = await window.electronApp.printDirectNetwork({ ip: printer.ip_address, port: printer.port || 9100, content: params.content, raw: printer.print_mode === 'raw' });

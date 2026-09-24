@@ -514,7 +514,7 @@ async function printPdfJob(printer, pdfUrl) {
   }
 }
 
-const LINHAS_MARGEM = 3;
+const LINHAS_MARGEM = 2;
 const comMargem = (printer, content) => (printer && printer.bottom_margin && typeof content === 'string' && !content.startsWith('@@PDF@@'))
   ? `${content.replace(/\s+$/, '')}\n${'\n'.repeat(LINHAS_MARGEM)}.`
   : content;
