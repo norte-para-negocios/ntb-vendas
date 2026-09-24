@@ -2700,11 +2700,12 @@ const pushPrintHistory = (item: PendingPrintHistory) => {
 };
 
 let flushingPrintHistory = false;
-export const flushPrintHistory = async () => {
-  if (typeof window === 'undefined' || flushingPrintHistory) return;
+export const flushPrintHistory = async (): Promise<number> => {
+  if (typeof window === 'undefined') return 0;
+  if (flushingPrintHistory) return -1;
   let list: PendingPrintHistory[] = [];
-  try { list = JSON.parse(localStorage.getItem(PRINT_HISTORY_KEY) || '[]'); } catch { return; }
-  if (!list.length) return;
+  try { list = JSON.parse(localStorage.getItem(PRINT_HISTORY_KEY) || '[]'); } catch { return 0; }
+  if (!list.length) return 0;
   flushingPrintHistory = true;
   try {
     const restantes: PendingPrintHistory[] = [];
@@ -2719,6 +2720,7 @@ export const flushPrintHistory = async () => {
       }
     }
     localStorage.setItem(PRINT_HISTORY_KEY, JSON.stringify(restantes));
+    return restantes.length;
   } finally { flushingPrintHistory = false; }
 };
 
@@ -2737,6 +2739,42 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
   if (!r.ok) { console.error('Impressão direta offline falhou:', r.reason); return false; }
   pushPrintHistory({ storeId: params.storeId, printerConfigId: params.printerConfigId, destination: params.destination, title: params.title, content: params.content, dedupeKey: params.dedupeKey || null, printedAt: new Date().toISOString() });
   return true;
+};
+
+// Pedido do garçom feito SEM internet: imprime a comanda direto nas impressoras
+// de rede do destino (cache local) e registra no histórico com uma chave
+// "offline:<assinatura>#<impressora>" — a Estação de Impressão usa essas chaves
+// pra não imprimir de novo o mesmo item quando o pedido sincronizar.
+export const printOfflineOrderTicket = async (params: { storeId: string; destination: 'kitchen' | 'bar'; title: string; content: string; sig: string }): Promise<number> => {
+  const printers = readCachedPrinters(params.storeId).filter((p) => p.is_active && p.connection_type === 'network' && (p.destination === params.destination || p.destination === 'all'));
+  let ok = 0;
+  for (const printer of printers) {
+    const feito = await printDirectOffline({ storeId: params.storeId, printerConfigId: printer.id, destination: params.destination, title: params.title, content: params.content, dedupeKey: `offline:${params.sig}#${printer.id}` });
+    if (feito) ok++;
+  }
+  return ok;
+};
+
+// Assinaturas (mesa|produto|qtd|obs) já impressas offline nas últimas 12h,
+// com quantas vezes cada uma saiu (por impressora, pega o maior).
+export const fetchOfflinePrintedSigs = async (storeId: string): Promise<Map<string, number>> => {
+  const desde = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+  const { data, error } = await supabase.from('print_jobs').select('dedupe_key').eq('store_id', storeId).like('dedupe_key', 'offline:%').gte('created_at', desde);
+  const porImpressora = new Map<string, Map<string, number>>();
+  if (error) return new Map();
+  for (const row of data || []) {
+    const k = String(row.dedupe_key || '');
+    const i = k.lastIndexOf('#');
+    if (i < 0) continue;
+    const sig = k.slice('offline:'.length, i);
+    const imp = k.slice(i + 1);
+    if (!porImpressora.has(sig)) porImpressora.set(sig, new Map());
+    const m = porImpressora.get(sig)!;
+    m.set(imp, (m.get(imp) || 0) + 1);
+  }
+  const out = new Map<string, number>();
+  porImpressora.forEach((m, sig) => out.set(sig, Math.max(...m.values())));
+  return out;
 };
 
 export const enqueuePrintJob = async (params: {

@@ -251,6 +251,20 @@ export async function runSync(): Promise<void> {
       return;
     }
 
+    // Comandas impressas SEM internet: as marcas "já impressa" precisam chegar ao
+    // servidor ANTES dos pedidos sincronizarem, senão a Estação de Impressão
+    // imprimiria a comanda de novo. Se ainda restar marca sem enviar, adia a
+    // sincronização dos pedidos pra próxima rodada.
+    try {
+      const { flushPrintHistory } = await import('../api');
+      const restantes = await flushPrintHistory();
+      if (restantes !== 0) {
+        const pending = (await getPendingActions()).length;
+        notify({ syncing: false, pending, failed: 0 });
+        return;
+      }
+    } catch { /* sem histórico local: segue */ }
+
     const idMap = new Map<string, string>();
     const actions = await getPendingActions(); // já vem ordenado por createdAt
     for (const action of actions) {
