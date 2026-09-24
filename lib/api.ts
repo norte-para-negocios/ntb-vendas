@@ -2743,6 +2743,43 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
   );
 };
 
+// Cupom fiscal completo (PDF com QR) pela fila: quem finaliza pode estar em
+// QUALQUER computador (notebook, navegador); o PC que tem a impressora USB do
+// caixa baixa o PDF e imprime (motor de impressão do app desktop). Impressora
+// de rede não imprime PDF -- recebe o resumo em texto como antes.
+export const enqueueFiscalCupomPrintJobs = async (
+  storeId: string,
+  title: string,
+  textContent: string,
+  dedupeKeyBase: string,
+  pdfUrlFor: (paperWidthMm: number) => string,
+): Promise<void> => {
+  const { data: printers, error } = await supabase
+    .from('printer_configs')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('connection_type', ['network', 'usb'])
+    .in('destination', ['receipt', 'all']);
+  if (error) { console.error('Error fetching receipt printers:', error); return; }
+  const origem = typeof window !== 'undefined' ? window.location.origin : '';
+  await Promise.all(
+    (printers || []).map((printer) => {
+      const content = printer.connection_type === 'usb'
+        ? `@@PDF@@${new URL(pdfUrlFor(printer.paper_width_mm ?? 80), origem).href}`
+        : textContent;
+      return enqueuePrintJob({
+        storeId,
+        printerConfigId: printer.id,
+        destination: printer.destination,
+        title,
+        content,
+        dedupeKey: `${dedupeKeyBase}:${printer.id}`,
+      });
+    })
+  );
+};
+
 export const fetchRecentPrintJobs = async (storeId: string, limit: number = 30): Promise<PrintJob[]> => {
   const { data, error } = await supabase.from('print_jobs').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(limit);
   if (error) { console.error('Error fetching print jobs:', error); return []; }

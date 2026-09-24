@@ -470,7 +470,32 @@ async function printOnce(printer, content) {
 // pra saber se o papel já saiu antes do erro). Repetir às cegas arrisca
 // imprimir fisicamente 2x; falhar e deixar 'error' na fila (reenviável na
 // aba Impressão) é sempre a escolha mais segura aqui.
+// Job de cupom fiscal completo (PDF): conteúdo "@@PDF@@<url>". Só impressora
+// USB (Windows): baixa o PDF e manda pro SumatraPDF, que imprime silencioso
+// na impressora pelo nome (mesmo mecanismo do 'ntb-print-pdf-silent').
+async function printPdfJob(printer, pdfUrl) {
+  if (process.platform !== 'win32') throw new Error('Impressão de PDF só no Windows.');
+  const sumatraPath = path.join(process.resourcesPath || path.join(__dirname, '..'), 'vendor', 'SumatraPDF.exe');
+  if (!fs.existsSync(sumatraPath)) throw new Error('SumatraPDF.exe ausente no pacote instalado');
+  const res = await fetch(pdfUrl);
+  if (!res.ok) throw new Error(`Falha ao baixar o PDF (HTTP ${res.status})`);
+  const tmpFile = path.join(os.tmpdir(), `ntb-cupom-fila-${Date.now()}.pdf`);
+  fs.writeFileSync(tmpFile, Buffer.from(await res.arrayBuffer()));
+  try {
+    await new Promise((resolve, reject) => {
+      execFile(sumatraPath, ['-print-to', printer.usb_system_name, '-print-settings', 'noscale', '-silent', '-exit-when-done', tmpFile], { timeout: 30000 },
+        (err) => { if (err) reject(err); else resolve(); });
+    });
+  } finally {
+    setTimeout(() => { try { fs.unlinkSync(tmpFile); } catch { /* ignore */ } }, 15000);
+  }
+}
+
 async function printJob(printer, content) {
+  if (typeof content === 'string' && content.startsWith('@@PDF@@')) {
+    await printPdfJob(printer, content.slice(7).trim());
+    return;
+  }
   if (printer.connection_type !== 'network') {
     await printOnce(printer, content);
     return;
