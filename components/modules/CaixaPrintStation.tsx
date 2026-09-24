@@ -649,16 +649,21 @@ async function reconcileDestination(
   // Itens do garçom impressos SEM internet (direto na impressora de rede): não
   // imprime de novo quando o pedido sincroniza. Cada assinatura só é "consumida"
   // tantas vezes quantas foi impressa offline.
-  const offlineSigs = await fetchOfflinePrintedSigs(storeId).catch(() => new Map<string, number>());
-  const consumidas: Record<string, number> = (() => { try { return JSON.parse(localStorage.getItem(`ntb-offline-sigs-consumidas:${storeId}`) || '{}'); } catch { return {}; } })();
+  const offlineSigs = await fetchOfflinePrintedSigs(storeId).catch(() => null);
+  // Sem conseguir consultar as marcas, não imprime nesta rodada (tenta na próxima):
+  // imprimir às cegas poderia repetir uma comanda já impressa sem internet.
+  if (offlineSigs === null) return true;
+  const chaveConsumidas = `ntb-offline-marcas-consumidas:${storeId}`;
+  const consumidas = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(chaveConsumidas) || '[]'); } catch { return []; } })());
   const jaImpressoOffline = (it: any): boolean => {
     const sig = `${it.order?.tables?.number ?? ''}|${it.product_id}|${it.quantity}|${it.notes || ''}`;
-    const total = offlineSigs.get(sig) || 0;
-    if (total <= (consumidas[sig] || 0)) return false;
-    consumidas[sig] = (consumidas[sig] || 0) + 1;
+    const marca = (offlineSigs.get(sig) || []).find((m) => !consumidas.has(m));
+    if (!marca) return false;
+    consumidas.add(marca);
+    const vivas = new Set<string>(); offlineSigs.forEach((l) => l.forEach((m) => vivas.add(m)));
+    try { localStorage.setItem(chaveConsumidas, JSON.stringify([...consumidas].filter((m) => vivas.has(m)))); } catch { /* sem persistência */ }
     printedIds.add(it.id);
     savePrintedIds(storeId, destination, printedIds);
-    try { localStorage.setItem(`ntb-offline-sigs-consumidas:${storeId}`, JSON.stringify(consumidas)); } catch { /* sem persistência */ }
     return true;
   };
   const toPrint = items.filter((it) => !printedIds.has(it.id) && new Date(it.created_at).getTime() >= activatedAtMs && !jaImpressoOffline(it));

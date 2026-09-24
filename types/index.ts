@@ -442,6 +442,10 @@ export interface PrinterConfig {
   paper_width_mm: 58 | 80 | 210;
   // 'driver' (padrão, via driver do Windows) ou 'raw' (ESC/POS direto, migration 083).
   print_mode?: 'driver' | 'raw';
+  // hostname -> nome da impressora no Windows daquele computador (migration 084).
+  machine_names?: Record<string, string>;
+  // Linhas em branco no fim da impressão pra cortar o papel (migration 085).
+  bottom_margin?: boolean;
   is_active: boolean;
   created_at: string;
 }

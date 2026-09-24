@@ -28,7 +28,8 @@ declare global {
       startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
       printPdfSilent?: (params: { pdfUrl: string; printerName: string }) => Promise<{ ok: boolean; reason?: string }>;
-      printDirectUsb?: (params: { name: string; content: string; raw: boolean; owners: string[] }) => Promise<{ ok: boolean; reason?: string }>;
+      printDirectUsb?: (params: { printer: PrinterConfig; content: string; owners: string[] }) => Promise<{ ok: boolean; reason?: string }>;
+      localPrinters?: () => Promise<{ hostname: string; impressoras: string[] }>;
       printDirectNetwork?: (params: { ip: string; port: number; content: string; raw: boolean }) => Promise<{ ok: boolean; reason?: string }>;
     };
   }
@@ -2667,7 +2668,7 @@ export const createPrinterConfig = async (params: {
   return { success: true };
 };
 
-export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode'>>): Promise<{ success: boolean; message?: string }> => {
+export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode' | 'machine_names' | 'bottom_margin'>>): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').update(updates).eq('id', id);
   if (error) { console.error('Error updating printer config:', error); return { success: false, message: error.message }; }
   return { success: true };
@@ -2699,12 +2700,12 @@ const readCachedPrinters = (storeId: string): PrinterConfig[] => {
   try { return JSON.parse(localStorage.getItem(PRINTERS_CACHE_KEY(storeId)) || '[]'); } catch { return []; }
 };
 
-type PendingPrintHistory = { storeId: string; printerConfigId: string | null; destination: string; title: string; content: string; dedupeKey: string | null; printedAt: string };
+type PendingPrintHistory = { uid?: string; storeId: string; printerConfigId: string | null; destination: string; title: string; content: string; dedupeKey: string | null; printedAt: string };
 
 const pushPrintHistory = (item: PendingPrintHistory) => {
   try {
     const list: PendingPrintHistory[] = JSON.parse(localStorage.getItem(PRINT_HISTORY_KEY) || '[]');
-    list.push(item);
+    list.push({ ...item, uid: item.uid || crypto.randomUUID() });
     localStorage.setItem(PRINT_HISTORY_KEY, JSON.stringify(list.slice(-200)));
   } catch { /* sem histórico local */ }
 };
@@ -2718,17 +2719,22 @@ export const flushPrintHistory = async (): Promise<number> => {
   if (!list.length) return 0;
   flushingPrintHistory = true;
   try {
-    const restantes: PendingPrintHistory[] = [];
+    const enviados = new Set<string>();
     for (const it of list) {
       const { error } = await supabase.from('print_jobs').insert({
         store_id: it.storeId, printer_config_id: it.printerConfigId, destination: it.destination,
         title: it.title, content: it.content, dedupe_key: it.dedupeKey, status: 'done', printed_at: it.printedAt,
       });
       if (error && (error as { code?: string }).code !== '23505') {
-        if (isNetworkError(error)) { restantes.push(it); continue; }
+        if (isNetworkError(error)) continue;
         console.error('Histórico de impressão offline não gravou:', error);
       }
+      if (it.uid) enviados.add(it.uid);
     }
+    // Relê: marcas criadas DURANTE o envio não podem ser apagadas.
+    let atual: PendingPrintHistory[] = [];
+    try { atual = JSON.parse(localStorage.getItem(PRINT_HISTORY_KEY) || '[]'); } catch { atual = []; }
+    const restantes = atual.filter((it) => !it.uid || !enviados.has(it.uid));
     localStorage.setItem(PRINT_HISTORY_KEY, JSON.stringify(restantes));
     return restantes.length;
   } finally { flushingPrintHistory = false; }
@@ -2745,6 +2751,7 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
   if (params.content.startsWith('@@PDF@@')) return false;
   const printer = readCachedPrinters(params.storeId).find((p) => p.id === params.printerConfigId);
   if (!printer) return false;
+  if (printer.bottom_margin) params = { ...params, content: `${params.content.replace(/\s+$/, '')}\n${'\n'.repeat(8)}.` };
   let r: { ok: boolean; reason?: string };
   if (printer.connection_type === 'network' && printer.ip_address) {
     r = await window.electronApp.printDirectNetwork({ ip: printer.ip_address, port: printer.port || 9100, content: params.content, raw: printer.print_mode === 'raw' });
@@ -2754,12 +2761,12 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
       const cache: { name: string; machine: string; kind: string }[] = JSON.parse(localStorage.getItem(`ntb-discovered-cache:${params.storeId}`) || '[]');
       donos = cache.filter((d) => d.kind !== 'network' && d.name === printer.usb_system_name && d.machine).map((d) => d.machine);
     } catch { /* sem cache */ }
-    r = await window.electronApp.printDirectUsb({ name: printer.usb_system_name, content: params.content, raw: printer.print_mode === 'raw', owners: donos });
+    r = await window.electronApp.printDirectUsb({ printer, content: params.content, owners: donos });
   } else {
     return false;
   }
   if (!r.ok) { console.error('Impressão direta offline falhou:', r.reason); return false; }
-  pushPrintHistory({ storeId: params.storeId, printerConfigId: params.printerConfigId, destination: params.destination, title: params.title, content: params.content, dedupeKey: params.dedupeKey || null, printedAt: new Date().toISOString() });
+  pushPrintHistory({ storeId: params.storeId, printerConfigId: params.printerConfigId ?? null, destination: params.destination, title: params.title, content: params.content, dedupeKey: params.dedupeKey || null, printedAt: new Date().toISOString() });
   return true;
 };
 
@@ -2779,23 +2786,28 @@ export const printOfflineOrderTicket = async (params: { storeId: string; destina
 
 // Assinaturas (mesa|produto|qtd|obs) já impressas offline nas últimas 12h,
 // com quantas vezes cada uma saiu (por impressora, pega o maior).
-export const fetchOfflinePrintedSigs = async (storeId: string): Promise<Map<string, number>> => {
+// Marcas de itens impressos sem internet nas últimas 12h: assinatura
+// (mesa|produto|qtd|obs) -> ids das marcas (da impressora com mais marcas).
+// `null` = não deu pra consultar (quem chama NÃO deve imprimir nessa rodada).
+export const fetchOfflinePrintedSigs = async (storeId: string): Promise<Map<string, string[]> | null> => {
   const desde = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
   const { data, error } = await supabase.from('print_jobs').select('dedupe_key').eq('store_id', storeId).like('dedupe_key', 'offline:%').gte('created_at', desde);
-  const porImpressora = new Map<string, Map<string, number>>();
-  if (error) return new Map();
+  if (error) return null;
+  const porSig = new Map<string, Map<string, string[]>>();
   for (const row of data || []) {
     const resto = String(row.dedupe_key || '').slice('offline:'.length);
     const a = resto.indexOf(':'); const b = resto.indexOf(':', a + 1);
     if (a < 0 || b < 0) continue;
+    const marca = resto.slice(0, a);
     const imp = resto.slice(a + 1, b);
     const sig = resto.slice(b + 1);
-    if (!porImpressora.has(sig)) porImpressora.set(sig, new Map());
-    const m = porImpressora.get(sig)!;
-    m.set(imp, (m.get(imp) || 0) + 1);
+    if (!porSig.has(sig)) porSig.set(sig, new Map());
+    const m = porSig.get(sig)!;
+    if (!m.has(imp)) m.set(imp, []);
+    m.get(imp)!.push(marca);
   }
-  const out = new Map<string, number>();
-  porImpressora.forEach((m, sig) => out.set(sig, Math.max(...m.values())));
+  const out = new Map<string, string[]>();
+  porSig.forEach((m, sig) => { let melhor: string[] = []; m.forEach((l) => { if (l.length > melhor.length) melhor = l; }); out.set(sig, melhor.sort()); });
   return out;
 };
 

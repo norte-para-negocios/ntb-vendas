@@ -567,11 +567,15 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('ntb-local-printers', async () => {
+    try { return await printEngine.listarImpressorasLocais(); } catch { return { hostname: '', impressoras: [] }; }
+  });
+
   ipcMain.handle('ntb-print-direct-usb', async (_event, params) => {
-    const { name, content, raw, owners } = params || {};
-    if (!name || typeof content !== 'string') return { ok: false, reason: 'parâmetros ausentes' };
+    const { printer, content, owners } = params || {};
+    if (!printer || typeof content !== 'string') return { ok: false, reason: 'parâmetros ausentes' };
     try {
-      await printEngine.printDirectUsb(name, content, Boolean(raw), owners);
+      await printEngine.printDirectUsb(printer, content, owners);
       return { ok: true };
     } catch (e) {
       return { ok: false, reason: e.message };

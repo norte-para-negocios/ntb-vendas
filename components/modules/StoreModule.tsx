@@ -3460,9 +3460,13 @@ NOTIFY pgrst, 'reload schema';`;
                     orderIdShort: String(result.orderId).slice(6, 14),
                 });
                 const sig = `${selectedTable.number}|${product.id}|${qty}|${optimisticNotes}`;
-                const impressas = await printOfflineOrderTicket({ storeId, destination: destino, title: `${qty}x ${product.name} — Mesa ${selectedTable.number}`, content: conteudo, sig }).catch(() => 0);
-                if (impressas > 0) toast.info('Sem internet: comanda impressa direto na impressora da rede.');
-                else toast.warning('Sem internet: o pedido foi salvo, mas a comanda não saiu na impressora. Ela sai quando a internet voltar.');
+                // Não espera a impressão: o garçom continua lançando enquanto imprime.
+                printOfflineOrderTicket({ storeId, destination: destino, title: `${qty}x ${product.name} — Mesa ${selectedTable.number}`, content: conteudo, sig })
+                    .catch(() => 0)
+                    .then((impressas) => {
+                        if (impressas > 0) toast.info('Sem internet: comanda impressa direto na impressora.');
+                        else toast.warning('Sem internet: o pedido foi salvo, mas a comanda não saiu na impressora. Ela sai quando a internet voltar.');
+                    });
             }
 
             // Atualização otimista da comanda — sem isso, "Ver Comanda" e o

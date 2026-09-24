@@ -67,6 +67,20 @@ const CONNECTION_ICON: Record<PrinterConfig['connection_type'], React.ReactNode>
   usb: <Usb size={16} />,
 };
 
+const normTokens = (s: string) => String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Z0-9]+/).filter(Boolean);
+// Mesma regra do app desktop (print-engine.js, resolverNomeLocal).
+const resolverNomeLocal = (printer: PrinterConfig, host: string, locais: string[]): string | null => {
+  const mapa = printer.machine_names || {};
+  const k = Object.keys(mapa).find((x) => x.toLowerCase() === host.toLowerCase());
+  if (k && mapa[k]) return mapa[k];
+  if (printer.usb_system_name && locais.includes(printer.usb_system_name)) return printer.usb_system_name;
+  const chaves = new Set([...normTokens(printer.name), ...normTokens(String(printer.usb_system_name || '').replace(/^IMP/i, ''))]);
+  ['IMP', 'IMPRESSORA', 'PC', 'USB'].forEach((x) => chaves.delete(x));
+  if (!chaves.size) return null;
+  const achadas = locais.filter((n) => normTokens(n).some((t) => chaves.has(t)));
+  return achadas.length === 1 ? achadas[0] : null;
+};
+
 const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
   const [jobs, setJobs] = useState<PrintJob[]>([]);
@@ -102,6 +116,11 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // `Date.now()` do PRÓPRIO navegador (nunca contra o relógio do agente,
   // que pode estar errado). `null` = agente nunca rodou nesta loja.
   const [agentStatus, setAgentStatus] = useState<{ lastSeenAt: string; printersLoaded: number } | null>(null);
+
+  const [maquina, setMaquina] = useState<{ hostname: string; impressoras: string[] } | null>(null);
+  useEffect(() => {
+    window.electronApp?.localPrinters?.().then(setMaquina).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     const [printerList, jobList, discovered, agent] = await Promise.all([
@@ -469,6 +488,39 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                     {printer.connection_type === 'usb' && ` — ${printer.usb_system_name}`}
                     {' · '}{DESTINATION_LABELS[printer.destination]}
                   </p>
+                  {printer.connection_type === 'usb' && maquina?.hostname && (() => {
+                    // Lista deste computador: a detecção local; se ela falhar (PowerShell lento
+                    // no Windows 11), usa o que o app deste PC já publicou.
+                    const impressorasDaqui = maquina.impressoras.length > 0
+                      ? maquina.impressoras
+                      : discoveredPrinters.filter((d) => d.kind !== 'network' && d.machine.toLowerCase() === maquina.hostname.toLowerCase()).map((d) => d.name);
+                    const auto = resolverNomeLocal({ ...printer, machine_names: {} }, maquina.hostname, impressorasDaqui);
+                    const manual = Object.entries(printer.machine_names || {}).find(([h]) => h.toLowerCase() === maquina.hostname.toLowerCase())?.[1] || '';
+                    const efetivo = manual || auto;
+                    return (
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs ${efetivo ? 'text-[var(--ok)]' : 'text-[var(--warn)]'}`}>
+                          Neste computador ({maquina.hostname}):
+                        </span>
+                        <select
+                          value={manual}
+                          onChange={async (e) => {
+                            const mapa = { ...(printer.machine_names || {}) };
+                            Object.keys(mapa).forEach((h) => { if (h.toLowerCase() === maquina.hostname.toLowerCase()) delete mapa[h]; });
+                            if (e.target.value) mapa[maquina.hostname] = e.target.value;
+                            const r = await updatePrinterConfig(printer.id, { machine_names: mapa });
+                            if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
+                            toast.success('Impressora deste computador salva.');
+                            load();
+                          }}
+                          className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text)] max-sm:text-base"
+                        >
+                          <option value="">{auto ? `Automático: ${auto}` : 'Não encontrada — escolha'}</option>
+                          {impressorasDaqui.map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -487,6 +539,22 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                     <option value="driver">Padrão</option>
                     <option value="raw">Direto</option>
                   </select>
+                )}
+                {(printer.connection_type === 'usb' || printer.connection_type === 'network') && (
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text)] cursor-pointer select-none" title="Adiciona linhas em branco no fim de cada impressão pra dar pra cortar o papel certo">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(printer.bottom_margin)}
+                      onChange={async (e) => {
+                        const r = await updatePrinterConfig(printer.id, { bottom_margin: e.target.checked });
+                        if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
+                        toast.success(e.target.checked ? `"${printer.name}" agora imprime com margem embaixo.` : `"${printer.name}" sem margem embaixo.`);
+                        load();
+                      }}
+                      className="size-4 accent-[var(--brand)]"
+                    />
+                    Margem embaixo
+                  </label>
                 )}
                 <select
                   value={printer.paper_width_mm ?? 80}

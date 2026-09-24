@@ -14,7 +14,7 @@ export function isNetworkError(error: unknown): boolean {
   // a causa real é rede, mesmo não sendo um TypeError nativo — checagem
   // por mensagem como fallback, não como caminho principal.
   if (error && typeof error === 'object' && 'message' in error && typeof (error as any).message === 'string') {
-    return /failed to fetch|network ?error|err_internet_disconnected|err_name_not_resolved/i.test((error as any).message);
+    return /failed to fetch|network ?error|err_internet_disconnected|err_name_not_resolved|aborterror|operation was aborted|signal is aborted/i.test((error as any).message);
   }
   return false;
 }
@@ -44,8 +44,8 @@ export async function checkRealConnectivity(): Promise<boolean> {
   // Resultado recente vale por alguns segundos: evita pagar o ping (ou os 4s de
   // timeout sem internet) a cada toque do garçom.
   const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
-  if (off && Date.now() - off < 15000) return false;
-  if (Date.now() - ultimoOkAt < 10000) return true;
+  if (off && Date.now() - off < 30000) return false;
+  if (Date.now() - ultimoOkAt < 3000) return true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4000);
   try {

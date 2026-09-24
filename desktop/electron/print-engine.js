@@ -55,6 +55,8 @@ let geracao = 0;
 // apagar de `discovered_printers` uma impressora de OUTRO computador da mesma
 // loja (o caixa e a cozinha têm impressoras USB diferentes).
 let publicadasPorEstaMaquina = new Set();
+// Impressoras instaladas NESTE computador (última varredura, mesmo sem internet).
+let nomesLocais = [];
 
 async function rest(pathAndQuery, init = {}) {
   const res = await fetch(`${cfg.baseUrl}/rest/v1/${pathAndQuery}`, {
@@ -257,7 +259,7 @@ function printViaUsbRaw(printerName, content) {
     const scriptFile = path.join(os.tmpdir(), `ntb-raw-${stamp}.ps1`);
     fs.writeFileSync(binFile, toEscPos(content));
     fs.writeFileSync(scriptFile, PS_RAW_SCRIPT, 'utf8');
-    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', binFile], (err) => {
+    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', binFile], { timeout: 30000 }, (err) => {
       try { fs.unlinkSync(binFile); } catch { /* ignore */ }
       try { fs.unlinkSync(scriptFile); } catch { /* ignore */ }
       if (err) reject(err); else resolve();
@@ -283,6 +285,7 @@ function printViaUsb(printerName, content) {
       execFile(
         'powershell.exe',
         ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', tmpFile],
+        { timeout: 30000 },
         (err) => {
           cleanup(scriptFile);
           if (err) reject(err); else resolve();
@@ -299,7 +302,7 @@ function printViaUsb(printerName, content) {
 
 function runCommand(file, args) {
   return new Promise((resolve) => {
-    execFile(file, args, { timeout: 10000 }, (err, stdout) => resolve(err ? null : stdout));
+    execFile(file, args, { timeout: 30000 }, (err, stdout) => resolve(err ? null : stdout));
   });
 }
 
@@ -330,6 +333,7 @@ async function syncDiscoveredPrinters(storeId) {
   // null = o comando falhou nesta máquina; nunca apaga a lista já conhecida
   // por causa disso, só desiste desta rodada.
   if (names === null) return;
+  nomesLocais = names;
   if (names.length > 0) {
     await rest('discovered_printers?on_conflict=store_id,name', {
       method: 'POST',
@@ -444,6 +448,25 @@ async function sendHeartbeat(storeId, printersLoaded) {
   }
 }
 
+const normTokens = (s) => String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Z0-9]+/).filter(Boolean);
+
+// Nome da impressora NESTE computador: 1) mapa manual (machine_names),
+// 2) o mesmo nome cadastrado, se existir aqui, 3) automático: uma única
+// impressora local cujo nome contém a palavra-chave (ex. cadastro "pizzaria"
+// / IMPPIZZARIA -> "PIZZARIA_PC-2" no notebook).
+function resolverNomeLocal(printer, locais) {
+  const lista = locais || nomesLocais;
+  const eu = os.hostname().toLowerCase();
+  const mapa = printer.machine_names || {};
+  for (const k of Object.keys(mapa)) if (k.toLowerCase() === eu && mapa[k]) return mapa[k];
+  if (printer.usb_system_name && lista.includes(printer.usb_system_name)) return printer.usb_system_name;
+  const chaves = new Set([...normTokens(printer.name), ...normTokens(String(printer.usb_system_name || '').replace(/^IMP/i, ''))]);
+  ['IMP', 'IMPRESSORA', 'PC', 'USB'].forEach((x) => chaves.delete(x));
+  if (!chaves.size) return null;
+  const achadas = lista.filter((n) => normTokens(n).some((t) => chaves.has(t)));
+  return achadas.length === 1 ? achadas[0] : null;
+}
+
 async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
     await printViaNetwork(printer.ip_address, printer.port, content, printer.print_mode === 'raw');
@@ -491,7 +514,13 @@ async function printPdfJob(printer, pdfUrl) {
   }
 }
 
+const LINHAS_MARGEM = 8;
+const comMargem = (printer, content) => (printer && printer.bottom_margin && typeof content === 'string' && !content.startsWith('@@PDF@@'))
+  ? `${content.replace(/\s+$/, '')}\n${'\n'.repeat(LINHAS_MARGEM)}.`
+  : content;
+
 async function printJob(printer, content) {
+  content = comMargem(printer, content);
   if (typeof content === 'string' && content.startsWith('@@PDF@@')) {
     await printPdfJob(printer, content.slice(7).trim());
     return;
@@ -622,12 +651,13 @@ function start(storeId, options) {
         // mesmo com a máquina certa disponível pra imprimir.
         let impressoraDoJob = printer;
         let viaCompartilhamento = false;
-        if (printer.connection_type === 'usb' && publicadasPorEstaMaquina.size > 0
-            && !publicadasPorEstaMaquina.has(printer.usb_system_name)) {
+        const nomeLocal = printer.connection_type === 'usb' ? resolverNomeLocal(printer) : null;
+        if (nomeLocal) impressoraDoJob = { ...printer, usb_system_name: nomeLocal };
+        if (printer.connection_type === 'usb' && !nomeLocal && nomesLocais.length > 0) {
           // Plano B (pedido do dono: qualquer computador da loja imprime): se o
           // computador dono da impressora não pegou o job em ~15s, este
           // imprime pelo compartilhamento do Windows (\\dono\impressora).
-          const dono = [...(donosPorNome.get(printer.usb_system_name) || [])].find((mq) => mq !== os.hostname());
+          const dono = [...(donosPorNome.get(printer.usb_system_name) || [])].find((mq) => mq.toLowerCase() !== os.hostname().toLowerCase());
           if (!dono || process.platform !== 'win32') continue;
           if (!primeiraVez.has(job.id)) primeiraVez.set(job.id, Date.now());
           if (Date.now() - primeiraVez.get(job.id) < 15000) continue;
@@ -642,17 +672,24 @@ function start(storeId, options) {
         try {
           await printJob(impressoraDoJob, job.content);
           await marcarJob(job.id, { status: 'done', printed_at: new Date().toISOString() });
+          primeiraVez.delete(job.id);
           log(viaCompartilhamento ? `INFO impresso OK via compartilhamento ${impressoraDoJob.usb_system_name}` : 'INFO impresso OK');
         } catch (printErr) {
           log(`ERROR falhou: ${printErr.message}`);
-          if (viaCompartilhamento) {
-            // Plano B falhou (compartilhamento inexistente/sem permissão): devolve à fila
-            // pro dono imprimir e só tenta de novo daqui a 1 min.
+          // Impressora nem abriu (compartilhamento inexistente, nome errado): nada
+          // foi mandado pro papel, então é seguro devolver à fila pro computador
+          // certo imprimir; este só tenta de novo daqui a ~1 min.
+          const nadaEnviado = /Impressora invalida|Nao abriu a impressora|Esta máquina não tem/i.test(String(printErr.message || ''));
+          if (viaCompartilhamento && nadaEnviado) {
             primeiraVez.set(job.id, Date.now() + 45000);
             await marcarJob(job.id, { status: 'pending' });
-          } else {
-            await marcarJob(job.id, { status: 'error', error_message: String(printErr.message || printErr) });
+            continue;
           }
+          // Qualquer outro erro: nunca devolve à fila (o Windows pode acusar erro
+          // DEPOIS de já ter mandado pro spooler; reenfileirar imprimiria em dobro).
+          // Fica 'error', reenviável na aba Impressão.
+          primeiraVez.delete(job.id);
+          await marcarJob(job.id, { status: 'error', error_message: String(printErr.message || printErr) });
         }
       }
     } catch (e) {
@@ -682,12 +719,25 @@ function start(storeId, options) {
 
 // Impressão USB/compartilhada direto (sem fila do servidor): usa o nome local se
 // esta máquina tem a impressora; senão o compartilhamento do Windows do dono.
-function printDirectUsb(nome, content, raw, donos) {
-  const eu = os.hostname();
-  const dono = (donos || []).find((m) => m && m.toLowerCase() !== eu.toLowerCase());
-  const local = !dono || (donos || []).some((m) => m && m.toLowerCase() === eu.toLowerCase());
-  const alvo = local ? nome : `\\\\${dono}\\${nome}`;
+async function printDirectUsb(printer, content, donos) {
+  content = comMargem(printer, content);
+  if (!nomesLocais.length) { const n = await detectLocalPrinters(); if (n) nomesLocais = n; }
+  const raw = printer.print_mode === 'raw';
+  const local = resolverNomeLocal(printer);
+  let alvo = local;
+  if (!alvo) {
+    const eu = os.hostname().toLowerCase();
+    const dono = (donos || []).find((m) => m && m.toLowerCase() !== eu);
+    if (!dono) throw new Error('Esta máquina não tem essa impressora');
+    alvo = `\\\\${dono}\\${printer.usb_system_name}`;
+  }
   return raw ? printViaUsbRaw(alvo, content) : printViaUsb(alvo, content);
 }
 
-module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork, printDirectUsb };
+async function listarImpressorasLocais() {
+  const n = await detectLocalPrinters();
+  if (n) nomesLocais = n;
+  return { hostname: os.hostname(), impressoras: nomesLocais };
+}
+
+module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork, printDirectUsb, listarImpressorasLocais, resolverNomeLocal };

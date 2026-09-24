@@ -71,4 +71,5 @@ contextBridge.exposeInMainWorld('electronApp', {
   printPdfSilent: (params) => ipcRenderer.invoke('ntb-print-pdf-silent', params),
   printDirectNetwork: (params) => ipcRenderer.invoke('ntb-print-direct-network', params),
   printDirectUsb: (params) => ipcRenderer.invoke('ntb-print-direct-usb', params),
+  localPrinters: () => ipcRenderer.invoke('ntb-local-printers'),
 });
