@@ -2287,6 +2287,8 @@ const TablesView: React.FC<{
     // combinam.
     const [closedTodayOrders, setClosedTodayOrders] = useState<Order[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+    const [hostNameInput, setHostNameInput] = useState('');
+    useEffect(() => { setHostNameInput(''); }, [selectedTable?.id]);
     const [showFullBill, setShowFullBill] = useState(false);
     
     // Menu Mode State
@@ -3900,8 +3902,16 @@ NOTIFY pgrst, 'reload schema';`;
                                  </div>
                              )}
                              {selectedTable?.status === 'available' && (
+                                <>
+                                <Input
+                                    label="Nome do cliente (opcional)"
+                                    placeholder="Ex.: Família Silva"
+                                    value={hostNameInput}
+                                    onChange={e => setHostNameInput(e.target.value)}
+                                />
                                 <Button className="w-full text-lg h-14" onClick={async () => {
                                     if(selectedTable) {
+                                        const hostName = hostNameInput.trim() || loggedUser.name;
                                         const previousTable = selectedTable;
 
                                         // 1. UPDATE LOCAL STATE IMMEDIATELY (Visual Feedback) — atualiza o
@@ -3909,14 +3919,14 @@ NOTIFY pgrst, 'reload schema';`;
                                         // card por trás continua mostrando "Disponível" até sincronizar de
                                         // verdade (achado real, WhatsApp 2026-09-09: offline, parecia que o
                                         // clique não tinha feito nada).
-                                        const optimisticTable = { ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: loggedUser.name };
+                                        const optimisticTable = { ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: hostName };
                                         setSelectedTable(optimisticTable);
                                         setTables(prev => prev.map(t => t.id === optimisticTable.id ? optimisticTable : t));
 
                                         try {
                                             // 2. CALL API (grava a sessão de ocupação também, senão mesas abertas
                                             // pelo lojista nunca entram na métrica de tempo médio)
-                                            const { queued } = await openTableManually(selectedTable.id, store.id, loggedUser.name);
+                                            const { queued } = await openTableManually(selectedTable.id, store.id, hostName);
 
                                             // 3. REFRESH DATA — só quando a mesa abriu de verdade no servidor
                                             // agora (`!queued`). Se caiu na fila offline, `loadData()` cairia no
@@ -3944,6 +3954,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 }}>
                                     Abrir Mesa Manualmente
                                 </Button>
+                                </>
                             )}
                         </>
                     ) : (
