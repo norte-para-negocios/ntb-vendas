@@ -2158,8 +2158,9 @@ export const aguardarNotaFiscalDaVenda = async (
 export const descreverFalhaFiscalDaVenda = async (
   storeId: string,
   alvo: { orderId?: string; tableId?: string },
+  desde: number = Date.now() - 60000,
 ): Promise<{ status: string; motivo: string | null } | null> => {
-  const inicio = Date.now() - 60000;
+  const inicio = desde;
   const notas = await fetchFiscalNotas(storeId);
   const nota = notas
     .filter((n: any) => !n.pessoa_identificador)

@@ -444,10 +444,10 @@ function useWatchedTables(storeId: string | undefined): Set<string> {
 // clique (enquanto o gesto ainda vale), mostrando "Gerando cupom fiscal...",
 // e só troca de endereço quando o PDF existe. Se ainda assim vier bloqueada,
 // cai num aviso claro em vez de não fazer nada.
-const avisarFalhaNotaFiscal = async (storeId: string, alvo: { orderId?: string; tableId?: string }) => {
-    const r = await descreverFalhaFiscalDaVenda(storeId, alvo).catch(() => null);
+const avisarFalhaNotaFiscal = async (storeId: string, alvo: { orderId?: string; tableId?: string }, desde?: number) => {
+    const r = await descreverFalhaFiscalDaVenda(storeId, alvo, desde).catch(() => null);
     if (r?.status === 'pendente') {
-        toast.warning('Nota fiscal pendente: falta o CPF/CNPJ do cliente. Informe em Administração → Notas Fiscais e clique em Reemitir.');
+        toast.warning('Nota fiscal pendente: CPF/CNPJ do cliente ausente ou inválido. Corrija em Administração → Notas Fiscais e clique em Reemitir.');
     } else if (r?.status === 'rejeitada' || r?.status === 'erro') {
         toast.error(`Nota fiscal rejeitada: ${(r.motivo || 'sem detalhe').slice(0, 140)}`);
     } else {
@@ -460,6 +460,7 @@ const abrirCupomFiscalQuandoSair = (
     storeName: string,
     alvo: { orderId?: string; tableId?: string },
 ) => {
+    const desde = Date.now() - 5000;
     // No app desktop (Electron), main.js nega TODO window.open() internamente
     // (setWindowOpenHandler sempre devolve { action: 'deny' } e repassa pra
     // shell.openExternal) — a janela em branco aberta aqui embaixo nunca
@@ -498,7 +499,7 @@ const abrirCupomFiscalQuandoSair = (
         aguardarNotaFiscalDaVenda(storeId, alvo)
             .then(async (resultado) => {
                 if (!resultado) {
-                    avisarFalhaNotaFiscal(storeId, alvo);
+                    avisarFalhaNotaFiscal(storeId, alvo, desde);
                     return;
                 }
                 if (resultado?.nota.status === 'autorizada') toast.success(`Nota fiscal autorizada${resultado.nota.numero ? ` (nº ${resultado.nota.numero})` : ''}.`);
@@ -565,7 +566,7 @@ const abrirCupomFiscalQuandoSair = (
                 toast.error('O cupom fiscal saiu, mas o navegador bloqueou a janela. Abra por Administração → Notas Fiscais.');
             } else {
                 if (janela && !janela.closed) janela.close();
-                avisarFalhaNotaFiscal(storeId, alvo);
+                avisarFalhaNotaFiscal(storeId, alvo, desde);
             }
         })
         .catch((e) => {
