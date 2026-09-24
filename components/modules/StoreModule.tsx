@@ -1447,14 +1447,14 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
-                                    className="p-2 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
+                                    className="p-2 max-sm:p-3 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
                                     title="Cancelar Item"
                                 >
                                     <X size={18} />
                                 </button>
                                 <button
                                     onClick={() => printOrderTicket(item)}
-                                    className="p-2 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] u-motion u-press"
+                                    className="p-2 max-sm:p-3 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] u-motion u-press"
                                     title="Imprimir Ticket"
                                 >
                                     <Printer size={18} />
@@ -1489,7 +1489,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                         )}
 
                         <div className="mt-auto pt-2">
-                            <Button onClick={() => advanceStatus(item)} className={`w-full shadow-sm font-bold ${
+                            <Button onClick={() => advanceStatus(item)} className={`w-full max-sm:h-12 shadow-sm font-bold ${
                                 item.status === 'pending' ? 'bg-[var(--warn)] hover:opacity-90 text-white' :
                                 item.status === 'accepted' ? 'bg-[var(--warn)] hover:opacity-90 text-white' :
                                 item.status === 'preparing' ? 'bg-[var(--info)] hover:opacity-90 text-white' :
@@ -3596,7 +3596,7 @@ NOTIFY pgrst, 'reload schema';`;
                 espaço vazio numa mesa com poucos itens só porque a vizinha tem
                 muitos. Cada card agora só ocupa a altura que o próprio conteúdo
                 precisa. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-sm:gap-3 items-start">
                 <AnimatePresence>
                 {tables.map((table, tableIdx) => {
                     const summary = getTableSummary(table.id);

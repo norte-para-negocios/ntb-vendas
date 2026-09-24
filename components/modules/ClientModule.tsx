@@ -1914,7 +1914,7 @@ const CartModal: React.FC<{
                                     {item.notes && <p className="text-[12px] text-[var(--text-muted)] mt-0.5 italic">"{item.notes}"</p>}
 
                                     <div className="flex justify-between items-center mt-2">
-                                        <button onClick={() => onRemove(item)} className="text-[var(--err)]/60 hover:text-[var(--err)] p-1 u-motion rounded-[var(--r-sm)]">
+                                        <button onClick={() => onRemove(item)} className="relative hit-44 text-[var(--err)]/60 hover:text-[var(--err)] p-1 u-motion rounded-[var(--r-sm)]">
                                             <Trash2 size={14}/>
                                         </button>
                                         <div className="flex items-center gap-2 bg-[var(--surface-2)] rounded-[var(--r-sm)] px-1.5 py-0.5 border border-[var(--border)]">
@@ -3517,7 +3517,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             onClick={() => setFavoritesOnly(v => !v)}
                             aria-label={favoritesOnly ? 'Mostrar todos os produtos' : 'Mostrar só favoritos'}
                             aria-pressed={favoritesOnly}
-                            className={`w-9 h-9 grid place-items-center rounded-full backdrop-blur-sm text-white u-motion ${favoritesOnly ? 'bg-[var(--brand)]' : 'bg-black/35'}`}
+                            className={`relative hit-44 w-9 h-9 grid place-items-center rounded-full backdrop-blur-sm text-white u-motion ${favoritesOnly ? 'bg-[var(--brand)]' : 'bg-black/35'}`}
                         >
                             <Heart size={16} className={favoritesOnly ? 'fill-current' : ''} />
                         </button>
@@ -3528,7 +3528,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 searchInputRef.current?.focus();
                             }}
                             aria-label="Buscar no cardápio"
-                            className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                            className="relative hit-44 w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
                         >
                             <Search size={16} />
                         </button>
@@ -3558,7 +3558,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     // agora que este estado fica alcançável em qualquer reload.
                                     aria-label={isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
                                     title={isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
-                                    className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                                    className="relative hit-44 w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
                                 >
                                     <Receipt size={16} />
                                 </button>
@@ -3568,7 +3568,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                     onClick={() => handleLogout(false)}
                                     aria-label="Sair deste aparelho"
                                     title="Sair deste aparelho"
-                                    className="w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
+                                    className="relative hit-44 w-9 h-9 grid place-items-center rounded-full bg-black/35 backdrop-blur-sm text-white u-motion"
                                 >
                                     <LogOut size={16} />
                                 </button>
