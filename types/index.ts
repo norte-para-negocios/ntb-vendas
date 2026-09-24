@@ -440,6 +440,8 @@ export interface PrinterConfig {
   destination: 'kitchen' | 'bar' | 'all' | 'receipt';
   // Largura do papel desta impressora (migration 077): 58, 80 ou 210 (A4).
   paper_width_mm: 58 | 80 | 210;
+  // 'driver' (padrão, via driver do Windows) ou 'raw' (ESC/POS direto, migration 083).
+  print_mode?: 'driver' | 'raw';
   is_active: boolean;
   created_at: string;
 }

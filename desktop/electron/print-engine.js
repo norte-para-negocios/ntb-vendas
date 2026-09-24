@@ -151,26 +151,8 @@ $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0,
 $script:font = New-Object System.Drawing.Font('Consolas', 9)
 $font = $script:font
 $script:lineIndex = 0
-$script:fitDone = $false
 $doc.add_PrintPage({
   param($sender, $e)
-  # Auto-ajuste (2026-09-24, loja Sertao): duas impressoras recebiam o MESMO
-  # texto (48 colunas) e uma saia com a fonte cortada na metade da folha --
-  # o driver dela informa uma largura util menor que o papel. Em vez de
-  # confiar na largura que o driver declara, mede a linha mais larga e
-  # reduz a fonte so o necessario pra ela caber inteira na area imprimivel.
-  if (-not $script:fitDone) {
-    $script:fitDone = $true
-    try {
-    $maior = 0
-    foreach ($l in $lines) { $w = $e.Graphics.MeasureString($l, $font).Width; if ($w -gt $maior) { $maior = $w } }
-    $disp = $e.MarginBounds.Width
-    if ($maior -gt $disp -and $disp -gt 0) {
-      $novo = [Math]::Max(5.0, [Math]::Floor(9.0 * ($disp / $maior) * 10) / 10)
-      $script:font = New-Object System.Drawing.Font('Consolas', [single]$novo)
-    }
-    } catch { }
-  }
   $font = $script:font
   $lineHeight = $font.GetHeight($e.Graphics)
   $y = $e.MarginBounds.Top
@@ -190,6 +172,98 @@ $doc.add_PrintPage({
 })
 $doc.Print()
 `;
+
+// Modo 'raw': manda os bytes ESC/POS direto pro spooler (datatype RAW), sem
+// passar pelo driver GDI -- a impressora térmica usa a fonte e a largura
+// dela mesma. Resolve drivers que escalam/cortam o texto (loja Sertao,
+// 2026-09-24: a impressora da pizzaria saia com fonte gigante e cortada).
+const PS_RAW_SCRIPT = `
+param(
+  [Parameter(Mandatory=$true)][string]$PrinterName,
+  [Parameter(Mandatory=$true)][string]$FilePath
+)
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class NtbRawPrinter {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+  }
+  [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+  [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+  [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
+  public static void Send(string printerName, byte[] bytes) {
+    IntPtr h;
+    if (!OpenPrinter(printerName, out h, IntPtr.Zero)) throw new Exception("Nao abriu a impressora: " + printerName);
+    try {
+      DOCINFOA di = new DOCINFOA();
+      di.pDocName = "NTB Vendas";
+      di.pDataType = "RAW";
+      if (!StartDocPrinter(h, 1, di)) throw new Exception("StartDocPrinter falhou");
+      try {
+        if (!StartPagePrinter(h)) throw new Exception("StartPagePrinter falhou");
+        IntPtr p = Marshal.AllocCoTaskMem(bytes.Length);
+        try {
+          Marshal.Copy(bytes, 0, p, bytes.Length);
+          int w;
+          if (!WritePrinter(h, p, bytes.Length, out w) || w != bytes.Length) throw new Exception("WritePrinter falhou");
+        } finally { Marshal.FreeCoTaskMem(p); }
+        EndPagePrinter(h);
+      } finally { EndDocPrinter(h); }
+    } finally { ClosePrinter(h); }
+  }
+}
+'@
+$bytes = [System.IO.File]::ReadAllBytes($FilePath)
+[NtbRawPrinter]::Send($PrinterName, $bytes)
+`;
+
+const CP850 = { 'á':0xA0,'é':0x82,'í':0xA1,'ó':0xA2,'ú':0xA3,'à':0x85,'è':0x8A,'ã':0xC6,'õ':0xE4,'â':0x83,'ê':0x88,'ô':0x93,'ç':0x87,'ü':0x81,
+  'Á':0xB5,'É':0x90,'Í':0xD6,'Ó':0xE0,'Ú':0xE9,'À':0xB7,'Ã':0xC7,'Õ':0xE5,'Â':0xB6,'Ê':0xD2,'Ô':0xE2,'Ç':0x80,'º':0xA7,'ª':0xA6,'°':0xF8 };
+
+function toEscPos(content) {
+  const out = [0x1B, 0x40, 0x1B, 0x74, 0x02, 0x1B, 0x61, 0x01]; // init, CP850, centralizado
+  const texto = String(content).replace(/[\u2013\u2014]/g, '-').replace(/\u2026/g, '...').replace(/\r/g, '');
+  for (const ch of texto) {
+    const c = ch.codePointAt(0);
+    if (c === 10) out.push(0x0A);
+    else if (c < 128) out.push(c);
+    else out.push(CP850[ch] !== undefined ? CP850[ch] : 0x3F);
+  }
+  out.push(0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x42, 0x00); // avanca e corta
+  return Buffer.from(out);
+}
+
+function printViaUsbRaw(printerName, content) {
+  return new Promise((resolve, reject) => {
+    if (process.platform !== 'win32') { reject(new Error('Modo direto (ESC/POS) só existe no Windows.')); return; }
+    const stamp = Date.now();
+    const binFile = path.join(os.tmpdir(), `ntb-raw-${stamp}.bin`);
+    const scriptFile = path.join(os.tmpdir(), `ntb-raw-${stamp}.ps1`);
+    fs.writeFileSync(binFile, toEscPos(content));
+    fs.writeFileSync(scriptFile, PS_RAW_SCRIPT, 'utf8');
+    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', binFile], (err) => {
+      try { fs.unlinkSync(binFile); } catch { /* ignore */ }
+      try { fs.unlinkSync(scriptFile); } catch { /* ignore */ }
+      if (err) reject(err); else resolve();
+    });
+  });
+}
 
 function printViaUsb(printerName, content) {
   return new Promise((resolve, reject) => {
@@ -374,7 +448,7 @@ async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
     await printViaNetwork(printer.ip_address, printer.port, content);
   } else if (printer.connection_type === 'usb') {
-    await printViaUsb(printer.usb_system_name, content);
+    await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content) : printViaUsb(printer.usb_system_name, content));
   } else {
     throw new Error(`Tipo de conexão não suportado aqui: ${printer.connection_type}`);
   }
@@ -555,4 +629,4 @@ function start(storeId, options) {
   return { ok: true };
 }
 
-module.exports = { start, stop, detectNetworkPrinters };
+module.exports = { start, stop, detectNetworkPrinters, toEscPos };

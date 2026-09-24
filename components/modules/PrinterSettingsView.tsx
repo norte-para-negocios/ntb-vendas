@@ -472,6 +472,22 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {printer.connection_type === 'usb' && (
+                  <select
+                    value={printer.print_mode ?? 'driver'}
+                    onChange={async (e) => {
+                      const r = await updatePrinterConfig(printer.id, { print_mode: e.target.value as 'driver' | 'raw' });
+                      if (!r.success) { toast.error(r.message || 'Erro ao mudar o modo de impressão.'); return; }
+                      toast.success(`"${printer.name}" agora imprime no modo ${e.target.value === 'raw' ? 'direto (ESC/POS)' : 'padrão (driver)'}.`);
+                      load();
+                    }}
+                    className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs font-semibold text-[var(--text)] max-sm:text-base"
+                    title="Modo de impressão: Padrão usa o driver do Windows; Direto manda ESC/POS para a térmica (use se a fonte sair errada)"
+                  >
+                    <option value="driver">Padrão</option>
+                    <option value="raw">Direto</option>
+                  </select>
+                )}
                 <select
                   value={printer.paper_width_mm ?? 80}
                   onChange={(e) => handleChangePaperWidth(printer, Number(e.target.value) as PrinterConfig['paper_width_mm'])}

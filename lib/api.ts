@@ -2653,7 +2653,7 @@ export const createPrinterConfig = async (params: {
   return { success: true };
 };
 
-export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm'>>): Promise<{ success: boolean; message?: string }> => {
+export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode'>>): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').update(updates).eq('id', id);
   if (error) { console.error('Error updating printer config:', error); return { success: false, message: error.message }; }
   return { success: true };
