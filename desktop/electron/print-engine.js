@@ -77,7 +77,7 @@ async function rest(pathAndQuery, init = {}) {
   return res;
 }
 
-function printViaNetwork(ip, port, content) {
+function printViaNetwork(ip, port, content, raw) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
     // Depois que os bytes saíram, o papel JÁ ESTÁ SAINDO — um erro de socket
@@ -93,7 +93,7 @@ function printViaNetwork(ip, port, content) {
       reject(e);
     }, 5000);
     socket.connect(port, ip, () => {
-      socket.write(Buffer.from(content, 'utf8'), (err) => {
+      socket.write(raw ? toEscPos(content) : Buffer.from(content, 'utf8'), (err) => {
         if (err) {
           clearTimeout(timeout);
           socket.destroy();
@@ -446,7 +446,7 @@ async function sendHeartbeat(storeId, printersLoaded) {
 
 async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
-    await printViaNetwork(printer.ip_address, printer.port, content);
+    await printViaNetwork(printer.ip_address, printer.port, content, printer.print_mode === 'raw');
   } else if (printer.connection_type === 'usb') {
     await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content) : printViaUsb(printer.usb_system_name, content));
   } else {
@@ -573,6 +573,11 @@ function start(storeId, options) {
   log(`INFO motor de impressão iniciado para a loja ${storeId}`);
 
   let printersById = new Map();
+  // nome da impressora -> computadores que a publicaram (discovered_printers).
+  // Usado pelo plano B: se o computador dono da impressora USB não pegar o job,
+  // outro computador da loja imprime pelo compartilhamento do Windows.
+  let donosPorNome = new Map();
+  const primeiraVez = new Map();
 
   const refreshPrinters = async () => {
     try {
@@ -580,6 +585,10 @@ function start(storeId, options) {
         `printer_configs?select=*&store_id=eq.${storeId}&is_active=eq.true&connection_type=in.(network,usb)`
       ).then((r) => r.json());
       printersById = new Map((Array.isArray(data) ? data : []).map((p) => [p.id, p]));
+      const pub = await rest(`discovered_printers?select=name,machine&store_id=eq.${storeId}&kind=eq.system`).then((r) => r.json());
+      const m = new Map();
+      for (const r of Array.isArray(pub) ? pub : []) { if (!r.machine) continue; if (!m.has(r.name)) m.set(r.name, new Set()); m.get(r.name).add(r.machine); }
+      donosPorNome = m;
     } catch (e) {
       log(`ERROR ao buscar impressoras: ${e.message}`);
     }
@@ -611,9 +620,19 @@ function start(storeId, options) {
         // da impressora USB do caixa, o `Out-Printer` falhava porque aquele
         // nome não existe ali, e o job virava "erro" — a comanda NUNCA saía,
         // mesmo com a máquina certa disponível pra imprimir.
+        let impressoraDoJob = printer;
+        let viaCompartilhamento = false;
         if (printer.connection_type === 'usb' && publicadasPorEstaMaquina.size > 0
             && !publicadasPorEstaMaquina.has(printer.usb_system_name)) {
-          continue;
+          // Plano B (pedido do dono: qualquer computador da loja imprime): se o
+          // computador dono da impressora não pegou o job em ~15s, este
+          // imprime pelo compartilhamento do Windows (\\dono\impressora).
+          const dono = [...(donosPorNome.get(printer.usb_system_name) || [])].find((mq) => mq !== os.hostname());
+          if (!dono || process.platform !== 'win32') continue;
+          if (!primeiraVez.has(job.id)) primeiraVez.set(job.id, Date.now());
+          if (Date.now() - primeiraVez.get(job.id) < 15000) continue;
+          impressoraDoJob = { ...printer, usb_system_name: `\\\\${dono}\\${printer.usb_system_name}` };
+          viaCompartilhamento = true;
         }
         if (!(await reservarJob(job.id))) {
           log(`INFO "${job.title}" já foi pego por outro computador — ignorando`);
@@ -621,12 +640,19 @@ function start(storeId, options) {
         }
         log(`INFO imprimindo "${job.title}" em "${printer.name}"`);
         try {
-          await printJob(printer, job.content);
+          await printJob(impressoraDoJob, job.content);
           await marcarJob(job.id, { status: 'done', printed_at: new Date().toISOString() });
-          log('INFO impresso OK');
+          log(viaCompartilhamento ? `INFO impresso OK via compartilhamento ${impressoraDoJob.usb_system_name}` : 'INFO impresso OK');
         } catch (printErr) {
           log(`ERROR falhou: ${printErr.message}`);
-          await marcarJob(job.id, { status: 'error', error_message: String(printErr.message || printErr) });
+          if (viaCompartilhamento) {
+            // Plano B falhou (compartilhamento inexistente/sem permissão): devolve à fila
+            // pro dono imprimir e só tenta de novo daqui a 1 min.
+            primeiraVez.set(job.id, Date.now() + 45000);
+            await marcarJob(job.id, { status: 'pending' });
+          } else {
+            await marcarJob(job.id, { status: 'error', error_message: String(printErr.message || printErr) });
+          }
         }
       }
     } catch (e) {

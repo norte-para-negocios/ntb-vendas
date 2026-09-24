@@ -472,7 +472,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {printer.connection_type === 'usb' && (
+                {(printer.connection_type === 'usb' || printer.connection_type === 'network') && (
                   <select
                     value={printer.print_mode ?? 'driver'}
                     onChange={async (e) => {
