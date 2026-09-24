@@ -112,7 +112,9 @@ export const parseItemNote = (fullNote: string): { client: string | null; observ
     if (!fullNote) return { client: null, observation: '' };
     const match = fullNote.match(/^\[(.*?)\]\s*(.*)$/);
     if (match) {
-        return { client: match[1], observation: match[2].trim() };
+        // Legado: linhas gravadas como `[Nome] [Nome] obs` (prefixo duplicado)
+        // renderizam como `obs`.
+        return { client: match[1], observation: match[2].replace(/^(\[[^\]]*\]\s*)+/, '').trim() };
     }
     return { client: null, observation: fullNote.trim() };
 };

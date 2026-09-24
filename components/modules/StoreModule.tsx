@@ -3380,7 +3380,8 @@ NOTIFY pgrst, 'reload schema';`;
         if (isAddingItemRef.current) return;
         isAddingItemRef.current = true;
 
-        const finalNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
+        // createOrder já prefixa `[Nome]`; aqui só o texto do item otimista.
+        const optimisticNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
 
         try {
             // Reuses createOrder logic which handles adding to existing orders.
@@ -3391,7 +3392,7 @@ NOTIFY pgrst, 'reload schema';`;
             // de acompanhamento, 2026-09-09) só pra alimentar a atualização
             // otimista abaixo, não pra print.
             const result = await createOrder(selectedTable.id, storeId, [{
-                product, quantity: qty, notes: finalNotes, selectedOptions
+                product, quantity: qty, notes, selectedOptions
             }], loggedUser.name, 'garcom', loggedUser.name);
 
             // Atualização otimista da comanda — sem isso, "Ver Comanda" e o
@@ -3409,7 +3410,7 @@ NOTIFY pgrst, 'reload schema';`;
                     product,
                     quantity: qty,
                     status: OrderStatus.PENDING,
-                    notes: finalNotes,
+                    notes: optimisticNotes,
                     created_at: new Date().toISOString(),
                     price_at_time: unitPrice,
                     selected_options: selectedOptions.map(o => ({ name: o.name, price_delta: o.price_delta })),
@@ -3958,7 +3959,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     // pessoas diferentes — só o item lançado pelo GARÇOM tinha
                                                     // badge de atribuição. O nome do cliente vem embutido em
                                                     // `notes` (createOrder, lib/api.ts), nunca extraído aqui.
-                                                    const clientNote = item.added_by_role !== 'garcom' ? parseItemNote(item.notes || '') : null;
+                                                    const clientNote = parseItemNote(item.notes || '');
                                                     return (
                                                     <div key={item.id} className="flex justify-between p-3 border-b border-[var(--border)] text-sm hover:bg-[var(--surface-2)] transition-colors group">
                                                         <div className="flex-1">
@@ -4123,6 +4124,9 @@ NOTIFY pgrst, 'reload schema';`;
                                                         <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
                                                     )}
                                                 </div>
+                                                {parseItemNote(item.notes || '').observation && (
+                                                    <div className="text-xs font-semibold text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
+                                                )}
                                             </div>
                                             <button
                                                 type="button"
@@ -4560,6 +4564,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             Mesa {row.tableNumber} · {new Date(row.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                             {row.closed ? ' · mesa fechada' : ''}
                                         </p>
+                                        {row.observation && <p className="text-xs font-semibold text-[var(--warn)]">Obs: {row.observation}</p>}
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
                                         <Badge color={row.printed ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
@@ -5278,12 +5283,18 @@ const CounterView: React.FC<{
                          </div>
 
                          <div className="flex-1 overflow-y-auto max-h-[150px] space-y-1 mb-3 bg-[var(--surface-2)] p-2 rounded-[var(--r-md)] border border-[var(--border)]">
-                             {order.order_items?.map((item, idx) => (
-                                 <div key={idx} className="flex justify-between text-sm text-[var(--text-muted)]">
-                                     <span className="truncate flex-1">{item.quantity}x {getOrderItemDisplayName(item)}</span>
-                                     <span className="font-mono text-xs">{(item.price_at_time * item.quantity).toFixed(2)}</span>
-                                 </div>
-                             ))}
+                             {order.order_items?.map((item, idx) => {
+                                 const obs = parseItemNote(item.notes || '').observation;
+                                 return (
+                                     <div key={idx}>
+                                         <div className="flex justify-between text-sm text-[var(--text-muted)]">
+                                             <span className="truncate flex-1">{item.quantity}x {getOrderItemDisplayName(item)}</span>
+                                             <span className="font-mono text-xs">{(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                         </div>
+                                         {obs && <div className="text-xs font-semibold text-[var(--warn)]">Obs: {obs}</div>}
+                                     </div>
+                                 );
+                             })}
                          </div>
 
                          <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
