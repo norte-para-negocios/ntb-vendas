@@ -82,6 +82,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [testPaperWidth, setTestPaperWidth] = useState<48 | 58 | 80>(48);
 
   const [name, setName] = useState('');
+  const [redeManual, setRedeManual] = useState(false);
   const [connectionType, setConnectionType] = useState<PrinterConfig['connection_type']>('network');
   const [ipAddress, setIpAddress] = useState('');
   const [port, setPort] = useState('9100');
@@ -92,7 +93,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // agente local (print-agent/, migration 065) — quando existe, vira
   // seletor em vez de campo de texto livre. Vazia = nenhum agente rodou
   // ainda nesta loja, cai pro texto livre (comportamento anterior).
-  const [discoveredPrinters, setDiscoveredPrinters] = useState<{ name: string; machine: string; kind: string }[]>([]);
+  const [discoveredPrinters, setDiscoveredPrinters] = useState<{ name: string; machine: string; kind: string; label: string }[]>([]);
   const redePrinters = discoveredPrinters.filter((p) => p.kind === 'network');
   const sistemaPrinters = discoveredPrinters.filter((p) => p.kind !== 'network');
   const [usbManualEntry, setUsbManualEntry] = useState(false);
@@ -364,21 +365,28 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 <label className="text-[13px] font-medium text-[var(--text-muted)]">Impressoras achadas na rede da loja (porta 9100)</label>
                 <select
                   value={ipAddress ? `${ipAddress}:${port}` : ''}
-                  onChange={(e) => { const [ip, pt] = e.target.value.split(':'); if (ip) { setIpAddress(ip); setPort(pt || '9100'); } }}
+                  onChange={(e) => { const [ip, pt] = e.target.value.split(':'); if (ip) { setIpAddress(ip); setPort(pt || '9100'); const ach = redePrinters.find((r) => r.name === e.target.value); if (!name.trim()) setName(ach?.label || `Impressora ${ip}`); } }}
                   className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
                 >
                   <option value="">Selecione (ou digite o IP abaixo)...</option>
                   {redePrinters.map((p) => (
-                    <option key={`${p.machine}|${p.name}`} value={p.name}>{p.name}{p.machine ? ` — vista por ${p.machine}` : ''}</option>
+                    <option key={`${p.machine}|${p.name}`} value={p.name}>{p.label ? `${p.label} — ${p.name}` : p.name}</option>
                   ))}
                 </select>
                 <p className="text-xs text-[var(--text-muted)]">A lista se atualiza a cada 5 minutos pelo app desktop aberto na loja. Se tiver mais de uma, imprima "Imprimir teste" para descobrir qual é qual.</p>
               </div>
             )}
+            {redePrinters.length > 0 && !redeManual && (
+              <button type="button" onClick={() => setRedeManual(true)} className="text-xs text-[var(--brand)] self-start underline">
+                Não achei a minha, digitar o IP manualmente
+              </button>
+            )}
+            {(redePrinters.length === 0 || redeManual) && (
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
               <Input label="IP da impressora" placeholder="Ex: 192.168.0.50" value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} />
               <Input label="Porta" placeholder="9100" value={port} onChange={(e) => setPort(e.target.value)} />
             </div>
+            )}
             </div>
           )}
 

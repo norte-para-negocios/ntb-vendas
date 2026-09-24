@@ -27,6 +27,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const net = require('net');
+const dns = require('dns').promises;
 const { execFile } = require('child_process');
 
 const POLL_INTERVAL_MS = 3000;
@@ -298,7 +299,17 @@ async function detectNetworkPrinters() {
     }
   };
   await Promise.all(Array.from({ length: 64 }, worker));
-  return achados.sort();
+  const lista = achados.sort();
+  const rotulos = {};
+  await Promise.all(lista.map(async (nome) => {
+    const ip = nome.split(':')[0];
+    try {
+      const hosts = await Promise.race([dns.reverse(ip), new Promise((_, rej) => setTimeout(() => rej(new Error('t')), 1500))]);
+      if (hosts && hosts[0]) rotulos[nome] = hosts[0].split('.')[0];
+    } catch (_) { /* sem nome: fica só o IP */ }
+  }));
+  detectNetworkPrinters.ultimosRotulos = rotulos;
+  return lista;
 }
 
 async function syncNetworkPrinters(storeId) {
@@ -307,7 +318,7 @@ async function syncNetworkPrinters(storeId) {
     await rest('discovered_printers?on_conflict=store_id,name', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify(nomes.map((name) => ({ store_id: storeId, name, kind: 'network', machine: os.hostname(), updated_at: new Date().toISOString() }))),
+      body: JSON.stringify(nomes.map((name) => ({ store_id: storeId, name, kind: 'network', label: detectNetworkPrinters.ultimosRotulos?.[name] || '', machine: os.hostname(), updated_at: new Date().toISOString() }))),
     });
   }
   const sumiram = [...redePublicadaPorEstaMaquina].filter((n) => !nomes.includes(n));
