@@ -1523,17 +1523,10 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
         if (product) {
             setQty(1);
             setNotes('');
-            // Grupo unico obrigatorio (ex: "Tamanho" P/M/G) vem pre-selecionado
-            // na 1a opcao disponivel, em vez de forcar o garcom a clicar antes
-            // de poder lancar o item.
-            const initialSelections: Record<string, string[]> = {};
-            (product.option_groups || []).forEach(group => {
-                if (group.type === 'single' && group.required) {
-                    const firstAvailable = group.options.find(o => o.available !== false);
-                    if (firstAvailable) initialSelections[group.id] = [firstAvailable.id];
-                }
-            });
-            setSelections(initialSelections);
+            // Garçom escolhe tamanho/sabor explicitamente (2026-09-24): com a 1ª opção
+            // pré-marcada, um pedido errado ficava a um toque de distância e o selo
+            // "Obrigatório" perdia o sentido. O cardápio do CLIENTE mantém a pré-seleção.
+            setSelections({});
         }
     }, [product]);
 
@@ -1630,10 +1623,12 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <Button className="w-full mt-4 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                    Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
-                </Button>
-                {missingRequired && <p className="text-xs text-center text-[var(--err)]">Escolha uma opção obrigatória para continuar.</p>}
+                <div className="max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
+                    <Button className="w-full mt-4 max-sm:mt-1 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                        Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
+                    </Button>
+                    {missingRequired && <p className="text-xs text-center text-[var(--err)] mt-1">Escolha uma opção obrigatória para continuar.</p>}
+                </div>
             </div>
         </Modal>
     );
