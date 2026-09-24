@@ -3819,7 +3819,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <button
                                     type="button"
                                     onClick={() => setIsLoginModalOpen(true)}
-                                    className="flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] py-2.5 u-motion u-press-sm"
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] py-3 max-sm:min-h-11 u-motion u-press-sm"
                                     style={{ backgroundColor: ACTION_BG }}
                                 >
                                     <LogIn size={16} className="flex-shrink-0 text-white" />
@@ -3828,7 +3828,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <button
                                     type="button"
                                     onClick={() => setEntradaDispensada(true)}
-                                    className="flex items-center justify-center gap-2 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-2.5 u-motion u-press-sm"
+                                    className="flex items-center justify-center gap-2 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-3 max-sm:min-h-11 u-motion u-press-sm"
                                 >
                                     <span className="text-[13px] font-semibold text-[var(--text-muted)]">Só ver o cardápio</span>
                                 </button>
