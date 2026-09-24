@@ -1637,7 +1637,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <div className="max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
+                <div className="max-sm:sticky max-sm:bottom-[calc(-1*max(1.25rem,env(safe-area-inset-bottom)))] max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
                     <Button className="w-full mt-4 max-sm:mt-1 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
                         Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
                     </Button>
@@ -2135,7 +2135,7 @@ const PaymentCaptureFields: React.FC<{
         {children}
 
         {/* Summary & Action */}
-        <div className="border-t border-[var(--border)] pt-4 max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:z-10">
+        <div className="border-t border-[var(--border)] pt-4 max-sm:sticky max-sm:bottom-[calc(-1*max(1.25rem,env(safe-area-inset-bottom)))] max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:z-10">
             <div className="space-y-1 mb-4 px-2">
                 <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
@@ -10165,8 +10165,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
 
                     <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
                         <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-4">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-3">
+                            <div className="flex justify-between items-center max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
+                                <div className="flex items-center gap-3 max-sm:flex-wrap">
                                     <h3 className="font-bold text-lg text-[var(--text)]">Histórico de Vendas</h3>
                                     <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-xs font-bold">
                                         <button
