@@ -92,7 +92,9 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // agente local (print-agent/, migration 065) — quando existe, vira
   // seletor em vez de campo de texto livre. Vazia = nenhum agente rodou
   // ainda nesta loja, cai pro texto livre (comportamento anterior).
-  const [discoveredPrinters, setDiscoveredPrinters] = useState<{ name: string; machine: string }[]>([]);
+  const [discoveredPrinters, setDiscoveredPrinters] = useState<{ name: string; machine: string; kind: string }[]>([]);
+  const redePrinters = discoveredPrinters.filter((p) => p.kind === 'network');
+  const sistemaPrinters = discoveredPrinters.filter((p) => p.kind !== 'network');
   const [usbManualEntry, setUsbManualEntry] = useState(false);
   // Achado ao vivo (2026-08-28/29, migration 066): não dava pra saber se o
   // agente local estava mesmo rodando -- `lastSeenAt` comparado contra
@@ -356,14 +358,32 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           )}
 
           {connectionType === 'network' && (
+            <div className="flex flex-col gap-3">
+            {redePrinters.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[13px] font-medium text-[var(--text-muted)]">Impressoras achadas na rede da loja (porta 9100)</label>
+                <select
+                  value={ipAddress ? `${ipAddress}:${port}` : ''}
+                  onChange={(e) => { const [ip, pt] = e.target.value.split(':'); if (ip) { setIpAddress(ip); setPort(pt || '9100'); } }}
+                  className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
+                >
+                  <option value="">Selecione (ou digite o IP abaixo)...</option>
+                  {redePrinters.map((p) => (
+                    <option key={`${p.machine}|${p.name}`} value={p.name}>{p.name}{p.machine ? ` — vista por ${p.machine}` : ''}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-[var(--text-muted)]">A lista se atualiza a cada 5 minutos pelo app desktop aberto na loja. Se tiver mais de uma, imprima "Imprimir teste" para descobrir qual é qual.</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
               <Input label="IP da impressora" placeholder="Ex: 192.168.0.50" value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} />
               <Input label="Porta" placeholder="9100" value={port} onChange={(e) => setPort(e.target.value)} />
             </div>
+            </div>
           )}
 
           {connectionType === 'usb' && (
-            discoveredPrinters.length > 0 && !usbManualEntry ? (
+            sistemaPrinters.length > 0 && !usbManualEntry ? (
               <div className="flex flex-col gap-1">
                 <label className="text-[13px] font-medium text-[var(--text-muted)]">Impressora instalada no computador do caixa/cozinha (escolha a do PC onde ela está ligada)</label>
                 <select
@@ -372,7 +392,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                   className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
                 >
                   <option value="">Selecione...</option>
-                  {discoveredPrinters
+                  {sistemaPrinters
                     .filter((p) => !/^(fax|microsoft (print to pdf|xps document writer)|onenote)/i.test(p.name))
                     .map((p) => (
                       <option key={`${p.machine}|${p.name}`} value={p.name}>{p.machine ? `${p.name} — ${p.machine}` : p.name}</option>
@@ -385,7 +405,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
             ) : (
               <div className="flex flex-col gap-1">
                 <Input label="Nome da impressora no sistema" placeholder="Ex: EPSON TM-T20" value={usbSystemName} onChange={(e) => setUsbSystemName(e.target.value)} />
-                {discoveredPrinters.length > 0 && (
+                {sistemaPrinters.length > 0 && (
                   <button type="button" onClick={() => setUsbManualEntry(false)} className="text-xs text-[var(--brand)] self-start underline">
                     Ver impressoras detectadas automaticamente
                   </button>

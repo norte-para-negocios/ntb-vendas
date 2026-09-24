@@ -255,6 +255,70 @@ async function syncDiscoveredPrinters(storeId) {
   }
 }
 
+let redePublicadaPorEstaMaquina = new Set();
+
+function sub24DasInterfaces() {
+  const bases = new Set();
+  for (const lista of Object.values(os.networkInterfaces())) {
+    for (const i of lista || []) {
+      if (i.family !== 'IPv4' || i.internal) continue;
+      const p = i.address.split('.');
+      if (p[0] === '169') continue;
+      bases.add(`${p[0]}.${p[1]}.${p[2]}`);
+    }
+  }
+  return [...bases];
+}
+
+function portaAberta(ip, porta, timeoutMs) {
+  return new Promise((resolve) => {
+    const sock = new net.Socket();
+    let feito = false;
+    const fim = (ok) => { if (feito) return; feito = true; sock.destroy(); resolve(ok); };
+    sock.setTimeout(timeoutMs);
+    sock.once('connect', () => fim(true));
+    sock.once('timeout', () => fim(false));
+    sock.once('error', () => fim(false));
+    sock.connect(porta, ip);
+  });
+}
+
+// Varre cada /24 desta máquina procurando a porta 9100 (RAW/ESC-POS) aberta.
+async function detectNetworkPrinters() {
+  const meus = new Set(Object.values(os.networkInterfaces()).flat().filter(Boolean).map((i) => i.address));
+  const alvos = [];
+  for (const base of sub24DasInterfaces()) for (let n = 1; n <= 254; n++) alvos.push(`${base}.${n}`);
+  const achados = [];
+  let idx = 0;
+  const worker = async () => {
+    while (idx < alvos.length) {
+      const ip = alvos[idx++];
+      if (meus.has(ip)) continue;
+      if (await portaAberta(ip, 9100, 600)) achados.push(`${ip}:9100`);
+    }
+  };
+  await Promise.all(Array.from({ length: 64 }, worker));
+  return achados.sort();
+}
+
+async function syncNetworkPrinters(storeId) {
+  const nomes = await detectNetworkPrinters();
+  if (nomes.length > 0) {
+    await rest('discovered_printers?on_conflict=store_id,name', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(nomes.map((name) => ({ store_id: storeId, name, kind: 'network', machine: os.hostname(), updated_at: new Date().toISOString() }))),
+    });
+  }
+  const sumiram = [...redePublicadaPorEstaMaquina].filter((n) => !nomes.includes(n));
+  redePublicadaPorEstaMaquina = new Set(nomes);
+  for (const nome of sumiram) {
+    await rest(`discovered_printers?store_id=eq.${storeId}&name=eq.${encodeURIComponent(nome)}&kind=eq.network`, { method: 'DELETE' })
+      .catch((e) => log(`WARN nao consegui remover a impressora de rede sumida "${nome}": ${e.message}`));
+  }
+  log(`INFO varredura de rede: ${nomes.length} impressora(s) com a porta 9100 aberta`);
+}
+
 async function sendHeartbeat(storeId, printersLoaded) {
   // O painel usa isto pra dizer "agente conectado / offline há X min" — sem
   // heartbeat ninguém consegue saber, de fora, se a impressão automática
@@ -445,6 +509,7 @@ function start(storeId, options) {
   refreshPrinters().then(() => {
     sendHeartbeat(storeId, printersById.size);
     syncDiscoveredPrinters(storeId).catch((e) => log(`WARN detecção de impressoras falhou: ${e.message}`));
+    syncNetworkPrinters(storeId).catch((e) => log(`WARN varredura de rede falhou: ${e.message}`));
     tick();
   });
 
@@ -453,9 +518,10 @@ function start(storeId, options) {
     await sendHeartbeat(storeId, printersById.size);
   }, HEARTBEAT_INTERVAL_MS));
   timers.push(setInterval(() => syncDiscoveredPrinters(storeId).catch(() => {}), DISCOVER_INTERVAL_MS));
+  timers.push(setInterval(() => syncNetworkPrinters(storeId).catch(() => {}), 5 * 60 * 1000));
   timers.push(setInterval(tick, POLL_INTERVAL_MS));
 
   return { ok: true };
 }
 
-module.exports = { start, stop };
+module.exports = { start, stop, detectNetworkPrinters };
