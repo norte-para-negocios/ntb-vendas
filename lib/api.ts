@@ -4,7 +4,7 @@ import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModul
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
 import { enqueue } from './offline/queue';
-import { isNetworkError } from './offline/network';
+import { isNetworkError, checkRealConnectivity } from './offline/network';
 
 // App desktop (Electron, ver docs/superpowers/specs/2026-09-07-desktop-app-
 // electron-design.md): a interface roda embutida no instalador, mas as
@@ -28,6 +28,7 @@ declare global {
       startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
       printPdfSilent?: (params: { pdfUrl: string; printerName: string }) => Promise<{ ok: boolean; reason?: string }>;
+      printDirectUsb?: (params: { name: string; content: string; raw: boolean; owners: string[] }) => Promise<{ ok: boolean; reason?: string }>;
       printDirectNetwork?: (params: { ip: string; port: number; content: string; raw: boolean }) => Promise<{ ok: boolean; reason?: string }>;
     };
   }
@@ -53,6 +54,7 @@ export const iniciarMotorImpressaoDesktop = async (storeId: string) => {
     });
     // Guarda a lista de impressoras pra poder imprimir direto na rede se a internet cair.
     fetchPrinterConfigs(storeId).catch(() => {});
+    fetchDiscoveredPrinters(storeId).catch(() => {});
   } catch (e) {
     // Impressão de rede/USB é um caminho ADITIVO (ver AGENTS.md, aba
     // "Impressão"): falhar aqui nunca pode derrubar o login nem o
@@ -1363,6 +1365,9 @@ export const createOrder = async (
   };
 
   try {
+    // Garçom: confirma a conexão de verdade antes de esperar a resposta do servidor
+    // (Wi-Fi sem internet deixaria o app pendurado); sem conexão vai direto pra fila local.
+    if (addedByRole === 'garcom' && !(await checkRealConnectivity())) throw new TypeError('Failed to fetch (sem conexão)');
     const { data, error } = await supabase.rpc('create_order_secure', rpcPayload);
     if (error) throw error;
     if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
@@ -2616,8 +2621,13 @@ export const fetchUsbPrinterForAutoprint = async (
 // a UI cai pro campo de texto livre nesse caso.
 export const fetchDiscoveredPrinters = async (storeId: string): Promise<{ name: string; machine: string; kind: string; label: string }[]> => {
   const { data, error } = await supabase.from('discovered_printers').select('name, machine, kind, label').eq('store_id', storeId).order('name', { ascending: true });
-  if (error) { console.error('Error fetching discovered printers:', error); return []; }
-  return (data || []).map((row) => ({ name: row.name, machine: row.machine || '', kind: row.kind || 'system', label: row.label || '' }));
+  if (error) {
+    console.error('Error fetching discovered printers:', error);
+    try { return JSON.parse(localStorage.getItem(`ntb-discovered-cache:${storeId}`) || '[]'); } catch { return []; }
+  }
+  const lista = (data || []).map((row) => ({ name: row.name, machine: row.machine || '', kind: row.kind || 'system', label: row.label || '' }));
+  try { localStorage.setItem(`ntb-discovered-cache:${storeId}`, JSON.stringify(lista)); } catch { /* sem cache */ }
+  return lista;
 };
 
 // Achado ao vivo (2026-08-28/29): não havia nenhum jeito de o painel saber
@@ -2734,8 +2744,20 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
   if (typeof window === 'undefined' || !window.electronApp?.printDirectNetwork || !params.printerConfigId) return false;
   if (params.content.startsWith('@@PDF@@')) return false;
   const printer = readCachedPrinters(params.storeId).find((p) => p.id === params.printerConfigId);
-  if (!printer || printer.connection_type !== 'network' || !printer.ip_address) return false;
-  const r = await window.electronApp.printDirectNetwork({ ip: printer.ip_address, port: printer.port || 9100, content: params.content, raw: printer.print_mode === 'raw' });
+  if (!printer) return false;
+  let r: { ok: boolean; reason?: string };
+  if (printer.connection_type === 'network' && printer.ip_address) {
+    r = await window.electronApp.printDirectNetwork({ ip: printer.ip_address, port: printer.port || 9100, content: params.content, raw: printer.print_mode === 'raw' });
+  } else if (printer.connection_type === 'usb' && printer.usb_system_name && window.electronApp.printDirectUsb) {
+    let donos: string[] = [];
+    try {
+      const cache: { name: string; machine: string; kind: string }[] = JSON.parse(localStorage.getItem(`ntb-discovered-cache:${params.storeId}`) || '[]');
+      donos = cache.filter((d) => d.kind !== 'network' && d.name === printer.usb_system_name && d.machine).map((d) => d.machine);
+    } catch { /* sem cache */ }
+    r = await window.electronApp.printDirectUsb({ name: printer.usb_system_name, content: params.content, raw: printer.print_mode === 'raw', owners: donos });
+  } else {
+    return false;
+  }
   if (!r.ok) { console.error('Impressão direta offline falhou:', r.reason); return false; }
   pushPrintHistory({ storeId: params.storeId, printerConfigId: params.printerConfigId, destination: params.destination, title: params.title, content: params.content, dedupeKey: params.dedupeKey || null, printedAt: new Date().toISOString() });
   return true;
@@ -2746,10 +2768,10 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
 // "offline:<assinatura>#<impressora>" — a Estação de Impressão usa essas chaves
 // pra não imprimir de novo o mesmo item quando o pedido sincronizar.
 export const printOfflineOrderTicket = async (params: { storeId: string; destination: 'kitchen' | 'bar'; title: string; content: string; sig: string }): Promise<number> => {
-  const printers = readCachedPrinters(params.storeId).filter((p) => p.is_active && p.connection_type === 'network' && (p.destination === params.destination || p.destination === 'all'));
+  const printers = readCachedPrinters(params.storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
   let ok = 0;
   for (const printer of printers) {
-    const feito = await printDirectOffline({ storeId: params.storeId, printerConfigId: printer.id, destination: params.destination, title: params.title, content: params.content, dedupeKey: `offline:${params.sig}#${printer.id}` });
+    const feito = await printDirectOffline({ storeId: params.storeId, printerConfigId: printer.id, destination: params.destination, title: params.title, content: params.content, dedupeKey: `offline:${crypto.randomUUID()}:${printer.id}:${params.sig}` });
     if (feito) ok++;
   }
   return ok;
@@ -2763,11 +2785,11 @@ export const fetchOfflinePrintedSigs = async (storeId: string): Promise<Map<stri
   const porImpressora = new Map<string, Map<string, number>>();
   if (error) return new Map();
   for (const row of data || []) {
-    const k = String(row.dedupe_key || '');
-    const i = k.lastIndexOf('#');
-    if (i < 0) continue;
-    const sig = k.slice('offline:'.length, i);
-    const imp = k.slice(i + 1);
+    const resto = String(row.dedupe_key || '').slice('offline:'.length);
+    const a = resto.indexOf(':'); const b = resto.indexOf(':', a + 1);
+    if (a < 0 || b < 0) continue;
+    const imp = resto.slice(a + 1, b);
+    const sig = resto.slice(b + 1);
     if (!porImpressora.has(sig)) porImpressora.set(sig, new Map());
     const m = porImpressora.get(sig)!;
     m.set(imp, (m.get(imp) || 0) + 1);

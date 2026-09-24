@@ -14,6 +14,12 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return Promise.reject(new TypeError('Failed to fetch (offline)'));
   }
+  // Offline já detectado pelo ping de conectividade (lib/offline/network.ts):
+  // falha na hora, sem esperar o timeout do navegador (Wi-Fi sem internet).
+  const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
+  if (off && Date.now() - off < 15000 && url.includes('/rest/v1/') && !url.endsWith('/rest/v1/')) {
+    return Promise.reject(new TypeError('Failed to fetch (offline detectado)'));
+  }
   // Só leituras (GET/HEAD e RPCs fetch_*): abortar uma escrita que já chegou
   // no servidor faria a fila offline reenviar e duplicar o pedido.
   const method = (init?.method || (typeof input === 'object' && 'method' in input ? input.method : 'GET')).toUpperCase();

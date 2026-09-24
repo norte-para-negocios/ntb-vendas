@@ -567,6 +567,17 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('ntb-print-direct-usb', async (_event, params) => {
+    const { name, content, raw, owners } = params || {};
+    if (!name || typeof content !== 'string') return { ok: false, reason: 'parâmetros ausentes' };
+    try {
+      await printEngine.printDirectUsb(name, content, Boolean(raw), owners);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: e.message };
+    }
+  });
+
   ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
     const { pdfUrl, printerName } = params || {};
     if (!pdfUrl || !printerName) {

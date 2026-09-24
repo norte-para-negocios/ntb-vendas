@@ -38,8 +38,14 @@ export function isNetworkError(error: unknown): boolean {
 // liberado pra qualquer origem (é feito pra ser chamado de apps/domínios
 // arbitrários) — confirmado ao vivo, mesmo fetch que falhava na raiz
 // funciona normal aqui, de dentro do `app://bundle` real.
+let ultimoOkAt = 0;
 export async function checkRealConnectivity(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  // Resultado recente vale por alguns segundos: evita pagar o ping (ou os 4s de
+  // timeout sem internet) a cada toque do garçom.
+  const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
+  if (off && Date.now() - off < 15000) return false;
+  if (Date.now() - ultimoOkAt < 10000) return true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4000);
   try {
@@ -49,8 +55,12 @@ export async function checkRealConnectivity(): Promise<boolean> {
       cache: 'no-store',
       headers: { apikey: supabaseKeyForConnectivityCheck },
     });
-    return res.ok || res.status < 500;
+    const ok = res.ok || res.status < 500;
+    if (ok) { delete (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt; ultimoOkAt = Date.now(); }
+    else (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
+    return ok;
   } catch {
+    (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
     return false;
   } finally {
     clearTimeout(timeout);

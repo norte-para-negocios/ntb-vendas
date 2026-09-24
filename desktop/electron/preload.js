@@ -70,4 +70,5 @@ contextBridge.exposeInMainWorld('electronApp', {
   // diálogo — ver handler 'ntb-print-pdf-silent' em main.js.
   printPdfSilent: (params) => ipcRenderer.invoke('ntb-print-pdf-silent', params),
   printDirectNetwork: (params) => ipcRenderer.invoke('ntb-print-direct-network', params),
+  printDirectUsb: (params) => ipcRenderer.invoke('ntb-print-direct-usb', params),
 });

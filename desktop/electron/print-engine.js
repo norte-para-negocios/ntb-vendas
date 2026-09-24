@@ -680,4 +680,14 @@ function start(storeId, options) {
   return { ok: true };
 }
 
-module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork };
+// Impressão USB/compartilhada direto (sem fila do servidor): usa o nome local se
+// esta máquina tem a impressora; senão o compartilhamento do Windows do dono.
+function printDirectUsb(nome, content, raw, donos) {
+  const eu = os.hostname();
+  const dono = (donos || []).find((m) => m && m.toLowerCase() !== eu.toLowerCase());
+  const local = !dono || (donos || []).some((m) => m && m.toLowerCase() === eu.toLowerCase());
+  const alvo = local ? nome : `\\\\${dono}\\${nome}`;
+  return raw ? printViaUsbRaw(alvo, content) : printViaUsb(alvo, content);
+}
+
+module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork, printDirectUsb };
