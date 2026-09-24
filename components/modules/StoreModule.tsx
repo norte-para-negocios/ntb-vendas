@@ -10188,7 +10188,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         </button>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 max-sm:flex-wrap">
                                     <Button variant="secondary" onClick={() => setShowFilters(!showFilters)}>
                                         <Search size={16} className="mr-2" />
                                         Filtros
@@ -10201,12 +10201,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         <Download size={16} className="mr-2" />
                                         Exportar CSV
                                     </Button>
-                                    <div className="w-px h-6 bg-[var(--border)] mx-1" />
-                                    <Button variant="outline" className="text-[var(--err)] border-[var(--err)]/20 hover:bg-[var(--err)]/5" onClick={handleClearSales} isLoading={isClearing}>
+                                    <div className="w-px h-6 bg-[var(--border)] mx-1 max-sm:hidden" />
+                                    <Button variant="outline" className="text-[var(--err)] border-[var(--err)]/20 hover:bg-[var(--err)]/5 max-sm:order-last max-sm:w-full max-sm:mt-6" onClick={handleClearSales} isLoading={isClearing}>
                                         <Trash2 size={16} className="mr-2" />
                                         Zerar Vendas
                                     </Button>
-                                    <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</Badge>
+                                    <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)] max-sm:order-first">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</Badge>
                                 </div>
                             </div>
                             
