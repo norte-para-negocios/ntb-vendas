@@ -680,4 +680,4 @@ function start(storeId, options) {
   return { ok: true };
 }
 
-module.exports = { start, stop, detectNetworkPrinters, toEscPos };
+module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork };

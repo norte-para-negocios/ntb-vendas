@@ -554,6 +554,19 @@ app.whenReady().then(() => {
   // sistemas de PDV/nota fiscal pra exatamente este problema.
   const sumatraPath = path.join(process.resourcesPath || path.join(__dirname, '..'), 'vendor', 'SumatraPDF.exe');
 
+  // Impressão direta pela rede local (IP:porta), sem passar pelo servidor:
+  // usado quando a internet cai (a fila de impressão fica no servidor).
+  ipcMain.handle('ntb-print-direct-network', async (_event, params) => {
+    const { ip, port, content, raw } = params || {};
+    if (!ip || typeof content !== 'string') return { ok: false, reason: 'parâmetros ausentes' };
+    try {
+      await printEngine.printDirectNetwork(ip, Number(port) || 9100, content, Boolean(raw));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: e.message };
+    }
+  });
+
   ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
     const { pdfUrl, printerName } = params || {};
     if (!pdfUrl || !printerName) {

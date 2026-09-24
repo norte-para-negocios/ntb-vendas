@@ -69,4 +69,5 @@ contextBridge.exposeInMainWorld('electronApp', {
   // Cupom fiscal (PDF real, com QR Code) direto na impressora do caixa, sem
   // diálogo — ver handler 'ntb-print-pdf-silent' em main.js.
   printPdfSilent: (params) => ipcRenderer.invoke('ntb-print-pdf-silent', params),
+  printDirectNetwork: (params) => ipcRenderer.invoke('ntb-print-direct-network', params),
 });

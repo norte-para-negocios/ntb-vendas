@@ -28,6 +28,7 @@ declare global {
       startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
       printPdfSilent?: (params: { pdfUrl: string; printerName: string }) => Promise<{ ok: boolean; reason?: string }>;
+      printDirectNetwork?: (params: { ip: string; port: number; content: string; raw: boolean }) => Promise<{ ok: boolean; reason?: string }>;
     };
   }
 }
@@ -50,6 +51,8 @@ export const iniciarMotorImpressaoDesktop = async (storeId: string) => {
       supabaseUrl: supabaseUrlForConnectivityCheck,
       supabaseAnonKey: supabaseKeyForConnectivityCheck,
     });
+    // Guarda a lista de impressoras pra poder imprimir direto na rede se a internet cair.
+    fetchPrinterConfigs(storeId).catch(() => {});
   } catch (e) {
     // Impressão de rede/USB é um caminho ADITIVO (ver AGENTS.md, aba
     // "Impressão"): falhar aqui nunca pode derrubar o login nem o
@@ -2550,7 +2553,8 @@ export const updateReservationStatus = async (reservationId: string, status: 'co
 // texto de ticket já semi-público) — allow_all_anon direto, sem RPC.
 export const fetchPrinterConfigs = async (storeId: string): Promise<PrinterConfig[]> => {
   const { data, error } = await supabase.from('printer_configs').select('*').eq('store_id', storeId).order('created_at', { ascending: true });
-  if (error) { console.error('Error fetching printer configs:', error); return []; }
+  if (error) { console.error('Error fetching printer configs:', error); return isNetworkError(error) ? readCachedPrinters(storeId) : []; }
+  cachePrinters(storeId, data || []);
   return data || [];
 };
 
@@ -2670,6 +2674,71 @@ export const deletePrinterConfig = async (id: string): Promise<{ success: boolea
 // chamado em paralelo ao window.print() existente (CaixaPrintStation)
 // só pra deixar histórico visível na fila, mesmo quando quem imprimiu de
 // verdade foi o navegador.
+// ── Impressão sem internet (impressoras de rede/IP) ─────────────────────────
+// A fila de impressão fica no servidor. Se a internet cair, o app desktop
+// manda o texto DIRETO pra impressora de rede (IP:porta, mesma rede local) e
+// guarda o registro aqui; quando a internet volta o registro entra no
+// histórico de impressões (status 'done', sem imprimir de novo).
+const PRINTERS_CACHE_KEY = (storeId: string) => `ntb-printers-cache:${storeId}`;
+const PRINT_HISTORY_KEY = 'ntb-print-history-pending';
+
+const cachePrinters = (storeId: string, printers: unknown[]) => {
+  try { localStorage.setItem(PRINTERS_CACHE_KEY(storeId), JSON.stringify(printers)); } catch { /* sem cache */ }
+};
+const readCachedPrinters = (storeId: string): PrinterConfig[] => {
+  try { return JSON.parse(localStorage.getItem(PRINTERS_CACHE_KEY(storeId)) || '[]'); } catch { return []; }
+};
+
+type PendingPrintHistory = { storeId: string; printerConfigId: string | null; destination: string; title: string; content: string; dedupeKey: string | null; printedAt: string };
+
+const pushPrintHistory = (item: PendingPrintHistory) => {
+  try {
+    const list: PendingPrintHistory[] = JSON.parse(localStorage.getItem(PRINT_HISTORY_KEY) || '[]');
+    list.push(item);
+    localStorage.setItem(PRINT_HISTORY_KEY, JSON.stringify(list.slice(-200)));
+  } catch { /* sem histórico local */ }
+};
+
+let flushingPrintHistory = false;
+export const flushPrintHistory = async () => {
+  if (typeof window === 'undefined' || flushingPrintHistory) return;
+  let list: PendingPrintHistory[] = [];
+  try { list = JSON.parse(localStorage.getItem(PRINT_HISTORY_KEY) || '[]'); } catch { return; }
+  if (!list.length) return;
+  flushingPrintHistory = true;
+  try {
+    const restantes: PendingPrintHistory[] = [];
+    for (const it of list) {
+      const { error } = await supabase.from('print_jobs').insert({
+        store_id: it.storeId, printer_config_id: it.printerConfigId, destination: it.destination,
+        title: it.title, content: it.content, dedupe_key: it.dedupeKey, status: 'done', printed_at: it.printedAt,
+      });
+      if (error && (error as { code?: string }).code !== '23505') {
+        if (isNetworkError(error)) { restantes.push(it); continue; }
+        console.error('Histórico de impressão offline não gravou:', error);
+      }
+    }
+    localStorage.setItem(PRINT_HISTORY_KEY, JSON.stringify(restantes));
+  } finally { flushingPrintHistory = false; }
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { flushPrintHistory().catch(() => {}); });
+  setInterval(() => { flushPrintHistory().catch(() => {}); }, 60000);
+}
+
+// Sem internet: imprime direto na impressora de rede (só no app desktop).
+const printDirectOffline = async (params: { storeId: string; printerConfigId?: string | null; destination: string; title: string; content: string; dedupeKey?: string }): Promise<boolean> => {
+  if (typeof window === 'undefined' || !window.electronApp?.printDirectNetwork || !params.printerConfigId) return false;
+  if (params.content.startsWith('@@PDF@@')) return false;
+  const printer = readCachedPrinters(params.storeId).find((p) => p.id === params.printerConfigId);
+  if (!printer || printer.connection_type !== 'network' || !printer.ip_address) return false;
+  const r = await window.electronApp.printDirectNetwork({ ip: printer.ip_address, port: printer.port || 9100, content: params.content, raw: printer.print_mode === 'raw' });
+  if (!r.ok) { console.error('Impressão direta offline falhou:', r.reason); return false; }
+  pushPrintHistory({ storeId: params.storeId, printerConfigId: params.printerConfigId, destination: params.destination, title: params.title, content: params.content, dedupeKey: params.dedupeKey || null, printedAt: new Date().toISOString() });
+  return true;
+};
+
 export const enqueuePrintJob = async (params: {
   storeId: string;
   printerConfigId?: string | null;
@@ -2694,6 +2763,7 @@ export const enqueuePrintJob = async (params: {
     // 23505 = unique_violation: outro aparelho já enfileirou este mesmo
     // trabalho. É o comportamento desejado, não um erro pra reportar.
     if ((error as { code?: string }).code === '23505') return { success: true, duplicado: true };
+    if (isNetworkError(error) && await printDirectOffline(params)) return { success: true };
     console.error('Error enqueueing print job:', error);
     return { success: false, message: error.message };
   }
@@ -2728,9 +2798,13 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
     .eq('is_active', true)
     .in('connection_type', ['network', 'usb'])
     .in('destination', ['receipt', 'all']);
-  if (error) { console.error('Error fetching receipt printers:', error); return; }
+  let impressoras = printers;
+  if (error) {
+    if (!isNetworkError(error)) { console.error('Error fetching receipt printers:', error); return; }
+    impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && ['receipt', 'all'].includes(p.destination));
+  }
   await Promise.all(
-    (printers || []).map((printer) =>
+    (impressoras || []).map((printer) =>
       enqueuePrintJob({
         storeId,
         printerConfigId: printer.id,
