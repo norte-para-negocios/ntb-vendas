@@ -2134,7 +2134,7 @@ const PaymentCaptureFields: React.FC<{
         {children}
 
         {/* Summary & Action */}
-        <div className="border-t border-[var(--border)] pt-4 max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:z-10">
+        <div className="border-t border-[var(--border)] pt-4 max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:z-10">
             <div className="space-y-1 mb-4 px-2">
                 <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
@@ -2144,7 +2144,7 @@ const PaymentCaptureFields: React.FC<{
                 </div>
                 {finishDisabled && (
                     <p className="text-xs text-[var(--text-muted)]">
-                        Digite o valor recebido e toque em <span className="font-bold">+</span> para liberar o fechamento.
+                        Digite o valor recebido e toque em <span className="font-bold">+</span> para liberar o botão.
                     </p>
                 )}
                 {changeDue > 0 && (
