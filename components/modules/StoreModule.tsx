@@ -3493,7 +3493,9 @@ NOTIFY pgrst, 'reload schema';`;
     const handleDeleteItem = async (itemId: string) => {
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
-        if(await confirm("Deseja cancelar este item da comanda?")) {
+        const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
+        const nomeItem = itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item';
+        if(await confirm(`Cancelar ${nomeItem} da comanda?`)) {
             try {
                 await cancelSpecificOrderItem(itemId);
                 // Realtime will update the list
