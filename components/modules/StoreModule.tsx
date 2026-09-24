@@ -1623,11 +1623,11 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                     onChange={e => setNotes(e.target.value)}
                 />
 
-                <div className="max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
+                <div className="max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
                     <Button className="w-full mt-4 max-sm:mt-1 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
                         Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
                     </Button>
-                    {missingRequired && <p className="text-xs text-center text-[var(--err)] mt-1">Escolha uma opção obrigatória para continuar.</p>}
+                    {missingRequired && <p className="text-xs text-center text-[var(--err)] mt-4 max-sm:mt-1">Escolha uma opção obrigatória para continuar.</p>}
                 </div>
             </div>
         </Modal>
