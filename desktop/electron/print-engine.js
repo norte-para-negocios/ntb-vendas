@@ -148,10 +148,30 @@ $doc.DefaultPageSettings.Landscape = $false
 # aproveitar a largura real do rolo -- o driver clampa sozinho pro minimo
 # de hardware se 0 nao for suportado.
 $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
-$font = New-Object System.Drawing.Font('Consolas', 9)
+$script:font = New-Object System.Drawing.Font('Consolas', 9)
+$font = $script:font
 $script:lineIndex = 0
+$script:fitDone = $false
 $doc.add_PrintPage({
   param($sender, $e)
+  # Auto-ajuste (2026-09-24, loja Sertao): duas impressoras recebiam o MESMO
+  # texto (48 colunas) e uma saia com a fonte cortada na metade da folha --
+  # o driver dela informa uma largura util menor que o papel. Em vez de
+  # confiar na largura que o driver declara, mede a linha mais larga e
+  # reduz a fonte so o necessario pra ela caber inteira na area imprimivel.
+  if (-not $script:fitDone) {
+    $script:fitDone = $true
+    try {
+    $maior = 0
+    foreach ($l in $lines) { $w = $e.Graphics.MeasureString($l, $font).Width; if ($w -gt $maior) { $maior = $w } }
+    $disp = $e.MarginBounds.Width
+    if ($maior -gt $disp -and $disp -gt 0) {
+      $novo = [Math]::Max(5.0, [Math]::Floor(9.0 * ($disp / $maior) * 10) / 10)
+      $script:font = New-Object System.Drawing.Font('Consolas', [single]$novo)
+    }
+    } catch { }
+  }
+  $font = $script:font
   $lineHeight = $font.GetHeight($e.Graphics)
   $y = $e.MarginBounds.Top
   while ($script:lineIndex -lt $lines.Count -and ($y + $lineHeight) -le $e.MarginBounds.Bottom) {
