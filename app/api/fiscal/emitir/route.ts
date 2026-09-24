@@ -329,11 +329,22 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     // idempotência (duas chamadas pra a MESMA sessão de fechamento
     // poderiam resolver âncoras diferentes e não se reconhecerem como a
     // mesma venda).
-    let queryOrders = admin.from('orders').select('id, store_id, payment_details').eq('table_id', body.tableId);
+    let queryOrders = admin.from('orders').select('id, store_id, payment_details, updated_at').eq('table_id', body.tableId);
     queryOrders = body.itemIds?.length
       ? queryOrders.neq('status', 'canceled')
       : queryOrders.eq('status', 'delivered').gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
-    const { data: orders } = await queryOrders.order('created_at', { ascending: true });
+    const { data: ordersJanela } = await queryOrders.order('created_at', { ascending: true });
+    // Mesa fechada duas vezes em <5 min: a janela pegava também o pedido do
+    // fechamento anterior e a âncora (orders[0]) virava a venda velha,
+    // fazendo a nota nova ser tratada como duplicata. O mesmo fechamento
+    // grava todos os pedidos juntos, então só vale o que está a <=30s do
+    // mais recente.
+    const orders = body.itemIds?.length || !ordersJanela?.length
+      ? ordersJanela
+      : (() => {
+          const maisRecente = Math.max(...ordersJanela.map((o: any) => new Date(o.updated_at).getTime()));
+          return ordersJanela.filter((o: any) => new Date(o.updated_at).getTime() >= maisRecente - 30000);
+        })();
     if (orders?.length) {
       storeId = orders[0].store_id;
       orderIds = orders.map((o) => o.id);
