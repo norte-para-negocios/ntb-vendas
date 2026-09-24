@@ -3238,7 +3238,11 @@ NOTIFY pgrst, 'reload schema';`;
                 // o único equipamento fixo é o do próprio caixa, ver
                 // lib/storeModules.ts).
                 const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-                if (isCaixaOperator) {
+                // Loja com impressora ativa pro caixa (rede/USB) imprime o comprovante
+                // em toda venda fechada, seja quem for que finalizou (dono, universal,
+                // operador) e em qualquer computador — a impressora física é quem decide.
+                const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
+                if (isCaixaOperator || temImpressoraFisica) {
                     const receiptOpts = {
                         storeName: store.name,
                         cnpj: store.cnpj,
@@ -3276,7 +3280,6 @@ NOTIFY pgrst, 'reload schema';`;
                     // enqueue acima já imprime — window.print() aqui
                     // duplicava o comprovante (mesmo princípio já aplicado
                     // na conferência acima e em CaixaPrintStation.tsx).
-                    const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
                     if (!temImpressoraFisica) {
                         const printed = await printBillReceipt(receiptOpts);
                         if (!printed) {
@@ -5101,7 +5104,8 @@ const CounterView: React.FC<{
             // fechou — não existe mais "Estação" separada pra evitar
             // duplicar (ver lib/storeModules.ts).
             const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-            if (isCaixaOperator) {
+            const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
+            if (isCaixaOperator || temImpressoraFisica) {
                 const items = paymentOrder.order_items || [];
                 const receiptOpts = {
                     storeName: store.name,
@@ -5124,7 +5128,6 @@ const CounterView: React.FC<{
                     .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
                 // Achado ao vivo na loja Sertão (2026-09-15) — mesmo guard
                 // aplicado nos outros call sites de printBillReceipt.
-                const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
                 if (!temImpressoraFisica) {
                     const printed = await printBillReceipt(receiptOpts);
                     if (!printed) {
