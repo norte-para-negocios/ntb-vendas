@@ -239,7 +239,7 @@ async function syncDiscoveredPrinters(storeId) {
     await rest('discovered_printers?on_conflict=store_id,name', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify(names.map((name) => ({ store_id: storeId, name, updated_at: new Date().toISOString() }))),
+      body: JSON.stringify(names.map((name) => ({ store_id: storeId, name, machine: os.hostname(), updated_at: new Date().toISOString() }))),
     });
   }
   // Só apaga o que ESTA máquina publicou antes e não tem mais (impressora

@@ -92,7 +92,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // agente local (print-agent/, migration 065) — quando existe, vira
   // seletor em vez de campo de texto livre. Vazia = nenhum agente rodou
   // ainda nesta loja, cai pro texto livre (comportamento anterior).
-  const [discoveredPrinters, setDiscoveredPrinters] = useState<string[]>([]);
+  const [discoveredPrinters, setDiscoveredPrinters] = useState<{ name: string; machine: string }[]>([]);
   const [usbManualEntry, setUsbManualEntry] = useState(false);
   // Achado ao vivo (2026-08-28/29, migration 066): não dava pra saber se o
   // agente local estava mesmo rodando -- `lastSeenAt` comparado contra
@@ -365,16 +365,18 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           {connectionType === 'usb' && (
             discoveredPrinters.length > 0 && !usbManualEntry ? (
               <div className="flex flex-col gap-1">
-                <label className="text-[13px] font-medium text-[var(--text-muted)]">Impressora instalada neste computador</label>
+                <label className="text-[13px] font-medium text-[var(--text-muted)]">Impressora instalada no computador do caixa/cozinha (escolha a do PC onde ela está ligada)</label>
                 <select
                   value={usbSystemName}
                   onChange={(e) => setUsbSystemName(e.target.value)}
                   className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
                 >
                   <option value="">Selecione...</option>
-                  {discoveredPrinters.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
+                  {discoveredPrinters
+                    .filter((p) => !/^(fax|microsoft (print to pdf|xps document writer)|onenote)/i.test(p.name))
+                    .map((p) => (
+                      <option key={`${p.machine}|${p.name}`} value={p.name}>{p.machine ? `${p.name} — ${p.machine}` : p.name}</option>
+                    ))}
                 </select>
                 <button type="button" onClick={() => setUsbManualEntry(true)} className="text-xs text-[var(--brand)] self-start mt-1 underline">
                   Não achei a minha, digitar o nome manualmente

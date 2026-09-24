@@ -2610,10 +2610,10 @@ export const fetchUsbPrinterForAutoprint = async (
 // da impressora era fricção/erro desnecessário). Lista vazia = nenhum
 // agente rodou ainda nesta loja, ou nenhuma impressora local instalada —
 // a UI cai pro campo de texto livre nesse caso.
-export const fetchDiscoveredPrinters = async (storeId: string): Promise<string[]> => {
-  const { data, error } = await supabase.from('discovered_printers').select('name').eq('store_id', storeId).order('name', { ascending: true });
+export const fetchDiscoveredPrinters = async (storeId: string): Promise<{ name: string; machine: string }[]> => {
+  const { data, error } = await supabase.from('discovered_printers').select('name, machine').eq('store_id', storeId).order('name', { ascending: true });
   if (error) { console.error('Error fetching discovered printers:', error); return []; }
-  return (data || []).map((row) => row.name);
+  return (data || []).map((row) => ({ name: row.name, machine: row.machine || '' }));
 };
 
 // Achado ao vivo (2026-08-28/29): não havia nenhum jeito de o painel saber
