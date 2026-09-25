@@ -802,8 +802,8 @@ export const updateCategorySector = async (categoryId: string, sectorId: string 
   const { error } = await supabase.from('categories').update({ sector_id: sectorId }).eq('id', categoryId);
   if (error) throw error;
 };
-export const updateProductSector = async (productId: string, storeId: string, sectorId: string | null) => {
-  const { error } = await supabase.rpc('set_product_sector_secure', { p_product_id: productId, p_store_id: storeId, p_sector_id: sectorId });
+export const updateProductSector = async (productId: string, storeId: string, sectorId: string | null, ignoreCategory = false) => {
+  const { error } = await supabase.rpc('set_product_sector_secure', { p_product_id: productId, p_store_id: storeId, p_sector_id: sectorId, p_ignore_category: ignoreCategory });
   if (error) throw error;
 };
 // Impressora atende o item? Mesmo destino (ou 'all') E mesmo setor

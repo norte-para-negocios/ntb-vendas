@@ -3450,7 +3450,7 @@ NOTIFY pgrst, 'reload schema';`;
                 // Setor do item (produto ?? categoria) e o destino dele, pelo cache local.
                 const menuCache: any = await getCachedMenu(storeId).catch(() => null);
                 const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === product.category_id);
-                const setorId: string | null = product.sector_id || catDoProduto?.sector_id || null;
+                const setorId: string | null = product.sector_id || (product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
                 const setor = setorId ? (await fetchPrintSectors(storeId)).find((x) => x.id === setorId) : undefined;
                 const destino: 'kitchen' | 'bar' = setor ? setor.base : (product.destination === 'bar' ? 'bar' : 'kitchen');
                 const conteudo = buildKitchenTicketText({
@@ -7146,6 +7146,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [printSectors, setPrintSectors] = useState<PrintSector[]>([]);
+    const [newSectorName, setNewSectorName] = useState('');
     // Grupos da lista lateral começam fechados (sanfona); o grupo da categoria ativa abre sozinho.
     const [openSidebarGroups, setOpenSidebarGroups] = useState<Set<string>>(new Set());
     const [activeMenuCategoryId, setActiveMenuCategoryId] = useState<string | null>(null);
@@ -7169,6 +7170,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pTime, setPTime] = useState('15');
     const [pDestination, setPDestination] = useState<'kitchen' | 'bar'>('kitchen');
     const [pSector, setPSector] = useState('');
+    const [pIgnoreCat, setPIgnoreCat] = useState(false);
     // NCM (migration 032/033) — classificacao fiscal do produto. Texto livre
     // (o codigo tem digitos e as vezes pontuacao), mesmo padrao dos outros
     // campos de texto opcionais deste form (nao ha catalogo fechado, ao
@@ -7527,6 +7529,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPreview(product.image_url);
             setPDestination(product.destination || 'kitchen');
             setPSector(product.sector_id || '');
+            setPIgnoreCat(Boolean(product.ignore_category_sector));
             setPOptionGroups(toDraftGroups(product.option_groups));
             setPPromoPrice(product.promo_price != null ? product.promo_price.toString() : '');
             setPFeatured(product.featured ?? false);
@@ -7551,6 +7554,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPreview(null);
             setPDestination('kitchen');
             setPSector('');
+            setPIgnoreCat(false);
             setPOptionGroups([]);
             setPPromoPrice('');
             setPFeatured(false);
@@ -7627,8 +7631,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 productId = await createProduct(storeId, pCat, productData);
             }
 
-            if ((pSector || '') !== (editingProduct?.sector_id || '')) {
-                try { await updateProductSector(productId, storeId, pSector || null); }
+            if ((pSector || '') !== (editingProduct?.sector_id || '') || pIgnoreCat !== Boolean(editingProduct?.ignore_category_sector)) {
+                try { await updateProductSector(productId, storeId, pSector || null, pIgnoreCat); }
                 catch (e: any) { toast.error('Produto salvo, mas o setor não foi salvo: ' + (e.message || '')); }
             }
 
@@ -8198,6 +8202,38 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
 
                     <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Locais de preparo</p>
+                        <p className="text-[11px] text-[var(--text-muted)] mb-2">Pra onde os pedidos vão ser impressos. Cozinha e Bar já existem; crie outros (ex.: Pizzaria) e escolha o local de cada categoria abaixo. A impressora de cada local se escolhe em Administração → Impressão.</p>
+                        <div className="flex gap-2 mb-2">
+                            <Input placeholder="Novo local (ex.: Pizzaria)" value={newSectorName} onChange={e => setNewSectorName(e.target.value)} maxLength={30} />
+                            <Button onClick={async () => {
+                                const nome = newSectorName.trim();
+                                if (!nome) return;
+                                try { await createPrintSector(storeId, nome, 'kitchen'); setNewSectorName(''); toast.success(`Local "${nome}" criado.`); loadMenu(); }
+                                catch (e: any) { toast.error('Erro ao criar local: ' + (e.message || '')); }
+                            }}><Plus size={20}/></Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <span className="bg-[var(--surface-2)] px-3 py-1.5 rounded-lg font-bold text-[var(--text)]">Cozinha</span>
+                            <span className="bg-[var(--surface-2)] px-3 py-1.5 rounded-lg font-bold text-[var(--text)]">Bar</span>
+                            {printSectors.map(st => (
+                                <div key={st.id} className="bg-[var(--brand)]/10 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                                    <span className="font-bold text-[var(--brand)]">{st.name}</span>
+                                    <button
+                                        aria-label={`Excluir local ${st.name}`}
+                                        onClick={async () => {
+                                            if (!(await confirm({ message: `Excluir o local "${st.name}"? As categorias e produtos dele voltam pra Cozinha/Bar.`, variant: 'danger' }))) return;
+                                            try { await deletePrintSector(st.id); toast.success('Local excluído.'); loadMenu(); }
+                                            catch (e: any) { toast.error('Erro ao excluir: ' + (e.message || '')); }
+                                        }}
+                                        className="relative hit-44 text-[var(--text-muted)] hover:text-[var(--err)]"
+                                    ><X size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
                         <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Categorias</p>
                         <div className="flex gap-2 mb-2">
                             <Input placeholder="Nova Categoria" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
@@ -8235,15 +8271,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                 {categoryGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                                                             </select>
                                                         )}
-                                                        {printSectors.length > 0 && (
+                                                        {(
                                                             <select
                                                                 value={cat.sector_id || ''}
                                                                 onChange={e => handleChangeCategorySector(cat.id, e.target.value || null)}
                                                                 title="Pra qual setor (impressora) os itens desta categoria vão"
                                                                 className="text-xs bg-[var(--surface)] border border-[var(--border)] rounded px-1.5 py-1 text-[var(--text-muted)] max-sm:text-base"
                                                             >
-                                                                <option value="">Setor padrão</option>
-                                                                {printSectors.map(st => <option key={st.id} value={st.id}>→ {st.name}</option>)}
+                                                                <option value="">Local: Cozinha/Bar</option>
+                                                                {printSectors.map(st => <option key={st.id} value={st.id}>Local: {st.name}</option>)}
                                                             </select>
                                                         )}
                                                         {scheduleLabel && (
@@ -8338,19 +8374,24 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                          <div className="flex flex-col gap-1.5">
-                             <label className="text-sm font-semibold text-[var(--text)]">Destino do Pedido</label>
-                             <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pSector || pDestination} onChange={e => {
-                                 const v = e.target.value;
-                                 if (v === 'kitchen' || v === 'bar') { setPDestination(v); setPSector(''); }
-                                 else { const st = printSectors.find(x => x.id === v); setPSector(v); if (st) setPDestination(st.base); }
-                             }}>
-                                 <option value="kitchen">Cozinha</option>
-                                 <option value="bar">Bar</option>
-                                 {printSectors.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-                             </select>
-                             {!pSector && (() => {
-                                 const setorCat = printSectors.find(x => x.id === categories.find(c => c.id === pCat)?.sector_id);
-                                 return setorCat ? <p className="text-xs text-[var(--text-muted)]">A categoria manda pra <b>{setorCat.name}</b>. Escolha outro setor aqui só se este produto for diferente.</p> : null;
+                             <label className="text-sm font-semibold text-[var(--text)]">Local de preparo (impressão)</label>
+                             {(() => {
+                                 const catSector = categories.find(c => c.id === pCat)?.sector_id || '';
+                                 const valor = pSector || ((pIgnoreCat || !catSector) ? pDestination : catSector);
+                                 return (
+                                     <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={valor} onChange={e => {
+                                         const v = e.target.value;
+                                         if (v === 'kitchen' || v === 'bar') { setPDestination(v); setPSector(''); setPIgnoreCat(Boolean(catSector)); return; }
+                                         const st = printSectors.find(x => x.id === v);
+                                         if (st) setPDestination(st.base);
+                                         if (v === catSector) { setPSector(''); setPIgnoreCat(false); }
+                                         else { setPSector(v); setPIgnoreCat(false); }
+                                     }}>
+                                         <option value="kitchen">Cozinha</option>
+                                         <option value="bar">Bar</option>
+                                         {printSectors.map(st => <option key={st.id} value={st.id}>{st.name}{st.id === catSector ? ' (da categoria)' : ''}</option>)}
+                                     </select>
+                                 );
                              })()}
                          </div>
                          <Input

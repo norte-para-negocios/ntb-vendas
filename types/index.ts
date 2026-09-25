@@ -220,6 +220,8 @@ export interface Product {
   id: string;
   // Setor próprio do produto; null = usa o da categoria (migration 087).
   sector_id?: string | null;
+  // true = escolheu Cozinha/Bar mesmo com a categoria indo pra outro local (migration 089).
+  ignore_category_sector?: boolean;
   category_id: string | null; // FK is `on delete set null` — categoria excluida deixa o produto orfao
   store_id: string;
   name: string;
