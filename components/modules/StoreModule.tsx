@@ -321,7 +321,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                                         </div>
                                     )}
                                     <div className="text-center min-w-0 w-full">
-                                        <p className="font-semibold truncate">{conta.name}</p>
+                                        <p className="font-semibold leading-tight line-clamp-2">{conta.name}</p>
                                         <p className="text-xs text-white/70">{conta.roleLabel}{conta.senhaCifrada ? ' · entra direto' : ''}</p>
                                     </div>
                                 </button>
