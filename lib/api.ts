@@ -29,6 +29,8 @@ declare global {
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
       printPdfSilent?: (params: { pdfUrl: string; printerName: string }) => Promise<{ ok: boolean; reason?: string }>;
       printDirectUsb?: (params: { printer: PrinterConfig; content: string; owners: string[] }) => Promise<{ ok: boolean; reason?: string }>;
+      encryptSecret?: (texto: string) => Promise<string | null>;
+      decryptSecret?: (b64: string) => Promise<string | null>;
       localPrinters?: () => Promise<{ hostname: string; impressoras: string[] }>;
       printDirectNetwork?: (params: { ip: string; port: number; content: string; raw: boolean }) => Promise<{ ok: boolean; reason?: string }>;
     };

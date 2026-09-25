@@ -28,6 +28,7 @@ import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
 import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
+import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
@@ -91,6 +92,26 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
+    // Tela "Quem está entrando?" (só no app desktop): contas que já entraram
+    // neste computador viram cartões. Ver lib/contasSalvas.ts.
+    const [isDesktop, setIsDesktop] = useState(false);
+    const [contas, setContas] = useState<ContaSalva[]>([]);
+    const [mostrarFormulario, setMostrarFormulario] = useState(false);
+    const [contaEscolhida, setContaEscolhida] = useState<ContaSalva | null>(null);
+    const [lembrarSenha, setLembrarSenha] = useState(false);
+    useEffect(() => {
+        const desk = typeof window !== 'undefined' && Boolean(window.electronApp?.isElectron);
+        setIsDesktop(desk);
+        if (desk) setContas(lerContasSalvas());
+    }, []);
+
+    const guardarConta = async (dados: { email: string; name: string; roleLabel: string; photoUrl?: string | null }, senha: string, lembrar: boolean) => {
+        if (!isDesktop) return;
+        let senhaCifrada: string | null = null;
+        if (lembrar && window.electronApp?.encryptSecret) senhaCifrada = await window.electronApp.encryptSecret(senha).catch(() => null);
+        salvarConta({ ...dados, senhaCifrada, ultimoUso: Date.now() });
+    };
+
     // Reset Password State
     const [needsChange, setNeedsChange] = useState(false);
     const [userId, setUserId] = useState('');
@@ -106,10 +127,13 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     const [storeFilter, setStoreFilter] = useState('');
     const [isLoadingStores, setIsLoadingStores] = useState(false);
 
-    const handleLogin = async () => {
+    const handleLogin = async (emailArg?: string, senhaArg?: string, lembrarArg?: boolean) => {
+        const emailUsado = (emailArg ?? email).trim();
+        const senhaUsada = senhaArg ?? password;
+        const lembrar = lembrarArg ?? lembrarSenha;
         setError('');
         setIsLoading(true);
-        const result = await authenticateStoreUser(email, password);
+        const result = await authenticateStoreUser(emailUsado, senhaUsada);
 
         if (result.success && result.user) {
             if (result.user.must_change_password) {
@@ -117,6 +141,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 setUserId(result.user.id);
                 setIsUniversalChange(false);
             } else {
+                await guardarConta({ email: emailUsado, name: result.user.name, roleLabel: rotuloDoPapel(result.user.role, result.user.permissions), photoUrl: (result.user as any).photo_url ?? null }, senhaUsada, lembrar);
                 onLogin(result.user);
             }
             setIsLoading(false);
@@ -126,13 +151,14 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         // Não bateu em nenhum store_user: tenta a conta universal antes de
         // mostrar erro (tabelas separadas, sem custo extra de segurança em
         // tentar as duas em sequência).
-        const universalResult = await authenticateUniversalUser(email, password);
+        const universalResult = await authenticateUniversalUser(emailUsado, senhaUsada);
         if (universalResult.success && universalResult.user) {
             if (universalResult.mustChangePass) {
                 setNeedsChange(true);
                 setUserId(universalResult.user.id);
                 setIsUniversalChange(true);
             } else {
+                await guardarConta({ email: emailUsado, name: universalResult.user.name, roleLabel: rotuloDoPapel('universal') }, senhaUsada, lembrar);
                 setUniversalUser(universalResult.user);
             }
         } else {
@@ -252,6 +278,82 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         );
     }
 
+    const entrarComConta = async (conta: ContaSalva) => {
+        setError('');
+        if (conta.senhaCifrada && window.electronApp?.decryptSecret) {
+            const senha = await window.electronApp.decryptSecret(conta.senhaCifrada).catch(() => null);
+            if (senha) { await handleLogin(conta.email, senha, true); return; }
+        }
+        setContaEscolhida(conta);
+        setEmail(conta.email);
+        setPassword('');
+        setLembrarSenha(false);
+        setMostrarFormulario(true);
+    };
+
+    if (isDesktop && contas.length > 0 && !mostrarFormulario) {
+        return (
+            <AuthBackdrop>
+                <div className="max-w-2xl w-full">
+                    <div className="text-center mb-8">
+                        <h1 className="text-3xl font-bold text-white tracking-tight">Quem está entrando?</h1>
+                        <p className="text-white/75 text-sm mt-1.5">Toque no seu nome</p>
+                    </div>
+                    {error && (
+                        <div className="mb-4 bg-[var(--err)]/15 text-white p-3 rounded text-sm flex items-center gap-2 justify-center">
+                            <AlertCircle size={16} /> {error}
+                        </div>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {contas.map((conta) => (
+                            <div key={conta.email} className="relative group/conta">
+                                <button
+                                    type="button"
+                                    disabled={isLoading}
+                                    onClick={() => entrarComConta(conta)}
+                                    className="w-full u-grow-in p-5 rounded-[var(--r-lg)] bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm u-motion u-press-sm flex flex-col items-center gap-3 text-white disabled:opacity-60"
+                                >
+                                    {conta.photoUrl ? (
+                                        <img src={conta.photoUrl} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-white/40" />
+                                    ) : (
+                                        <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
+                                            {conta.name.trim().charAt(0).toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div className="text-center min-w-0 w-full">
+                                        <p className="font-semibold truncate">{conta.name}</p>
+                                        <p className="text-xs text-white/70">{conta.roleLabel}{conta.senhaCifrada ? ' · entra direto' : ''}</p>
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label={`Tirar ${conta.name} deste computador`}
+                                    onClick={async () => {
+                                        if (!(await confirm({ message: `Tirar ${conta.name} da tela de entrada deste computador? A conta continua existindo, só some daqui.`, variant: 'danger' }))) return;
+                                        removerContaSalva(conta.email);
+                                        setContas(lerContasSalvas());
+                                    }}
+                                    className="absolute top-2 right-2 hit-44 p-1 rounded-full text-white/60 hover:text-white hover:bg-white/15 opacity-0 group-hover/conta:opacity-100 focus:opacity-100 u-motion"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => { setContaEscolhida(null); setEmail(''); setPassword(''); setLembrarSenha(false); setError(''); setMostrarFormulario(true); }}
+                            className="u-grow-in p-5 rounded-[var(--r-lg)] border-2 border-dashed border-white/30 hover:border-white/60 hover:bg-white/10 u-motion flex flex-col items-center justify-center gap-3 text-white/80"
+                        >
+                            <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center"><Plus size={28} /></div>
+                            <p className="font-semibold text-sm">Entrar com outro usuário</p>
+                        </button>
+                    </div>
+                    {isLoading && <p className="text-center text-white/80 text-sm mt-4">Entrando...</p>}
+                </div>
+            </AuthBackdrop>
+        );
+    }
+
     return (
         <AuthBackdrop>
             <div className="max-w-sm w-full">
@@ -259,13 +361,21 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                     <div className="w-16 h-16 rounded-[1.4rem] flex items-center justify-center mx-auto mb-5 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ boxShadow: '0 20px 40px -12px rgba(0,0,0,0.35)', animation: '3s ease-in-out infinite icon-float' }}>
                         <StoreIcon size={26} />
                     </div>
-                    <h1 className="text-3xl font-bold text-white tracking-tight">Área do Lojista</h1>
-                    <p className="text-white/75 text-sm mt-1.5">Gerencie seus pedidos e mesas</p>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">{contaEscolhida ? contaEscolhida.name : 'Área do Lojista'}</h1>
+                    <p className="text-white/75 text-sm mt-1.5">{contaEscolhida ? `${contaEscolhida.roleLabel} · digite sua senha` : 'Gerencie seus pedidos e mesas'}</p>
                 </div>
                 <Card className="u-grow-in p-6" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
                     <div className="space-y-4">
-                        <Input label="Email de Acesso" placeholder="seu@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-                        <Input label="Senha" placeholder="••••••" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+                        {!contaEscolhida && (
+                            <Input label="Email de Acesso" placeholder="seu@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+                        )}
+                        <Input label="Senha" placeholder="••••••" type="password" autoFocus={Boolean(contaEscolhida)} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleLogin(); }} />
+                        {isDesktop && (
+                            <label className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer select-none">
+                                <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="size-4 accent-[var(--brand)]" />
+                                Entrar sem senha neste computador
+                            </label>
+                        )}
 
                         {error && (
                             <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
@@ -273,12 +383,17 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                             </div>
                         )}
 
-                        <Button className="w-full group" onClick={handleLogin} isLoading={isLoading}>
+                        <Button className="w-full group" onClick={() => handleLogin()} isLoading={isLoading}>
                             Acessar Painel
                             {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />}
                         </Button>
                     </div>
                 </Card>
+                {isDesktop && contas.length > 0 && (
+                    <button onClick={() => { setMostrarFormulario(false); setContaEscolhida(null); setError(''); }} className="w-full text-center text-sm text-white/70 hover:text-white mt-4 u-motion">
+                        ← Voltar para os usuários
+                    </button>
+                )}
             </div>
         </AuthBackdrop>
     );

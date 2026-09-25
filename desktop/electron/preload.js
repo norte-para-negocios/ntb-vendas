@@ -72,4 +72,6 @@ contextBridge.exposeInMainWorld('electronApp', {
   printDirectNetwork: (params) => ipcRenderer.invoke('ntb-print-direct-network', params),
   printDirectUsb: (params) => ipcRenderer.invoke('ntb-print-direct-usb', params),
   localPrinters: () => ipcRenderer.invoke('ntb-local-printers'),
+  encryptSecret: (texto) => ipcRenderer.invoke('ntb-secret-encrypt', texto),
+  decryptSecret: (b64) => ipcRenderer.invoke('ntb-secret-decrypt', b64),
 });

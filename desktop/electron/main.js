@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, protocol, net, shell, Notification, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, protocol, net, shell, Notification, ipcMain, dialog, safeStorage } = require('electron');
 
 // Espelha lib/appVersion.ts: número interno 1.x (updater), exibido como 0.x (beta).
 const formatAppVersion = (v) => { if (!v) return ''; const [, mi = '0', pa = '0'] = String(v).split('.'); return `v0.${mi}.${pa} (beta)`; };
@@ -565,6 +565,21 @@ app.whenReady().then(() => {
     } catch (e) {
       return { ok: false, reason: e.message };
     }
+  });
+
+  // Senha lembrada nas contas salvas da tela de entrada: criptografada pelo
+  // sistema (DPAPI no Windows), só este usuário do Windows neste PC abre.
+  ipcMain.handle('ntb-secret-encrypt', (_event, texto) => {
+    try {
+      if (!safeStorage.isEncryptionAvailable() || typeof texto !== 'string') return null;
+      return safeStorage.encryptString(texto).toString('base64');
+    } catch { return null; }
+  });
+  ipcMain.handle('ntb-secret-decrypt', (_event, b64) => {
+    try {
+      if (!safeStorage.isEncryptionAvailable() || typeof b64 !== 'string') return null;
+      return safeStorage.decryptString(Buffer.from(b64, 'base64'));
+    } catch { return null; }
   });
 
   ipcMain.handle('ntb-local-printers', async () => {
