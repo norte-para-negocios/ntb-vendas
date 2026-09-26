@@ -1970,58 +1970,140 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [showAllCategories, setShowAllCategories] = useState(false);
 
+    const listRef = useRef<HTMLDivElement>(null);
+    const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+    const [loaded, setLoaded] = useState(false);
+
     useEffect(() => {
         fetchMenu(storeId, true).then(({ categories, categoryGroups, products }) => {
             setCategories(categories);
             setCategoryGroups(categoryGroups);
             setProducts(products);
-            if (categories.length > 0) setActiveCategory(categories[0].id);
+            setLoaded(true);
         });
     }, [storeId]);
 
-    // Achado real (reunião com o Ramon, 2026-08-25): buscar "camarão" só
-    // trazia resultado da categoria ativa (ex.: Entradas), mesmo tendo
-    // "camarão" em outras categorias — porque o filtro de categoria rodava
-    // incondicionalmente, antes do termo de busca sequer entrar. Com termo
-    // de busca preenchido, ignora a categoria ativa e busca em todo o
-    // cardápio; sem termo, continua restrito à categoria como sempre.
-    // normalizeForSearch (lib/search.ts) também resolve o segundo achado da
-    // mesma reunião: busca ignorando acento.
-    const filteredProducts = useMemo(() => {
-        let prods = [...products];
-        const term = searchTerm.trim();
-        if (term) {
-            const normalizedTerm = normalizeForSearch(term);
-            prods = prods.filter(p => normalizeForSearch(p.name).includes(normalizedTerm));
-        } else if (activeCategory) {
-            prods = prods.filter(p => p.category_id === activeCategory);
-        }
-        return prods;
-    }, [products, activeCategory, searchTerm]);
+    // Grupo→subcategoria. Fonte única de ordenação via buildTopLevelItems
+    // (lib/categoryGroups.ts), a mesma das outras telas que navegam categoria.
+    // Análise de categorias (2026-09-26, P3/P4): grupo com UMA categoria só
+    // vira categoria solta na barra (com o nome do grupo) — um nível a mais
+    // que não serve pra nada ("Bebidas sem Álcool › Geladas sem Álcool").
+    const topLevelItems = useMemo<TopLevelItem[]>(() => buildTopLevelItems(categories, categoryGroups).map(item =>
+        item.kind === 'group' && item.categories.length === 1
+            ? { kind: 'category', category: { ...item.categories[0], name: item.group.name } }
+            : item
+    ), [categories, categoryGroups]);
 
-    // Grupo→subcategoria (2026-09-22): mesma lógica do cliente
-    // (ClientModule.tsx), adaptada ao fluxo sem scroll-spy deste componente
-    // (clicar só troca o filtro, não rola a tela). Fix I2 da revisão final:
-    // fonte única de ordenação via buildTopLevelItems (lib/categoryGroups.ts),
-    // mesma usada pelas outras 4 telas que navegam categoria.
-    const topLevelItems = useMemo(() => buildTopLevelItems(categories, categoryGroups), [categories, categoryGroups]);
-
-    const activeCategoryGroupId = useMemo(
-        () => categories.find(c => c.id === activeCategory)?.group_id ?? null,
-        [categories, activeCategory]
+    // Ordem da barra achatada (grupos na ordem da barra, categorias na ordem
+    // do grupo) — a lista de produtos segue sempre ESTA ordem, nunca a crua.
+    const orderedCategories = useMemo(
+        () => topLevelItems.flatMap(i => i.kind === 'category' ? [i.category] : i.categories),
+        [topLevelItems]
     );
 
+    // Abre na primeira coisa da barra (grupo inteiro ou categoria solta).
+    useEffect(() => {
+        if (!loaded || activeCategory || activeGroupId) return;
+        const first = topLevelItems[0];
+        if (!first) return;
+        if (first.kind === 'group') setActiveGroupId(first.group.id);
+        else setActiveCategory(first.category.id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- só na 1ª carga
+    }, [loaded, topLevelItems]);
+
+    const productsByCategory = useMemo(() => {
+        const map = new Map<string, Product[]>();
+        products.forEach(p => {
+            if (!p.category_id) return;
+            const list = map.get(p.category_id) || [];
+            list.push(p);
+            map.set(p.category_id, list);
+        });
+        map.forEach(list => list.sort((a, b) => (a.order || 0) - (b.order || 0)));
+        return map;
+    }, [products]);
+
+    const categoryLabelOf = useMemo(() => {
+        const m = new Map<string, string>();
+        orderedCategories.forEach(c => m.set(c.id, c.name));
+        return m;
+    }, [orderedCategories]);
+
+    // Achado real (reunião com o Ramon, 2026-08-25): com termo de busca, busca
+    // no cardápio inteiro ignorando a categoria ativa, e sem acento
+    // (normalizeForSearch). 2026-09-26: procura também na descrição e cada
+    // resultado mostra a categoria (três "Carne do Sol" ficam distinguíveis).
+    const term = searchTerm.trim();
+    type MenuSection = { cat: Category | null; products: Product[] };
+    const { sections, sectionMode } = useMemo((): { sections: MenuSection[]; sectionMode: 'search' | 'group' | 'category' | 'all' } => {
+        if (term) {
+            const nt = normalizeForSearch(term);
+            const matches = (p: Product) => normalizeForSearch(p.name).includes(nt) || (!!p.description && normalizeForSearch(p.description).includes(nt));
+            const ordered = orderedCategories.flatMap(c => (productsByCategory.get(c.id) || []).filter(matches));
+            const orphans = products.filter(p => !p.category_id && matches(p));
+            return { sections: [{ cat: null, products: [...ordered, ...orphans] }], sectionMode: 'search' };
+        }
+        if (activeGroupId) {
+            const item = topLevelItems.find(i => i.kind === 'group' && i.group.id === activeGroupId);
+            const cats = item && item.kind === 'group' ? item.categories : [];
+            return { sections: cats.map(c => ({ cat: c, products: productsByCategory.get(c.id) || [] })).filter(sec => sec.products.length > 0), sectionMode: 'group' };
+        }
+        if (activeCategory) {
+            const cat = orderedCategories.find(c => c.id === activeCategory) || null;
+            return { sections: [{ cat, products: productsByCategory.get(activeCategory) || [] }], sectionMode: 'category' };
+        }
+        const all: MenuSection[] = orderedCategories.map(c => ({ cat: c, products: productsByCategory.get(c.id) || [] })).filter(sec => sec.products.length > 0);
+        const orphans = products.filter(p => !p.category_id);
+        if (orphans.length) all.push({ cat: null, products: orphans });
+        return { sections: all, sectionMode: 'all' };
+    }, [term, activeGroupId, activeCategory, topLevelItems, orderedCategories, productsByCategory, products]);
+
+    const totalShown = sections.reduce((n, sec) => n + sec.products.length, 0);
+
+    // Troca de visão volta a lista pro topo.
+    useEffect(() => {
+        if (listRef.current) listRef.current.scrollTop = 0;
+    }, [activeGroupId, activeCategory, term]);
+
+    const activeCategoryGroupId = useMemo(() => {
+        for (const i of topLevelItems) if (i.kind === 'group' && i.categories.some(c => c.id === activeCategory)) return i.group.id;
+        return null;
+    }, [topLevelItems, activeCategory]);
+
     const expandedGroupSubcategories = useMemo(() => {
-        if (!activeGroupId) return [];
-        const item = topLevelItems.find(i => i.kind === 'group' && i.group.id === activeGroupId);
+        const gid = activeGroupId ?? activeCategoryGroupId;
+        if (!gid) return [];
+        const item = topLevelItems.find(i => i.kind === 'group' && i.group.id === gid);
         return item && item.kind === 'group' ? item.categories : [];
-    }, [topLevelItems, activeGroupId]);
+    }, [topLevelItems, activeGroupId, activeCategoryGroupId]);
+
+    // Tocar num grupo mostra o grupo INTEIRO (análise P3): antes só abria a
+    // 2ª fileira e a lista continuava na categoria anterior.
+    const selectGroup = (groupId: string) => {
+        setSearchTerm('');
+        setActiveGroupId(groupId);
+        setActiveCategory('');
+    };
 
     const selectSubcategory = (categoryId: string) => {
         setSearchTerm('');
         setActiveCategory(categoryId);
         setActiveGroupId(null);
     };
+
+    // Chip da 2ª fileira com o grupo aberto = atalho: rola até a seção.
+    const [chipFocus, setChipFocus] = useState<string | null>(null);
+    const jumpToSubcategory = (categoryId: string) => {
+        if (activeGroupId && !term) {
+            setChipFocus(categoryId);
+            const el = sectionRefs.current[categoryId];
+            const box = listRef.current;
+            if (el && box) box.scrollTo({ top: el.offsetTop - box.offsetTop - 4, behavior: 'smooth' });
+            return;
+        }
+        selectSubcategory(categoryId);
+    };
+    useEffect(() => { setChipFocus(null); }, [activeGroupId]);
 
     return (
         <div className="flex flex-col h-full min-h-[400px]">
@@ -2061,7 +2143,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                 <button
                                     key={cat.id}
                                     type="button"
-                                    onClick={() => { setActiveCategory(cat.id); setActiveGroupId(null); }}
+                                    onClick={() => selectSubcategory(cat.id)}
                                     aria-current={isActive ? 'true' : undefined}
                                     className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
                                 >
@@ -2076,14 +2158,14 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                             );
                         }
                         const group = item.group;
-                        const ownsActive = activeCategoryGroupId === group.id;
-                        const isExpanded = activeGroupId === group.id;
-                        const isEmphasized = ownsActive || isExpanded;
+                        const ownsActive = activeCategoryGroupId === group.id || activeGroupId === group.id;
+                        const isExpanded = ownsActive;
+                        const isEmphasized = ownsActive;
                         return (
                             <button
                                 key={group.id}
                                 type="button"
-                                onClick={() => setActiveGroupId(prev => prev === group.id ? null : group.id)}
+                                onClick={() => selectGroup(group.id)}
                                 aria-current={ownsActive ? 'true' : undefined}
                                 aria-expanded={isExpanded}
                                 className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isEmphasized ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
@@ -2100,17 +2182,32 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     })}
                 </div>
                 </div>
-                {activeGroupId && expandedGroupSubcategories.length > 0 && (
+                {!term && expandedGroupSubcategories.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mt-1">
+                        {(() => {
+                            const gid = activeGroupId ?? activeCategoryGroupId;
+                            const isAll = !!activeGroupId && !chipFocus;
+                            return (
+                                <button
+                                    type="button"
+                                    onClick={() => { if (gid) { selectGroup(gid); listRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); } }}
+                                    aria-current={isAll ? 'true' : undefined}
+                                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion ${isAll ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
+                                    style={isAll ? { color: GARCOM_ACTION } : undefined}
+                                >
+                                    Tudo
+                                </button>
+                            );
+                        })()}
                         {expandedGroupSubcategories.map(cat => {
-                            const isActiveSub = activeCategory === cat.id;
+                            const isActiveSub = activeGroupId ? chipFocus === cat.id : activeCategory === cat.id;
                             return (
                                 <button
                                     key={cat.id}
                                     type="button"
-                                    onClick={() => selectSubcategory(cat.id)}
+                                    onClick={() => jumpToSubcategory(cat.id)}
                                     aria-current={isActiveSub ? 'true' : undefined}
-                                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion bg-[var(--surface-2)] ${isActiveSub ? 'font-semibold' : 'font-medium text-[var(--text)]'}`}
+                                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion ${isActiveSub ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
                                     style={isActiveSub ? { color: GARCOM_ACTION } : undefined}
                                 >
                                     {cat.name}
@@ -2193,49 +2290,74 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 que "Adicionar Pedido" é tela cheia (não modal pequeno), o
                 pai já dá altura real via flex — um teto de viewport aqui
                 sobraria espaço vazio embaixo em telas altas. */}
-            <div className="flex-1 min-h-0 overflow-y-auto py-1">
-                {filteredProducts.length === 0 && (
+            <div ref={listRef} className="relative flex-1 min-h-0 overflow-y-auto py-1">
+                {loaded && totalShown === 0 && (
                     <p className="text-sm text-[var(--text-muted)] text-center py-8">Nenhum produto encontrado.</p>
                 )}
-                {filteredProducts.map(product => {
-                    const effectivePrice = getEffectivePrice(product);
-                    const hasActivePromo = effectivePrice < product.price;
-                    const variablePricing = !!product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0));
+                {sections.map((sec, si) => {
+                    // Título de seção só quando ajuda: categoria com 2+ itens (ou a
+                    // única categoria na tela). Categoria de 1 item dentro de um
+                    // grupo não ganha título grande — o nome dela vai embaixo do
+                    // produto (as 5 pizzas viram uma lista só).
+                    const showHeader = sectionMode !== 'search' && !!sec.cat && (sectionMode === 'category' || sec.products.length > 1);
+                    const labelUnder = sectionMode === 'search' || (!showHeader && sectionMode !== 'category');
                     return (
-                        <div
-                            key={product.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedProduct(product)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProduct(product); } }}
-                            className="flex items-center gap-3 px-2 -mx-2 py-3 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)] rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                        <section
+                            key={sec.cat?.id ?? `sec-${si}`}
+                            ref={el => { if (sec.cat) sectionRefs.current[sec.cat.id] = el; }}
+                            className={showHeader && si > 0 ? 'mt-4' : ''}
                         >
-                            <div className="flex-1 min-w-0">
-                                <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
-                                {product.description && (
-                                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
-                                )}
-                                <div className="mt-1 flex items-center gap-2">
-                                    <span className="font-semibold text-[15px] num" style={{ color: hasActivePromo ? GARCOM_IFOOD_PURPLE : 'var(--text)' }}>
-                                        {variablePricing && (
-                                            <span className="font-normal text-[var(--text-muted)] text-[13px] mr-0.5">A partir de</span>
-                                        )}
-                                        {' '}R$ {formatBRL(effectivePrice)}
-                                    </span>
-                                    {hasActivePromo && (
-                                        <span className="text-[var(--text-muted)] line-through text-[13px]">R$ {formatBRL(product.price)}</span>
-                                    )}
-                                </div>
-                                {!!product.prep_time_minutes && (
-                                    <div className="mt-1">
-                                        <span className="flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
-                                            <Clock size={12} /> {product.prep_time_minutes} min
-                                        </span>
+                            {showHeader && sec.cat && (
+                                <h3 className="text-[13px] font-semibold text-[var(--text-muted)] pt-2 pb-1">
+                                    {sec.cat.name} <span className="font-normal num">· {sec.products.length}</span>
+                                </h3>
+                            )}
+                            {sec.products.map(product => {
+                                const effectivePrice = getEffectivePrice(product);
+                                const hasActivePromo = effectivePrice < product.price;
+                                const variablePricing = !!product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0));
+                                const catLabel = labelUnder && product.category_id ? categoryLabelOf.get(product.category_id) : undefined;
+                                return (
+                                    <div
+                                        key={product.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => setSelectedProduct(product)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProduct(product); } }}
+                                        className="flex items-center gap-3 px-2 -mx-2 py-3 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)] rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
+                                            {catLabel && (
+                                                <p className="text-[12px] font-medium text-[var(--brand)] mt-0.5 truncate">{catLabel}</p>
+                                            )}
+                                            {product.description && (
+                                                <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
+                                            )}
+                                            <div className="mt-1 flex items-center gap-2">
+                                                <span className="font-semibold text-[15px] num" style={{ color: hasActivePromo ? GARCOM_IFOOD_PURPLE : 'var(--text)' }}>
+                                                    {variablePricing && (
+                                                        <span className="font-normal text-[var(--text-muted)] text-[13px] mr-0.5">A partir de</span>
+                                                    )}
+                                                    {' '}R$ {formatBRL(effectivePrice)}
+                                                </span>
+                                                {hasActivePromo && (
+                                                    <span className="text-[var(--text-muted)] line-through text-[13px]">R$ {formatBRL(product.price)}</span>
+                                                )}
+                                            </div>
+                                            {!!product.prep_time_minutes && (
+                                                <div className="mt-1">
+                                                    <span className="flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
+                                                        <Clock size={12} /> {product.prep_time_minutes} min
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <ProductThumb src={product.image_url} name={product.name} size="option" className="!rounded-[12px]" />
                                     </div>
-                                )}
-                            </div>
-                            <ProductThumb src={product.image_url} name={product.name} size="option" className="!rounded-[12px]" />
-                        </div>
+                                );
+                            })}
+                        </section>
                     );
                 })}
             </div>
