@@ -2,8 +2,22 @@
 
 import React from 'react';
 import { Loader2, X, ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
+import { motion, AnimatePresence, useDragControls } from 'motion/react';
+import { SPRING_TAP, SPRING_SHEET, SPRING_UI } from '@/lib/motion';
+
+// Celular = abaixo do breakpoint `sm` (mesmo corte que o Modal usa pra
+// virar folha encostada embaixo).
+const usePhoneSheet = () => {
+  const [phone, setPhone] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639.98px)');
+    const update = () => setPhone(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return phone;
+};
 
 export const Button: React.FC<
   Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'> & {
@@ -88,7 +102,9 @@ export const Card: React.FC<{
     <motion.div
       onClick={onClick}
       {...(interactive
-        ? { whileHover: { y: -1, boxShadow: 'var(--shadow-md)' }, whileTap: { scale: 0.99 }, transition: SPRING_TAP }
+        // Sem "pulo" no hover (Task 10: Mac não levanta cartão) — só a sombra
+        // cresce; pressionar afunda 0.97.
+        ? { whileHover: { boxShadow: 'var(--shadow-md)' }, whileTap: { scale: 0.97 }, transition: SPRING_TAP }
         : {})}
       className={`relative overflow-hidden rounded-[var(--r-lg)] bg-[var(--surface)] ${
         interactive ? 'cursor-pointer' : ''
@@ -214,7 +230,12 @@ export const Modal: React.FC<{
   // de novo depois deste fix: dialog do ProductModal do cliente segue
   // medindo exatamente 448px.
   size?: 'sm' | 'md' | 'lg';
-}> = ({ isOpen, onClose, title, children, width, variant = 'center', surface = 'glass', hideTitle = false, size = 'sm' }) => {
+  // Task 10 (2026-09-26): no celular a janela 'center' vira folha que sobe
+  // de baixo e fecha arrastando. `phoneSheet={false}` mantém o movimento
+  // antigo (fade+scale com SPRING_SHEET em qualquer tela) — usado pelo
+  // cardápio do cliente, que não muda com o redesign do lojista.
+  phoneSheet?: boolean;
+}> = ({ isOpen, onClose, title, children, width, variant = 'center', surface = 'glass', hideTitle = false, size = 'sm', phoneSheet = true }) => {
   // `width` continua aceito como override explícito (compat, nenhum call
   // site usa hoje); na ausência dele, `size` decide a largura.
   const SIZE_WIDTH_CLASSES: Record<'sm' | 'md' | 'lg', string> = {
@@ -245,6 +266,8 @@ export const Modal: React.FC<{
   // reconhecido como arrasto, bem antes do soltar/click) e só é limpa
   // depois, em `onDragEnd`, com um pequeno atraso.
   const justDraggedRef = React.useRef(false);
+  const phone = usePhoneSheet() && phoneSheet;
+  const dragControls = useDragControls();
 
   // Foco inicial + focus trap (Tab/Shift+Tab) + fechar com Esc enquanto o
   // modal estiver aberto. Ver Task I2 da varredura de 2026-07-02.
@@ -436,13 +459,37 @@ export const Modal: React.FC<{
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={SPRING_SHEET}
+            // Task 10 Step 4: no computador, janela scale 0.96→1 com mola sem
+            // sobra (SPRING_UI) e sai pelo mesmo caminho; no celular, folha
+            // que sobe de baixo (SPRING_SHEET) e fecha arrastando pela alça/
+            // título pra baixo (respeita a velocidade do gesto). Só a alça/
+            // cabeçalho arrasta — o conteúdo rola normalmente.
+            initial={phone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
+            animate={phone ? { y: 0 } : { opacity: 1, scale: 1 }}
+            exit={phone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
+            transition={phone || !phoneSheet ? SPRING_SHEET : SPRING_UI}
+            drag={phone ? 'y' : false}
+            dragListener={false}
+            dragControls={dragControls}
+            dragConstraints={{ top: 0 }}
+            dragElastic={{ top: 0.05, bottom: 0.5 }}
+            onDragStart={() => { justDraggedRef.current = true; }}
+            onDragEnd={(_e, info) => {
+              setTimeout(() => { justDraggedRef.current = false; }, 150);
+              if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.3) onClose();
+            }}
             className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[22px] sm:rounded-[22px] overflow-hidden flex flex-col u-modal-h`}
             style={{ boxShadow: '0 20px 60px -12px rgba(0,0,0,0.28), 0 0 0 1px var(--border)' }}
           >
+            <div
+              className="flex-shrink-0 max-sm:touch-none"
+              onPointerDown={(e) => { if (phone && !(e.target as HTMLElement).closest('button')) dragControls.start(e); }}
+            >
+            {phone && (
+              <div className="flex justify-center pt-2 -mb-1">
+                <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2 flex-shrink-0">
               <h3 id={titleId} className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">{title}</h3>
               <button
@@ -452,6 +499,7 @@ export const Modal: React.FC<{
               >
                 <X size={16} strokeWidth={2.25} className="max-sm:size-[18px]" />
               </button>
+            </div>
             </div>
             <div className="px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]">{children}</div>
           </motion.div>

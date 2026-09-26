@@ -130,7 +130,7 @@ const CounterConfirmModal: React.FC<{ isOpen: boolean, onClose: () => void, onCo
     if (!isOpen) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Atenção ao Pedido">
+        <Modal isOpen={isOpen} onClose={onClose} title="Atenção ao Pedido" phoneSheet={false}>
             <div className="flex flex-col items-center text-center space-y-6 py-2">
                 <div className="bg-[var(--warn)]/10 p-4 rounded-full text-[var(--warn)]">
                     <AlertTriangle size={48} />
@@ -825,7 +825,7 @@ const ReservationModal: React.FC<{ isOpen: boolean; onClose: () => void; storeId
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Reservar mesa">
+        <Modal isOpen={isOpen} onClose={handleClose} title="Reservar mesa" phoneSheet={false}>
             {sent ? (
                 <div className="text-center py-6">
                     <CheckCircle size={40} className="mx-auto mb-3 text-[var(--ok)]" />
@@ -2198,7 +2198,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
 
     if (showCloseConfirmation) {
         return (
-             <Modal isOpen={true} onClose={() => setShowCloseConfirmation(false)} title="Encerrar Mesa">
+             <Modal isOpen={true} onClose={() => setShowCloseConfirmation(false)} title="Encerrar Mesa" phoneSheet={false}>
                  <div className="space-y-6 text-center">
                      <div className="bg-[var(--warn)]/8 p-4 rounded-[var(--r-lg)] border border-[var(--warn)]/20 flex flex-col items-center">
                          <AlertCircle className="text-[var(--warn)] mb-2" size={32}/>

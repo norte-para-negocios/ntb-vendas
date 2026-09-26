@@ -103,8 +103,8 @@
   --ease: var(--ease-out);
 
   /* Escalas de toque/press */
-  --press: 0.98;
-  --press-sm: 0.96;
+  --press: 0.97;
+  --press-sm: 0.97;
 
   /* Skeleton shimmer */
   --shimmer: rgba(255, 255, 255, 0.55);
