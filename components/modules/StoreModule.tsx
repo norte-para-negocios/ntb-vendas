@@ -8529,8 +8529,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         )}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start gap-2">
-                            <h5 className="min-w-0 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-[var(--text)] [overflow-wrap:anywhere]">
+                        {/* Nome em cima, preço embaixo: lado a lado, em 3 colunas, o
+                            nome ficava espremido e quebrava no meio da palavra
+                            ("Charqu/e", varredura final 2026-09-26). */}
+                        <div className="flex flex-col items-start gap-0.5">
+                            <h5 className="min-w-0 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-[var(--text)] break-words">
                                 {prod.featured && (
                                     <Star size={14} className="inline-block -mt-0.5 mr-1 text-[var(--warn)] fill-[var(--warn)]" aria-label="Produto em destaque" />
                                 )}
@@ -8548,12 +8551,12 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 const effectivePrice = getEffectivePrice(prod);
                                 const hasActivePromo = effectivePrice < prod.price;
                                 return hasActivePromo ? (
-                                    <span className="flex flex-col items-end leading-tight flex-shrink-0">
-                                        <span className="text-[12px] text-[var(--text-muted)] line-through num">R$ {formatBRL(prod.price)}</span>
+                                    <span className="flex items-baseline gap-1.5">
                                         <span className="text-[15px] font-semibold text-[var(--text)] num">R$ {formatBRL(effectivePrice)}</span>
+                                        <span className="text-[12px] text-[var(--text-muted)] line-through num">R$ {formatBRL(prod.price)}</span>
                                     </span>
                                 ) : (
-                                    <span className="text-[15px] font-semibold text-[var(--text)] num flex-shrink-0">R$ {formatBRL(prod.price)}</span>
+                                    <span className="text-[15px] font-semibold text-[var(--text)] num">R$ {formatBRL(prod.price)}</span>
                                 );
                             })()}
                         </div>
