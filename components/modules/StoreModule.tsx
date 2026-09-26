@@ -224,26 +224,32 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     if (needsChange) {
          return (
             <AuthBackdrop>
-                <Card className="u-grow-in w-full max-w-sm p-8" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
-                    <div className="text-center mb-6">
-                        <div className="bg-[var(--warn)]/10 w-14 h-14 rounded-[var(--r-lg)] flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
-                            <Lock size={24} />
+                <div className="w-full max-w-sm">
+                    <div className="text-center mb-7">
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 text-white ring-1 ring-white/30 bg-white/10 backdrop-blur-md shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]">
+                            <Lock size={26} strokeWidth={1.75} />
                         </div>
-                        <h2 className="text-xl font-bold text-[var(--text)]">Crie sua Senha</h2>
-                        <p className="text-[var(--text-muted)] text-sm mt-1">Primeiro acesso. Defina uma senha segura para continuar.</p>
+                        <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">Crie sua senha</h1>
+                        <p className="text-white/65 text-sm mt-1">Primeiro acesso. Defina uma senha segura para continuar.</p>
                     </div>
+                    <Card className="u-grow-in p-6 !rounded-[22px]" style={{ boxShadow: '0 30px 60px -20px rgba(15,12,60,0.55), 0 2px 8px rgba(15,12,60,0.12)' }}>
+                        <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleChangePassword(); }}>
+                            <Input label="Nova senha" type="password" autoFocus autoComplete="new-password" value={newPass} onChange={e => setNewPass(e.target.value)} className="h-11" />
+                            <Input label="Confirmar nova senha" type="password" autoComplete="new-password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} className="h-11" />
+                            <p className="text-[12px] text-[var(--text-muted)] -mt-1">Mínimo de 6 caracteres.</p>
 
-                    <div className="space-y-4">
-                        <Input label="Nova Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
-                        <Input label="Confirmar Nova Senha" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+                            {error && (
+                                <div className="bg-[var(--err)]/10 text-[var(--err)] px-3 py-2.5 rounded-[12px] text-[13px] font-medium flex items-center gap-2">
+                                    <AlertCircle size={16} className="shrink-0" /> {error}
+                                </div>
+                            )}
 
-                        {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
-
-                        <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
-                            Salvar Senha
-                        </Button>
-                    </div>
-                </Card>
+                            <Button type="submit" size="lg" className="w-full" isLoading={isLoading}>
+                                Salvar senha
+                            </Button>
+                        </form>
+                    </Card>
+                </div>
             </AuthBackdrop>
         );
     }
@@ -253,34 +259,50 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         return (
             <AuthBackdrop>
                 <div className="max-w-md w-full">
-                    <div className="text-center mb-6">
-                        <div className="w-14 h-14 rounded-[1.25rem] flex items-center justify-center mx-auto mb-4 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ animation: '3s ease-in-out infinite icon-float' }}>
-                            <StoreIcon size={24} />
+                    <div className="text-center mb-7">
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 text-white ring-1 ring-white/30 bg-white/10 backdrop-blur-md shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]">
+                            <StoreIcon size={26} strokeWidth={1.75} />
                         </div>
-                        <h1 className="text-2xl font-bold text-white">Qual loja você quer acessar?</h1>
-                        <p className="text-white/75 text-sm mt-1">Logado como {universalUser.name}</p>
+                        <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">Qual loja você quer acessar?</h1>
+                        <p className="text-white/65 text-sm mt-1">Entrou como {universalUser.name}</p>
                     </div>
-                    <Card className="u-grow-in p-4" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
-                        <Input placeholder="Buscar loja..." value={storeFilter} onChange={e => setStoreFilter(e.target.value)} className="mb-3" />
-                        <div className="max-h-96 overflow-y-auto space-y-1">
-                            {isLoadingStores && <p className="text-sm text-[var(--text-muted)] text-center py-6">Carregando lojas...</p>}
+                    <Card className="u-grow-in p-3 !rounded-[22px]" style={{ boxShadow: '0 30px 60px -20px rgba(15,12,60,0.55), 0 2px 8px rgba(15,12,60,0.12)' }}>
+                        <div className="relative mb-2">
+                            <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+                            <input
+                                type="search"
+                                autoFocus
+                                placeholder="Buscar loja"
+                                aria-label="Buscar loja"
+                                value={storeFilter}
+                                onChange={e => setStoreFilter(e.target.value)}
+                                className="w-full h-11 pl-10 pr-4 rounded-full bg-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)] text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+                            />
+                        </div>
+                        <div className="max-h-[min(24rem,55vh)] overflow-y-auto">
+                            {isLoadingStores && <p className="text-[13px] text-[var(--text-muted)] text-center py-8">Carregando lojas…</p>}
                             {!isLoadingStores && filteredStores.map((store, i) => (
                                 <button
                                     key={store.id}
                                     onClick={() => handleSelectStore(store)}
-                                    className="u-grow-in group/store w-full text-left p-3 rounded-[var(--r-md)] hover:bg-[var(--brand-soft)] u-motion flex items-center justify-between"
+                                    className="u-grow-in group/store w-full text-left min-h-12 px-3 rounded-[12px] hover:bg-[var(--brand-soft)] u-motion flex items-center gap-3"
                                     style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
                                 >
-                                    <span className="font-medium text-[var(--text)] group-hover/store:text-[var(--brand)]">{store.name}</span>
-                                    <ArrowRight size={16} className="text-[var(--text-muted)] u-motion group-hover/store:translate-x-1 group-hover/store:text-[var(--brand)]" />
+                                    <span className="w-8 h-8 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] group-hover/store:bg-[var(--surface)] group-hover/store:text-[var(--brand)] flex items-center justify-center text-[13px] font-semibold shrink-0 u-motion">
+                                        {store.name.trim().charAt(0).toUpperCase()}
+                                    </span>
+                                    <span className="flex-1 min-w-0 py-3 border-b border-[var(--border)] group-last/store:border-0 flex items-center justify-between gap-2">
+                                        <span className="text-[15px] font-medium text-[var(--text)] truncate group-hover/store:text-[var(--brand)]">{store.name}</span>
+                                        <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]/70 u-motion group-hover/store:translate-x-0.5 group-hover/store:text-[var(--brand)]" />
+                                    </span>
                                 </button>
                             ))}
                             {!isLoadingStores && filteredStores.length === 0 && (
-                                <p className="text-sm text-[var(--text-muted)] text-center py-6">Nenhuma loja encontrada.</p>
+                                <p className="text-[13px] text-[var(--text-muted)] text-center py-8">Nenhuma loja encontrada.</p>
                             )}
                         </div>
                     </Card>
-                    <button onClick={() => setUniversalUser(null)} className="w-full text-center text-sm text-white/70 hover:text-white mt-4 u-motion">
+                    <button onClick={() => setUniversalUser(null)} className="block mx-auto mt-6 px-4 min-h-11 rounded-full text-sm font-medium text-white/75 hover:text-white hover:bg-white/10 u-motion">
                         Sair
                     </button>
                 </div>
@@ -475,41 +497,41 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     return (
         <AuthBackdrop>
             <div className="max-w-sm w-full">
-                <div className="text-center mb-8">
-                    <div className="w-16 h-16 rounded-[1.4rem] flex items-center justify-center mx-auto mb-5 text-white bg-white/12 backdrop-blur-sm border border-white/25" style={{ boxShadow: '0 20px 40px -12px rgba(0,0,0,0.35)', animation: '3s ease-in-out infinite icon-float' }}>
-                        <StoreIcon size={26} />
+                <div className="text-center mb-7">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 text-white ring-1 ring-white/30 bg-white/10 backdrop-blur-md shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]">
+                        <StoreIcon size={26} strokeWidth={1.75} />
                     </div>
-                    <h1 className="text-3xl font-bold text-white tracking-tight">{contaEscolhida ? contaEscolhida.name : 'Área do Lojista'}</h1>
-                    <p className="text-white/75 text-sm mt-1.5">{contaEscolhida ? `${contaEscolhida.roleLabel} · digite sua senha` : 'Gerencie seus pedidos e mesas'}</p>
+                    <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">{contaEscolhida ? contaEscolhida.name : 'Área do Lojista'}</h1>
+                    <p className="text-white/65 text-sm mt-1">{contaEscolhida ? `${contaEscolhida.roleLabel} · digite sua senha` : 'Gerencie seus pedidos e mesas'}</p>
                 </div>
-                <Card className="u-grow-in p-6" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
-                    <div className="space-y-4">
+                <Card className="u-grow-in p-6 !rounded-[22px]" style={{ boxShadow: '0 30px 60px -20px rgba(15,12,60,0.55), 0 2px 8px rgba(15,12,60,0.12)' }}>
+                    <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleLogin(); }}>
                         {!contaEscolhida && (
-                            <Input label="Email de Acesso" placeholder="seu@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+                            <Input label="Email de acesso" placeholder="seu@email.com" type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} className="h-11" />
                         )}
-                        <Input label="Senha" placeholder="••••••" type="password" autoFocus={Boolean(contaEscolhida)} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleLogin(); }} />
+                        <Input label="Senha" placeholder="Sua senha" type="password" autoComplete="current-password" autoFocus={Boolean(contaEscolhida)} value={password} onChange={e => setPassword(e.target.value)} className="h-11" />
                         {isDesktop && (
-                            <label className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer select-none">
+                            <label className="flex items-center gap-2 text-[13px] text-[var(--text)] cursor-pointer select-none">
                                 <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="size-4 accent-[var(--brand)]" />
                                 Entrar sem senha neste computador
                             </label>
                         )}
 
                         {error && (
-                            <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
-                                <AlertCircle size={16} /> {error}
+                            <div className="bg-[var(--err)]/10 text-[var(--err)] px-3 py-2.5 rounded-[12px] text-[13px] font-medium flex items-center gap-2">
+                                <AlertCircle size={16} className="shrink-0" /> {error}
                             </div>
                         )}
 
-                        <Button className="w-full group" onClick={() => handleLogin()} isLoading={isLoading}>
-                            Acessar Painel
-                            {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />}
+                        <Button type="submit" size="lg" className="w-full group" isLoading={isLoading}>
+                            Acessar painel
+                            {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-0.5" />}
                         </Button>
-                    </div>
+                    </form>
                 </Card>
                 {isDesktop && contas.length > 0 && (
-                    <button onClick={() => { setMostrarFormulario(false); setContaEscolhida(null); setError(''); }} className="w-full text-center text-sm text-white/70 hover:text-white mt-4 u-motion">
-                        ← Voltar para os usuários
+                    <button onClick={() => { setMostrarFormulario(false); setContaEscolhida(null); setError(''); }} className="block mx-auto mt-6 px-4 min-h-11 rounded-full text-sm font-medium text-white/75 hover:text-white hover:bg-white/10 u-motion">
+                        Voltar para os usuários
                     </button>
                 )}
             </div>
