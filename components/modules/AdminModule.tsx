@@ -963,28 +963,28 @@ export const AdminModule: React.FC = () => {
     <MotionConfig reducedMotion="user">
     <div className="min-h-screen supports-[height:100dvh]:min-h-dvh bg-[var(--bg)] flex max-md:flex-col">
       {/* Barra superior (celular) — a sidebar só existe a partir de md */}
-      <header className="md:hidden bg-[var(--ink)] text-white px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 sticky top-0 z-30">
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold">Master Admin</h1>
-          <ThemeToggle variant="sidebar" />
+      <header className="md:hidden bg-[var(--surface)]/80 backdrop-blur-xl border-b border-[var(--border)] text-[var(--text)] px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-3 sticky top-0 z-30">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-[17px] font-semibold tracking-[-0.01em]">Master Admin</h1>
+          <ThemeToggle className="!w-11 !h-11" />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => setView('stores')} className={`flex items-center justify-center gap-2 min-h-11 rounded-lg text-sm font-semibold u-motion ${view === 'stores' ? 'bg-[var(--brand)] text-white' : 'bg-white/10 text-white/70'}`}><StoreIcon size={18} /> Lojas</button>
-          <button onClick={() => setView('users')} className={`flex items-center justify-center gap-2 min-h-11 rounded-lg text-sm font-semibold u-motion ${view === 'users' ? 'bg-[var(--brand)] text-white' : 'bg-white/10 text-white/70'}`}><Users size={18} /> Lojistas</button>
+        <div className="grid grid-cols-2 gap-1 p-0.5 rounded-[10px] bg-[var(--surface-2)]">
+          <button onClick={() => setView('stores')} className={`flex items-center justify-center gap-2 min-h-11 rounded-[8px] text-[13px] font-semibold u-motion ${view === 'stores' ? 'bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_rgba(0,0,0,0.12)]' : 'text-[var(--text-muted)]'}`}><StoreIcon size={16} /> Lojas</button>
+          <button onClick={() => setView('users')} className={`flex items-center justify-center gap-2 min-h-11 rounded-[8px] text-[13px] font-semibold u-motion ${view === 'users' ? 'bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_rgba(0,0,0,0.12)]' : 'text-[var(--text-muted)]'}`}><Users size={16} /> Lojistas</button>
         </div>
       </header>
       {/* Sidebar */}
-      <aside className="w-64 bg-[var(--ink)] text-white p-6 hidden md:flex md:flex-col">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-white">Master Admin</h1>
-          <ThemeToggle variant="sidebar" />
+      <aside className="w-64 shrink-0 bg-[var(--surface)]/80 backdrop-blur-xl border-r border-[var(--border)] text-[var(--text)] px-3 pt-5 pb-3 hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen">
+        <div className="flex items-center justify-between px-2 mb-5">
+          <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">Master Admin</h1>
+          <ThemeToggle />
         </div>
-        <nav className="space-y-2">
-          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full p-3 rounded-lg u-motion u-press-sm ${view === 'stores' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
-            <StoreIcon size={20} /> Lojas
+        <nav className="space-y-0.5">
+          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press-sm whitespace-nowrap ${view === 'stores' ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] font-medium hover:bg-[var(--surface-2)]'}`}>
+            <StoreIcon size={18} /> Lojas
           </button>
-          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full p-3 rounded-lg u-motion u-press-sm ${view === 'users' ? 'bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/30' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}>
-            <Users size={20} /> Usuários (Lojistas)
+          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press-sm whitespace-nowrap ${view === 'users' ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] font-medium hover:bg-[var(--surface-2)]'}`}>
+            <Users size={18} /> Usuários (Lojistas)
           </button>
         </nav>
       </aside>
@@ -993,7 +993,7 @@ export const AdminModule: React.FC = () => {
       <main className="flex-1 min-w-0 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 md:p-10 overflow-y-auto">
         <div className="flex justify-between items-center mb-8 max-sm:flex-col max-sm:items-stretch max-sm:gap-3 max-sm:mb-5">
           <div>
-            <h2 className="text-3xl max-sm:text-2xl font-bold text-[var(--text)]">
+            <h2 className="text-[30px] max-sm:text-[26px] font-bold tracking-[-0.02em] leading-tight text-[var(--text)]">
                 {view === 'stores' ? 'Gestão de Lojas' : 'Gestão de Lojistas'}
             </h2>
             <p className="text-[var(--text-muted)] mt-1">Gerencie os {view === 'stores' ? 'estabelecimentos' : 'acessos dos clientes'} da plataforma.</p>

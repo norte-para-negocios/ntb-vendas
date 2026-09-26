@@ -1199,14 +1199,13 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
         type="button"
         onClick={() => setShowDetails(true)}
         title="Impressão automática (Caixa) — clique pra ver detalhes"
-        className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold u-motion u-press-sm border ${
-          isAlarmed
-            ? 'bg-[var(--err)]/10 border-[var(--err)]/30 text-[var(--err)]'
-            : 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]'
+        aria-label={isAlarmed ? 'Impressão com problema — ver detalhes' : 'Impressão funcionando — ver detalhes'}
+        className={`relative flex items-center gap-2 h-9 max-sm:h-11 px-2.5 rounded-full text-[13px] font-medium u-motion u-press-sm whitespace-nowrap hover:bg-[var(--surface-2)] ${
+          isAlarmed ? 'text-[var(--err)]' : 'text-[var(--text-muted)]'
         } ${className || ''}`}
       >
-        {isConnected ? <Wifi size={13} /> : <WifiOff size={13} />}
-        <span className="hidden sm:inline">Impressão</span>
+        <span className={`w-2 h-2 rounded-full shrink-0 ${isAlarmed ? 'bg-[var(--err)]' : 'bg-[var(--ok)]'}`} />
+        <span>Impressão</span>
         {hasFailures && (
           <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[var(--err)] text-white text-[10px] font-bold num">
             {status.failedItems.length}

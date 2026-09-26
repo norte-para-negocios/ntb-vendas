@@ -44,7 +44,7 @@ export function ThemeToggle({ className = '', variant = 'default' }: { className
   return (
     <button
       onClick={toggle}
-      className={`u-motion u-press-sm w-9 h-9 flex items-center justify-center rounded-lg shrink-0 ${VARIANTS[variant]} ${className}`}
+      className={`u-motion u-press-sm w-9 h-9 flex items-center justify-center rounded-full shrink-0 ${VARIANTS[variant]} ${className}`}
       title={isDark ? 'Modo claro' : 'Modo escuro'}
       aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
     >
