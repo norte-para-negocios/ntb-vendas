@@ -72,13 +72,13 @@ export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
         <div className="space-y-6">
             <Card className="p-6 space-y-4">
                 <div>
-                    <h3 className="font-bold text-lg text-[var(--text)]">{store.name}</h3>
+                    <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">{store.name}</h3>
                     <p className="text-sm text-[var(--text-muted)] mt-1">
                         Este é o link do cardápio digital da sua loja. Compartilhe com os clientes ou gere um QR Code pra colocar nas mesas.
                     </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-2)]">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 pl-4 rounded-[14px] bg-[var(--surface-2)]">
                     <Link2 size={16} className="text-[var(--text-muted)] flex-shrink-0 hidden sm:block" />
                     <input
                         readOnly
@@ -86,15 +86,15 @@ export const MeuLinkView: React.FC<{ store: Store }> = ({ store }) => {
                         onFocus={(e) => e.target.select()}
                         className="flex-1 bg-transparent text-sm text-[var(--text)] outline-none min-w-0"
                     />
-                    <Button size="sm" variant="outline" onClick={handleCopy}>
-                        <Copy size={14} /> Copiar Link
+                    <Button size="sm" variant="primary" className="max-sm:!h-11" onClick={handleCopy}>
+                        <Copy size={14} /> Copiar link
                     </Button>
                 </div>
 
-                <div className="flex flex-col items-center gap-4 pt-2 border-t border-[var(--border)]">
+                <div className="flex flex-col items-center gap-4 pt-4">
                     <canvas ref={canvasRef} className="rounded-[var(--r-md)] border border-[var(--border)]" />
                     <Button variant="primary" onClick={handleDownload}>
-                        <Download size={16} /> Baixar QR Code (PNG)
+                        <Download size={16} /> Baixar QR code (PNG)
                     </Button>
                 </div>
             </Card>

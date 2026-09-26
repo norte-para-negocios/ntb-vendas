@@ -358,16 +358,16 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
     };
 
     return (
-        <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
-            <h3 className="font-bold text-lg mb-4 text-[var(--text)]">Configurações Gerais</h3>
+        <section className="bg-[var(--surface)] p-6 max-sm:p-4 rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">
+            <h3 className="font-semibold text-[17px] tracking-[-0.01em] mb-4 text-[var(--text)]">Configurações gerais</h3>
 
             {/* Capa do cardápio (Task 1, redesign iFood, migration 047) —
                 mesmo padrão visual do upload de logo do Master Admin
                 (AdminModule.tsx), que não existe replicado aqui. */}
             <div className="flex flex-col gap-2 mb-4 pb-4 border-b border-[var(--border)]">
-                <label className="text-sm font-semibold text-[var(--text)]">Imagem de Capa do Cardápio</label>
+                <label className="text-[15px] font-semibold text-[var(--text)]">Imagem de capa do cardápio</label>
                 <div className="flex items-center gap-4">
-                    <div className={`w-20 h-20 rounded-xl border-2 border-dashed border-[var(--border)] flex items-center justify-center overflow-hidden bg-[var(--surface-2)] ${coverPreview ? 'border-[var(--brand)]' : ''}`}>
+                    <div className={`w-20 h-20 rounded-[14px] flex items-center justify-center overflow-hidden bg-[var(--surface-2)] ${coverPreview ? '' : 'border-2 border-dashed border-[var(--border)]'}`}>
                         {coverPreview ? (
                             <img src={coverPreview} alt="Capa Preview" className="w-full h-full object-cover" />
                         ) : (
@@ -375,11 +375,11 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         )}
                     </div>
                     <div className="flex-1">
-                        <label className="cursor-pointer bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors shadow-sm">
-                            <Upload size={16} /> Escolher Imagem
+                        <label className="cursor-pointer bg-[var(--surface-2)] hover:bg-[var(--border)] text-[var(--text)] h-[38px] max-sm:h-11 px-4 rounded-full text-[15px] font-semibold flex items-center gap-2 w-fit transition-colors">
+                            <Upload size={16} /> Escolher imagem
                             <input type="file" className="hidden" accept="image/*" onChange={handleCoverFileChange} />
                         </label>
-                        <p className="text-xs text-[var(--text-muted)] mt-2">Imagem de fundo/hero do cardápio (paisagem, ideal 1200x600px)</p>
+                        <p className="text-[13px] text-[var(--text-muted)] mt-2">Imagem de fundo/hero do cardápio (paisagem, ideal 1200x600px)</p>
                     </div>
                     {coverFile && (
                         <Button onClick={handleSaveCover} isLoading={isSavingCover} aria-label="Salvar capa">
@@ -389,10 +389,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 </div>
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+            <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">Cobrar Taxa de Serviço ({formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)})</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Aplica {formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)} de taxa opcional no total das comandas e pedidos.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Cobrar taxa de serviço ({formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)})</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Aplica {formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)} de taxa opcional no total das comandas e pedidos.</p>
                 </div>
                 <button
                     onClick={handleToggleServiceFee}
@@ -404,10 +404,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
 
             {/* Melhorias no fluxo de Caixa (2026-08-28), Task 4 —
                 contagem cega no fechamento de turno. */}
-            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">Contagem cega no fechamento de caixa</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Quem fecha o caixa só vê o valor esperado DEPOIS de confirmar a contagem — evita ajustar a contagem pra bater. Quem tem a permissão &ldquo;Supervisiona caixa&rdquo; continua vendo antes.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Contagem cega no fechamento de caixa</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Quem fecha o caixa só vê o valor esperado DEPOIS de confirmar a contagem — evita ajustar a contagem pra bater. Quem tem a permissão &ldquo;Supervisiona caixa&rdquo; continua vendo antes.</p>
                 </div>
                 <button
                     onClick={handleToggleBlindCount}
@@ -419,10 +419,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
 
             {/* Vende mais II (migration 020) — "mais vendido" automatico, calculado
                 de venda real (get_bestseller_product_ids), nunca tag manual. */}
-            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">🔥 Mostrar mais vendidos automaticamente no cardápio</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Calcula os produtos mais vendidos dos últimos 30 dias (por quantidade, sem expor valor de venda) e mostra um selo "Mais vendido" pro cliente no cardápio.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Mostrar mais vendidos automaticamente no cardápio</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Calcula os produtos mais vendidos dos últimos 30 dias (por quantidade, sem expor valor de venda) e mostra um selo "Mais vendido" pro cliente no cardápio.</p>
                 </div>
                 <button
                     onClick={handleToggleBestsellers}
@@ -439,16 +439,16 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 Ramon, 2026-08-25) — comanda saía cortada numa impressora maior que
                 a antiga 48mm da loja. Afeta ticket de cozinha/bar e comprovante de
                 mesa/balcão (lib/print.ts), nunca o relatório de vendas (A4). */}
-            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">🖨️ Largura do papel da impressora</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Ajusta o ticket de cozinha/bar e o comprovante de mesa/balcão pro tamanho real da bobina térmica.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Largura do papel da impressora</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Ajusta o ticket de cozinha/bar e o comprovante de mesa/balcão pro tamanho real da bobina térmica.</p>
                 </div>
                 <select
                     value={paperWidthMm}
                     onChange={e => handleChangePaperWidth(Number(e.target.value) as 48 | 58 | 80)}
                     aria-label="Largura do papel da impressora"
-                    className="flex-shrink-0 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold"
+                    className="flex-shrink-0 h-9 max-sm:h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-[15px] font-semibold focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                 >
                     <option value={48}>48mm</option>
                     <option value={58}>58mm</option>
@@ -460,10 +460,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 0 = desligado. TablesView usa o item mais antigo/mais novo dos
                 pedidos ativos da mesa como aproximação de "ocupada desde"/"último
                 pedido em" (não existe timestamp de abertura de mesa dedicado). */}
-            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] flex-wrap gap-3">
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px] flex-wrap gap-3">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">⏱️ Avisos de tempo na Gestão de Mesas</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Destaca o card da mesa quando passar desse tempo. Deixe 0 pra desligar.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Avisos de tempo na gestão de mesas</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Destaca o card da mesa quando passar desse tempo. Deixe 0 pra desligar.</p>
                 </div>
                 <div className="flex items-center gap-4 flex-wrap">
                     <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
@@ -473,7 +473,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                             value={tableAlertOccupiedMin}
                             onChange={e => handleChangeTableAlert('table_alert_occupied_minutes', Math.max(0, Number(e.target.value) || 0))}
                             aria-label="Avisar quando mesa estiver ocupada há mais de X minutos"
-                            className="w-16 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                            className="w-16 h-9 max-sm:h-11 px-2 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-[15px] max-sm:text-base font-semibold num text-center focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                         />
                         min
                     </label>
@@ -484,7 +484,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                             value={tableAlertNoOrderMin}
                             onChange={e => handleChangeTableAlert('table_alert_no_order_minutes', Math.max(0, Number(e.target.value) || 0))}
                             aria-label="Avisar quando mesa estiver sem pedido novo há mais de X minutos"
-                            className="w-16 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                            className="w-16 h-9 max-sm:h-11 px-2 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-[15px] max-sm:text-base font-semibold num text-center focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                         />
                         min
                     </label>
@@ -495,10 +495,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 desligada. Diferença acima disso exige aprovação de supervisor
                 (dono, ou quem tiver a permissão "Supervisiona Caixa") pra
                 fechar o turno, ver CaixaView em StoreModule.tsx. */}
-            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">🔒 Tolerância no fechamento de caixa</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Diferença acima deste valor exige aprovação de um supervisor (dono ou quem tiver a permissão "Supervisiona Caixa") pra fechar o turno. Deixe 0 pra desligar.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Tolerância no fechamento de caixa</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Diferença acima deste valor exige aprovação de um supervisor (dono ou quem tiver a permissão "Supervisiona Caixa") pra fechar o turno. Deixe 0 pra desligar.</p>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] flex-shrink-0">
                     R$
@@ -507,7 +507,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         value={cashShiftMaxTolerance}
                         onChange={e => handleChangeCashShiftTolerance(Math.max(0, Number(e.target.value) || 0))}
                         aria-label="Tolerância máxima de diferença de caixa em reais"
-                        className="w-20 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                        className="w-20 h-9 max-sm:h-11 px-2 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-[15px] max-sm:text-base font-semibold num text-center focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                     />
                 </label>
             </div>
@@ -516,10 +516,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 alerta desligado. Sangria com valor igual ou maior que este
                 limiar grava um evento em cash_shift_audit_events, ver
                 handleSubmitMovement em CaixaView (StoreModule.tsx). */}
-            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+            <div className="mt-4 flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
                 <div>
-                    <h4 className="font-bold text-[var(--text)]">🚨 Alertar sangria acima de</h4>
-                    <p className="text-sm text-[var(--text-muted)]">Sangria com valor igual ou maior que este limiar gera um registro de auditoria. Deixe 0 pra desligar.</p>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Alertar sangria acima de</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Sangria com valor igual ou maior que este limiar gera um registro de auditoria. Deixe 0 pra desligar.</p>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] flex-shrink-0">
                     R$
@@ -528,7 +528,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         value={sangriaAlertThreshold}
                         onChange={e => handleChangeSangriaAlertThreshold(Math.max(0, Number(e.target.value) || 0))}
                         aria-label="Alertar sangria acima deste valor em reais"
-                        className="w-20 px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-bold text-center"
+                        className="w-20 h-9 max-sm:h-11 px-2 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-[15px] max-sm:text-base font-semibold num text-center focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                     />
                 </label>
             </div>
@@ -544,8 +544,8 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 ver LoginScreen em ClientModule.tsx. Preview ajustado pra mostrar
                 isso, não mais um preço. */}
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                <h4 className="font-bold text-[var(--text)]">Cor de destaque da tela de identificação</h4>
-                <p className="text-sm text-[var(--text-muted)] mb-3">
+                <h4 className="font-semibold text-[15px] text-[var(--text)]">Cor de destaque da tela de identificação</h4>
+                <p className="text-[13px] text-[var(--text-muted)] mb-3">
                     Cor usada no ícone e no texto de apoio da tela onde o cliente se identifica antes de pedir
                     (&ldquo;Identifique-se para continuar seu pedido&rdquo;). Sem cor própria definida, o cardápio usa o
                     azul padrão da marca.
@@ -558,8 +558,8 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         onChange={e => { setAccentColorDraft(e.target.value); setAccentColorError(null); }}
                         className="w-12 h-12 rounded-lg border border-[var(--border)] cursor-pointer p-0.5 bg-[var(--surface)]"
                     />
-                    <div className="px-4 py-3 rounded-lg border border-[var(--border)]" style={{ background: MENU_DARK_BG_HEX }}>
-                        <span className="text-[10px] uppercase tracking-wide text-white/40 block mb-1">Pré-visualização</span>
+                    <div className="px-4 py-3 rounded-[14px] bg-[var(--surface-2)]" style={{ background: MENU_DARK_BG_HEX }}>
+                        <span className="text-[12px] text-white/50 block mb-1">Pré-visualização</span>
                         <span className="font-semibold text-sm" style={{ color: accentColorDraft }}>Identifique-se para continuar seu pedido</span>
                     </div>
                     <div className="flex gap-2">
@@ -586,8 +586,8 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 do cliente (ver lib/theme.ts). Cor continua sendo só o
                 seletor acima — nunca duplicado aqui. */}
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                <h4 className="font-bold text-[var(--text)]">Identidade visual do cardápio</h4>
-                <p className="text-sm text-[var(--text-muted)] mb-3">
+                <h4 className="font-semibold text-[15px] text-[var(--text)]">Identidade visual do cardápio</h4>
+                <p className="text-[13px] text-[var(--text-muted)] mb-3">
                     Escolha um estilo pra tipografia e textura de fundo do cardápio do cliente. &ldquo;Clássico&rdquo; é o
                     visual atual, sem nenhuma mudança.
                 </p>
@@ -598,10 +598,10 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                             type="button"
                             disabled={isSavingThemePreset}
                             onClick={() => handleSaveThemePreset(key)}
-                            className={`px-3 py-2 rounded-xl border text-sm font-semibold u-motion u-press-sm disabled:opacity-50 ${
+                            className={`h-9 max-sm:h-11 px-3.5 rounded-full text-[13px] font-semibold u-motion u-press-sm disabled:opacity-50 ${
                                 themePreset === key
-                                    ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]'
-                                    : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                                    ? 'ring-2 ring-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]'
+                                    : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
                             }`}
                         >
                             {preset.categoryEmoji ? `${preset.categoryEmoji} ` : ''}{preset.label}
@@ -613,20 +613,20 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
             {/* Sugestoes de observacao rapida (migration 019) — chips de atalho
                 pro campo de observacao do cliente, ver ProductModal em ClientModule.tsx */}
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                <h4 className="font-bold text-[var(--text)]">Sugestões de observação rápida</h4>
-                <p className="text-sm text-[var(--text-muted)] mb-3">
+                <h4 className="font-semibold text-[15px] text-[var(--text)]">Sugestões de observação rápida</h4>
+                <p className="text-[13px] text-[var(--text-muted)] mb-3">
                     Chips de atalho que aparecem pro cliente no campo de observação do pedido (ex.: "Sem cebola",
                     "Bem passado", "Sem gelo"). Sem nenhuma sugestão cadastrada, o campo de observação continua
                     como é hoje.
                 </p>
                 <div className="flex flex-wrap gap-2 mb-3">
                     {noteSuggestions.length === 0 && (
-                        <span className="text-xs text-[var(--text-muted)] italic">Nenhuma sugestão cadastrada.</span>
+                        <span className="text-[13px] text-[var(--text-muted)]">Nenhuma sugestão cadastrada.</span>
                     )}
                     {noteSuggestions.map(suggestion => (
                         <span
                             key={suggestion}
-                            className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-xs font-medium text-[var(--text)]"
+                            className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-[var(--surface-2)] text-[13px] font-medium text-[var(--text)]"
                         >
                             {suggestion}
                             <button

@@ -9445,51 +9445,51 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Usuários do Sistema</h3>
-                <Button onClick={() => openModal()}><Plus size={18} className="mr-1"/> Novo Usuário</Button>
+                <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Usuários do sistema</h3>
+                <Button onClick={() => openModal()}><Plus size={18} /> Novo usuário</Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
                 {users.map(user => (
-                    <Card key={user.id} className="p-4 border border-[var(--border)] shadow-sm relative group">
-                        <div className="flex justify-between items-start mb-2">
-                            <div>
-                                <h4 className="font-bold text-[var(--text)]">{user.name}</h4>
-                                <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
+                    <Card key={user.id} className="p-5 relative group">
+                        <div className="flex justify-between items-start gap-2 mb-2">
+                            <div className="min-w-0">
+                                <h4 className="font-semibold text-[17px] text-[var(--text)] truncate">{user.name}</h4>
+                                <p className="text-[13px] text-[var(--text-muted)] truncate">{user.email}</p>
                             </div>
-                            <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">{getRoleLabel(user.role)}</Badge>
+                            <span className="shrink-0"><Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">{getRoleLabel(user.role)}</Badge></span>
                         </div>
 
                         <div className="mt-3 space-y-1">
                             <p className="text-[13px] font-medium text-[var(--text-muted)]">Acessos</p>
-                            <div className="flex flex-wrap gap-1">
-                                {user.permissions?.tables && <span className="px-1.5 py-0.5 bg-[var(--ok)]/10 text-[var(--ok)] text-[10px] rounded border border-[var(--ok)]/20">Mesas</span>}
-                                {user.permissions?.counter && <span className="px-1.5 py-0.5 bg-[var(--warn)]/10 text-[var(--warn)] text-[10px] rounded border border-[var(--warn)]/20">Balcão</span>}
-                                {user.permissions?.kitchen && <span className="px-1.5 py-0.5 bg-[var(--err)]/10 text-[var(--err)] text-[10px] rounded border border-[var(--err)]/20">Cozinha</span>}
-                                {user.permissions?.bar && <span className="px-1.5 py-0.5 bg-[var(--info)]/10 text-[var(--info)] text-[10px] rounded border border-[var(--info)]/20">Bar</span>}
-                                {user.permissions?.menu && <span className="px-1.5 py-0.5 bg-[var(--brand)]/10 text-[var(--brand)] text-[10px] rounded border border-[var(--brand)]/20">Cardápio</span>}
-                                {user.permissions?.admin && <span className="px-1.5 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[10px] rounded border border-[var(--border)]">Admin</span>}
-                                {user.permissions?.caixa && <span className="px-1.5 py-0.5 bg-[var(--ok)]/15 text-[var(--ok)] text-[10px] rounded border border-[var(--ok)]/30 font-bold">Caixa</span>}
+                            <div className="flex flex-wrap gap-1.5">
+                                {user.permissions?.tables && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Mesas</span>}
+                                {user.permissions?.counter && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Balcão</span>}
+                                {user.permissions?.kitchen && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Cozinha</span>}
+                                {user.permissions?.bar && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Bar</span>}
+                                {user.permissions?.menu && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Cardápio</span>}
+                                {user.permissions?.admin && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Admin</span>}
+                                {user.permissions?.caixa && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Caixa</span>}
                             </div>
                         </div>
 
-                        <div className="mt-4 flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="outline" className="h-8 text-xs" onClick={() => openModal(user)}>Editar</Button>
-                            <Button variant="outline" className="h-8 text-xs text-[var(--err)] border-[var(--err)]/20 hover:bg-[var(--err)]/5" onClick={() => handleDelete(user.id)}>Excluir</Button>
+                        <div className="mt-4 flex gap-2 justify-end md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <Button variant="secondary" size="sm" className="max-md:!h-11" onClick={() => openModal(user)}>Editar</Button>
+                            <Button variant="ghost" size="sm" className="!text-[var(--err)] hover:!bg-[var(--err)]/10 max-md:!h-11" onClick={() => handleDelete(user.id)}>Excluir</Button>
                         </div>
                     </Card>
                 ))}
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? 'Editar Usuário' : 'Novo Usuário'}>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? 'Editar usuário' : 'Novo usuário'}>
                 <div className="space-y-4">
                     <Input label="Nome Completo" value={name} onChange={e => setName(e.target.value)} />
                     <Input label="Email de Acesso" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                     <Input label={editingUser ? "Nova Senha (opcional)" : "Senha"} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={editingUser ? "Deixe em branco para manter" : "******"} />
                     
                     <div>
-                        <label className="text-sm font-semibold text-[var(--text)] mb-1 block">Função</label>
-                        <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm max-sm:text-base" value={role} onChange={e => setRole(e.target.value)}>
+                        <label className="text-[13px] font-medium text-[var(--text-muted)] mb-1 block">Função</label>
+                        <select className="w-full h-[38px] max-sm:h-11 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[var(--text)] px-3 text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40" value={role} onChange={e => setRole(e.target.value)}>
                             <option value="waiter">Garçom</option>
                             <option value="cashier">Caixa</option>
                             <option value="cook">Cozinheiro</option>
@@ -9498,8 +9498,8 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         </select>
                     </div>
 
-                    <div className="bg-[var(--surface-2)] p-3 rounded-lg border border-[var(--border)]">
-                        <label className="text-sm font-bold text-[var(--text)] mb-2 block">Permissões de Acesso</label>
+                    <div className="bg-[var(--surface-2)] p-4 rounded-[14px]">
+                        <label className="text-[15px] font-semibold text-[var(--text)] mb-2 block">Permissões de acesso</label>
                         {!editingUser && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
                                 {Object.entries(TEAM_PERMISSION_PRESETS).map(([key, preset]) => (
@@ -10306,19 +10306,19 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     const ADMIN_NAV_GROUPS: { label: string; icon: React.ReactNode; tabs: { id: string; label: string; sensitive?: boolean }[] }[] = [
         { label: 'Visão geral', icon: <LayoutDashboard size={14} />, tabs: [
             { id: 'dashboard', label: 'Dashboard' },
-            { id: 'sales', label: 'Histórico de Vendas' },
+            { id: 'sales', label: 'Histórico de vendas' },
         ]},
         { label: 'Operação', icon: <Wallet size={14} />, tabs: [
             { id: 'shifts', label: 'Turnos' },
             { id: 'impressao', label: 'Impressão' },
         ]},
         { label: 'Time', icon: <Users size={14} />, tabs: [
-            { id: 'users', label: 'Gestão de Usuários' },
+            { id: 'users', label: 'Gestão de usuários' },
         ]},
         { label: 'Loja', icon: <StoreIcon size={14} />, tabs: [
-            { id: 'link', label: 'Meu Link / QR Code' },
+            { id: 'link', label: 'Meu link / QR code' },
             { id: 'settings', label: 'Configurações' },
-            { id: 'fiscal', label: 'Notas Fiscais', sensitive: true },
+            { id: 'fiscal', label: 'Notas fiscais', sensitive: true },
         ]},
     ];
 
@@ -10496,10 +10496,10 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                                     onClick={() => setSelectedOperatorHistory(nomeOperador)}
                                                     className="text-left p-3 rounded-[14px] u-motion u-press-sm flex items-center gap-3 bg-[var(--surface-2)] hover:bg-[var(--border)]"
                                                 >
-                                                    <div className="w-9 h-9 shrink-0"><ProductThumb name={nomeOperador} size="cart" /></div>
+                                                    <ProductThumb name={nomeOperador} size="cart" className="!w-10 !h-10 !rounded-full shrink-0" />
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="font-bold text-sm text-[var(--text)] truncate">{nomeOperador}</p>
-                                                        <p className={`text-xs ${esquecido ? 'text-[var(--warn)] font-semibold' : 'text-[var(--text-muted)]'}`}>
+                                                        <p className="font-semibold text-[15px] text-[var(--text)] truncate">{nomeOperador}</p>
+                                                        <p className={`text-[13px] ${esquecido ? 'text-[var(--warn)]' : 'text-[var(--text-muted)]'}`}>
                                                             {esquecido ? `Aberto há ${Math.floor(horas / 24)}d ${horas % 24}h — esqueceu de fechar?` : `Fundo R$ ${formatBRL(s.opening_float)}`}
                                                         </p>
                                                     </div>
@@ -11522,20 +11522,20 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 const UMA_HORA_MS = 60 * 60 * 1000;
                 const antigas = emContingencia.filter((n) => Date.now() - new Date(n.created_at).getTime() > 2 * UMA_HORA_MS);
                 return (
-                    <div className={`p-3 rounded-lg border text-sm font-medium ${antigas.length > 0 ? 'bg-[var(--err)]/10 border-[var(--err)]/30 text-[var(--err)]' : 'bg-[var(--warn)]/10 border-[var(--warn)]/30 text-[var(--warn)]'}`}>
+                    <div className={`p-3 px-4 rounded-[14px] border text-[15px] font-medium ${antigas.length > 0 ? 'bg-[var(--err)]/10 border-[var(--err)]/30 text-[var(--err)]' : 'bg-[var(--warn)]/10 border-[var(--warn)]/30 text-[var(--warn)]'}`}>
                         {antigas.length > 0
                             ? `${antigas.length} nota(s) em contingência pendente(s) há mais de 2h — verifique a conexão com a SEFAZ. (${emContingencia.length} no total aguardando confirmação.)`
                             : `${emContingencia.length} nota(s) em contingência aguardando confirmação automática da SEFAZ.`}
                     </div>
                 );
             })()}
-            <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
-                <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-3">
+            <Card className="overflow-hidden">
+                <div className="p-4 sm:px-5 border-b border-[var(--border)] flex flex-col gap-3">
                     <div className="flex justify-between items-center flex-wrap gap-2">
-                        <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Notas Fiscais</h3>
+                        <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Notas fiscais</h3>
                         <div className="flex items-center gap-2 flex-wrap">
                             <select
-                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] max-sm:text-base"
+                                className="h-8 max-sm:h-11 px-3 text-[13px] font-medium rounded-full bg-[var(--surface-2)] text-[var(--text)] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                                 value={tipoFilter}
                                 onChange={(e) => setTipoFilter(e.target.value as 'todos' | '55' | '65')}
                             >
@@ -11544,7 +11544,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <option value="65">Só NFC-e</option>
                             </select>
                             <select
-                                className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] max-sm:text-base"
+                                className="h-8 max-sm:h-11 px-3 text-[13px] font-medium rounded-full bg-[var(--surface-2)] text-[var(--text)] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                                 value={ambienteFilter}
                                 onChange={(e) => setAmbienteFilter(e.target.value as 'todos' | 'homologacao' | 'producao')}
                             >
@@ -11552,10 +11552,10 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <option value="homologacao">Só Homologação</option>
                                 <option value="producao">Só Produção</option>
                             </select>
-                            <Button variant="secondary" className="h-8 px-3 text-xs" onClick={load} isLoading={isLoading}>
-                                <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                            <Button variant="secondary" size="sm" className="max-sm:!h-11" onClick={load} isLoading={isLoading}>
+                                <RefreshCw size={14} /> Atualizar
                             </Button>
-                            <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)]">
+                            <Badge color="bg-transparent text-[var(--text-muted)] !text-[13px] num">
                                 {filteredNotas.length} {filteredNotas.length === 1 ? 'nota' : 'notas'}
                             </Badge>
                         </div>
@@ -11566,28 +11566,28 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     <div className="flex items-end gap-2 flex-wrap">
                         <div>
                             <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Data inicial</label>
-                            <Input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="h-8 text-xs" />
+                            <Input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="!h-8 max-sm:!h-11 !text-[13px] max-sm:!text-base" />
                         </div>
                         <div>
                             <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Data final</label>
-                            <Input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="h-8 text-xs" />
+                            <Input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="!h-8 max-sm:!h-11 !text-[13px] max-sm:!text-base" />
                         </div>
-                        <Button variant="secondary" className="h-8 px-3 text-xs" onClick={handleExportPeriodo} isLoading={isExporting}>
-                            <Download size={14} className="mr-1.5" /> Exportar período
+                        <Button variant="secondary" size="sm" className="max-sm:!h-11" onClick={handleExportPeriodo} isLoading={isExporting}>
+                            <Download size={14} /> Exportar período
                         </Button>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
+                    <table className="w-full text-[15px] text-left">
                         <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                             <tr>
-                                <th className="px-4 py-3">Data</th>
-                                <th className="px-4 py-3 text-right">Valor</th>
-                                <th className="px-4 py-3">Modelo</th>
-                                <th className="px-4 py-3">Ambiente</th>
-                                <th className="px-4 py-3">Status</th>
-                                <th className="px-4 py-3">Chave de Acesso</th>
-                                <th className="px-4 py-3 text-right">Ações</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap">Data</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap text-right">Valor</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap">Modelo</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap">Ambiente</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap">Status</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap">Chave de acesso</th>
+                                <th className="px-4 py-2.5 font-medium whitespace-nowrap text-right">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--border)]">

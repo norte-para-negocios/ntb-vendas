@@ -275,14 +275,14 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold text-[var(--text)] flex items-center gap-2"><Printer size={18} /> Impressoras</h3>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+          <h3 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)] flex items-center gap-2"><Printer size={18} className="text-[var(--text-muted)]" /> Impressoras</h3>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
             Cadastre as impressoras da loja e teste cada uma antes de abrir pro cliente.
           </p>
         </div>
         {!showAddForm && (
           <Button size="sm" variant="secondary" onClick={() => setShowAddForm(true)}>
-            <Plus size={14} className="mr-1" /> Nova impressora
+            <Plus size={14} /> Nova impressora
           </Button>
         )}
       </div>
@@ -295,7 +295,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         const ageMs = agentStatus ? Date.now() - new Date(agentStatus.lastSeenAt).getTime() : null;
         const online = ageMs !== null && ageMs < 90000;
         return (
-          <Card className={`p-3 flex items-center gap-2 text-xs font-medium ${online ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--err)]/10 text-[var(--err)]'}`}>
+          <Card className={`p-3 px-4 flex items-center gap-2.5 text-[13px] font-medium ${online ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
             {online ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
             {/* Desde 2026-09-12 quem manda esse heartbeat normalmente é o
                 próprio app desktop (desktop/electron/print-engine.js), não
@@ -323,8 +323,8 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
               key={mm}
               type="button"
               onClick={() => setTestPaperWidth(mm)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border u-motion u-press-sm ${
-                testPaperWidth === mm ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
+              className={`h-8 max-sm:h-11 px-3.5 rounded-full text-[13px] font-semibold num u-motion u-press-sm ${
+                testPaperWidth === mm ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
               }`}
             >
               {mm}mm
@@ -459,8 +459,8 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                   key={dest}
                   type="button"
                   onClick={() => setDestination(dest)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border u-motion u-press-sm ${
-                    destination === dest ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'
+                  className={`h-8 max-sm:h-11 px-3.5 rounded-full text-[13px] font-medium u-motion u-press-sm ${
+                    destination === dest ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
                   }`}
                 >
                   {DESTINATION_LABELS[dest]}
@@ -478,7 +478,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
 
       <Card className="p-4 space-y-3">
         <div>
-          <p className="text-sm font-bold text-[var(--text)]">Locais de preparo</p>
+          <p className="text-[15px] font-semibold text-[var(--text)]">Locais de preparo</p>
           <p className="text-xs text-[var(--text-muted)]">Cozinha e Bar já existem. Crie outros (ex.: Pizzaria), escolha em Cardápio → Gerenciar categorias o local de cada categoria, e aqui embaixo qual impressora é de cada local.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -646,7 +646,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
       )}
 
       <div>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-1">Fila de impressão (últimos 30)</h3>
+        <h3 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)] mb-1">Fila de impressão (últimos 30)</h3>
         <p className="text-xs text-[var(--text-muted)] mb-3">
           Jobs enviados pra impressoras de rede/USB. Atualiza sozinho a cada 5s.
         </p>
