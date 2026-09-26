@@ -1799,12 +1799,12 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
             })}
             </AnimatePresence>
             {visibleOrders.length === 0 && (
-                <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
+                <div className="col-span-full flex flex-col items-center justify-center text-center py-24 px-6 bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">
                     {destination === 'kitchen'
-                        ? <ChefHat className="mb-4 h-20 w-20 opacity-20" />
-                        : <Wine className="mb-4 h-20 w-20 opacity-20" />}
-                    <p className="text-xl font-medium">{nomeLocalAtivo ? `Tudo tranquilo em ${nomeLocalAtivo}!` : destination === 'kitchen' ? 'Tudo tranquilo na cozinha!' : 'Tudo tranquilo no bar!'}</p>
-                    <p className="text-sm">Aguardando novos pedidos...</p>
+                        ? <ChefHat size={40} strokeWidth={1.5} className="mb-3 text-[var(--text-muted)] opacity-50" />
+                        : <Wine size={40} strokeWidth={1.5} className="mb-3 text-[var(--text-muted)] opacity-50" />}
+                    <p className="text-[17px] font-semibold text-[var(--text)]">{nomeLocalAtivo ? `Tudo tranquilo em ${nomeLocalAtivo}!` : destination === 'kitchen' ? 'Tudo tranquilo na cozinha!' : 'Tudo tranquilo no bar!'}</p>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Aguardando novos pedidos...</p>
                 </div>
             )}
         </div>
@@ -5675,7 +5675,7 @@ const CounterView: React.FC<{
                                      em estados bem diferentes (pago e não pago) ficariam
                                      visualmente idênticos. */}
                                  {pedidoJaPago(order) && (
-                                     <span className="px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]">
+                                     <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-[var(--ok)]/10 text-[var(--ok)]">
                                          Pago
                                      </span>
                                  )}
@@ -5709,7 +5709,7 @@ const CounterView: React.FC<{
                                          </span>
                                      );
                                  })()}
-                                 <span className={`px-2 py-1 rounded-[var(--r-sm)] text-xs font-bold uppercase border ${getStatusColor(status)}`}>
+                                 <span className={`px-2 py-0.5 rounded-full text-[12px] font-medium ${getStatusColor(status)}`}>
                                      {getStatusLabel(status)}
                                  </span>
                              </div>
@@ -5732,8 +5732,8 @@ const CounterView: React.FC<{
 
                          <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
                              <div>
-                                 <p className="text-xs text-[var(--text-muted)] font-bold uppercase">Total</p>
-                                 <p className="text-xl font-black text-[var(--text)] num">R$ {formatBRL(total)}</p>
+                                 <p className="text-[13px] text-[var(--text-muted)]">Total</p>
+                                 <p className="text-[22px] font-semibold text-[var(--text)] num leading-tight">R$ {formatBRL(total)}</p>
                              </div>
                              <button
                                  onClick={() => printCounterReceipt(order)}
@@ -5881,10 +5881,10 @@ const CounterView: React.FC<{
             })}
             </AnimatePresence>
             {orders.length === 0 && (
-                <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
-                    <Coffee className="mb-4 h-20 w-20 opacity-20" />
-                    <p className="text-xl font-medium">Tudo tranquilo no balcão!</p>
-                    <p className="text-sm">Aguardando novos pedidos...</p>
+                <div className="col-span-full flex flex-col items-center justify-center text-center py-24 px-6 bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">
+                    <Coffee size={40} strokeWidth={1.5} className="mb-3 text-[var(--text-muted)] opacity-50" />
+                    <p className="text-[17px] font-semibold text-[var(--text)]">Tudo tranquilo no balcão!</p>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Aguardando novos pedidos...</p>
                 </div>
             )}
 
@@ -6941,30 +6941,31 @@ const CaixaView: React.FC<{
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP}>
             <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-16 h-16 shrink-0"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" /></div>
+                    <div className="w-12 h-12 shrink-0 rounded-full overflow-hidden"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" /></div>
                     <div className="min-w-0">
-                        <p className="text-base font-bold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
-                        <p className={`text-xs ${turnoEsquecido ? 'font-bold text-[var(--warn)]' : 'text-[var(--text-muted)]'}`}>
+                        <p className="text-[17px] font-semibold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
+                        <p className="text-[13px] text-[var(--text-muted)]">
                             {abertoLabel}
-                            {' · '}{duracaoLabel}{turnoEsquecido ? ' — esqueceu de fechar?' : ''}
-                            {' · '}Fundo R$ {formatBRL(shift.opening_float)}
+                            {' · '}<span className="num">{duracaoLabel}</span>
+                            {turnoEsquecido && <span className="text-[var(--warn)] font-medium"> — esqueceu de fechar?</span>}
+                            {' · '}Fundo <span className="num">R$ {formatBRL(shift.opening_float)}</span>
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    <Button onClick={() => handleOpenMovementModal('sangria')} variant="outline" className="shrink-0">
-                        <TrendingDown size={16} className="mr-2" /> Sangria
+                    <Button onClick={() => handleOpenMovementModal('sangria')} variant="secondary" className="shrink-0 max-sm:h-11">
+                        <TrendingDown size={16} /> Sangria
                     </Button>
-                    <Button onClick={() => handleOpenMovementModal('suprimento')} variant="outline" className="shrink-0">
-                        <TrendingUp size={16} className="mr-2" /> Suprimento
+                    <Button onClick={() => handleOpenMovementModal('suprimento')} variant="secondary" className="shrink-0 max-sm:h-11">
+                        <TrendingUp size={16} /> Suprimento
                     </Button>
-                    <Button onClick={handleCloseShiftClick} variant="outline" className="shrink-0 border-[var(--err)]/30 text-[var(--err)] hover:bg-[var(--err)]/5">
-                        <Lock size={16} className="mr-2" /> Fechar Caixa
+                    <Button onClick={handleCloseShiftClick} variant="secondary" className="shrink-0 max-sm:h-11">
+                        <Lock size={16} /> Fechar caixa
                     </Button>
-                    <Button onClick={handleOpenHistory} variant="ghost" className="shrink-0" title="Ver histórico de turnos">
+                    <Button onClick={handleOpenHistory} variant="secondary" className="shrink-0 !w-9 !h-9 !px-0 max-sm:!w-11 max-sm:!h-11 text-[var(--text-muted)]" title="Ver histórico de turnos" aria-label="Ver histórico de turnos">
                         <History size={16} />
                     </Button>
-                    <Button onClick={() => { setShowAuditModal(true); loadAuditEvents(); }} variant="ghost" className="shrink-0" title="Ver Auditoria">
+                    <Button onClick={() => { setShowAuditModal(true); loadAuditEvents(); }} variant="secondary" className="shrink-0 !w-9 !h-9 !px-0 max-sm:!w-11 max-sm:!h-11 text-[var(--text-muted)]" title="Ver Auditoria" aria-label="Ver auditoria">
                         <Shield size={16} />
                     </Button>
                 </div>
@@ -6974,12 +6975,12 @@ const CaixaView: React.FC<{
             {occupiedTables.length > 0 && (
                 <div className="mb-6">
                     <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                        <h3 className="eyebrow">
                             Mesas ocupadas ({occupiedTables.length})
                         </h3>
                         <button
                             onClick={() => setRushModeManual(prev => prev === null ? !rushMode : !prev)}
-                            className={`text-[11px] font-bold px-2.5 py-1 rounded-full border u-motion u-press-sm ${rushMode ? 'border-[var(--ember,var(--warn))]/40 bg-[var(--warn)]/10 text-[var(--warn)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                            className={`relative hit-44 text-[12px] font-semibold px-3 h-7 rounded-full u-motion u-press-sm ${rushMode ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                             title="Simplifica a visão sob carga alta — liga sozinho a partir de 6 mesas"
                         >
                             {rushMode ? '⚡ Modo Rush ligado' : 'Modo Rush'}
@@ -7000,56 +7001,61 @@ const CaixaView: React.FC<{
                         className={`grid gap-2 ${rushMode ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'}`}
                     >
                         {occupiedTables.map(t => {
-                            const colorClass = t.minutesOccupied >= 60
-                                ? 'border-[var(--err)]/30 bg-[var(--err)]/12 text-[var(--err)]'
-                                : t.minutesOccupied >= 30
-                                    ? 'border-[var(--warn)]/30 bg-[var(--warn)]/12 text-[var(--warn)]'
-                                    : 'border-[var(--ok)]/30 bg-[var(--ok)]/12 text-[var(--ok)]';
-                            const glass = 'backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.08)] border-t-white/40';
+                            // Redesign estilo Apple (2026-09-26): cartão branco; a urgência
+                            // (ok/warn/err conforme minutos ocupados) virou ponto + cor do tempo.
+                            const urgency = t.minutesOccupied >= 60 ? 'var(--err)' : t.minutesOccupied >= 30 ? 'var(--warn)' : 'var(--ok)';
+                            const cardCls = 'bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]';
                             if (rushMode) {
                                 return (
                                     <button
                                         key={t.id}
                                         onClick={() => onOpenTablePayment(t.id)}
-                                        className={`text-center p-2 rounded-xl border border-t-2 u-motion u-press-sm ${colorClass} ${glass}`}
+                                        className={`text-left px-3 py-2.5 u-motion u-press-sm hover:shadow-[var(--shadow-md)] ${cardCls}`}
                                     >
-                                        <span className="block font-bold text-[var(--text)]">Mesa {t.number}</span>
-                                        <span className="block text-xs font-bold text-[var(--text)]">R$ {formatBRL(t.total)}</span>
+                                        <span className="flex items-center gap-1.5 font-semibold text-[15px] text-[var(--text)]">
+                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: urgency }} aria-hidden />
+                                            Mesa {t.number}
+                                        </span>
+                                        <span className="block text-[13px] num text-[var(--text-muted)] mt-0.5">R$ {formatBRL(t.total)}</span>
                                     </button>
                                 );
                             }
                             return (
-                                <div key={t.id} className={`rounded-xl border border-t-2 overflow-hidden ${colorClass} ${glass}`}>
+                                <div key={t.id} className={`overflow-hidden ${cardCls}`}>
                                     <button
                                         onClick={() => onOpenTablePayment(t.id)}
-                                        className="w-full text-left p-3 u-motion u-press-sm"
+                                        className="w-full text-left p-4 max-sm:p-3.5 u-motion u-press-sm hover:bg-[var(--surface-2)]/50"
                                     >
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
-                                            <span className="text-[11px] num">{formatDuration(t.minutesOccupied)}</span>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="flex items-center gap-1.5 font-semibold text-[17px] text-[var(--text)] min-w-0">
+                                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: t.isWaitingBill ? 'var(--warn)' : urgency }} aria-hidden />
+                                                <span className="truncate">Mesa {t.number}</span>
+                                            </span>
+                                            <span className="text-[12px] num shrink-0" style={{ color: urgency }}>{formatDuration(t.minutesOccupied)}</span>
                                         </div>
-                                        <p className="text-xs text-[var(--text-muted)] truncate">{t.hostName || '—'}</p>
-                                        <p className="text-sm font-bold text-[var(--text)] mt-1">R$ {formatBRL(t.total)}</p>
-                                        {t.isWaitingBill && <p className="text-[10px] font-bold uppercase mt-0.5">Aguardando pagamento</p>}
+                                        <p className="text-[13px] text-[var(--text-muted)] truncate mt-0.5">{t.hostName || '—'}</p>
+                                        <p className="text-[20px] font-semibold num text-[var(--text)] mt-1.5 leading-tight">R$ {formatBRL(t.total)}</p>
+                                        {t.isWaitingBill && <p className="text-[12px] font-medium text-[var(--warn)] mt-1">Aguardando pagamento</p>}
                                     </button>
                                     {/* Fase 3, Task 8: "a sala de controle também é a cozinha" — só
                                         existe em loja `direct_print` (sem KDS); dá o mesmo "eu sei o
                                         que tá sendo preparado agora" que uma loja com KDS já tem. */}
                                     {t.pendingPrintItems.length > 0 && (
-                                        <div className="border-t border-current/20 bg-[var(--surface)]/60 px-3 py-2 space-y-1.5">
-                                            <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                                        <div className="border-t border-[var(--border)] px-4 max-sm:px-3.5 py-2.5 space-y-1">
+                                            <p className="text-[12px] font-medium text-[var(--text-muted)]">
                                                 {t.pendingPrintItems.length === 1 ? '1 item aguardando preparo' : `${t.pendingPrintItems.length} itens aguardando preparo`}
                                             </p>
                                             {t.pendingPrintItems.map(item => (
-                                                <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
-                                                    <span className="text-[var(--text)] truncate">{item.quantity}x {item.productName}</span>
+                                                <div key={item.id} className="flex items-center justify-between gap-2 text-[13px]">
+                                                    <span className="text-[var(--text)] truncate"><span className="text-[var(--text-muted)] num">{item.quantity}×</span> {item.productName}</span>
                                                     {canReprintPending && (
                                                         <button
                                                             type="button"
                                                             disabled={reprintingPendingIds.has(item.id)}
                                                             onClick={() => handleReprintPending({ ...item, tableNumber: t.number })}
-                                                            className="shrink-0 p-1 rounded-full hover:bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+                                                            className="relative hit-44 shrink-0 p-1 rounded-full hover:bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
                                                             title="Reimprimir"
+                                                            aria-label={`Reimprimir ${item.productName}`}
                                                         >
                                                             <RotateCcw size={12} className={reprintingPendingIds.has(item.id) ? 'animate-spin' : ''} />
                                                         </button>
@@ -7066,14 +7072,14 @@ const CaixaView: React.FC<{
             )}
 
             <div>
-                <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">
+                <h3 className="eyebrow mb-3">
                     Aguardando pagamento {queueItems.length > 0 && `(${queueItems.length})`}
                 </h3>
                 {queueItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
-                        <Wallet className="mb-3 h-14 w-14 opacity-20" />
-                        <p className="text-base font-medium">Nenhum recebível pendente</p>
-                        <p className="text-xs">Mesas que pedirem a conta e vendas de balcão aparecem aqui.</p>
+                    <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">
+                        <Wallet size={40} strokeWidth={1.5} className="mb-3 text-[var(--text-muted)] opacity-50" />
+                        <p className="text-[17px] font-semibold text-[var(--text)]">Nenhum recebível pendente</p>
+                        <p className="text-[13px] text-[var(--text-muted)] mt-1">Mesas que pedirem a conta e vendas de balcão aparecem aqui.</p>
                     </div>
                 ) : (
                     <div className="space-y-2">
@@ -7087,21 +7093,21 @@ const CaixaView: React.FC<{
                                 exit={{ opacity: 0 }}
                                 transition={SPRING_TAP}
                                 onClick={() => item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id)}
-                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r-lg)] hover:border-[var(--brand)] u-motion u-press-sm text-left"
+                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] shadow-[var(--shadow-sm)] rounded-[var(--r-lg)] hover:shadow-[var(--shadow-md)] u-motion u-press-sm text-left"
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="h-9 w-9 rounded-full bg-[var(--warn)]/10 flex items-center justify-center text-[var(--warn)] shrink-0">
                                         {item.kind === 'table' ? <LayoutDashboard size={16} /> : <Coffee size={16} />}
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="font-bold text-[var(--text)] truncate">{item.label}</p>
+                                        <p className="font-semibold text-[var(--text)] truncate">{item.label}</p>
                                         <p className="text-xs text-[var(--text-muted)] flex items-center gap-1">
                                             <Clock size={11} /> {item.sublabel ? `${item.sublabel} · ` : ''}Aguardando {formatWaitingLabel(item.waitingSince)}
                                         </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <span className="num font-bold text-[var(--text)]">R$ {formatBRL(item.total)}</span>
+                                    <span className="num font-semibold text-[var(--text)]">R$ {formatBRL(item.total)}</span>
                                     <ArrowRight size={16} className="text-[var(--text-muted)]" />
                                 </div>
                             </motion.button>
