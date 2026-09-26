@@ -8261,8 +8261,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <Button onClick={criarLocalCardapio}>Criar local</Button>
                 </div>
                 {printSectors.length > 0 && categories.length > 0 && (
-                    <details className="rounded-[var(--r-md)] border border-[var(--border)] p-3" open>
-                        <summary className="text-sm font-semibold text-[var(--text)] cursor-pointer select-none">Local de cada categoria</summary>
+                    <details className="rounded-[var(--r-md)] border border-[var(--border)] p-3">
+                        <summary className="text-sm font-semibold text-[var(--text)] cursor-pointer select-none">Escolher o local de cada categoria ({categories.length})</summary>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
                             {categories.map(cat => (
                                 <label key={cat.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-[var(--r-md)] bg-[var(--surface-2)]">
