@@ -99,6 +99,14 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     const [mostrarFormulario, setMostrarFormulario] = useState(false);
     const [contaEscolhida, setContaEscolhida] = useState<ContaSalva | null>(null);
     const [lembrarSenha, setLembrarSenha] = useState(false);
+    const [editandoContas, setEditandoContas] = useState(false);
+    const [entrandoEmail, setEntrandoEmail] = useState<string | null>(null);
+    const [tremerSenha, setTremerSenha] = useState(0);
+    const [agora, setAgora] = useState(() => new Date());
+    useEffect(() => {
+        const t = setInterval(() => setAgora(new Date()), 15000);
+        return () => clearInterval(t);
+    }, []);
     useEffect(() => {
         const desk = typeof window !== 'undefined' && Boolean(window.electronApp?.isElectron);
         setIsDesktop(desk);
@@ -162,7 +170,8 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 setUniversalUser(universalResult.user);
             }
         } else {
-            setError(result.message || 'Erro ao entrar.');
+            setError(contaEscolhida ? 'Senha incorreta.' : (result.message || 'Erro ao entrar.'));
+            setTremerSenha(n => n + 1);
         }
         setIsLoading(false);
     };
@@ -279,76 +288,183 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     }
 
     const entrarComConta = async (conta: ContaSalva) => {
+        if (editandoContas) return;
         setError('');
         if (conta.senhaCifrada && window.electronApp?.decryptSecret) {
+            setEntrandoEmail(conta.email);
             const senha = await window.electronApp.decryptSecret(conta.senhaCifrada).catch(() => null);
-            if (senha) { await handleLogin(conta.email, senha, true); return; }
+            if (senha) { await handleLogin(conta.email, senha, true); setEntrandoEmail(null); return; }
+            setEntrandoEmail(null);
         }
         setContaEscolhida(conta);
         setEmail(conta.email);
         setPassword('');
-        setLembrarSenha(false);
+        setLembrarSenha(Boolean(conta.senhaCifrada));
         setMostrarFormulario(true);
     };
+
+    // Avatar redondo no estilo da tela de login do Mac. O layoutId faz o
+    // avatar escolhido "voar" da grade pro centro da tela de senha.
+    const AvatarConta = ({ conta, tamanho }: { conta: ContaSalva; tamanho: number }) => (
+        <motion.div
+            layoutId={`avatar-${conta.email}`}
+            transition={{ type: 'spring', bounce: 0, duration: 0.45 }}
+            className="rounded-full overflow-hidden flex items-center justify-center text-white font-semibold ring-1 ring-white/35 shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]"
+            style={{ width: tamanho, height: tamanho, fontSize: tamanho * 0.4, background: 'linear-gradient(160deg, rgba(255,255,255,0.32), rgba(255,255,255,0.08))', backdropFilter: 'blur(20px) saturate(180%)' }}
+        >
+            {conta.photoUrl
+                ? <img src={conta.photoUrl} alt="" className="w-full h-full object-cover" />
+                : <span className="tracking-tight">{conta.name.trim().charAt(0).toUpperCase()}</span>}
+        </motion.div>
+    );
+
+    const relogio = (
+        <div className="text-center text-white mb-10 select-none">
+            <p className="text-[15px] font-medium text-white/75 capitalize">{agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <p className="text-[64px] leading-none font-semibold tracking-[-0.03em] tabular-nums mt-1">{agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+        </div>
+    );
 
     if (isDesktop && contas.length > 0 && !mostrarFormulario) {
         return (
             <AuthBackdrop>
-                <div className="max-w-2xl w-full">
-                    <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Quem está entrando?</h1>
-                        <p className="text-white/75 text-sm mt-1.5">Toque no seu nome</p>
-                    </div>
+                <div className="w-full max-w-3xl flex flex-col items-center">
+                    {relogio}
+                    <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">Quem está entrando?</h1>
+                    <p className="text-white/65 text-sm mt-1 mb-8">{editandoContas ? 'Toque no – para tirar alguém deste computador' : 'Toque no seu nome'}</p>
                     {error && (
-                        <div className="mb-4 bg-[var(--err)]/15 text-white p-3 rounded text-sm flex items-center gap-2 justify-center">
+                        <div className="mb-6 bg-white/12 backdrop-blur-md text-white px-4 py-2.5 rounded-full text-sm flex items-center gap-2">
                             <AlertCircle size={16} /> {error}
                         </div>
                     )}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {contas.map((conta) => (
-                            <div key={conta.email} className="relative group/conta">
-                                <button
+                    <div className="flex flex-wrap justify-center gap-x-8 gap-y-7">
+                        {contas.map((conta, i) => (
+                            <motion.div
+                                key={conta.email}
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={editandoContas ? { opacity: 1, y: 0, rotate: [0, -1.2, 1.2, 0] } : { opacity: 1, y: 0, rotate: 0 }}
+                                transition={editandoContas
+                                    ? { rotate: { repeat: Infinity, duration: 0.3, delay: i * 0.05 }, default: { type: 'spring', bounce: 0, duration: 0.4 } }
+                                    : { type: 'spring', bounce: 0, duration: 0.45, delay: Math.min(i, 8) * 0.04 }}
+                                className="relative"
+                            >
+                                <motion.button
                                     type="button"
                                     disabled={isLoading}
                                     onClick={() => entrarComConta(conta)}
-                                    className="w-full u-grow-in p-5 rounded-[var(--r-lg)] bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm u-motion u-press-sm flex flex-col items-center gap-3 text-white disabled:opacity-60"
+                                    whileHover={editandoContas ? undefined : { scale: 1.06 }}
+                                    whileTap={editandoContas ? undefined : { scale: 0.95 }}
+                                    transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+                                    className="w-32 flex flex-col items-center gap-3 text-white disabled:opacity-70 outline-none focus-visible:[&>div:first-child]:ring-2 focus-visible:[&>div:first-child]:ring-white"
                                 >
-                                    {conta.photoUrl ? (
-                                        <img src={conta.photoUrl} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-white/40" />
-                                    ) : (
-                                        <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
-                                            {conta.name.trim().charAt(0).toUpperCase()}
-                                        </div>
-                                    )}
-                                    <div className="text-center min-w-0 w-full">
-                                        <p className="font-semibold leading-tight line-clamp-2">{conta.name}</p>
-                                        <p className="text-xs text-white/70">{conta.roleLabel}{conta.senhaCifrada ? ' · entra direto' : ''}</p>
+                                    <AvatarConta conta={conta} tamanho={96} />
+                                    <div className="text-center">
+                                        <p className="text-[15px] font-semibold leading-tight line-clamp-2">{conta.name}</p>
+                                        <p className="text-xs text-white/60 mt-0.5">{entrandoEmail === conta.email ? 'Entrando…' : conta.roleLabel}</p>
                                     </div>
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label={`Tirar ${conta.name} deste computador`}
-                                    onClick={async () => {
-                                        if (!(await confirm({ message: `Tirar ${conta.name} da tela de entrada deste computador? A conta continua existindo, só some daqui.`, variant: 'danger' }))) return;
-                                        removerContaSalva(conta.email);
-                                        setContas(lerContasSalvas());
-                                    }}
-                                    className="absolute top-2 right-2 hit-44 p-1 rounded-full text-white/60 hover:text-white hover:bg-white/15 opacity-0 group-hover/conta:opacity-100 focus:opacity-100 u-motion"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </div>
+                                </motion.button>
+                                <AnimatePresence>
+                                    {editandoContas && (
+                                        <motion.button
+                                            type="button"
+                                            aria-label={`Tirar ${conta.name} deste computador`}
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            exit={{ scale: 0 }}
+                                            transition={{ type: 'spring', bounce: 0.3, duration: 0.3 }}
+                                            onClick={async () => {
+                                                if (!(await confirm({ message: `Tirar ${conta.name} da tela de entrada deste computador? A conta continua existindo, só some daqui.`, variant: 'danger' }))) return;
+                                                removerContaSalva(conta.email);
+                                                const restantes = lerContasSalvas();
+                                                setContas(restantes);
+                                                if (restantes.length === 0) setEditandoContas(false);
+                                            }}
+                                            className="absolute top-0 left-4 hit-44 w-7 h-7 rounded-full bg-[#ff3b30] text-white flex items-center justify-center shadow-md"
+                                        >
+                                            <Minus size={16} strokeWidth={3} />
+                                        </motion.button>
+                                    )}
+                                </AnimatePresence>
+                            </motion.div>
                         ))}
-                        <button
-                            type="button"
-                            onClick={() => { setContaEscolhida(null); setEmail(''); setPassword(''); setLembrarSenha(false); setError(''); setMostrarFormulario(true); }}
-                            className="u-grow-in p-5 rounded-[var(--r-lg)] border-2 border-dashed border-white/30 hover:border-white/60 hover:bg-white/10 u-motion flex flex-col items-center justify-center gap-3 text-white/80"
-                        >
-                            <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center"><Plus size={28} /></div>
-                            <p className="font-semibold text-sm">Entrar com outro usuário</p>
-                        </button>
+                        {!editandoContas && (
+                            <motion.button
+                                type="button"
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ type: 'spring', bounce: 0, duration: 0.45, delay: Math.min(contas.length, 8) * 0.04 }}
+                                whileHover={{ scale: 1.06 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => { setContaEscolhida(null); setEmail(''); setPassword(''); setLembrarSenha(false); setError(''); setMostrarFormulario(true); }}
+                                className="w-32 flex flex-col items-center gap-3 text-white/85"
+                            >
+                                <div className="w-24 h-24 rounded-full flex items-center justify-center ring-1 ring-white/30 bg-white/8 backdrop-blur-md">
+                                    <Plus size={34} strokeWidth={1.75} />
+                                </div>
+                                <p className="text-[15px] font-semibold leading-tight">Outro usuário</p>
+                            </motion.button>
+                        )}
                     </div>
-                    {isLoading && <p className="text-center text-white/80 text-sm mt-4">Entrando...</p>}
+                    <button
+                        type="button"
+                        onClick={() => setEditandoContas(v => !v)}
+                        className="mt-10 px-4 min-h-11 rounded-full text-sm font-medium text-white/75 hover:text-white hover:bg-white/10 u-motion"
+                    >
+                        {editandoContas ? 'OK' : 'Editar'}
+                    </button>
+                </div>
+            </AuthBackdrop>
+        );
+    }
+
+    // Senha de uma conta salva: avatar grande no centro, campo em pílula com a
+    // seta dentro, e o campo "balança" quando a senha está errada (igual Mac).
+    if (isDesktop && contaEscolhida) {
+        return (
+            <AuthBackdrop>
+                <div className="w-full max-w-sm flex flex-col items-center text-white">
+                    {relogio}
+                    <AvatarConta conta={contaEscolhida} tamanho={112} />
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.4, delay: 0.1 }} className="text-center mt-4 mb-6">
+                        <p className="text-[22px] font-semibold tracking-[-0.01em]">{contaEscolhida.name}</p>
+                        <p className="text-sm text-white/60">{contaEscolhida.roleLabel}</p>
+                    </motion.div>
+                    <motion.form
+                        key={tremerSenha}
+                        onSubmit={(e) => { e.preventDefault(); if (password) handleLogin(); }}
+                        animate={tremerSenha > 0 ? { x: [0, -12, 10, -8, 6, -3, 0] } : { x: 0 }}
+                        transition={{ duration: 0.45 }}
+                        className="w-72 relative"
+                    >
+                        <input
+                            type="password"
+                            autoFocus
+                            placeholder="Senha"
+                            value={password}
+                            onChange={e => { setPassword(e.target.value); if (error) setError(''); }}
+                            className="w-full h-11 pl-4 pr-12 rounded-full bg-white/15 backdrop-blur-xl text-white placeholder:text-white/55 ring-1 ring-white/30 focus:ring-2 focus:ring-white/70 outline-none text-base u-motion"
+                        />
+                        <button
+                            type="submit"
+                            aria-label="Entrar"
+                            disabled={!password || isLoading}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-white text-[#484DB5] disabled:bg-white/25 disabled:text-white/60 u-motion"
+                        >
+                            {isLoading ? <RefreshCw size={15} className="animate-spin" /> : <ArrowRight size={16} strokeWidth={2.5} />}
+                        </button>
+                    </motion.form>
+                    <p className="h-5 mt-3 text-sm text-white/90">{error}</p>
+                    <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer select-none mt-2">
+                        <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="size-4 accent-white" />
+                        Entrar sem senha neste computador
+                    </label>
+                    <button
+                        type="button"
+                        onClick={() => { setMostrarFormulario(false); setContaEscolhida(null); setError(''); setPassword(''); }}
+                        className="mt-8 px-4 min-h-11 rounded-full text-sm font-medium text-white/75 hover:text-white hover:bg-white/10 u-motion"
+                    >
+                        Cancelar
+                    </button>
                 </div>
             </AuthBackdrop>
         );
