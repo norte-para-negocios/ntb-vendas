@@ -179,6 +179,16 @@
   --surface: #15171d;
   --surface-2: #1c1f27;
   --border: rgba(255, 255, 255, 0.12);
+  /* Destaques como TEXTO sobre o vidro escuro (chips "Pizzaria"/"Bar",
+     aba ativa) — os valores claros (#484DB5 etc.) sumiam no vidro. Os
+     preenchimentos (-fill) continuam os mesmos. */
+  --brand: #8b90ea;
+  --brand-soft: rgba(139, 144, 234, 0.18);
+  --ok: #30d158;
+  --warn: #ffb340;
+  --err: #ff6961;
+  --info: #409cff;
+  --promo: #d17ae6;
 }
 
 /* Dark mode: ativado por classe .dark no <html> */

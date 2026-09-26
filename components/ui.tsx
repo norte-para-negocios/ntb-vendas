@@ -465,7 +465,11 @@ export const Modal: React.FC<{
             // título pra baixo (respeita a velocidade do gesto). Só a alça/
             // cabeçalho arrasta — o conteúdo rola normalmente.
             initial={phone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
-            animate={phone ? { y: 0 } : { opacity: 1, scale: 1 }}
+            // opacity/scale também no ramo do celular: quando a janela já monta
+            // aberta, o 1º render ainda acha que é computador (usePhoneSheet
+            // começa false) e parte de opacity 0 — sem isso a folha ficava
+            // presa quase transparente (ex.: folha do produto do garçom).
+            animate={phone ? { y: 0, opacity: 1, scale: 1 } : { opacity: 1, scale: 1 }}
             exit={phone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
             transition={phone || !phoneSheet ? SPRING_SHEET : SPRING_UI}
             drag={phone ? 'y' : false}

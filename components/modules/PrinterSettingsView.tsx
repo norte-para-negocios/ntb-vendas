@@ -518,7 +518,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
       ) : (
         <div className="space-y-2">
           {printers.map((printer) => (
-            <Card key={printer.id} className={`p-4 flex items-center justify-between gap-3 ${!printer.is_active ? 'opacity-50' : ''}`}>
+            <Card key={printer.id} className={`p-4 flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch ${!printer.is_active ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-3 min-w-0">
                 <div className="text-[var(--text-muted)]">{CONNECTION_ICON[printer.connection_type]}</div>
                 <div className="min-w-0">
@@ -564,7 +564,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                   })()}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 max-sm:flex-wrap">
                 {(printer.connection_type === 'usb' || printer.connection_type === 'network') && (
                   <select
                     value={printer.print_mode ?? 'driver'}
