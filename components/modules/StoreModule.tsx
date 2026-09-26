@@ -4638,7 +4638,7 @@ NOTIFY pgrst, 'reload schema';`;
                         ]}
                     />
 
-                    <div className="sm:max-h-[60vh] sm:overflow-y-auto sm:pr-1">
+                    <div className="sm:max-h-[60vh] sm:overflow-y-auto sm:-mx-1 sm:px-1 sm:pb-1">
                         {paymentTab === 'payment' && (
                             <PaymentCaptureFields
                                 total={selectedTable ? getTableSummary(selectedTable.id).total : 0}
@@ -4791,13 +4791,13 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <div className="flex items-center gap-1.5">
                                                         <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                     </div>
-                                                    <span>{(it.price_at_time * it.quantity).toFixed(2)}</span>
+                                                    <span className="num">{formatBRL(it.price_at_time * it.quantity)}</span>
                                                 </div>
                                             ))}
                                             {currentTableSummary?.isServiceFeeEnabled && (
                                                 <div className="flex justify-between items-center text-[13px] text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
                                                     <span>Taxa de serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
-                                                    <span>{data.serviceFee.toFixed(2)}</span>
+                                                    <span className="num">{formatBRL(data.serviceFee)}</span>
                                                 </div>
                                             )}
                                         </div>
