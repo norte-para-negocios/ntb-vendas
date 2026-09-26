@@ -1880,7 +1880,9 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
 // Achado real (varredura 2026-07-05): antes o garçom conseguia lançar um
 // produto com grupo obrigatório sem escolher nada e o preço saía sem o
 // price_delta.
-const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ product, onClose, onAdd }) => {
+// `addLabel`: texto do botão final. Mesa lança na hora ("Lançar pedido"); a
+// venda de balcão pela equipe só junta no carrinho ("Adicionar à venda").
+const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void, addLabel?: string }> = ({ product, onClose, onAdd, addLabel = 'Lançar pedido' }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -1991,7 +1993,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
 
                 <div className="max-sm:sticky max-sm:bottom-[calc(-1*max(1.25rem,env(safe-area-inset-bottom)))] max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
                     <Button size="lg" className="w-full mt-4 max-sm:mt-1 !h-[52px] !text-[17px]" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                        Lançar pedido · R$ {formatBRL(unitPrice * qty)}
+                        {addLabel} · R$ {formatBRL(unitPrice * qty)}
                     </Button>
                     {missingRequired && <p className="text-xs text-center text-[var(--err)] mt-4 max-sm:mt-1">Escolha uma opção obrigatória para continuar.</p>}
                 </div>
@@ -2041,7 +2043,7 @@ const MenuTile: React.FC<{ title: string; meta: string; hint?: string; onClick: 
 
 const itensLabel = (n: number) => `${n} ${n === 1 ? 'item' : 'itens'}`;
 
-const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void }> = ({ storeId, onAddItem }) => {
+const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void, addLabel?: string }> = ({ storeId, onAddItem, addLabel }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -2400,6 +2402,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 
             <StoreProductModal
                 product={selectedProduct}
+                addLabel={addLabel}
                 onClose={() => setSelectedProduct(null)}
                 onAdd={(qty, notes, selectedOptions) => {
                     if (selectedProduct) {
@@ -5437,6 +5440,10 @@ NOTIFY pgrst, 'reload schema';`;
 
 // --- SUB-MODULE: COUNTER (BALCÃO) ---
 
+// Linha do carrinho da venda de balcão feita pela equipe (CounterView).
+// `key` = produto + opções + observação: repetir o mesmo item soma quantidade.
+type CounterSaleLine = { key: string; product: Product; qty: number; notes: string; selectedOptions: SelectedOption[] };
+
 const CounterView: React.FC<{
     store: Store;
     loggedUser: StoreUser;
@@ -5520,6 +5527,159 @@ const CounterView: React.FC<{
     const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
     const [currentPaymentMethod, setCurrentPaymentMethod] = useState('CREDIT');
     const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
+
+    // Venda de balcão registrada pela EQUIPE (2026-09-26, virada do Sertão pra
+    // cardápio vitrine: sem pedido do cliente pelo QR, a aba Balcão ficava
+    // vazia). Mesma superfície do garçom (WaiterOrderSurface + StoreTableMenu),
+    // mas tocar em "Adicionar à venda" só junta num carrinho local — o pedido
+    // de balcão nasce de uma vez, com todos os itens, em "Enviar pedido".
+    // Quem pode receber (módulo Caixa + canFinalizeBill) ganha "Receber agora"
+    // logo depois; o resto fica em "Aguardando pagamento", igual pedido do QR.
+    const canReceberVenda = caixaModuleOn && canFinalize;
+    const [showNovaVenda, setShowNovaVenda] = useState(false);
+    const [vendaItens, setVendaItens] = useState<CounterSaleLine[]>([]);
+    const [vendaCliente, setVendaCliente] = useState('');
+    const [enviandoVenda, setEnviandoVenda] = useState(false);
+    const enviandoVendaRef = useRef(false);
+    const [vendaEnviada, setVendaEnviada] = useState<{ orderId: string; total: number; cliente: string; offline: boolean } | null>(null);
+    // Pedido cujo pagamento foi aberto por "Receber agora": o pagamento é
+    // registrado SEM fechar o pedido (fica pago, esperando entregar) — em
+    // qualquer configuração da loja, não só no "paga primeiro".
+    const [pagamentoDaNovaVenda, setPagamentoDaNovaVenda] = useState<string | null>(null);
+
+    const vendaTotal = vendaItens.reduce((a, l) => a + calculateCartItemUnitPrice({ product: l.product, selectedOptions: l.selectedOptions }) * l.qty, 0);
+    const vendaQtd = vendaItens.reduce((a, l) => a + l.qty, 0);
+
+    const adicionarNaVenda = (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => {
+        const obs = notes.trim();
+        const key = `${product.id}|${selectedOptions.map(o => o.option_id).sort().join(',')}|${obs}`;
+        setVendaItens(prev => {
+            const existente = prev.find(l => l.key === key);
+            if (existente) return prev.map(l => l.key === key ? { ...l, qty: l.qty + qty } : l);
+            return [...prev, { key, product, qty, notes: obs, selectedOptions }];
+        });
+        toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado à venda`);
+    };
+
+    const mudarQtdVenda = (key: string, delta: number) => {
+        setVendaItens(prev => prev.map(l => l.key === key ? { ...l, qty: Math.max(1, l.qty + delta) } : l));
+    };
+
+    const removerDaVenda = (key: string) => setVendaItens(prev => prev.filter(l => l.key !== key));
+
+    const fecharNovaVenda = async () => {
+        if (enviandoVendaRef.current) return;
+        if (vendaItens.length > 0 && !(await confirm({ message: 'Descartar os itens desta venda?', variant: 'danger', confirmLabel: 'Descartar' }))) return;
+        setVendaItens([]);
+        setVendaCliente('');
+        setShowNovaVenda(false);
+    };
+
+    const enviarVenda = async () => {
+        if (enviandoVendaRef.current || vendaItens.length === 0) return;
+        enviandoVendaRef.current = true;
+        setEnviandoVenda(true);
+        const cliente = vendaCliente.trim();
+        const itens = vendaItens;
+        const total = vendaTotal;
+        try {
+            // Mesmo caminho do garçom na mesa (`createOrder(..., 'garcom')`),
+            // com mesa nula = pedido de balcão. 'garcom' passa pelo bloqueio da
+            // migration 091 (cardápio vitrine só recusa 'cliente').
+            const result = await createOrder(null, storeId, itens.map(l => ({
+                product: l.product, quantity: l.qty, notes: l.notes, selectedOptions: l.selectedOptions,
+            })), cliente || undefined, 'garcom', loggedUser.name);
+            if (!result.orderId) throw new Error('O servidor não confirmou a venda.');
+            const offline = String(result.orderId).startsWith('local_');
+
+            if (offline) {
+                // Sem internet: a venda ficou na fila local (sincroniza sozinha
+                // quando a conexão voltar). A Estação do Caixa lê o servidor e
+                // não vê nada agora — mesma saída da mesa: imprime a comanda
+                // direto na impressora de rede de cada destino.
+                const menuCache: any = await getCachedMenu(storeId).catch(() => null);
+                const setores = await fetchPrintSectors(storeId).catch(() => []);
+                let impressas = 0;
+                for (const l of itens) {
+                    const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === l.product.category_id);
+                    const setorId: string | null = l.product.sector_id || (l.product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
+                    const setor = setorId ? setores.find((x) => x.id === setorId) : undefined;
+                    const destino: 'kitchen' | 'bar' = setor ? setor.base : (l.product.destination === 'bar' ? 'bar' : 'kitchen');
+                    const notasNoBanco = l.notes ? `${cliente ? `[${cliente}] ` : ''}${l.notes}` : cliente ? `[${cliente}]` : '';
+                    const conteudo = buildKitchenTicketText({
+                        kind: destino === 'bar' ? 'BAR' : 'COZINHA',
+                        storeName: store.name,
+                        orderType: 'BALCÃO',
+                        identifier: 'BALCÃO',
+                        client: cliente || undefined,
+                        quantity: l.qty,
+                        productName: l.product.name,
+                        addons: l.selectedOptions.map(o => o.name).join(', ') || undefined,
+                        observation: l.notes || undefined,
+                        orderIdShort: String(result.orderId).slice(6, 14),
+                    });
+                    // Mesma assinatura que a Estação usa (mesa|produto|qtd|obs,
+                    // mesa vazia no balcão) — não sai em dobro depois.
+                    const sig = `|${l.product.id}|${l.qty}|${notasNoBanco}`;
+                    impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Balcão`, content: conteudo, sig }).catch(() => 0);
+                }
+                if (impressas === 0) toast.warning('Sem internet: a comanda não saiu na impressora. Avise a cozinha.');
+            } else if (!paymentFirst) {
+                // Pedido de balcão nasce 'pending', e a Estação de Impressão /
+                // KDS ignoram item de balcão pendente de propósito (é o pedido
+                // do QR esperando alguém da loja aceitar — migration 021/089).
+                // Aqui quem lançou JÁ é a loja: vai direto pra produção e sai
+                // nas impressoras do local certo pelo fluxo normal, igual mesa.
+                // No "paga primeiro" só vai depois de receber (ver
+                // handleFinishCounterPayment).
+                try {
+                    await sendOrderToKitchen(result.orderId);
+                } catch {
+                    toast.error('A venda foi registrada, mas não foi liberada pra cozinha. Confira a conexão e avise a cozinha.');
+                }
+            }
+
+            setVendaItens([]);
+            setVendaCliente('');
+            setShowNovaVenda(false);
+            flashSuccessCheck();
+            load();
+
+            if (offline) {
+                setVendaEnviada({ orderId: result.orderId, total, cliente, offline: true });
+            } else if (canReceberVenda) {
+                setVendaEnviada({ orderId: result.orderId, total, cliente, offline: false });
+            } else {
+                toast.success(caixaModuleOn ? 'Venda enviada. Ela fica em "Aguardando pagamento" até o caixa receber.' : 'Venda enviada.');
+            }
+        } catch (e: any) {
+            toast.error(e?.message ? `A venda não foi enviada: ${e.message}` : 'A venda não foi enviada. Tente de novo.');
+        } finally {
+            enviandoVendaRef.current = false;
+            setEnviandoVenda(false);
+        }
+    };
+
+    // "Receber agora": abre a MESMA janela de pagamento do balcão, com o
+    // pedido real recém-criado (itens e preço do servidor, não do carrinho).
+    const receberVendaAgora = async () => {
+        if (!vendaEnviada || !canReceberVenda) return;
+        const { orderId } = vendaEnviada;
+        setVendaEnviada(null);
+        const data = await fetchCounterOrders(storeId);
+        const order = data.find(o => o.id === orderId) || null;
+        if (!order) {
+            toast.error('Não achei a venda pra receber agora. Ela está na lista do balcão — receba por lá.');
+            load();
+            return;
+        }
+        if (pedidoJaPago(order)) {
+            toast.error('Esta venda já foi paga.');
+            return;
+        }
+        setPagamentoDaNovaVenda(order.id);
+        abrirCapturaDePagamento(order);
+    };
 
     const load = async () => {
         const [data, pendingOrders] = await Promise.all([
@@ -5829,8 +5989,16 @@ const CounterView: React.FC<{
             // dinheiro entrou), mas NÃO fecha o pedido — ele ainda vai pra
             // cozinha e só é entregue depois. No fluxo de sempre, receber e
             // fechar continuam sendo a mesma ação, como sempre foram.
-            if (paymentFirst) {
+            // Venda da equipe recebida na hora ("Receber agora"): mesma coisa —
+            // pago agora, entregue depois pelo botão "Entregar".
+            const ehNovaVenda = pagamentoDaNovaVenda === paymentOrder.id;
+            if (paymentFirst || ehNovaVenda) {
                 await registrarPagamentoBalcao(paymentOrder.id, paymentData, destinatario, store.id);
+                // No "paga primeiro" a venda da equipe só vai pra produção
+                // depois do dinheiro entrar (ver enviarVenda).
+                if (ehNovaVenda && paymentFirst && orderFlow === 'direct_print') {
+                    sendOrderToKitchen(paymentOrder.id).catch(() => toast.error('Pagamento registrado, mas a venda não foi liberada pra cozinha. Avise a cozinha.'));
+                }
             } else {
                 await closeOrderNow(paymentOrder.id, paymentData, destinatario);
             }
@@ -5887,16 +6055,20 @@ const CounterView: React.FC<{
             }
 
             setPaymentOrder(null);
+            setPagamentoDaNovaVenda(null);
             // No "paga primeiro" o pedido CONTINUA na tela (só mudou pra
             // pago) — sem recarregar, o card seguiria oferecendo "Receber
             // pagamento" de novo até o próximo evento de realtime.
-            if (paymentFirst) load();
+            if (paymentFirst || ehNovaVenda) {
+                load();
+                if (ehNovaVenda) toast.success('Pagamento recebido. Entregue quando o pedido sair.');
+            }
         } catch (e: any) {
             // closeOrderNow já avisa por toast, mas registrarPagamentoBalcao
             // não — e este catch vazio engolia a falha: o operador clicava em
             // "RECEBER PAGAMENTO" com o dinheiro já na mão, NADA acontecia na
             // tela, e ele clicava de novo (achado de revisão independente).
-            if (paymentFirst) {
+            if (paymentFirst || pagamentoDaNovaVenda === paymentOrder.id) {
                 toast.error(e?.message || 'Não consegui registrar o pagamento. Confira antes de cobrar de novo.');
                 load();
             }
@@ -5983,10 +6155,24 @@ const CounterView: React.FC<{
         }
     };
 
+    const pedidosAbertos = orders.length;
+
     return (
+        <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-[15px] text-[var(--text-muted)]">
+                {pedidosAbertos === 0 ? 'Nenhum pedido aberto no balcão' : `${pedidosAbertos} ${pedidosAbertos === 1 ? 'pedido aberto' : 'pedidos abertos'} no balcão`}
+            </p>
+            <Button size="lg" onClick={() => setShowNovaVenda(true)} className="w-full sm:w-auto !h-12 !px-6 shrink-0">
+                <Plus size={20} strokeWidth={2.25} /> Nova venda
+            </Button>
+        </div>
         <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
             <AnimatePresence mode="popLayout">
             {orders.map(order => {
+                // Venda lançada sem internet ainda na fila local: sem id real no
+                // servidor, nada de receber/entregar até sincronizar.
+                const aguardandoInternet = order.id.startsWith('local_') || order.id.startsWith('pending_order_');
                 const itemCount = order.order_items?.reduce((a,b) => a+b.quantity, 0) || 0;
                 const total = order.order_items?.reduce((a,b) => a+(b.quantity * b.price_at_time), 0) || 0;
                 const status = order.status;
@@ -6156,7 +6342,11 @@ const CounterView: React.FC<{
                                      Estornar
                                  </button>
                              )}
-                             {paymentFirst ? (
+                             {aguardandoInternet ? (
+                                 <span className="h-10 px-3 flex items-center gap-1.5 text-xs font-bold text-[var(--text-muted)] bg-[var(--surface-2)] rounded-full shrink-0">
+                                     <WifiOff size={14} /> Aguardando internet
+                                 </span>
+                             ) : paymentFirst ? (
                                  caixaModuleOn && !canFinalize ? (
                                      <span className="h-10 px-3 flex items-center text-xs font-bold text-[var(--text-muted)] bg-[var(--surface-2)] rounded-[var(--r-md)] border border-[var(--border)] shrink-0">
                                          Aguardando o caixa
@@ -6223,8 +6413,8 @@ const CounterView: React.FC<{
             {orders.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center text-center py-24 px-6 bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">
                     <Coffee size={40} strokeWidth={1.5} className="mb-3 text-[var(--text-muted)] opacity-50" />
-                    <p className="text-[17px] font-semibold text-[var(--text)]">Tudo tranquilo no balcão!</p>
-                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Aguardando novos pedidos...</p>
+                    <p className="text-[17px] font-semibold text-[var(--text)]">Tudo tranquilo no balcão</p>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Toque em “Nova venda” para registrar um pedido de balcão.</p>
                 </div>
             )}
 
@@ -6278,7 +6468,7 @@ const CounterView: React.FC<{
                 TablesView usa pra mesa (PaymentCaptureFields), nunca uma UI
                 paralela — "one payment mechanism", ver comentário do
                 componente. */}
-            <Modal isOpen={!!paymentOrder} onClose={() => setPaymentOrder(null)} title="Receber pagamento" size="lg">
+            <Modal isOpen={!!paymentOrder} onClose={() => { setPaymentOrder(null); setPagamentoDaNovaVenda(null); }} title="Receber pagamento" size="lg">
                 <PaymentCaptureFields
                     total={paymentTotalDue}
                     methods={paymentMethods}
@@ -6296,7 +6486,7 @@ const CounterView: React.FC<{
                     finishDisabled={remainingToPay > 0.01}
                     // No "paga primeiro" este botão NÃO finaliza a venda —
                     // o pedido ainda vai ser preparado e entregue depois.
-                    finishLabel={paymentFirst ? "Receber pagamento" : "Finalizar venda"}
+                    finishLabel={paymentFirst || (!!paymentOrder && pagamentoDaNovaVenda === paymentOrder.id) ? "Receber pagamento" : "Finalizar venda"}
                     showEmitirNotaToggle={emissaoFiscalConfigurada}
                     emitirNota={emitirNotaFiscal}
                     onEmitirNotaChange={setEmitirNotaFiscal}
@@ -6334,6 +6524,122 @@ const CounterView: React.FC<{
                         </div>
                     )}
                 </PaymentCaptureFields>
+            </Modal>
+        </div>
+
+            {/* Nova venda no balcão: mesma superfície do garçom (folha no
+                celular, janela grande no computador), cardápio em camadas à
+                esquerda e o carrinho desta venda à direita. */}
+            <WaiterOrderSurface
+                isOpen={showNovaVenda}
+                onClose={fecharNovaVenda}
+                ariaLabel="Nova venda no balcão"
+                title="Nova venda no balcão"
+            >
+                <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+                    <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
+                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" />
+                    </div>
+                    <div className="md:w-[320px] lg:w-[34%] lg:max-w-[420px] max-md:max-h-[50%] flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
+                        <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">
+                            <h4 className="font-semibold text-[15px] text-[var(--text)]">Itens desta venda</h4>
+                            <span className="text-[13px] text-[var(--text-muted)] num">{vendaQtd} {vendaQtd === 1 ? 'item' : 'itens'}</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto min-h-[72px] px-3">
+                            {vendaItens.length === 0 ? (
+                                <div className="p-6 text-center text-[13px] text-[var(--text-muted)]">Escolha os produtos no cardápio. Eles aparecem aqui antes de enviar.</div>
+                            ) : (
+                                <div className="bg-[var(--surface)] rounded-[14px] divide-y divide-[var(--border)] overflow-hidden">
+                                    {vendaItens.map(l => {
+                                        const unit = calculateCartItemUnitPrice({ product: l.product, selectedOptions: l.selectedOptions });
+                                        return (
+                                            <div key={l.key} className="flex items-center gap-2 pl-4 pr-1.5 py-2.5">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="font-semibold text-[15px] text-[var(--text)] leading-tight line-clamp-2">{getOrderItemDisplayName({ product: l.product, selected_options: l.selectedOptions })}</div>
+                                                    {l.notes && <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5 line-clamp-2">Obs: {l.notes}</div>}
+                                                    <div className="text-[13px] text-[var(--text-muted)] mt-0.5 num">R$ {formatBRL(unit * l.qty)}</div>
+                                                </div>
+                                                <div className="flex items-center gap-0.5 flex-shrink-0">
+                                                    <button type="button" onClick={() => mudarQtdVenda(l.key, -1)} disabled={l.qty <= 1} aria-label={`Diminuir ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] disabled:opacity-40 u-motion u-press-sm"><Minus size={15} /></button>
+                                                    <span className="font-semibold text-[15px] num w-7 text-center">{l.qty}</span>
+                                                    <button type="button" onClick={() => mudarQtdVenda(l.key, 1)} aria-label={`Aumentar ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] u-motion u-press-sm"><Plus size={15} /></button>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removerDaVenda(l.key)}
+                                                    className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)]/70 hover:text-[var(--err)] hover:bg-[var(--err)]/10 u-motion u-press flex-shrink-0"
+                                                    title="Remover item"
+                                                    aria-label={`Remover ${l.product.name}`}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3 max-md:space-y-2.5 flex-shrink-0 border-t border-[var(--border)]">
+                            <input
+                                type="text"
+                                value={vendaCliente}
+                                onChange={e => setVendaCliente(e.target.value)}
+                                placeholder="Nome do cliente (opcional)"
+                                aria-label="Nome do cliente (opcional)"
+                                maxLength={60}
+                                autoComplete="off"
+                                className="w-full h-11 px-4 rounded-full bg-[var(--surface)] text-[var(--text)] placeholder:text-[var(--text-muted)] text-base sm:text-[15px] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+                            />
+                            {/* No celular o total já está no botão — a linha some pra sobrar espaço pros itens. */}
+                            <div className="flex items-baseline justify-between max-md:hidden">
+                                <span className="font-medium text-[15px] text-[var(--text-muted)]">Total</span>
+                                <span className="font-bold text-[28px] max-md:text-[22px] num tracking-[-0.02em] text-[var(--text)]">R$ <AnimatedNumber value={vendaTotal} format={formatBRL} /></span>
+                            </div>
+                            <Button
+                                size="lg"
+                                className="w-full !h-[52px] !text-[17px]"
+                                disabled={vendaItens.length === 0}
+                                isLoading={enviandoVenda}
+                                onClick={enviarVenda}
+                            >
+                                Enviar pedido · R$ {formatBRL(vendaTotal)}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </WaiterOrderSurface>
+
+            {/* Logo depois de enviar: receber na hora ou deixar pro caixa. */}
+            <Modal isOpen={!!vendaEnviada} onClose={() => setVendaEnviada(null)} title={vendaEnviada?.offline ? 'Venda salva sem internet' : 'Venda enviada'} size="sm">
+                {vendaEnviada && (
+                    <div className="space-y-5">
+                        <div className="text-center pt-1">
+                            <p className="text-[13px] font-medium text-[var(--text-muted)]">{vendaEnviada.cliente ? `Balcão · ${vendaEnviada.cliente}` : 'Balcão'}</p>
+                            <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ {formatBRL(vendaEnviada.total)}</p>
+                        </div>
+                        {vendaEnviada.offline ? (
+                            <>
+                                <div className="flex gap-3 bg-[var(--surface-2)] rounded-[14px] p-4">
+                                    <WifiOff size={20} className="text-[var(--warn)] flex-shrink-0 mt-0.5" />
+                                    <p className="text-[14px] text-[var(--text)]">Sem internet agora. A venda ficou guardada neste aparelho e entra no sistema sozinha quando a conexão voltar. Receba o pagamento depois, com internet.</p>
+                                </div>
+                                <Button size="lg" className="w-full !h-[52px]" onClick={() => setVendaEnviada(null)}>Entendi</Button>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-[14px] text-[var(--text-muted)] text-center">O cliente vai pagar agora?</p>
+                                <div className="space-y-2.5">
+                                    <Button size="lg" className="w-full !h-[52px] !text-[17px]" onClick={receberVendaAgora}>
+                                        <Wallet size={20} /> Receber agora
+                                    </Button>
+                                    <Button size="lg" variant="secondary" className="w-full !h-[52px] !text-[17px]" onClick={() => { setVendaEnviada(null); toast.info('A venda ficou em "Aguardando pagamento".'); }}>
+                                        Receber depois
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
             </Modal>
         </div>
     );

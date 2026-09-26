@@ -12,6 +12,14 @@ export async function register() {
   // (https, node-forge, pdfkit) e Supabase com service role — só faz sentido,
   // e só funciona, no runtime Node.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  // `npm run dev` local conecta no banco de produção (ver AGENTS.md): sem
+  // esta trava, um dev server de teste viraria um SEGUNDO processo
+  // retransmitindo as mesmas notas pra SEFAZ ao mesmo tempo que o servidor
+  // (o job não tem lock distribuído — assume processo único).
+  if (process.env.DISABLE_FISCAL_RETRANSMISSAO === '1') {
+    console.log('Retransmissão fiscal de contingência: desligada neste processo (DISABLE_FISCAL_RETRANSMISSAO=1).');
+    return;
+  }
 
   const { verificarNotasEmContingencia } = await import('./lib/fiscal/retransmissao');
 

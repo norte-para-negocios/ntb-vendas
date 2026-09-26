@@ -2164,6 +2164,70 @@ solicitar o PIN". Chave jsonb em `stores.config`, sem coluna nova:
 - Lojas com a chave em `false`: `sertao-vai-virar-mar` (desde
   2026-09-26, pedido da gerência via Ramon).
 
+## Venda de balcão registrada pela equipe (2026-09-26)
+
+Motivo: com o Sertão virando cardápio vitrine (`client_ordering=false`),
+nenhum pedido de balcão nasceria mais pelo QR e a aba Balcão ficaria vazia.
+Agora a equipe registra a venda de balcão no próprio painel. Tudo em
+`CounterView` (`StoreModule.tsx`), sem migration, sem RPC nova.
+
+- **Botão "Nova venda"** (pílula da marca) no topo da aba Balcão — quem vê
+  a aba pode vender. Abre a MESMA superfície do garçom
+  (`WaiterOrderSurface`, título "Nova venda no balcão") com o
+  `StoreTableMenu` à esquerda. `StoreTableMenu`/`StoreProductModal` ganharam
+  a prop `addLabel` (padrão "Lançar pedido"; aqui "Adicionar à venda").
+- **Carrinho local** (`CounterSaleLine`, chave = produto + opções +
+  observação: repetir soma quantidade). Painel direito "Itens desta venda"
+  com −/+, remover, observação, "Nome do cliente (opcional)", total e
+  "Enviar pedido · R$ …". Fechar com itens pede confirmação ("Descartar").
+- **Enviar** = UM `createOrder(null, storeId, itens, nomeCliente, 'garcom',
+  operador)` → `order_type='counter'`, `added_by_role='garcom'` (passa pela
+  trava da migration 091). Nome do cliente vira `customer_name` e o prefixo
+  `[Nome]` das notas (sai na comanda).
+- **Impressão — achado importante**: `fetch_kitchen_orders_secure` (089)
+  EXCLUI item de balcão `pending` (`not (order_type='counter' and
+  status='pending')`) e todo pedido nasce `pending`. Ou seja, pedido de
+  balcão só aparece pra Estação de Impressão/KDS depois de
+  `send_order_to_kitchen_secure`. Por isso a venda da equipe chama
+  `sendOrderToKitchen` logo depois de criada (fora do "paga primeiro") —
+  aí sai nas impressoras do local/setor certo pelo fluxo normal, igual mesa.
+  No "paga primeiro" + `direct_print`, só depois de "Receber agora".
+  **Consequência pro pedido de balcão do QR (não mexido aqui)**: numa loja
+  `direct_print` nada envia pra cozinha, então esse pedido nunca imprime
+  sozinho — irrelevante pro Sertão hoje (vitrine), mas vale se outra loja
+  `direct_print` receber balcão pelo QR.
+- **Depois de enviar**: quem pode receber (`caixaModuleOn &&
+  canFinalizeBill`) vê "Venda enviada" com **Receber agora** (abre a mesma
+  janela de pagamento — formas, bandeira, troco, nota) ou **Receber depois**.
+  "Receber agora" usa `registrarPagamentoBalcao` (grava pagamento SEM
+  fechar, em qualquer configuração — `pagamentoDaNovaVenda`): o pedido fica
+  "Pago" e sai pelo "Entregar" de sempre (`entregarPedidoBalcao`). Receber
+  depois / quem não pode receber: fica em "Aguardando pagamento" (Caixa e
+  Balcão) como os pedidos do QR, e o caixa recebe pelo fluxo existente.
+  Precisa de turno de caixa aberto (mesma trava de sempre).
+- **Sem internet**: `createOrder` com `'garcom'` já enfileira (id
+  `local_…`). A venda imprime direto na impressora de rede do destino
+  (`printOfflineOrderTicket`, assinatura igual à da Estação:
+  `|produto|qtd|notas`), mostra "Venda salva sem internet" e NÃO oferece
+  receber (a fila offline de pagamento não resolve id local). O card fica
+  "Aguardando internet" até sincronizar; sincronizado, vira pedido `pending`
+  normal (não é enviado pra cozinha — já saiu impresso).
+- **Testado ponta a ponta (2026-09-26, só na ZZ, impressão pausada, sem
+  nota)**: 2 usuários temporários (caixa com permissão, garçom sem),
+  computador e celular: venda com prato com opção obrigatória + observação e
+  bebida ×2 → enviar → receber agora (Dinheiro) → "Pago" → entregar; venda
+  "receber depois" → "Aguardando pagamento" no Caixa → recebida; garçom sem
+  permissão → "Aguardando o caixa" → recebida pelo caixa; descartar
+  carrinho; offline (Playwright `set_offline`) → fila → sincronizou como
+  `counter/pending`. Banco conferido (`order_type='counter'`, itens,
+  `payment_details` com `cash_shift_id`, `delivered`). Tudo apagado depois
+  (pedidos também do `ntb_vendas_frio`, turno de teste, usuários, grupo de
+  opção de teste, `printing_paused` restaurado).
+- **Dev local**: `npm run dev` fala com o banco de produção e sobe o job de
+  retransmissão fiscal (`instrumentation.ts`, sem lock distribuído). Rode
+  com `DISABLE_FISCAL_RETRANSMISSAO=1` pra não virar um segundo processo
+  retransmitindo nota pra SEFAZ.
+
 ## Caixa por operador (`cash_shifts`, migration 062)
 
 Pedido direto do dono (2026-08-28, ao vivo): "frente de caixa"
