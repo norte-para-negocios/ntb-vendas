@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig, useDragControls } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
@@ -2027,13 +2027,17 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 
     return (
         <div className="flex flex-col h-full min-h-[400px]">
-            <div className="sticky top-0 bg-[var(--surface)] z-10 space-y-2 pb-2">
-                <Input
-                    placeholder="Buscar produto..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="bg-[var(--surface-2)]"
-                />
+            <div className="sticky top-0 bg-[var(--surface)] z-10 space-y-3 pb-1">
+                <div className="relative">
+                    <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+                    <input
+                        type="search"
+                        placeholder="Buscar produto..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full h-10 max-sm:h-11 pl-10 pr-4 rounded-full bg-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)] text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+                    />
+                </div>
                 {/* Barra de categorias idêntica ao cardápio do cliente
                     (ClientModule.tsx): "Categorias" é texto vermelho com
                     ícone, sem pílula; aba ativa é texto forte + sublinhado
@@ -2124,7 +2128,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     <button
                         type="button"
                         onClick={() => { setSearchTerm(''); setActiveCategory(''); setActiveGroupId(null); setShowAllCategories(false); }}
-                        className={`w-full text-left rounded-xl border px-3 py-3 text-sm font-bold u-motion u-press-sm ${activeCategory === '' ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)] text-[var(--text)]'}`}
+                        className={`w-full text-left rounded-[14px] px-4 py-3 text-[15px] font-semibold u-motion u-press-sm ${activeCategory === '' ? 'ring-2 ring-current bg-[var(--brand-soft)]' : 'bg-[var(--surface-2)] text-[var(--text)]'}`}
                         style={activeCategory === '' ? { color: GARCOM_ACTION } : undefined}
                     >
                         Ver todos os produtos <span className="font-normal text-[var(--text-muted)]">({products.length})</span>
@@ -2142,11 +2146,11 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                     type="button"
                                     onClick={() => { selectSubcategory(cat.id); setShowAllCategories(false); }}
                                     aria-current={isActive ? 'true' : undefined}
-                                    className={`text-left rounded-xl border px-3 py-3 u-motion u-press-sm ${isActive ? 'border-current bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}
+                                    className={`text-left rounded-[14px] px-4 py-3 u-motion u-press-sm ${isActive ? 'ring-2 ring-current bg-[var(--brand-soft)]' : 'bg-[var(--surface-2)]'}`}
                                     style={isActive ? { color: GARCOM_ACTION } : undefined}
                                 >
-                                    <span className="block text-sm font-bold text-[var(--text)] leading-tight">{cat.name}</span>
-                                    <span className="block text-xs text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                    <span className="block text-[15px] font-semibold text-[var(--text)] leading-tight">{cat.name}</span>
+                                    <span className="block text-[13px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
                                 </button>
                             );
                         };
@@ -2206,17 +2210,17 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                             tabIndex={0}
                             onClick={() => setSelectedProduct(product)}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProduct(product); } }}
-                            className="flex items-start gap-3 py-4 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)]/60 rounded-[var(--r-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                            className="flex items-center gap-3 px-2 -mx-2 py-3 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)] rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                         >
                             <div className="flex-1 min-w-0">
                                 <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
                                 {product.description && (
                                     <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
                                 )}
-                                <div className="mt-1.5 flex items-center gap-2">
-                                    <span className="font-bold text-[15px]" style={{ color: hasActivePromo ? GARCOM_IFOOD_PURPLE : 'var(--text)' }}>
+                                <div className="mt-1 flex items-center gap-2">
+                                    <span className="font-semibold text-[15px] num" style={{ color: hasActivePromo ? GARCOM_IFOOD_PURPLE : 'var(--text)' }}>
                                         {variablePricing && (
-                                            <span className="font-normal text-[var(--text-muted)] text-[11px] mr-0.5">A partir de</span>
+                                            <span className="font-normal text-[var(--text-muted)] text-[13px] mr-0.5">A partir de</span>
                                         )}
                                         {' '}R$ {formatBRL(effectivePrice)}
                                     </span>
@@ -2226,13 +2230,13 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                                 </div>
                                 {!!product.prep_time_minutes && (
                                     <div className="mt-1">
-                                        <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                                            <Clock size={11} /> {product.prep_time_minutes} min
+                                        <span className="flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
+                                            <Clock size={12} /> {product.prep_time_minutes} min
                                         </span>
                                     </div>
                                 )}
                             </div>
-                            <ProductThumb src={product.image_url} name={product.name} size="row" />
+                            <ProductThumb src={product.image_url} name={product.name} size="option" className="!rounded-[12px]" />
                         </div>
                     );
                 })}
@@ -2485,6 +2489,119 @@ const PaymentCaptureFields: React.FC<{
         </div>
     </div>
 );
+
+// "Adicionar pedido" do garçom (redesign 2026-09-26, pedido do dono): no
+// computador/tablet (>=768px) é uma janela grande centralizada (~88vw x 84vh)
+// sobre scrim escurecido+desfocado; no celular continua ocupando a altura
+// toda (é tela de trabalho), como folha que sobe de baixo com alça — só a
+// alça/cabeçalho arrasta (dragControls), pra não brigar com a rolagem do
+// cardápio. Esc/scrim/X fecham; Esc é ignorado enquanto houver outro
+// diálogo por cima (folha do produto, "Categorias"), que fecha primeiro.
+const useIsPhone = () => {
+    const [isPhone, setIsPhone] = useState(false);
+    useEffect(() => {
+        const mq = window.matchMedia('(max-width: 767px)');
+        const update = () => setIsPhone(mq.matches);
+        update();
+        mq.addEventListener('change', update);
+        return () => mq.removeEventListener('change', update);
+    }, []);
+    return isPhone;
+};
+
+const WaiterOrderSurface: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    title: React.ReactNode;
+    ariaLabel: string;
+    children: React.ReactNode;
+}> = ({ isOpen, onClose, title, ariaLabel, children }) => {
+    const isPhone = useIsPhone();
+    const dragControls = useDragControls();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            // Outro diálogo aberto por cima (folha do produto etc.) fecha primeiro.
+            const dialogs = document.querySelectorAll('[role="dialog"]');
+            if (dialogs.length > 1) return;
+            e.preventDefault();
+            onCloseRef.current();
+        };
+        document.addEventListener('keydown', onKey);
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [isOpen]);
+
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <motion.div
+                    key="waiter-scrim"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/30 backdrop-blur-sm"
+                    onClick={onClose}
+                >
+                    <motion.div
+                        key="waiter-panel"
+                        ref={containerRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={ariaLabel}
+                        initial={isPhone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
+                        animate={isPhone ? { y: 0 } : { opacity: 1, scale: 1 }}
+                        exit={isPhone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
+                        transition={SPRING_SHEET}
+                        drag={isPhone ? 'y' : false}
+                        dragListener={false}
+                        dragControls={dragControls}
+                        dragConstraints={{ top: 0 }}
+                        dragElastic={{ top: 0.05, bottom: 0.5 }}
+                        onDragEnd={(_e, info) => {
+                            if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.3) onClose();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full h-[calc(100dvh-10px)] rounded-t-[22px] md:w-[min(1280px,88vw)] md:h-[84vh] md:rounded-[22px] bg-[var(--surface)] overflow-hidden flex flex-col"
+                        style={{ boxShadow: '0 20px 60px -12px rgba(0,0,0,0.28), 0 0 0 1px var(--border)' }}
+                    >
+                        <div
+                            className="flex-shrink-0 touch-none md:touch-auto"
+                            onPointerDown={(e) => { if (isPhone && !(e.target as HTMLElement).closest('button')) dragControls.start(e); }}
+                        >
+                            <div className="flex justify-center pt-2 md:hidden">
+                                <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
+                            </div>
+                            <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-3 md:pt-5">
+                                <h3 className="text-[20px] font-semibold tracking-[-0.015em] text-[var(--text)] min-w-0 truncate">{title}</h3>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    aria-label="Sair"
+                                    title="Sair"
+                                    className="flex items-center justify-center flex-shrink-0 w-8 h-8 max-md:w-10 max-md:h-10 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion"
+                                >
+                                    <X size={16} strokeWidth={2.25} />
+                                </button>
+                            </div>
+                        </div>
+                        {children}
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
 
 const TablesView: React.FC<{
     store: Store;
@@ -4510,38 +4627,36 @@ NOTIFY pgrst, 'reload schema';`;
                 um teto de px como antes) e o cardápio ocupa o resto. Empilha
                 (cardápio em cima, resumo embaixo) em telas estreitas — 30%
                 de um celular quebraria o layout do resumo. */}
-            {showMenuMode && selectedTable && (() => {
+            <WaiterOrderSurface
+                isOpen={showMenuMode && !!selectedTable}
+                onClose={() => setShowMenuMode(false)}
+                ariaLabel={`Mesa ${selectedTable?.number ?? ''} — Adicionar pedido`}
+                title={<>Mesa {selectedTable?.number} <span className="text-[var(--text-muted)] font-normal">· Adicionar pedido</span></>}
+            >
+                {selectedTable && (() => {
                 const resumo = getTableSummary(selectedTable.id);
                 const itens = resumo.allItems || [];
                 return (
-                    <div className="fixed inset-0 z-50 bg-[var(--surface)] flex flex-col">
-                        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)]">
-                            <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)] flex items-center gap-2 min-w-0">
-                                <UtensilsCrossed size={18} className="flex-shrink-0 text-[var(--text-muted)]" />
-                                <span className="truncate">Mesa {selectedTable.number} <span className="text-[var(--text-muted)] font-normal">· Adicionar pedido</span></span>
-                            </h3>
-                            <Button variant="secondary" size="sm" onClick={() => setShowMenuMode(false)} className="flex-shrink-0 max-sm:!h-11">
-                                <X size={16} className="mr-1.5" /> Sair
-                            </Button>
-                        </div>
-                        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-                            <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden p-3">
+                        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+                            <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
                                 <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
                             </div>
                             {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
                                 mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
                                 getTableSummary da comanda completa — atualiza sozinho
                                 (otimista no handleAddItem + Realtime). */}
-                            <div className="lg:w-[30%] lg:min-w-[300px] lg:max-w-[420px] flex-shrink-0 border-t lg:border-t-0 lg:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
-                                <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface)] flex-shrink-0">
-                                    <h4 className="font-semibold text-[15px] text-[var(--text)] flex items-center gap-2"><Receipt size={16} className="text-[var(--text-muted)]"/> Já pedido nesta mesa</h4>
+                            <div className="md:w-[300px] lg:w-[32%] lg:max-w-[400px] max-md:max-h-[38%] flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
+                                <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">
+                                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Já pedido nesta mesa</h4>
                                     <span className="text-[13px] text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
                                 </div>
-                                <div className="flex-1 overflow-y-auto min-h-[120px]">
+                                <div className="flex-1 overflow-y-auto min-h-[88px] px-3">
                                     {itens.length === 0 ? (
-                                        <div className="p-6 text-center text-sm text-[var(--text-muted)]">Nenhum item lançado ainda.</div>
-                                    ) : itens.map(item => (
-                                        <div key={item.id} className="flex items-start justify-between gap-2 p-3 border-b border-[var(--border)] text-sm bg-[var(--surface)]">
+                                        <div className="p-6 text-center text-[13px] text-[var(--text-muted)]">Nenhum item lançado ainda.</div>
+                                    ) : (
+                                    <div className="bg-[var(--surface)] rounded-[14px] divide-y divide-[var(--border)] overflow-hidden">
+                                    {itens.map(item => (
+                                        <div key={item.id} className="flex items-start justify-between gap-2 pl-4 pr-2 py-3">
                                             <div className="min-w-0 flex-1">
                                                 <div className="font-semibold text-[15px] text-[var(--text)] leading-tight">
                                                     <span className="text-[13px] font-medium text-[var(--text-muted)] mr-1 num">{item.quantity}×</span>
@@ -4554,29 +4669,32 @@ NOTIFY pgrst, 'reload schema';`;
                                                     )}
                                                 </div>
                                                 {parseItemNote(item.notes || '').observation && (
-                                                    <div className="text-xs font-semibold text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
+                                                    <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
                                                 )}
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteItem(item.id)}
-                                                className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press flex-shrink-0"
+                                                className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)]/70 hover:text-[var(--err)] hover:bg-[var(--err)]/10 u-motion u-press flex-shrink-0"
                                                 title="Cancelar item"
+                                                aria-label="Cancelar item"
                                             >
                                                 <Trash2 size={16} />
                                             </button>
                                         </div>
                                     ))}
+                                    </div>
+                                    )}
                                 </div>
-                                <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between flex-shrink-0">
+                                <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] flex items-baseline justify-between flex-shrink-0">
                                     <span className="font-medium text-[15px] text-[var(--text-muted)]">Total</span>
-                                    <span className="font-bold text-[22px] num tracking-[-0.01em] text-[var(--text)]">R$ {formatBRL(resumo.total || 0)}</span>
+                                    <span className="font-bold text-[28px] max-md:text-[22px] num tracking-[-0.02em] text-[var(--text)]">R$ {formatBRL(resumo.total || 0)}</span>
                                 </div>
                             </div>
                         </div>
-                    </div>
                 );
-            })()}
+                })()}
+            </WaiterOrderSurface>
 
             {/* MOVE TABLE MODAL */}
             <Modal isOpen={showMoveTableModal} onClose={() => setShowMoveTableModal(false)} title="Trocar de Mesa">
