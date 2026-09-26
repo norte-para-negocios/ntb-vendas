@@ -1113,7 +1113,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             onClick={open}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
             aria-disabled={disabled}
-            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] rounded-[var(--r-sm)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
             style={style}
         >
             <div className="flex-1 min-w-0">
@@ -4076,7 +4076,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     >
                         <LayoutGrid size={15} /> Categorias
                     </button>
-                    <div role="group" aria-label="Categorias do cardápio" className="relative flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pr-4">
+                    <div
+                        role="group"
+                        aria-label="Categorias do cardápio"
+                        className="relative flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pl-2 pr-6"
+                        // Esmaece as pontas do trilho: aba cortada pela borda vira
+                        // "tem mais pra lá", não texto picotado.
+                        style={{ maskImage: 'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%)' }}
+                    >
                         {topLevelItems.map(item => {
                             // Item solto (inclui grupo de 1 categoria, que chega aqui já
                             // "achatado" com o nome do grupo em `label`).
@@ -4220,7 +4227,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 `scroll-margin-top` (spyOffset) garante que o título não fica
                 escondido atrás da barra + 2ª fileira. Com busca/favoritos
                 ativos, categoria sem resultado some inteira. */}
-            <div className={`px-4 pt-2 pb-2 md:max-w-5xl md:mx-auto ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+            <div
+                className={`px-4 pt-2 pb-2 md:max-w-5xl md:mx-auto ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}
+                // A 2ª fileira fica sobreposta logo abaixo da barra: se o cardápio
+                // começa por um grupo, ela já aparece no topo e cobriria o título
+                // do primeiro bloco — reserva o espaço dela aqui.
+                style={!hasActiveFilter && topLevelItems[0]?.kind === 'group' ? { paddingTop: SUBROW_H } : undefined}
+            >
                 {topLevelItems.map(item => {
                     const isGroup = item.kind === 'group';
                     const cats = isGroup ? item.categories : [item.category];
