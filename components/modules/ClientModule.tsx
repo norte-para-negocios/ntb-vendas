@@ -19,7 +19,7 @@ import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, c
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { isCategoryAvailableNow } from '@/lib/schedule';
-import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
+import { buildTopLevelItems, collapseSingleCategoryGroups, flattenTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
@@ -1089,7 +1089,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 // gold sai do cardápio). Continua funcionando bem SEM foto real — hoje
 // 0/1109 produtos têm `image_url` (catálogo vem do Omie) — porque é
 // exatamente esse o caso normal que ProductThumb resolve.
-const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, isBestseller, isFavorite, onToggleFavorite }: {
+const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuickAdd, disabled, style, isBestseller, isFavorite, onToggleFavorite, showPrepTime = true }: {
     product: Product,
     onSelect: (product: Product) => void,
     onQuickAdd?: (product: Product) => void,
@@ -1101,6 +1101,9 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
     isBestseller?: boolean,
     isFavorite?: boolean,
     onToggleFavorite?: (productId: string) => void,
+    // Mostrar o relógio de preparo (default true, compat) — o cardápio passa
+    // false quando o tempo é o padrão da loja ou o item é do bar.
+    showPrepTime?: boolean,
 }) {
     const open = () => { if (!disabled) onSelect(product); };
     return (
@@ -1110,7 +1113,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             onClick={open}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
             aria-disabled={disabled}
-            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] rounded-[var(--r-sm)] hover:bg-[var(--surface-2)]/60 ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] rounded-[var(--r-sm)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
             style={style}
         >
             <div className="flex-1 min-w-0">
@@ -1131,14 +1134,14 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                     <PriceRow product={product} size="row" variablePricing={hasVariablePricing(product)} />
                     {isBestseller && (
                         <span
-                            className="inline-flex items-center gap-1 rounded-full bg-[var(--brand)]/10 text-[var(--brand)] text-[10px] font-bold px-1.5 py-0.5 whitespace-nowrap"
+                            className="inline-flex items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)] text-[11px] font-semibold px-2 py-0.5 whitespace-nowrap"
                             title="Um dos produtos mais vendidos desta loja"
                         >
-                            🔥 Mais vendido
+                            Mais vendido
                         </span>
                     )}
                 </div>
-                {!!product.prep_time_minutes && (
+                {showPrepTime && !!product.prep_time_minutes && (
                     <div className="mt-1">
                         <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
                             <Clock size={11} /> {product.prep_time_minutes} min
@@ -1163,10 +1166,10 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                         onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
                         whileTap={{ scale: 0.88 }}
                         transition={SPRING_TAP}
-                        className="absolute hit-44 -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--surface)] border border-[var(--border)] shadow-sm grid place-items-center"
-                        style={{ color: ACTION_FG }}
+                        className="absolute hit-44 -bottom-1.5 -right-1.5 w-8 h-8 rounded-full grid place-items-center text-white ring-[3px] ring-[var(--surface)]"
+                        style={{ backgroundColor: ACTION_BG }}
                     >
-                        <Plus size={15} />
+                        <Plus size={17} strokeWidth={2.5} />
                     </motion.button>
                 )}
                 {onToggleFavorite && (
@@ -2499,10 +2502,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('');
-    // Task 5: navegação de 2 níveis (grupo → subcategoria) na barra do topo.
-    // Grupo expandido (fileira de subcategorias visível), independente de
-    // ele "possuir" a categoria ativa ou não — ver activeCategoryGroupId.
-    const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+    // Task 5 / correção 2026-09-26: a 2ª fileira (subcategorias) não tem mais
+    // estado próprio de "grupo expandido" — ela segue a rolagem e mostra
+    // sempre o grupo DONO da categoria em vista (activeCategoryGroupId). O
+    // estado antigo deixava a fileira de Vinhos presa embaixo de Pizzas
+    // (análise de categorias, P2).
     // Sheet "Todas as categorias" (pedido do dono, 2026-09-18): a barra só rola pro
     // lado e com 40 categorias fica ruim de navegar.
     const [showAllCategories, setShowAllCategories] = useState(false);
@@ -2578,6 +2582,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     const [stickyOffset, setStickyOffset] = useState(0);
     const sortMenuRef = useRef<HTMLDivElement>(null);
     const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const subTabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
     const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
     // Suprime a atualização do scroll-spy enquanto um scroll disparado por
     // clique numa tab está em curso — senão o observer muda a tab ativa no
@@ -3042,23 +3047,40 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // (lib/categoryGroups.ts), a mesma usada pela sheet "Categorias" logo
     // abaixo e pelas 3 outras telas que navegam categoria (garçom + sidebar
     // do lojista) — nunca reimplementar essa intercalação aqui.
-    const topLevelItems = useMemo(() => buildTopLevelItems(visibleCategories, categoryGroups), [visibleCategories, categoryGroups]);
+    // Correção 2026-09-26: grupo com 1 categoria vira item solto (nome do
+    // grupo, sem 2ª fileira) — ver collapseSingleCategoryGroups.
+    const topLevelItems = useMemo(
+        () => collapseSingleCategoryGroups(buildTopLevelItems(visibleCategories, categoryGroups)),
+        [visibleCategories, categoryGroups]
+    );
+
+    // Ordem das SEÇÕES da página = ordem da barra (grupo → membros, soltas no
+    // lugar delas). Antes a página seguia `visibleCategories` (ordem crua de
+    // `categories.order`) e um grupo "picado" no cadastro fazia a barra voltar
+    // pra um grupo já passado durante a rolagem (análise P1). Tudo que
+    // depende de "primeira/última categoria" (padrão inicial, guarda de fim
+    // de página, observer) usa esta lista.
+    const orderedCategories = useMemo(() => flattenTopLevelItems(topLevelItems), [topLevelItems]);
+
+    // categoria → grupo (só grupos de verdade, 2+ categorias; o de 1 já virou
+    // solto acima e não tem fileira).
+    const groupItemByCategoryId = useMemo(() => {
+        const map = new Map<string, Extract<TopLevelItem, { kind: 'group' }>>();
+        topLevelItems.forEach(item => {
+            if (item.kind === 'group') item.categories.forEach(c => map.set(c.id, item));
+        });
+        return map;
+    }, [topLevelItems]);
 
     // Grupo dono da categoria ativa (null se a categoria ativa for solta ou
     // nenhuma categoria estiver ativa ainda).
-    const activeCategoryGroupId = useMemo(
-        () => visibleCategories.find(c => c.id === activeCategory)?.group_id ?? null,
-        [visibleCategories, activeCategory]
-    );
+    const activeGroupItem = groupItemByCategoryId.get(activeCategory) ?? null;
+    const activeCategoryGroupId = activeGroupItem ? activeGroupItem.group.id : null;
 
-    // Fileira de subcategorias do grupo expandido (`activeGroupId`) — usa as
-    // categorias-membro já resolvidas/ordenadas por buildTopLevelItems (nunca
-    // refiltra visibleCategories aqui, pra nunca divergir da ordem da barra).
-    const expandedGroupSubcategories = useMemo(() => {
-        if (!activeGroupId) return [];
-        const item = topLevelItems.find(i => i.kind === 'group' && i.group.id === activeGroupId);
-        return item && item.kind === 'group' ? item.categories : [];
-    }, [topLevelItems, activeGroupId]);
+    // 2ª fileira: subcategorias do grupo em vista, na ordem da barra. Vazia
+    // (fileira some) quando a categoria em vista é solta.
+    const expandedGroupSubcategories = activeGroupItem ? activeGroupItem.categories : [];
+    const hasAnyGroup = useMemo(() => topLevelItems.some(i => i.kind === 'group'), [topLevelItems]);
 
     // Task 3: tabs fixas substituem o acordeão — sempre existe uma tab ativa
     // (nunca "nada aberto"). No primeiro paint, `activeCategory` começa ''
@@ -3068,14 +3090,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // isCategoryAvailableNow), cai pra primeira categoria ainda disponível
     // em vez de ficar sem nenhuma tab ativa.
     useEffect(() => {
-        if (visibleCategories.length === 0) {
+        if (orderedCategories.length === 0) {
             if (activeCategory !== '') setActiveCategory('');
             return;
         }
-        if (!visibleCategories.some(c => c.id === activeCategory)) {
-            setActiveCategory(visibleCategories[0].id);
+        if (!orderedCategories.some(c => c.id === activeCategory)) {
+            setActiveCategory(orderedCategories[0].id);
         }
-    }, [visibleCategories, activeCategory]);
+    }, [orderedCategories, activeCategory]);
 
     // Busca/favoritos filtram os produtos DENTRO de cada categoria (não mais
     // uma lista única da categoria ativa) — cada categoria do acordeão pega
@@ -3108,6 +3130,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         });
         return map;
     }, [products, visibleCategories, searchTerm, sortBy, favoritesOnly, favoriteIds]);
+
+    // Tempo de preparo "padrão" da loja (o mais comum entre os produtos). O
+    // cartão só mostra o relógio quando o prato demora MAIS que isso e não é
+    // do bar — antes todo item, até cerveja e água, mostrava "15 min"
+    // (análise de categorias, P9/Prioridade 4 item 8).
+    const typicalPrepTime = useMemo(() => {
+        const freq = new Map<number, number>();
+        products.forEach(p => { if (p.prep_time_minutes) freq.set(p.prep_time_minutes, (freq.get(p.prep_time_minutes) || 0) + 1); });
+        let best = 0, bestCount = 0;
+        freq.forEach((count, minutes) => { if (count > bestCount) { best = minutes; bestCount = count; } });
+        return best;
+    }, [products]);
 
     // Com busca ou filtro de favoritos ativo, a faixa de tabs some e só as
     // seções com resultado renderizam (Task 3) — sem o "abrir categoria"
@@ -3165,6 +3199,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         return () => ro.disconnect();
     }, [isWaitingBill, hasActiveFilter, visibleCategories.length]);
 
+    // A 2ª fileira fica SOBREPOSTA logo abaixo da barra (position absolute),
+    // fora do fluxo — aparecer/sumir conforme a rolagem não empurra a página
+    // (nada de "pulo"). Por isso a margem do título das seções e a faixa do
+    // scroll-spy reservam sempre a altura dela quando a loja tem algum grupo,
+    // senão o título ficaria escondido embaixo da fileira.
+    const SUBROW_H = 44;
+    const spyOffset = stickyOffset + (hasAnyGroup && !hasActiveFilter ? SUBROW_H : 0);
+
     // Scroll-spy: um único IntersectionObserver observando as seções de
     // categoria, ativo só quando a faixa de tabs está visível (sem busca/
     // favoritos ativos — com filtro ativo não há tabs pra destacar, ver
@@ -3173,7 +3215,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // Desconecta no cleanup do efeito em toda re-execução E no unmount —
     // nunca acumula observers.
     useEffect(() => {
-        if (hasActiveFilter || visibleCategories.length === 0) return;
+        if (hasActiveFilter || orderedCategories.length === 0) return;
 
         const observer = new IntersectionObserver(
             (entries) => {
@@ -3189,16 +3231,16 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 const id = intersecting[0].target.getAttribute('data-category-id');
                 if (id) setActiveCategory(id);
             },
-            { rootMargin: `-${stickyOffset}px 0px -65% 0px`, threshold: 0 }
+            { rootMargin: `-${spyOffset}px 0px -65% 0px`, threshold: 0 }
         );
 
-        visibleCategories.forEach(cat => {
+        orderedCategories.forEach(cat => {
             const el = sectionRefs.current[cat.id];
             if (el) observer.observe(el);
         });
 
         return () => observer.disconnect();
-    }, [visibleCategories, hasActiveFilter, stickyOffset]);
+    }, [orderedCategories, hasActiveFilter, spyOffset]);
 
     // Guarda de fim de página (achado da revisão final): `rootMargin` do
     // IntersectionObserver acima observa só uma faixa fina perto do topo
@@ -3215,7 +3257,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // um `setActiveCategory` síncrono aqui sobrescreveria esse padrão pela
     // ÚLTIMA categoria — corrida de efeitos, não scroll de verdade.
     useEffect(() => {
-        if (hasActiveFilter || visibleCategories.length === 0) return;
+        if (hasActiveFilter || orderedCategories.length === 0) return;
 
         const checkBottom = () => {
             // Mesma supressão do observer principal (linha ~2615) — sem isso,
@@ -3226,14 +3268,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             if (isClickScrollingRef.current) return;
             const doc = document.documentElement;
             if (window.scrollY + window.innerHeight >= doc.scrollHeight - 2) {
-                const last = visibleCategories[visibleCategories.length - 1];
+                const last = orderedCategories[orderedCategories.length - 1];
                 if (last) setActiveCategory(last.id);
             }
         };
 
         window.addEventListener('scroll', checkBottom, { passive: true });
         return () => window.removeEventListener('scroll', checkBottom);
-    }, [visibleCategories, hasActiveFilter]);
+    }, [orderedCategories, hasActiveFilter]);
 
     // Traz a tab ativa pra vista dentro da faixa horizontal rolável sempre
     // que ela muda — tanto por clique quanto pelo scroll-spy. `tabButtonRefs`
@@ -3242,8 +3284,19 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     useEffect(() => {
         // Categoria dentro de um grupo não tem tab própria — centraliza a tab
         // do grupo dono nesse caso (Task 5).
-        const btn = tabButtonRefs.current[activeCategoryGroupId ?? activeCategory];
-        if (btn) btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        // Rola só o trilho horizontal (scrollTo no próprio pai), nunca
+        // scrollIntoView: esse também mexe na janela e pode cancelar a rolagem
+        // suave da página que um toque na aba acabou de disparar.
+        const centerInRail = (el: HTMLElement | null | undefined) => {
+            const rail = el?.parentElement;
+            if (!el || !rail) return;
+            const left = el.offsetLeft - rail.clientWidth / 2 + el.offsetWidth / 2;
+            rail.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+        };
+        centerInRail(tabButtonRefs.current[activeCategoryGroupId ?? activeCategory]);
+        // Mesma coisa pro chip ativo da 2ª fileira (ela rola pro lado sozinha
+        // acompanhando a subcategoria em vista).
+        centerInRail(subTabButtonRefs.current[activeCategory]);
     }, [activeCategory, activeCategoryGroupId]);
 
     // Failsafe da supressão do spy: além do timeout de segurança em
@@ -3296,7 +3349,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         if (!section) return;
         isClickScrollingRef.current = true;
         setActiveCategory(categoryId);
-        setActiveGroupId(null);
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
         if (clickScrollTimeoutRef.current) clearTimeout(clickScrollTimeoutRef.current);
         clickScrollTimeoutRef.current = setTimeout(() => {
@@ -4014,80 +4066,43 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     embaixo, sem precisar de navegação por tab (ver
                     hasActiveFilter e a lista de seções logo abaixo). */}
                 {!hasActiveFilter && topLevelItems.length > 0 && (
-                    <div className="flex items-start gap-2 pl-4">
+                    <div className="flex items-center gap-3 pl-4">
                     <button
                         type="button"
                         onClick={() => setShowAllCategories(true)}
                         aria-label="Ver todas as categorias"
-                        className="flex-shrink-0 flex items-center gap-1.5 text-[13px] font-semibold pb-1.5 u-motion u-press-sm"
+                        className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold u-motion u-press-sm"
                         style={{ color: ACTION_FG }}
                     >
-                        <LayoutGrid size={16} /> Categorias
+                        <LayoutGrid size={15} /> Categorias
                     </button>
-                    <div role="group" aria-label="Categorias do cardápio" className="flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pr-4 pb-2.5">
+                    <div role="group" aria-label="Categorias do cardápio" className="relative flex-1 min-w-0 flex gap-5 overflow-x-auto no-scrollbar pr-4">
                         {topLevelItems.map(item => {
-                            if (item.kind === 'category') {
-                                const cat = item.category;
-                                const isActive = activeCategory === cat.id;
-                                return (
-                                    <button
-                                        key={cat.id}
-                                        type="button"
-                                        ref={el => { tabButtonRefs.current[cat.id] = el; }}
-                                        onClick={() => handleTabClick(cat.id)}
-                                        aria-current={isActive ? 'true' : undefined}
-                                        // Sublinhado da aba ativa: AÇÃO na paleta iFood (correção
-                                        // 2026-08-21). Virou um `motion.div` com `layoutId`
-                                        // compartilhado (2026-09-10) em vez de border-b estático —
-                                        // desliza de uma aba pra outra (padrão iFood/Uber Eats de
-                                        // verdade) em vez de sumir e reaparecer na aba nova. Mesmo
-                                        // SPRING_TAP já validado com o usuário (lib/motion.ts) —
-                                        // não é preset novo.
-                                        className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
-                                    >
-                                        {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
-                                        {cat.name}
-                                        {isActive && (
-                                            <motion.div
-                                                layoutId="categoryTabUnderline"
-                                                className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
-                                                style={{ backgroundColor: ACTION_FG }}
-                                                transition={SPRING_TAP}
-                                            />
-                                        )}
-                                    </button>
-                                );
-                            }
-                            // Grupo: tocar expande/recolhe a fileira de subcategorias
-                            // (não navega sozinho — grupo não tem seção própria no
-                            // scroll). Sublinhado só aparece quando o grupo é DONO da
-                            // categoria ativa (activeCategoryGroupId), nunca só por
-                            // estar expandido (`activeGroupId`) — dois elementos com o
-                            // mesmo layoutId ao mesmo tempo geram glitch de animação.
-                            const group = item.group;
-                            const isExpanded = activeGroupId === group.id;
-                            const ownsActiveCategory = activeCategoryGroupId === group.id;
-                            const isBold = isExpanded || ownsActiveCategory;
+                            // Item solto (inclui grupo de 1 categoria, que chega aqui já
+                            // "achatado" com o nome do grupo em `label`).
+                            const tabKey = item.kind === 'category' ? item.category.id : item.group.id;
+                            const label = item.kind === 'category' ? (item.label ?? item.category.name) : item.group.name;
+                            const isActive = item.kind === 'category'
+                                ? activeCategory === item.category.id
+                                : activeCategoryGroupId === item.group.id;
+                            const target = item.kind === 'category' ? item.category.id : item.categories[0]?.id;
                             return (
                                 <button
-                                    key={group.id}
+                                    key={tabKey}
                                     type="button"
-                                    ref={el => { tabButtonRefs.current[group.id] = el; }}
-                                    onClick={() => {
-                                        if (isExpanded) { setActiveGroupId(null); return; }
-                                        if (item.categories[0]) handleTabClick(item.categories[0].id);
-                                        setActiveGroupId(group.id);
-                                    }}
-                                    aria-expanded={isExpanded}
-                                    aria-current={ownsActiveCategory ? 'true' : undefined}
-                                    className={`relative flex-shrink-0 pb-1.5 text-[14px] whitespace-nowrap u-motion ${isBold ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)]'}`}
+                                    ref={el => { tabButtonRefs.current[tabKey] = el; }}
+                                    onClick={() => { if (target) handleTabClick(target); }}
+                                    aria-current={isActive ? 'true' : undefined}
+                                    // Sublinhado fino deslizante (layoutId único: só uma aba
+                                    // ativa por vez, grupo OU solta).
+                                    className={`relative flex-shrink-0 py-3 text-[15px] whitespace-nowrap u-motion ${isActive ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-muted)] font-medium'}`}
                                 >
                                     {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
-                                    {group.name}
-                                    {ownsActiveCategory && (
+                                    {label}
+                                    {isActive && (
                                         <motion.div
                                             layoutId="categoryTabUnderline"
-                                            className="absolute left-0 right-0 -bottom-0 h-0.5 rounded-full"
+                                            className="absolute left-0 right-0 bottom-0 h-[2px] rounded-full"
                                             style={{ backgroundColor: ACTION_FG }}
                                             transition={SPRING_TAP}
                                         />
@@ -4099,132 +4114,180 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     </div>
                 )}
 
-                {!hasActiveFilter && activeGroupId && expandedGroupSubcategories.length > 0 && (
-                    <div className="flex-1 min-w-0 flex gap-4 overflow-x-auto no-scrollbar pl-4 pr-4 pb-2 -mt-1">
-                        {expandedGroupSubcategories.map(cat => {
-                            const isActiveSub = activeCategory === cat.id;
-                            return (
-                                <button
-                                    key={cat.id}
-                                    type="button"
-                                    onClick={() => handleTabClick(cat.id)}
-                                    aria-current={isActiveSub ? 'true' : undefined}
-                                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap u-motion bg-[var(--surface-2)] ${isActiveSub ? 'font-semibold' : 'font-medium text-[var(--text)]'}`}
-                                    style={isActiveSub ? { color: ACTION_FG } : undefined}
-                                >
-                                    {cat.name}
-                                </button>
-                            );
-                        })}
-                    </div>
+                {/* 2ª fileira (subcategorias do grupo EM VISTA): segue a rolagem —
+                    aparece quando a seção atual pertence a um grupo, troca quando
+                    a rolagem entra em outro grupo e some numa categoria solta
+                    (análise P2: antes ficava "presa" no último grupo tocado).
+                    Sobreposta abaixo da barra (absolute), fora do fluxo — ver
+                    SUBROW_H/spyOffset. */}
+                {!hasActiveFilter && hasAnyGroup && (
+                    <AnimatePresence initial={false}>
+                        {activeGroupItem && expandedGroupSubcategories.length > 0 && (
+                            <motion.div
+                                key={activeGroupItem.group.id}
+                                data-subrow
+                                initial={{ opacity: 0, y: -6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={SPRING_TAP}
+                                className="absolute left-0 right-0 top-full bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)]"
+                                style={{ height: SUBROW_H }}
+                            >
+                                <div role="group" aria-label={`Subcategorias de ${activeGroupItem.group.name}`} className="relative h-full flex items-center gap-2 overflow-x-auto no-scrollbar px-4">
+                                    {expandedGroupSubcategories.map(cat => {
+                                        const isActiveSub = activeCategory === cat.id;
+                                        return (
+                                            <button
+                                                key={cat.id}
+                                                type="button"
+                                                ref={el => { subTabButtonRefs.current[cat.id] = el; }}
+                                                onClick={() => handleTabClick(cat.id)}
+                                                aria-current={isActiveSub ? 'true' : undefined}
+                                                className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[13px] whitespace-nowrap u-motion ${isActiveSub ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
+                                                style={isActiveSub ? { color: ACTION_FG } : undefined}
+                                            >
+                                                {cat.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 )}
             </div>
 
-            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet">
-                <div className="space-y-4">
-                    {/* Fix I2 (2026-09-22): mesma ordem intercalada de topLevelItems
-                        (loose + grupo), não mais "todas as soltas primeiro". Categorias
-                        soltas consecutivas continuam agrupadas numa única grade de 2
-                        colunas; um grupo entra como cabeçalho + grade própria. */}
-                    {(() => {
-                        const renderCategoryButton = (cat: Category) => {
-                            const qtd = (productsByCategory[cat.id] || []).length;
+            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet" surface="opaque">
+                {/* Lista agrupada estilo Ajustes: cada item de 1º nível (grupo OU
+                    categoria solta) é um cartão próprio, na mesma ordem da barra.
+                    A solta ganha o mesmo peso de título que um grupo — antes ela
+                    ficava numa grade sem título e parecia continuação do grupo de
+                    cima (análise P6). */}
+                <div className="space-y-3">
+                    {topLevelItems.map((item: TopLevelItem) => {
+                        const countOf = (cat: Category) => (productsByCategory[cat.id] || []).length;
+                        const itensLabel = (n: number) => `${n} ${n === 1 ? 'item' : 'itens'}`;
+                        const go = (catId: string | undefined) => { if (!catId) return; setShowAllCategories(false); handleTabClick(catId); };
+                        if (item.kind === 'category') {
                             return (
                                 <button
-                                    key={cat.id}
+                                    key={item.category.id}
                                     type="button"
-                                    onClick={() => { setShowAllCategories(false); handleTabClick(cat.id); }}
-                                    className="text-left rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 u-motion u-press-sm text-[var(--text)]"
+                                    onClick={() => go(item.category.id)}
+                                    className="w-full flex items-center gap-3 rounded-[18px] bg-[var(--surface-2)] px-4 py-3.5 text-left u-motion u-press-sm"
                                 >
-                                    <span className="block text-[14px] font-semibold leading-tight">{cat.name}</span>
-                                    <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{qtd} {qtd === 1 ? 'item' : 'itens'}</span>
+                                    <span className="flex-1 min-w-0 text-[16px] font-semibold text-[var(--text)] truncate">{item.label ?? item.category.name}</span>
+                                    <span className="flex-shrink-0 text-[13px] text-[var(--text-muted)] num">{itensLabel(countOf(item.category))}</span>
+                                    <ChevronRight size={16} className="flex-shrink-0 text-[var(--text-muted)]" />
                                 </button>
                             );
-                        };
-                        const nodes: React.ReactNode[] = [];
-                        let looseBuffer: Category[] = [];
-                        const flushLoose = () => {
-                            if (looseBuffer.length === 0) return;
-                            nodes.push(
-                                <div key={`loose-${nodes.length}`} className="grid grid-cols-2 gap-2">
-                                    {looseBuffer.map(renderCategoryButton)}
-                                </div>
-                            );
-                            looseBuffer = [];
-                        };
-                        topLevelItems.forEach((item: TopLevelItem) => {
-                            if (item.kind === 'category') {
-                                looseBuffer.push(item.category);
-                                return;
-                            }
-                            flushLoose();
-                            nodes.push(
-                                <div key={item.group.id}>
-                                    <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{item.group.name}</p>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {item.categories.map(renderCategoryButton)}
-                                    </div>
-                                </div>
-                            );
-                        });
-                        flushLoose();
-                        return nodes;
-                    })()}
+                        }
+                        const total = item.categories.reduce((sum, c) => sum + countOf(c), 0);
+                        return (
+                            <div key={item.group.id} className="rounded-[18px] bg-[var(--surface-2)] overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => go(item.categories[0]?.id)}
+                                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left u-motion"
+                                >
+                                    <span className="flex-1 min-w-0 text-[16px] font-semibold text-[var(--text)] truncate">{item.group.name}</span>
+                                    <span className="flex-shrink-0 text-[13px] text-[var(--text-muted)] num">{itensLabel(total)}</span>
+                                    <ChevronRight size={16} className="flex-shrink-0 text-[var(--text-muted)]" />
+                                </button>
+                                {item.categories.map(cat => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => go(cat.id)}
+                                        className="w-full flex items-center gap-3 pl-8 pr-4 py-3 text-left u-motion border-t border-[var(--border)]"
+                                    >
+                                        <span className="flex-1 min-w-0 text-[15px] text-[var(--text)] truncate">{cat.name}</span>
+                                        <span className="flex-shrink-0 text-[13px] text-[var(--text-muted)] num">{itensLabel(countOf(cat))}</span>
+                                        <ChevronRight size={15} className="flex-shrink-0 text-[var(--text-muted)] opacity-60" />
+                                    </button>
+                                ))}
+                            </div>
+                        );
+                    })}
                 </div>
             </Modal>
 
-            {/* Seções empilhadas (Task 3, substitui o acordeão): todo produto
-                fica visível sem nenhum toque — `scroll-margin-top` (via
-                `stickyOffset`) garante que o título da seção não fica
-                escondido atrás da barra fixa ao chegar por scrollIntoView
-                (clique numa tab). Com busca/favoritos ativos, categoria sem
-                nenhum resultado some inteira (mesmo comportamento que o
-                acordeão já tinha). */}
-            <div className={`px-4 pt-3 pb-2 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                {visibleCategories.map((cat) => {
-                    const catProducts = productsByCategory[cat.id] || [];
-                    if (hasActiveFilter && catProducts.length === 0) return null;
+            {/* Seções empilhadas NA ORDEM DA BARRA (correção 2026-09-26, análise
+                P1): grupo → título grande do grupo + subtítulo por categoria;
+                categoria solta → título grande próprio (não parece mais parte do
+                grupo de cima). Categoria de 1 item dentro de um grupo ganha
+                subtítulo leve (5 pizzas de 1 item viram uma lista só).
+                `scroll-margin-top` (spyOffset) garante que o título não fica
+                escondido atrás da barra + 2ª fileira. Com busca/favoritos
+                ativos, categoria sem resultado some inteira. */}
+            <div className={`px-4 pt-2 pb-2 md:max-w-5xl md:mx-auto ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                {topLevelItems.map(item => {
+                    const isGroup = item.kind === 'group';
+                    const cats = isGroup ? item.categories : [item.category];
+                    const shown = hasActiveFilter ? cats.filter(c => (productsByCategory[c.id] || []).length > 0) : cats;
+                    if (shown.length === 0) return null;
+                    const blockTitle = isGroup ? item.group.name : (item.label ?? item.category.name);
                     return (
-                        <section
-                            key={cat.id}
-                            ref={el => { sectionRefs.current[cat.id] = el; }}
-                            data-category-id={cat.id}
-                            style={{ scrollMarginTop: stickyOffset }}
-                            className="border-b border-[var(--border)] last:border-0 pt-4 pb-2"
-                        >
-                            <h2 className="text-[19px] font-bold text-[var(--text)] mb-1" style={{ fontFamily: theme.displayFont }}>
-                                {theme.categoryEmoji && <span aria-hidden="true">{theme.categoryEmoji} </span>}
-                                {cat.name}
-                            </h2>
-                            <div className="pb-2">
-                                {catProducts.map((product, i) => (
-                                    <ProductCard
-                                        key={product.id}
-                                        product={product}
-                                        onSelect={setSelectedProduct}
-                                        onQuickAdd={(p) => {
-                                            // Qualquer grupo de opção (obrigatório ou não) abre o
-                                            // modal completo em vez de adicionar direto — extras
-                                            // opcionais (ex.: borda de pizza) também são upsell/
-                                            // vinculados ao omie_codigo, não podem ser pulados no "+".
-                                            if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                            requestAccessThen(() => {
-                                                addToCart(p, 1, '', []);
-                                                toast.success(`${p.name} adicionado`);
-                                            });
-                                        }}
-                                        disabled={isWaitingBill}
-                                        style={stagger(Math.min(i, 10) * 30)}
-                                        isBestseller={bestsellerIds.has(product.id)}
-                                        isFavorite={favoriteIds.has(product.id)}
-                                        onToggleFavorite={toggleFavorite}
-                                    />
-                                ))}
-                                {catProducts.length === 0 && (
-                                    <p className="text-[13px] text-[var(--text-muted)] py-3 text-center">Nenhum produto nesta categoria.</p>
-                                )}
-                            </div>
-                        </section>
+                        <div key={isGroup ? item.group.id : item.category.id} className="pt-7 first:pt-4">
+                            {shown.map((cat, idx) => {
+                                const catProducts = productsByCategory[cat.id] || [];
+                                const lightHeader = isGroup && catProducts.length <= 1;
+                                return (
+                                    <section
+                                        key={cat.id}
+                                        ref={el => { sectionRefs.current[cat.id] = el; }}
+                                        data-category-id={cat.id}
+                                        style={{ scrollMarginTop: spyOffset }}
+                                        className={idx > 0 ? (lightHeader ? 'pt-3' : 'pt-5') : ''}
+                                    >
+                                        {idx === 0 && (
+                                            <h2
+                                                className="text-[24px] font-bold tracking-[-0.02em] leading-tight text-[var(--text)]"
+                                                style={{ fontFamily: theme.displayFont }}
+                                            >
+                                                {blockTitle}
+                                            </h2>
+                                        )}
+                                        {isGroup && (
+                                            lightHeader ? (
+                                                <h3 className={`text-[13px] font-semibold text-[var(--text-muted)] px-1 ${idx === 0 ? 'mt-2' : ''}`}>{cat.name}</h3>
+                                            ) : (
+                                                <h3 className={`text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)] px-1 ${idx === 0 ? 'mt-3' : ''}`}>{cat.name}</h3>
+                                            )
+                                        )}
+                                        <div className="mt-2 rounded-[18px] bg-[var(--surface)] px-4 md:grid md:grid-cols-2 md:gap-x-8">
+                                            {catProducts.map((product, i) => (
+                                                <ProductCard
+                                                    key={product.id}
+                                                    product={product}
+                                                    onSelect={setSelectedProduct}
+                                                    onQuickAdd={(p) => {
+                                                        // Qualquer grupo de opção (obrigatório ou não) abre o
+                                                        // modal completo em vez de adicionar direto — extras
+                                                        // opcionais (ex.: borda de pizza) também são upsell/
+                                                        // vinculados ao omie_codigo, não podem ser pulados no "+".
+                                                        if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
+                                                        requestAccessThen(() => {
+                                                            addToCart(p, 1, '', []);
+                                                            toast.success(`${p.name} adicionado`);
+                                                        });
+                                                    }}
+                                                    disabled={isWaitingBill}
+                                                    style={stagger(Math.min(i, 10) * 30)}
+                                                    isBestseller={bestsellerIds.has(product.id)}
+                                                    isFavorite={favoriteIds.has(product.id)}
+                                                    onToggleFavorite={toggleFavorite}
+                                                    showPrepTime={product.destination !== 'bar' && !!product.prep_time_minutes && product.prep_time_minutes > typicalPrepTime}
+                                                />
+                                            ))}
+                                            {catProducts.length === 0 && (
+                                                <p className="text-[13px] text-[var(--text-muted)] py-4 text-center md:col-span-2">Nenhum produto nesta categoria.</p>
+                                            )}
+                                        </div>
+                                    </section>
+                                );
+                            })}
+                        </div>
                     );
                 })}
 

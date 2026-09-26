@@ -14,7 +14,10 @@ import { Category, CategoryGroup } from '@/types';
 // grupos: `group.order`. Empate entre uma categoria solta e um grupo (mesmo
 // `order`): a categoria solta vem primeiro.
 export type TopLevelItem =
-  | { kind: 'category'; category: Category }
+  // `label` (opcional, 2026-09-26): nome a exibir no lugar de category.name —
+  // só preenchido por collapseSingleCategoryGroups (grupo de 1 categoria
+  // vira "solta" mostrando o nome do GRUPO). Quem não usa ignora.
+  | { kind: 'category'; category: Category; label?: string }
   | { kind: 'group'; group: CategoryGroup; categories: Category[] };
 
 export function buildTopLevelItems(categories: Category[], groups: CategoryGroup[]): TopLevelItem[] {
@@ -44,4 +47,25 @@ export function buildTopLevelItems(categories: Category[], groups: CategoryGroup
       return 0;
     })
     .map(e => e.item);
+}
+
+// Correção de sistema (2026-09-26, análise de categorias P4/Prioridade 1
+// item 4): grupo com UMA categoria só não é pasta de verdade — vira item
+// solto com o nome do grupo (ex.: "Bebidas sem Álcool" › "Geladas sem
+// Álcool" vira só "Bebidas sem Álcool"), sem 2ª fileira. Função separada de
+// buildTopLevelItems pra não mudar o que as outras telas já recebem.
+export function collapseSingleCategoryGroups(items: TopLevelItem[]): TopLevelItem[] {
+  return items.map(item =>
+    item.kind === 'group' && item.categories.length === 1
+      ? { kind: 'category', category: item.categories[0], label: item.group.name }
+      : item
+  );
+}
+
+// Ordem de LEITURA (a mesma da barra): grupo → suas categorias, soltas no
+// seu lugar. É a ordem em que as seções da página devem ser montadas — se a
+// página seguir a ordem crua de `categories.order`, um cadastro com grupo
+// "picado" faz a barra pular entre grupos ao rolar (análise P1).
+export function flattenTopLevelItems(items: TopLevelItem[]): Category[] {
+  return items.flatMap(item => (item.kind === 'group' ? item.categories : [item.category]));
 }
