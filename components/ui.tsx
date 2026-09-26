@@ -13,21 +13,21 @@ export const Button: React.FC<
   }
 > = ({ className = '', variant = 'primary', size = 'md', isLoading, children, ...props }) => {
   const base =
-    'inline-flex items-center justify-center font-medium rounded-[var(--r-md)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none';
+    'inline-flex items-center justify-center font-semibold rounded-full whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none';
 
   const sizes = {
-    sm: 'px-3 py-1.5 text-[13px] gap-1.5',
-    md: 'px-4 py-2 text-[14px] gap-2',
-    lg: 'px-5 py-2.5 text-[15px] gap-2',
+    sm: 'h-8 px-3.5 text-[13px] gap-1.5',
+    md: 'h-[38px] px-4 text-[15px] gap-2',
+    lg: 'h-11 px-5 text-[16px] gap-2',
   };
 
   const variants = {
     primary:
-      'bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white focus-visible:ring-[var(--brand)] shadow-sm',
+      'bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white focus-visible:ring-[var(--brand)]',
     secondary:
       'bg-[var(--surface-2)] hover:bg-[var(--border)] text-[var(--text)] focus-visible:ring-[var(--brand)]',
     outline:
-      'border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] hover:text-[var(--brand)] focus-visible:ring-[var(--brand)]',
+      'border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] focus-visible:ring-[var(--brand)]',
     danger:
       'bg-[var(--err)] hover:opacity-90 text-white focus-visible:ring-[var(--err)]',
     ghost:
@@ -37,7 +37,6 @@ export const Button: React.FC<
   return (
     <motion.button
       whileTap={{ scale: 0.97 }}
-      whileHover={{ scale: 1.015 }}
       transition={SPRING_TAP}
       className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
       disabled={isLoading || props.disabled}
@@ -64,8 +63,8 @@ export const Input: React.FC<
       )}
       <input
         id={inputId}
-        className={`w-full rounded-[var(--r-md)] border bg-[var(--surface)] px-3 py-2 text-sm max-sm:text-base text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all ${
-          error ? 'border-[var(--err)]' : 'border-[var(--border)]'
+        className={`w-full rounded-[var(--r-md)] border-0 bg-[var(--surface-2)] h-[38px] px-3 text-[15px] max-sm:text-base max-sm:h-11 text-[var(--text)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 transition-all ${
+          error ? 'ring-2 ring-[var(--err)]/50' : ''
         } ${className}`}
         {...props}
       />
@@ -81,22 +80,21 @@ export const Card: React.FC<{
   hoverable?: boolean;
   accentColor?: string;
   style?: React.CSSProperties;
-}> = ({ children, className = '', onClick, hoverable, accentColor, style }) => {
+}> = ({ children, className = '', onClick, hoverable, style }) => {
+  // `accentColor` (faixa lateral colorida) foi aposentado no redesign estilo
+  // Apple (2026-09-26); a prop continua aceita pra não quebrar chamadas.
   const interactive = Boolean(onClick || hoverable);
   return (
     <motion.div
       onClick={onClick}
       {...(interactive
-        ? { whileHover: { y: -2, boxShadow: 'var(--shadow-md)' }, whileTap: { scale: 0.99 }, transition: SPRING_TAP }
+        ? { whileHover: { y: -1, boxShadow: 'var(--shadow-md)' }, whileTap: { scale: 0.99 }, transition: SPRING_TAP }
         : {})}
-      className={`relative overflow-hidden rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface)] ${
+      className={`relative overflow-hidden rounded-[var(--r-lg)] bg-[var(--surface)] ${
         interactive ? 'cursor-pointer' : ''
       } ${className}`}
       style={{ boxShadow: 'var(--shadow-sm)', ...style }}
     >
-      {accentColor && (
-        <div className="absolute inset-y-0 left-0 w-1 rounded-l-[var(--r-lg)]" style={{ backgroundColor: accentColor }} />
-      )}
       {children}
     </motion.div>
   );
@@ -115,7 +113,7 @@ export const Collapsible: React.FC<{
 }> = ({ title, defaultOpen = false, badge, children }) => {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
-    <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+    <div className="rounded-[var(--r-lg)] bg-[var(--surface)] shadow-[var(--shadow-sm)] overflow-hidden">
       <motion.button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -124,7 +122,7 @@ export const Collapsible: React.FC<{
         transition={SPRING_TAP}
         className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-[var(--surface-2)]"
       >
-        <span className="flex items-center gap-2 font-bold text-[var(--text)]">
+        <span className="flex items-center gap-2 font-semibold text-[var(--text)]">
           {title}
           {badge}
         </span>
@@ -133,7 +131,7 @@ export const Collapsible: React.FC<{
         </motion.span>
       </motion.button>
       <motion.div initial={false} animate={{ height: open ? 'auto' : 0 }} transition={SPRING_SHEET} style={{ overflow: 'hidden' }}>
-        <div inert={!open || undefined} className="px-5 pb-5 pt-1 border-t border-[var(--border)]">
+        <div inert={!open || undefined} className="px-5 pb-5 pt-1">
           {children}
         </div>
       </motion.div>
@@ -373,7 +371,7 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${resolvedWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden u-sheet-h flex flex-col ${
+              className={`w-full ${resolvedWidth} ${surface === 'opaque' ? 'rounded-t-[22px] sm:rounded-[22px]' : 'rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)]'} overflow-hidden u-sheet-h flex flex-col ${
                 surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
               }`}
               style={
@@ -429,7 +427,7 @@ export const Modal: React.FC<{
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] p-0 sm:p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm p-0 sm:p-4"
         >
           <motion.div
             key="panel"
@@ -442,19 +440,20 @@ export const Modal: React.FC<{
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={SPRING_SHEET}
-            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col u-modal-h`}
-            style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
+            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[22px] sm:rounded-[22px] overflow-hidden flex flex-col u-modal-h`}
+            style={{ boxShadow: '0 20px 60px -12px rgba(0,0,0,0.28), 0 0 0 1px var(--border)' }}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] flex-shrink-0">
-              <h3 id={titleId} className="text-[15px] font-semibold text-[var(--text)]">{title}</h3>
+            <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2 flex-shrink-0">
+              <h3 id={titleId} className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">{title}</h3>
               <button
                 onClick={onClose}
-                className="text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] p-2.5 sm:p-1 rounded-[var(--r-sm)] u-motion"
+                aria-label="Fechar"
+                className="flex items-center justify-center flex-shrink-0 w-8 h-8 max-sm:w-10 max-sm:h-10 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion"
               >
-                <X size={16} className="max-sm:size-[18px]" />
+                <X size={16} strokeWidth={2.25} className="max-sm:size-[18px]" />
               </button>
             </div>
-            <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]">{children}</div>
+            <div className="px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]">{children}</div>
           </motion.div>
         </motion.div>
       )}
@@ -469,7 +468,7 @@ export const Badge: React.FC<{
   pulse?: boolean;
 }> = ({ children, color, dot, pulse }) => (
   <span
-    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${
+    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium normal-case tracking-normal ${
       color || 'bg-[var(--surface-2)] text-[var(--text-muted)]'
     }`}
   >
@@ -481,3 +480,39 @@ export const Badge: React.FC<{
     {children}
   </span>
 );
+
+// Controle segmentado estilo iOS/macOS (redesign 2026-09-26): grupo de
+// visões mutuamente exclusivas, pílula branca desliza até a opção ativa.
+export const SegmentedControl: React.FC<{
+  options: { value: string; label: React.ReactNode }[];
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+}> = ({ options, value, onChange, className = '' }) => {
+  const id = React.useId();
+  return (
+    <div role="tablist" className={`inline-flex p-0.5 rounded-[10px] bg-[var(--surface-2)] ${className}`}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          role="tab"
+          aria-selected={value === o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={`relative px-3 h-8 max-sm:h-10 text-[13px] font-semibold whitespace-nowrap rounded-[8px] u-motion ${
+            value === o.value ? 'text-[var(--text)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+          }`}
+        >
+          {value === o.value && (
+            <motion.span
+              layoutId={`seg-${id}`}
+              className="absolute inset-0 rounded-[8px] bg-[var(--surface)] shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+              transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+            />
+          )}
+          <span className="relative">{o.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
