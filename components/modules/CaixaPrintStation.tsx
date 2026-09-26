@@ -101,7 +101,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
-import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector } from '@/lib/api';
+import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText } from '@/lib/print';
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -889,6 +889,15 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     reconcileLockRef.current = true;
     let fetchFailed = false;
     try {
+      // "Desativar impressões por agora" (aba Impressão): nada sai, e o corte
+      // anda junto com o relógio — assim, quando religar, o que foi lançado
+      // durante a pausa NÃO é impresso de uma vez.
+      if (await fetchImpressaoPausada(s.id)) {
+        const agora = new Date().toISOString();
+        activatedAtRef.current = agora;
+        try { window.localStorage.setItem(activationCutoffKey(s.id), agora); } catch { /* sem armazenamento */ }
+        return;
+      }
       // Best-effort, fora do try/catch de impressão: uma falha aqui só
       // significa "nenhuma impressora de rede/USB entra nesta passada",
       // o window.print() de sempre continua rodando normalmente.

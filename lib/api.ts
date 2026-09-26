@@ -2641,6 +2641,38 @@ export const fetchPrinterConfigs = async (storeId: string): Promise<PrinterConfi
 // navegador, saindo duplicado (às vezes triplicado, um print_job por
 // tentativa de fechar a conta) na mesma impressora física CAIXA. `destination`
 // 'all' cobre config antiga/genérica que ainda não distingue destino.
+// "Desativar impressões por agora" (aba Impressão, pedido do dono
+// 2026-09-26): chave stores.config.printing_paused. Ligada, o app não manda
+// NADA pras impressoras da loja — fila, caixa automático, cupom, comprovante
+// e impressão sem internet. Serve pra testar no sistema real sem sair papel
+// na loja. Cache em localStorage pro caminho sem internet.
+const impressaoPausadaKey = (storeId: string) => `ntb_impressao_pausada_${storeId}`;
+export const lerImpressaoPausadaCache = (storeId: string): boolean => {
+  try { return typeof window !== 'undefined' && window.localStorage.getItem(impressaoPausadaKey(storeId)) === '1'; } catch { return false; }
+};
+const gravarImpressaoPausadaCache = (storeId: string, pausada: boolean) => {
+  try { if (typeof window !== 'undefined') window.localStorage.setItem(impressaoPausadaKey(storeId), pausada ? '1' : '0'); } catch { /* sem armazenamento */ }
+};
+export const fetchImpressaoPausada = async (storeId: string): Promise<boolean> => {
+  const { data, error } = await supabase.from('stores').select('config').eq('id', storeId).single();
+  if (error) return lerImpressaoPausadaCache(storeId);
+  const pausada = (data?.config as { printing_paused?: boolean } | null)?.printing_paused === true;
+  gravarImpressaoPausadaCache(storeId, pausada);
+  return pausada;
+};
+export const setImpressaoPausada = async (storeId: string, pausada: boolean): Promise<void> => {
+  const { data, error } = await supabase.from('stores').select('config').eq('id', storeId).single();
+  if (error) throw error;
+  const config = { ...((data?.config as Record<string, unknown>) || {}) };
+  if (pausada) config.printing_paused = true; else delete config.printing_paused;
+  await updateStoreConfig(storeId, config);
+  gravarImpressaoPausadaCache(storeId, pausada);
+  // O que já estava esperando na fila também não sai.
+  if (pausada) {
+    await supabase.from('print_jobs').update({ status: 'error', error_message: 'Impressões desativadas' }).eq('store_id', storeId).eq('status', 'pending');
+  }
+};
+
 export const hasActivePrinterForDestination = async (
   storeId: string,
   destination: 'receipt' | 'kitchen' | 'bar',
@@ -2670,6 +2702,7 @@ export const fetchUsbPrinterForAutoprint = async (
   storeId: string,
   destination: 'receipt' | 'kitchen' | 'bar',
 ): Promise<{ usbSystemName: string; paperWidthMm: 58 | 80 | 210 } | null> => {
+  if (await fetchImpressaoPausada(storeId)) return null;
   const { data, error } = await supabase
     .from('printer_configs')
     .select('usb_system_name, paper_width_mm')
@@ -2844,6 +2877,7 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
 // "offline:<assinatura>#<impressora>" — a Estação de Impressão usa essas chaves
 // pra não imprimir de novo o mesmo item quando o pedido sincronizar.
 export const printOfflineOrderTicket = async (params: { storeId: string; destination: 'kitchen' | 'bar'; sectorId?: string | null; title: string; content: string; sig: string }): Promise<number> => {
+  if (lerImpressaoPausadaCache(params.storeId)) return 0;
   const doDestino = readCachedPrinters(params.storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
   const doSetor = doDestino.filter((p) => (p.sector_id || null) === (params.sectorId || null));
   const printers = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
@@ -2894,6 +2928,7 @@ export const enqueuePrintJob = async (params: {
   // localStorage, por aparelho).
   dedupeKey?: string;
 }): Promise<{ success: boolean; id?: string; message?: string; duplicado?: boolean }> => {
+  if (await fetchImpressaoPausada(params.storeId)) return { success: false, message: 'Impressões desativadas nesta loja (aba Impressão).' };
   const { data, error } = await supabase.from('print_jobs').insert({
     store_id: params.storeId,
     printer_config_id: params.printerConfigId || null,

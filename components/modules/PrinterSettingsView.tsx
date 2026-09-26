@@ -35,6 +35,7 @@ import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
   fetchPrintSectors, createPrintSector, deletePrintSector,
   enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters, fetchPrintAgentStatus, updateStoreConfig,
+  fetchImpressaoPausada, setImpressaoPausada,
 } from '@/lib/api';
 import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
 import { PrinterConfig, PrintJob, PrintSector, Store } from '@/types';
@@ -95,6 +96,23 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   // pedido de verdade). Pedido explícito do dono (2026-08-28): testar o
   // corte/quebra de linha em cada largura antes de decidir qual comprar.
   const [testPaperWidth, setTestPaperWidth] = useState<48 | 58 | 80>(48);
+
+  // "Desativar impressões por agora" — ver setImpressaoPausada (lib/api.ts).
+  const [pausada, setPausada] = useState(false);
+  const [trocandoPausa, setTrocandoPausa] = useState(false);
+  useEffect(() => { fetchImpressaoPausada(store.id).then(setPausada); }, [store.id]);
+  const alternarPausa = async () => {
+    setTrocandoPausa(true);
+    try {
+      await setImpressaoPausada(store.id, !pausada);
+      setPausada(!pausada);
+      toast.success(!pausada ? 'Impressões desativadas. Nada vai sair nas impressoras.' : 'Impressões ligadas de novo.');
+    } catch {
+      toast.error('Não foi possível mudar agora. Tente de novo.');
+    } finally {
+      setTrocandoPausa(false);
+    }
+  };
 
   const [name, setName] = useState('');
   const [redeManual, setRedeManual] = useState(false);
@@ -261,6 +279,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   };
 
   const handleRetryJob = async (job: PrintJob) => {
+    if (pausada) { toast.error('As impressões estão desativadas nesta loja.'); return; }
     const result = await retryPrintJob(job.id);
     if (!result.success) { toast.error(result.message || 'Erro ao reenviar.'); return; }
     toast.success('Reenviado pra fila.');
@@ -286,6 +305,24 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
           </Button>
         )}
       </div>
+
+      <Card className={`p-4 flex items-center justify-between gap-4 flex-wrap ${pausada ? 'bg-[var(--warn)]/10' : ''}`}>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold text-[var(--text)] flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${pausada ? 'bg-[var(--warn)]' : 'bg-[var(--ok)]'}`} />
+            {pausada ? 'Impressões desativadas' : 'Impressões ligadas'}
+          </p>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+            {pausada
+              ? 'Nada sai nas impressoras da loja: cozinha, bar, cupom, comprovante e testes. O que for lançado agora não imprime depois.'
+              : 'Pra testar sem sair papel na loja, desative por agora e ligue de novo quando quiser.'}
+          </p>
+        </div>
+        <Button size="sm" variant={pausada ? 'primary' : 'secondary'} onClick={alternarPausa} disabled={trocandoPausa}>
+          {trocandoPausa ? <Loader2 size={14} className="animate-spin" /> : null}
+          {pausada ? 'Ligar impressões' : 'Desativar impressões por agora'}
+        </Button>
+      </Card>
 
       {printers.some((p) => p.connection_type === 'network' || p.connection_type === 'usb') && (() => {
         // 90s de folga sobre o heartbeat de 30s do agente (migration 066) --
