@@ -8321,14 +8321,14 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2">
-                            <h5 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-[var(--text)] flex items-center gap-1">
+                            <h5 className="min-w-0 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-[var(--text)] [overflow-wrap:anywhere]">
                                 {prod.featured && (
-                                    <Star size={14} className="text-[var(--warn)] fill-[var(--warn)] flex-shrink-0" aria-label="Produto em destaque" />
+                                    <Star size={14} className="inline-block -mt-0.5 mr-1 text-[var(--warn)] fill-[var(--warn)]" aria-label="Produto em destaque" />
                                 )}
                                 {prod.name}
                                 {prod.tags.length > 0 && (
                                     <span
-                                        className="text-[12px]"
+                                        className="text-[12px] ml-1"
                                         title={prod.tags.map(t => getTagDisplay(t).label).join(', ')}
                                     >
                                         {prod.tags.map(t => getTagDisplay(t).emoji).filter(Boolean).join(' ')}
