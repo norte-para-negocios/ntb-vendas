@@ -16,7 +16,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui'
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -2494,6 +2494,15 @@ const TablesView: React.FC<{
     // É buscado à parte, só quando este modal abre — ver efeito abaixo
     // (Important #I3, revisão de código 2026-08-23).
     const [showSentHistory, setShowSentHistory] = useState(false);
+    // Locais de preparo pra filtrar "Pedidos do Dia" por local (ex.: só Pizzaria).
+    const [locaisInfo, setLocaisInfo] = useState<{ setores: PrintSector[]; catSetor: Record<string, string | null> }>({ setores: [], catSetor: {} });
+    const [filtroLocal, setFiltroLocal] = useState<string>('todos');
+    useEffect(() => {
+        if (!showSentHistory) return;
+        Promise.all([fetchPrintSectors(storeId), fetchCategorySectors(storeId)])
+            .then(([setores, catSetor]) => setLocaisInfo({ setores, catSetor }))
+            .catch(() => {});
+    }, [showSentHistory, storeId]);
     // Subprojeto 3 (2026-08-25) — "Meus pedidos do dia": um garçom numa loja
     // com vários lançando na mesma "Pedidos do Dia" tinha que caçar os
     // próprios itens numa lista misturada de todo mundo. Default ligado só
@@ -2798,6 +2807,7 @@ const TablesView: React.FC<{
             productName: string;
             quantity: number;
             destination: 'kitchen' | 'bar';
+            localId: string;
             addons?: string;
             observation?: string;
             client?: string | null;
@@ -2808,9 +2818,15 @@ const TablesView: React.FC<{
         const pushOrder = (order: Order, closed: boolean) => {
             (order.order_items || []).forEach(item => {
                 if (item.status === OrderStatus.CANCELED) return;
-                const destination: 'kitchen' | 'bar' = item.product?.destination === 'bar' ? 'bar' : 'kitchen';
+                const setorId = item.product?.sector_id
+                    || (item.product?.ignore_category_sector ? null : (item.product?.category_id ? locaisInfo.catSetor[item.product.category_id] : null))
+                    || null;
+                const setor = setorId ? locaisInfo.setores.find(x => x.id === setorId) : undefined;
+                const destination: 'kitchen' | 'bar' = setor ? setor.base : (item.product?.destination === 'bar' ? 'bar' : 'kitchen');
+                const localId = setor ? setor.id : destination;
                 const { client, observation } = parseItemNote(item.notes || '');
                 rows.push({
+                    localId,
                     id: item.id,
                     orderId: item.order_id,
                     time: item.created_at,
@@ -2831,7 +2847,7 @@ const TablesView: React.FC<{
         closedTodayOrders.forEach(order => pushOrder(order, true));
         return rows.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
         // eslint-disable-next-line react-hooks/exhaustive-deps -- printedRefreshTick é só um gatilho de recálculo (lê localStorage via wasKitchenTicketPrinted), não um valor usado no corpo.
-    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId, printedRefreshTick]);
+    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId, printedRefreshTick, locaisInfo]);
 
     // Reimpressão manual (Critical #1 — corte de ativação): item que a
     // reconciliação automática do Caixa não pegou sozinha (o caso mais comum
@@ -4749,9 +4765,30 @@ NOTIFY pgrst, 'reload schema';`;
                         </button>
                     </div>
                     {(() => {
+                        const locais = [{ id: 'todos', nome: 'Todos os locais' }, { id: 'kitchen', nome: 'Cozinha' }, { id: 'bar', nome: 'Bar' }, ...locaisInfo.setores.map(x => ({ id: x.id, nome: x.name }))];
+                        return (
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+                                {locais.map(l => {
+                                    const qtd = l.id === 'todos' ? sentHistoryItems.length : sentHistoryItems.filter(r => r.localId === l.id).length;
+                                    return (
+                                        <button
+                                            key={l.id}
+                                            type="button"
+                                            onClick={() => setFiltroLocal(l.id)}
+                                            className={`shrink-0 min-h-9 max-sm:min-h-11 px-3 rounded-full text-xs font-bold border u-motion ${filtroLocal === l.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'}`}
+                                        >
+                                            {l.nome} <span className="opacity-70">({qtd})</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
+                    {(() => {
+                        const doLocal = filtroLocal === 'todos' ? sentHistoryItems : sentHistoryItems.filter(row => row.localId === filtroLocal);
                         const filteredHistory = showOnlyMine
-                            ? sentHistoryItems.filter(row => row.addedByName === loggedUser.name)
-                            : sentHistoryItems;
+                            ? doLocal.filter(row => row.addedByName === loggedUser.name)
+                            : doLocal;
                         if (filteredHistory.length === 0) {
                             return (
                                 <p className="text-sm text-[var(--text-muted)] text-center py-8">
@@ -4777,8 +4814,8 @@ NOTIFY pgrst, 'reload schema';`;
                                         <Badge color={row.printed ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
                                             {row.printed ? 'Impresso' : 'Sem registro'}
                                         </Badge>
-                                        <Badge color={row.destination === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : 'bg-[var(--warn)]/10 text-[var(--warn)]'}>
-                                            {row.destination === 'bar' ? 'Bar' : 'Cozinha'}
+                                        <Badge color={row.localId === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : row.localId === 'kitchen' ? 'bg-[var(--warn)]/10 text-[var(--warn)]' : 'bg-[var(--brand)]/10 text-[var(--brand)]'}>
+                                            {row.localId === 'bar' ? 'Bar' : row.localId === 'kitchen' ? 'Cozinha' : (locaisInfo.setores.find(x => x.id === row.localId)?.name || 'Cozinha')}
                                         </Badge>
                                         {/* Critical #2: só oferece a ação em quem passa por `canReprint`
                                             (aparelho de caixa de verdade, ver comentário acima) E cuja mesa/

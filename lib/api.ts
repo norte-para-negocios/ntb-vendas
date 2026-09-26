@@ -800,6 +800,12 @@ export const deletePrintSector = async (id: string) => {
   const { error } = await supabase.from('print_sectors').delete().eq('id', id);
   if (error) throw error;
 };
+// Mapa categoria -> local de preparo (pra telas que só têm o produto).
+export const fetchCategorySectors = async (storeId: string): Promise<Record<string, string | null>> => {
+  const { data, error } = await supabase.from('categories').select('id, sector_id').eq('store_id', storeId);
+  if (error) return {};
+  return Object.fromEntries((data || []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
+};
 export const updateCategorySector = async (categoryId: string, sectorId: string | null) => {
   const { error } = await supabase.from('categories').update({ sector_id: sectorId }).eq('id', categoryId);
   if (error) throw error;
