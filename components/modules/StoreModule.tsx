@@ -10420,7 +10420,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 <div className="bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)] overflow-hidden">
                     <div className="p-4 border-b border-[var(--border)]">
                         <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Turnos (ponto por operador)</h3>
-                        <p className="text-sm text-[var(--text-muted)]">Cada operador marca a própria entrada/saída pelo botão "Bater ponto" no menu lateral — independente do turno de caixa.</p>
+                        <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Cada operador marca a própria entrada/saída pelo botão "Bater ponto" no menu lateral — independente do turno de caixa.</p>
                     </div>
                     {isLoadingCheckins ? (
                         <div className="p-8 text-center text-[var(--text-muted)]">Carregando...</div>
@@ -10428,13 +10428,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         <div className="p-8 text-center text-[var(--text-muted)]">Nenhum ponto registrado ainda.</div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="w-full text-[15px]">
                                 <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                                     <tr>
-                                        <th className="px-4 py-2 text-left">Operador</th>
-                                        <th className="px-4 py-2 text-left">Entrada</th>
-                                        <th className="px-4 py-2 text-left">Saída</th>
-                                        <th className="px-4 py-2 text-left">Duração</th>
+                                        <th className="px-4 py-3 whitespace-nowrap text-left">Operador</th>
+                                        <th className="px-4 py-3 whitespace-nowrap text-left">Entrada</th>
+                                        <th className="px-4 py-3 whitespace-nowrap text-left">Saída</th>
+                                        <th className="px-4 py-3 whitespace-nowrap text-left">Duração</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -10445,12 +10445,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         const duracao = minutes === null ? '—' : minutes >= 60 ? `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}` : `${minutes} min`;
                                         return (
                                             <tr key={c.id} className="border-t border-[var(--border)]">
-                                                <td className="px-4 py-2 font-medium text-[var(--text)]">{c.user_name}</td>
-                                                <td className="px-4 py-2 text-[var(--text-muted)]">{format(start, 'dd/MM/yyyy HH:mm')}</td>
-                                                <td className="px-4 py-2 text-[var(--text-muted)]">
+                                                <td className="px-4 py-3 whitespace-nowrap font-medium text-[var(--text)]">{c.user_name}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-[var(--text-muted)]">{format(start, 'dd/MM/yyyy HH:mm')}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-[var(--text-muted)]">
                                                     {end ? format(end, 'dd/MM/yyyy HH:mm') : <span className="text-[var(--ok)] font-medium">Em andamento</span>}
                                                 </td>
-                                                <td className="px-4 py-2 text-[var(--text-muted)]">{duracao}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-[var(--text-muted)]">{duracao}</td>
                                             </tr>
                                         );
                                     })}
@@ -10470,7 +10470,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 <div className="bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)] overflow-hidden mt-4">
                     <div className="p-4 border-b border-[var(--border)]">
                         <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Caixa por operador</h3>
-                        <p className="text-sm text-[var(--text-muted)]">Turno de caixa é individual desde a migration 062 — cada operador abre e fecha o próprio, mesmo com vários ao mesmo tempo.</p>
+                        <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Turno de caixa é individual desde a migration 062 — cada operador abre e fecha o próprio, mesmo com vários ao mesmo tempo.</p>
                     </div>
                     {isLoadingCashShiftsAll ? (
                         <div className="p-8 text-center text-[var(--text-muted)]">Carregando...</div>
@@ -10934,7 +10934,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         CSV
                                     </Button>
                                     <div className="w-px h-5 bg-[var(--border)] mx-1 max-sm:hidden" />
-                                    <Button variant="ghost" size="sm" className="!text-[var(--err)] hover:!bg-[var(--err)]/10 max-sm:order-last max-sm:w-full max-sm:mt-4 max-sm:!h-11" onClick={handleClearSales} isLoading={isClearing}>
+                                    <Button variant="ghost" size="sm" className="!text-[var(--err)] hover:!bg-[var(--err)]/10 max-sm:order-last max-sm:w-full max-sm:mt-1 max-sm:!h-11" onClick={handleClearSales} isLoading={isClearing}>
                                         <Trash2 size={15} />
                                         Zerar vendas
                                     </Button>
