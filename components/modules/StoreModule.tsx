@@ -1380,6 +1380,16 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
+  // Locais de preparo (ex.: Pizzaria) deste fluxo: cada tela pode ficar fixa
+  // num local — escolha lembrada neste aparelho.
+  const [locaisKds, setLocaisKds] = useState<PrintSector[]>([]);
+  const chaveLocalKds = `ntb-kds-local:${storeId}:${destination}`;
+  const [localKds, setLocalKds] = useState<string>(() => { try { return localStorage.getItem(chaveLocalKds) || 'todos'; } catch { return 'todos'; } });
+  useEffect(() => {
+      fetchPrintSectors(storeId).then(l => setLocaisKds(l.filter(x => x.base === destination))).catch(() => {});
+  }, [storeId, destination]);
+  const escolherLocalKds = (v: string) => { setLocalKds(v); try { localStorage.setItem(chaveLocalKds, v); } catch { /* sem persistência */ } };
+
   // Snapshot do fetch anterior — usado só pra diff (detectar item novo em
   // 'pending' e disparar o alerta sonoro), nunca renderizado. null = ainda
   // não carregou nenhuma vez (evita alertar no load inicial). Mesmo padrão
@@ -1535,11 +1545,31 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
       });
   };
 
+  const pertenceAoLocal = (item: OrderItem, local: string) =>
+      local === 'todos' ? true : local === 'padrao' ? !item.sector_id : item.sector_id === local;
+  const localAtivo = localKds === 'todos' || localKds === 'padrao' || locaisKds.some(x => x.id === localKds) ? localKds : 'todos';
+  const visibleOrders = orders.filter(item => pertenceAoLocal(item, localAtivo));
+  const nomeLocalAtivo = localAtivo === 'todos' || localAtivo === 'padrao' ? null : locaisKds.find(x => x.id === localAtivo)?.name;
+
   return (
     <div>
+        {locaisKds.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4">
+                {[{ id: 'todos', nome: 'Tudo' }, { id: 'padrao', nome: destination === 'bar' ? 'Bar' : 'Cozinha' }, ...locaisKds.map(x => ({ id: x.id, nome: x.name }))].map(l => (
+                    <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => escolherLocalKds(l.id)}
+                        className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-bold border u-motion ${localAtivo === l.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'}`}
+                    >
+                        {l.nome} <span className="opacity-70">({orders.filter(it => pertenceAoLocal(it, l.id)).length})</span>
+                    </button>
+                ))}
+            </div>
+        )}
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
             <AnimatePresence>
-            {orders.map(item => {
+            {visibleOrders.map(item => {
                 const { client, observation } = parseItemNote(item.notes || '');
                 const late = isItemLate(item);
                 const { elapsedMinutes, ratio } = getPrepProgress(item);
@@ -1643,12 +1673,12 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                 );
             })}
             </AnimatePresence>
-            {orders.length === 0 && (
+            {visibleOrders.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center py-32 text-[var(--text-muted)] bg-[var(--surface)] rounded-[var(--r-lg)] border-2 border-dashed border-[var(--border)]">
                     {destination === 'kitchen'
                         ? <ChefHat className="mb-4 h-20 w-20 opacity-20" />
                         : <Wine className="mb-4 h-20 w-20 opacity-20" />}
-                    <p className="text-xl font-medium">{destination === 'kitchen' ? 'Tudo tranquilo na cozinha!' : 'Tudo tranquilo no bar!'}</p>
+                    <p className="text-xl font-medium">{nomeLocalAtivo ? `Tudo tranquilo em ${nomeLocalAtivo}!` : destination === 'kitchen' ? 'Tudo tranquilo na cozinha!' : 'Tudo tranquilo no bar!'}</p>
                     <p className="text-sm">Aguardando novos pedidos...</p>
                 </div>
             )}
