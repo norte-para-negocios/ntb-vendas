@@ -258,9 +258,9 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         const filteredStores = stores.filter(s => s.name.toLowerCase().includes(storeFilter.toLowerCase()));
         return (
             <AuthBackdrop>
-                <div className="max-w-md w-full">
-                    <div className="text-center mb-7">
-                        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 text-white ring-1 ring-white/30 bg-white/10 backdrop-blur-md shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]">
+                <div className="max-w-md w-full max-sm:pb-28">
+                    <div className="text-center mb-7 max-sm:mb-5">
+                        <div className="w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full flex items-center justify-center mx-auto mb-5 max-sm:mb-3 text-white ring-1 ring-white/30 bg-white/10 backdrop-blur-md shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]">
                             <StoreIcon size={26} strokeWidth={1.75} />
                         </div>
                         <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">Qual loja você quer acessar?</h1>
@@ -279,7 +279,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                                 className="w-full h-11 pl-10 pr-4 rounded-full bg-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)] text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
                             />
                         </div>
-                        <div className="max-h-[min(24rem,55vh)] overflow-y-auto">
+                        <div className="max-h-[min(24rem,55vh)] max-sm:max-h-[42vh] overflow-y-auto">
                             {isLoadingStores && <p className="text-[13px] text-[var(--text-muted)] text-center py-8">Carregando lojas…</p>}
                             {!isLoadingStores && filteredStores.map((store, i) => (
                                 <button
@@ -302,7 +302,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                             )}
                         </div>
                     </Card>
-                    <button onClick={() => setUniversalUser(null)} className="block mx-auto mt-6 px-4 min-h-11 rounded-full text-sm font-medium text-white/75 hover:text-white hover:bg-white/10 u-motion">
+                    <button onClick={() => setUniversalUser(null)} className="relative z-10 block mx-auto mt-5 px-5 min-h-11 rounded-full text-sm font-medium text-white bg-white/15 backdrop-blur-md hover:bg-white/25 u-motion">
                         Sair
                     </button>
                 </div>
@@ -1753,12 +1753,12 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                         ? (item.order?.customer_name || 'Balcão')
                                         : `Mesa ${item.order?.tables?.number || '?'}`}
                                 </p>
-                                <div className="flex items-center gap-2 mt-0.5 text-[13px] text-[var(--text-muted)]">
-                                    <span className="inline-flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[13px] text-[var(--text-muted)]">
+                                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                                         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getStatusInfo(item.status).dot }} />
                                         {getStatusInfo(item.status).label}
                                     </span>
-                                    {item.order?.order_type === 'counter' && <span>· Balcão</span>}
+                                    {item.order?.order_type === 'counter' && item.order?.customer_name && <span className="whitespace-nowrap">· Balcão</span>}
                                     {late && (
                                         <span className="inline-flex items-center gap-1 font-semibold text-[var(--err)]">
                                             · <AlertCircle size={12}/> Atrasado
