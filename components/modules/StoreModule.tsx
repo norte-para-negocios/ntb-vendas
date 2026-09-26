@@ -39,6 +39,7 @@ import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calcu
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
+import { formatDuration } from '@/lib/formatDuration';
 import { MeuLinkView } from '@/components/modules/MeuLinkView';
 
 // StoreDashboardView importa recharts (bundle pesado); cozinha/bar/balcão
@@ -1756,7 +1757,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                     title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
                                 >
                                     <Clock size={12}/>
-                                    {Math.floor(elapsedMinutes)}min
+                                    {formatDuration(Math.floor(elapsedMinutes))}
                                 </div>
                             </div>
                         </div>
@@ -3879,9 +3880,9 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                     {r.status === 'pending' ? (
-                                        <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-[var(--warn)]/10 text-[var(--warn)]">Pendente</span>
+                                        <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--warn)]/10 text-[var(--warn)]">Pendente</span>
                                     ) : (
-                                        <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-[var(--ok)]/10 text-[var(--ok)]">Confirmada</span>
+                                        <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--ok)]/10 text-[var(--ok)]">Confirmada</span>
                                     )}
                                     {r.status === 'pending' && (
                                         <Button size="sm" disabled={savingReservationIds.has(r.id)} onClick={() => handleUpdateReservation(r.id, 'confirmed')}>Confirmar</Button>
@@ -3894,55 +3895,98 @@ NOTIFY pgrst, 'reload schema';`;
                 </div>
             )}
 
-            <div className="flex justify-end mb-4 gap-2">
+            <div className="flex flex-wrap justify-end mb-5 gap-2">
                 {canManagePin && (
                     <Button
-                        variant={pinBlockEnabled ? "primary" : "secondary"}
+                        variant="secondary"
+                        size="sm"
                         onClick={handlePinBlockToggle}
-                        className={`flex items-center gap-2 text-sm ${pinBlockEnabled ? 'bg-[var(--err)] hover:bg-[var(--err)]/90 text-white border-[var(--err)]' : 'text-[var(--text-muted)]'}`}
+                        className="max-sm:h-11"
                         title="Se ativado, novos clientes precisarão do PIN para abrir a mesa"
                     >
-                        {pinBlockEnabled ? <Lock size={18} /> : <Unlock size={18} />}
-                        {pinBlockEnabled ? "Bloqueio PIN Ativo" : "Bloqueio PIN Inativo"}
+                        {pinBlockEnabled
+                            ? <span className="w-2 h-2 rounded-full bg-[var(--err)] shrink-0" aria-hidden />
+                            : <Unlock size={15} className="text-[var(--text-muted)]" />}
+                        {pinBlockEnabled ? "Bloqueio PIN ativo" : "Bloqueio PIN inativo"}
                     </Button>
                 )}
 
-                <Button 
-                    variant="secondary" 
+                <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setAreCardsCollapsed(!areCardsCollapsed)}
-                    className="flex items-center gap-2 text-sm"
+                    className="max-sm:h-11"
                 >
-                    {areCardsCollapsed ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                    {areCardsCollapsed ? "Expandir Cards" : "Colapsar Cards"}
+                    {areCardsCollapsed ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                    {areCardsCollapsed ? "Expandir cards" : "Colapsar cards"}
                 </Button>
 
                 {/* Task 2 (2026-08-22) — só aparece em direct_print: é o
                     substituto do KDS pra esta loja, "acessível para garçom
-                    e caixa" (o brief pede os dois; hoje só quem acessa
-                    TablesView tem permissão 'tables' — caixa ganha a mesma
-                    tela na Task 4). Nas 6 lojas com KDS, orderFlow é
-                    sempre 'kds' e este botão nunca renderiza. */}
+                    e caixa". Nas 6 lojas com KDS, orderFlow é sempre 'kds'
+                    e este botão nunca renderiza. */}
                 {orderFlow === 'direct_print' && (
                     <Button
                         variant="secondary"
+                        size="sm"
                         onClick={() => setShowSentHistory(true)}
-                        className="flex items-center gap-2 text-sm"
+                        className="max-sm:h-11"
                     >
-                        <FileText size={18} />
+                        <FileText size={16} />
                         Pedidos do Dia
                     </Button>
                 )}
             </div>
 
-            {/* items-start (pedido do dono, 2026-08-29 — "caber o máximo de coisa
-                na tela"): sem isso, o grid estica TODO card da linha pra igualar
-                o mais alto (comportamento padrão de CSS grid), reintroduzindo
-                espaço vazio numa mesa com poucos itens só porque a vizinha tem
-                muitos. Cada card agora só ocupa a altura que o próprio conteúdo
-                precisa. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-sm:gap-3 items-start">
-                <AnimatePresence>
-                {tables.map((table, tableIdx) => {
+            {(() => {
+                // Redesign estilo Apple (2026-09-26): mesas ocupadas (ou chamando
+                // garçom) em cartões completos; livres/bloqueadas em blocos
+                // compactos numa grade à parte — antes cada mesa livre ocupava o
+                // mesmo espaço de uma ocupada, virando uma grade infinita.
+                const isFullCard = (t: Table) =>
+                    t.status === 'occupied' || t.status === 'waiting_bill' || !!t.waiter_requested;
+                const fullTables = tables.filter(isFullCard);
+                const compactTables = tables.filter(t => !isFullCard(t));
+
+                const renderPinChip = (table: Table, inJurisdiction: boolean) => {
+                    const revealed = visiblePins.has(table.id);
+                    return (
+                        <div className={`flex items-center gap-1 h-6 px-2 rounded-full bg-[var(--surface-2)] shrink-0 ${revealed ? '' : 'pin-peek'}`}>
+                            <span className={`text-[12px] text-[var(--text-muted)] ${revealed ? 'font-mono font-semibold text-[var(--text)]' : 'tracking-[0.1em]'}`}>
+                                {revealed ? table.pin : '••••'}
+                            </span>
+                            <button
+                                onClick={(e) => togglePin(e, table.id, inJurisdiction)}
+                                disabled={!inJurisdiction}
+                                className="relative hit-44 text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
+                                title={revealed ? "Ocultar PIN" : "Ver PIN"}
+                                aria-label={revealed ? `Ocultar PIN da mesa ${table.number}` : `Ver PIN da mesa ${table.number}`}
+                            >
+                                {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                            </button>
+                        </div>
+                    );
+                };
+
+                const renderBlockButton = (table: Table, isBlocked: boolean, hasOrders: boolean, inJurisdiction: boolean) => canManagePin && (
+                    <button
+                        onClick={(e) => {
+                            if(!isBlocked && hasOrders) return;
+                            handleBlockToggle(e, table, inJurisdiction);
+                        }}
+                        disabled={(!isBlocked && hasOrders) || !inJurisdiction}
+                        className={`relative hit-44 p-1.5 rounded-full u-motion u-press z-10 shrink-0 disabled:pointer-events-none ${
+                            isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
+                            (!isBlocked && hasOrders) ? 'text-[var(--text-muted)] cursor-not-allowed opacity-30' :
+                            'text-[var(--text-muted)]/60 hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
+                        }`}
+                        title={isBlocked ? "Desbloquear" : hasOrders ? "Mesa com pedidos não pode ser bloqueada" : "Bloquear Mesa"}
+                    >
+                        {isBlocked ? <Lock size={14} /> : <Unlock size={14} />}
+                    </button>
+                );
+
+                const renderTable = (table: Table, tableIdx: number) => {
                     const summary = getTableSummary(table.id);
                     const isBlocked = table.status === 'blocked';
                     const isOccupied = table.status === 'occupied' || table.status === 'waiting_bill';
@@ -3952,17 +3996,14 @@ NOTIFY pgrst, 'reload schema';`;
                     // Mesa fora da jurisdicao continua renderizada normalmente
                     // (numero/status/PIN) mas inteiramente nao-interativa —
                     // `pointer-events-none` bloqueia tanto abrir o card quanto
-                    // os botoes internos (bloquear, ver PIN, atender garcom)
-                    // numa unica trava, sem precisar desabilitar cada acao
-                    // isoladamente. owner/universal nunca sao restringidos
-                    // (ver isTableInJurisdiction).
+                    // os botoes internos numa unica trava. owner/universal
+                    // nunca sao restringidos (ver isTableInJurisdiction).
                     const inJurisdiction = isTableInJurisdiction(loggedUser, table.id);
 
                     // allItems vem ordenado do mais novo pro mais antigo
                     // (getTableSummary acima) — [0] é o último pedido, o
                     // último elemento é o mais antigo (aproximação de
-                    // "ocupada desde", ver comentário da declaração de
-                    // tableAlertOccupiedMin).
+                    // "ocupada desde", ver tableAlertOccupiedMin).
                     const minutesSinceLastOrder = isOccupied && summary.allItems.length > 0
                         ? Math.floor((nowTick - new Date(summary.allItems[0].created_at).getTime()) / 60000) : null;
                     const minutesOccupied = isOccupied && summary.allItems.length > 0
@@ -3970,12 +4011,53 @@ NOTIFY pgrst, 'reload schema';`;
                     const isOccupiedTooLong = tableAlertOccupiedMin > 0 && minutesOccupied !== null && minutesOccupied >= tableAlertOccupiedMin;
                     const isNoOrderTooLong = tableAlertNoOrderMin > 0 && minutesSinceLastOrder !== null && minutesSinceLastOrder >= tableAlertNoOrderMin;
                     const hasTimeAlert = isOccupiedTooLong || isNoOrderTooLong;
-                    // Task 3 (refresh visual, 2026-09-08): terceiro nível de urgência —
-                    // "crítico" quando o atraso é o DOBRO do limiar configurado pela
-                    // loja (mesmo tableAlertOccupiedMin que já dispara o nível
-                    // "atenção" em hasTimeAlert). Sem limiar configurado, nunca escala
-                    // pra crítico — mesma regra de "recurso desligado" de isOccupiedTooLong.
+                    // "Crítico" quando o atraso é o DOBRO do limiar configurado.
                     const isOccupiedCritical = tableAlertOccupiedMin > 0 && minutesOccupied !== null && minutesOccupied >= tableAlertOccupiedMin * 2;
+
+                    // Status = ponto colorido + texto (nada de bloco colorido).
+                    const dotColor =
+                        isBlocked ? 'var(--text-muted)' :
+                        isWaiterRequested ? 'var(--err)' :
+                        table.status === 'waiting_bill' ? 'var(--warn)' :
+                        isOccupiedCritical ? 'var(--err)' :
+                        hasTimeAlert ? 'var(--warn)' :
+                        isOccupied ? 'var(--brand)' : 'var(--ok)';
+                    const statusLabel = getTableStatusLabel(isBlocked ? 'blocked' : isOccupied ? table.status : 'available');
+                    const open = () => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } };
+
+                    if (!isFullCard(table)) {
+                        return (
+                            <motion.div
+                                key={table.id}
+                                layout
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={SPRING_TAP}
+                            >
+                            <Card
+                                hoverable={inJurisdiction && !isBlocked}
+                                onClick={open}
+                                className={`group flex flex-col justify-between gap-1.5 px-3.5 py-3 min-h-[72px] ${
+                                    isBlocked ? '!bg-[var(--surface-2)] opacity-80' : ''
+                                } ${!inJurisdiction ? 'opacity-50 pointer-events-none grayscale' : ''}`}
+                                style={stagger(Math.min(tableIdx, 10) * 20)}
+                            >
+                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                    <span className="text-[15px] font-semibold text-[var(--text)] truncate">Mesa {table.number}</span>
+                                    {renderBlockButton(table, isBlocked, hasOrders, inJurisdiction)}
+                                </div>
+                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                    <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] min-w-0">
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} aria-hidden />
+                                        <span className="truncate">{!inJurisdiction ? TABLE_OUT_OF_JURISDICTION_LABEL : statusLabel}</span>
+                                    </span>
+                                    {!isBlocked && renderPinChip(table, inJurisdiction)}
+                                </div>
+                            </Card>
+                            </motion.div>
+                        );
+                    }
 
                     return (
                         <motion.div
@@ -3988,176 +4070,124 @@ NOTIFY pgrst, 'reload schema';`;
                         >
                         <Card
                             hoverable={inJurisdiction}
-                            onClick={() => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } }}
-                            className={`relative flex flex-col p-3 transition-[background-color,border-color,box-shadow] duration-300 border-2 group ${
-                                isBlocked ? 'bg-[var(--surface-2)] border-[var(--border)] grayscale opacity-80' :
-                                isWaiterRequested ? 'border-[var(--err)]/50 bg-[var(--err)]/5 shadow-xl animate-pulse' :
-                                table.status === 'waiting_bill' ? 'bg-[var(--warn)]/5 border-[var(--warn)]/30 shadow-lg' :
-                                isOccupiedCritical ? 'bg-[var(--err)]/10 border-[var(--err)]/60 shadow-lg' :
-                                hasTimeAlert ? 'bg-[var(--warn)]/10 border-[var(--warn)]/60 shadow-lg' :
-                                isOccupied ? 'bg-[var(--info)]/5 border-[var(--info)]/25 shadow-lg' :
-                                'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30 hover:shadow-lg'
+                            onClick={open}
+                            className={`group flex flex-col p-4 max-sm:p-3.5 ${
+                                isWaiterRequested ? 'ring-2 ring-[var(--err)]/60' : ''
                             } ${!inJurisdiction ? 'opacity-50 pointer-events-none grayscale' : ''}`}
                             style={stagger(Math.min(tableIdx, 10) * 30)}
                         >
-                            {/* Jurisdicao: mesa fora da area do usuario logado */}
+                            {/* Cabeçalho: número + status (ponto), PIN discreto e bloqueio à direita. */}
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[17px] font-semibold text-[var(--text)] shrink-0">Mesa {table.number}</span>
+                                <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] min-w-0">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isWaiterRequested ? 'u-pulse-dot' : ''}`} style={{ background: dotColor, color: dotColor }} aria-hidden />
+                                    <span className="truncate">{isWaiterRequested ? 'Chamando garçom' : statusLabel}</span>
+                                </span>
+                                <div className="ml-auto flex items-center gap-1 shrink-0">
+                                    {renderPinChip(table, inJurisdiction)}
+                                    {renderBlockButton(table, isBlocked, hasOrders, inJurisdiction)}
+                                </div>
+                            </div>
+
                             {!inJurisdiction && (
-                                <div className="absolute top-2 left-2 z-20">
-                                    <span className="px-1.5 py-0.5 bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold rounded border border-[var(--border)] uppercase tracking-wider">
-                                        {TABLE_OUT_OF_JURISDICTION_LABEL}
-                                    </span>
-                                </div>
+                                <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{TABLE_OUT_OF_JURISDICTION_LABEL}</p>
                             )}
 
-                            {/* Waiter Alert Overlay */}
-                            {isWaiterRequested && (
-                                <div className="absolute -top-3 -right-3 z-20">
-                                    <span className="relative flex h-8 w-8">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--err)] opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-8 w-8 bg-[var(--err)] items-center justify-center text-white border-2 border-white">
-                                        <BellRing size={16} />
-                                      </span>
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Header numa linha só — número, PIN, status, cliente — nos DOIS
-                                modos (recolhido e expandido, pedido do dono 2026-08-29: "quero
-                                que fique assim mesmo quando não colapsado"). Só a área de
-                                itens do pedido abaixo continua ligada/desligada pelo toggle. */}
-                            {(
-                                <div className="flex items-center gap-2 min-w-0 mb-2">
-                                    <div className="flex items-baseline gap-1 shrink-0">
-                                        <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Mesa</span>
-                                        <span className="text-xl font-black text-[var(--text)]">{table.number}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1 bg-[var(--surface-2)] px-1.5 py-0.5 rounded-md shrink-0">
-                                        <span className="num font-bold text-xs text-[var(--text)]">
-                                            {visiblePins.has(table.id) ? table.pin : '••••'}
-                                        </span>
-                                        <button
-                                            onClick={(e) => togglePin(e, table.id, inJurisdiction)}
-                                            disabled={!inJurisdiction}
-                                            className="relative hit-44 text-[var(--text-muted)] hover:text-[var(--brand)] u-motion u-press disabled:pointer-events-none"
-                                            title={visiblePins.has(table.id) ? "Ocultar PIN" : "Ver PIN"}
-                                        >
-                                            {visiblePins.has(table.id) ? <EyeOff size={11} /> : <Eye size={11} />}
-                                        </button>
-                                    </div>
-                                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                        isBlocked ? 'bg-[var(--surface-2)] text-[var(--text-muted)]' :
-                                        isOccupied ? (table.status === 'waiting_bill' ? 'bg-[var(--warn)] text-white' : 'bg-[var(--info)] text-white') :
-                                        'bg-[var(--ok)]/10 text-[var(--ok)]'
-                                    }`}>
-                                        {getTableStatusLabel(isBlocked ? 'blocked' : isOccupied ? table.status : 'available')}
-                                    </span>
-                                    {canManagePin && (
-                                        <button
-                                            onClick={(e) => {
-                                                if(!isBlocked && hasOrders) return;
-                                                handleBlockToggle(e, table, inJurisdiction);
-                                            }}
-                                            disabled={(!isBlocked && hasOrders) || !inJurisdiction}
-                                            className={`relative hit-44 ml-auto p-1.5 rounded-lg u-motion u-press z-10 shrink-0 disabled:pointer-events-none ${
-                                                isBlocked ? 'text-[var(--err)] bg-[var(--err)]/10 hover:bg-[var(--err)]/15' :
-                                                (!isBlocked && hasOrders) ? 'text-[var(--border)] cursor-not-allowed opacity-50' :
-                                                'text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
-                                            }`}
-                                            title={isBlocked ? "Desbloquear" : hasOrders ? "Mesa com pedidos não pode ser bloqueada" : "Bloquear Mesa"}
-                                        >
-                                            {isBlocked ? <Lock size={14} /> : <Unlock size={14} />}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Nome do cliente, linha própria embaixo do header (pedido do
-                                dono, 2026-08-29: "seria interessante o nome aparecer embaixo
-                                disso tudo" — junto na mesma linha ficava truncado demais). */}
+                            {/* Cliente embaixo do cabeçalho (pedido do dono, 2026-08-29). */}
                             {isOccupied && (
-                                <div className="flex items-center gap-1 text-xs text-[var(--text-muted)] mb-1 min-w-0">
-                                    <User size={11} className="shrink-0" />
-                                    <span className="font-bold truncate">{table.current_host_name || 'Lojista'}</span>
+                                <div className="flex items-center gap-1 text-[13px] text-[var(--text-muted)] mt-0.5 min-w-0">
+                                    <span className="truncate">{table.current_host_name || 'Lojista'}</span>
                                     {watchedTables.has(table.id) && (
                                         <span title="Cliente acompanhando o pedido agora" className="shrink-0 text-[var(--info)] flex items-center">
-                                            <Eye size={11} />
+                                            <Eye size={12} />
                                         </span>
                                     )}
                                 </div>
                             )}
 
-                            {/* Avisos de tempo (pedido do dono, 2026-08-29) — aparece nos dois
-                                modos (recolhido e expandido), já que é informação operacional,
-                                não estética. */}
+                            {isOccupied && (
+                                <p className="text-[22px] font-semibold num text-[var(--text)] mt-2 leading-none">R$ {formatBRL(summary.total)}</p>
+                            )}
+
+                            {/* Avisos de tempo (pedido do dono, 2026-08-29) — nos dois modos. */}
                             {hasTimeAlert && (
-                                <div className="flex items-center gap-1 text-[10px] font-bold text-[var(--warn)] mt-1">
-                                    <Clock size={11} />
+                                <div className={`flex items-center gap-1 text-[12px] font-medium mt-2 ${isOccupiedCritical ? 'text-[var(--err)]' : 'text-[var(--warn)]'}`}>
+                                    <Clock size={12} />
                                     {[
-                                        isOccupiedTooLong ? `Ocupada há ${minutesOccupied}min` : null,
-                                        isNoOrderTooLong ? `Sem pedido há ${minutesSinceLastOrder}min` : null,
+                                        isOccupiedTooLong ? `Ocupada há ${formatDuration(minutesOccupied ?? 0)}` : null,
+                                        isNoOrderTooLong ? `Sem pedido há ${formatDuration(minutesSinceLastOrder ?? 0)}` : null,
                                     ].filter(Boolean).join(' · ')}
                                 </div>
                             )}
 
-                            {/* Content Area: Items or Empty State */}
-                            {!areCardsCollapsed && (
-                                isOccupied ? (
-                                    <div className="flex-1 flex flex-col min-h-0 bg-[var(--surface)]/60 rounded-lg p-2 border border-[var(--border)]">
-                                        <div className="flex justify-between items-end border-b border-[var(--border)] pb-1 mb-1">
-                                            <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Últimos Pedidos</span>
-                                            <div className="text-right leading-none">
-                                                <span className="block text-[10px] text-[var(--text-muted)]">Total</span>
-                                                <span className="font-bold text-[var(--brand)] num">R$ {formatBRL(summary.total)}</span>
+                            {/* Itens (desligável pelo toggle "Colapsar cards"). */}
+                            {!areCardsCollapsed && isOccupied && (
+                                <div className="mt-3 pt-2.5 border-t border-[var(--border)] flex flex-col gap-1.5">
+                                    {summary.items.length > 0 ? (
+                                        summary.items.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center gap-1.5 text-[13px] text-[var(--text)]">
+                                                <span className="truncate min-w-0 flex-1">
+                                                    <span className="text-[var(--text-muted)] num">{item.quantity}×</span> {getOrderItemDisplayName(item)}
+                                                </span>
+                                                {orderFlow !== 'direct_print' && item.status === 'delivered' && <CheckCircle size={13} className="text-[var(--ok)] flex-shrink-0" />}
+                                                {orderFlow !== 'direct_print' && item.status === 'preparing' && <ChefHat size={13} className="text-[var(--info)] flex-shrink-0" />}
+                                                {orderFlow !== 'direct_print' && (item.status === 'pending' || item.status === 'accepted') && <Clock size={13} className="text-[var(--warn)] flex-shrink-0" />}
                                             </div>
-                                        </div>
-
-                                        <div className="flex-1 overflow-hidden flex flex-col gap-1.5">
-                                            {summary.items.length > 0 ? (
-                                                summary.items.map((item, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center gap-1.5 text-xs text-[var(--text)]">
-                                                        <span className="truncate min-w-0 flex-1 font-medium">{item.quantity}x {getOrderItemDisplayName(item)}</span>
-                                                        {orderFlow !== 'direct_print' && item.status === 'delivered' && <CheckCircle size={12} className="text-[var(--ok)] flex-shrink-0" />}
-                                                        {orderFlow !== 'direct_print' && item.status === 'preparing' && <ChefHat size={12} className="text-[var(--info)] flex-shrink-0" />}
-                                                        {orderFlow !== 'direct_print' && (item.status === 'pending' || item.status === 'accepted') && <Clock size={12} className="text-[var(--warn)] flex-shrink-0" />}
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <p className="text-xs text-[var(--text-muted)] text-center italic mt-2">Sem pedidos</p>
-                                            )}
-                                            {summary.count > 3 && (
-                                                <p className="text-[10px] text-center text-[var(--text-muted)] mt-auto">+ {summary.count - 3} {summary.count - 3 === 1 ? 'item' : 'itens'}...</p>
-                                            )}
-                                        </div>
-                                        <div className="mt-1 pt-1 border-t border-[var(--border)] text-[10px] text-center text-[var(--text-muted)]">
-                                            {summary.count} {summary.count === 1 ? 'item' : 'itens'} no total
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center opacity-30 py-3">
-                                        <UtensilsCrossed size={24} />
-                                        <p className="text-xs font-bold mt-1">Disponível</p>
-                                    </div>
-                                )
+                                        ))
+                                    ) : (
+                                        <p className="text-[13px] text-[var(--text-muted)]">Sem pedidos</p>
+                                    )}
+                                    <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+                                        {summary.count > 3
+                                            ? `+ ${summary.count - 3} ${summary.count - 3 === 1 ? 'item' : 'itens'} · ${summary.count} no total`
+                                            : `${summary.count} ${summary.count === 1 ? 'item' : 'itens'} no total`}
+                                    </p>
+                                </div>
                             )}
 
-                            {/* Footer: Waiter Action Only */}
                             {isWaiterRequested && (
-                                <div className="mt-3 pt-2 border-t border-[var(--border)] flex flex-col items-center">
-                                    <Button
-                                        onClick={(e) => { e.stopPropagation(); if (!inJurisdiction) return; handleDismissWaiter(table.id); }}
-                                        disabled={!inJurisdiction}
-                                        className="w-full max-sm:min-h-11 sm:h-8 text-xs bg-[var(--err)] hover:bg-[var(--err)]/90 shadow-[var(--err)]/20 shadow-sm animate-bounce"
-                                    >
-                                        <BellRing size={14} className="mr-1"/> ATENDER GARÇOM
-                                    </Button>
-                                </div>
+                                <Button
+                                    onClick={(e) => { e.stopPropagation(); if (!inJurisdiction) return; handleDismissWaiter(table.id); }}
+                                    disabled={!inJurisdiction}
+                                    variant="danger"
+                                    size="sm"
+                                    className="w-full mt-3 max-sm:h-11"
+                                >
+                                    <BellRing size={14} /> Atender garçom
+                                </Button>
                             )}
                         </Card>
                         </motion.div>
                     );
-                })}
-                </AnimatePresence>
-            </div>
+                };
+
+                return (
+                    <>
+                        {fullTables.length > 0 && (
+                            <>
+                                <h3 className="eyebrow mb-2.5">Ocupadas ({fullTables.length})</h3>
+                                {/* items-start (pedido do dono, 2026-08-29): cada card só ocupa a
+                                    altura do próprio conteúdo, sem esticar pela vizinha mais alta. */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-sm:gap-3 items-start mb-7">
+                                    <AnimatePresence>
+                                        {fullTables.map((t, i) => renderTable(t, i))}
+                                    </AnimatePresence>
+                                </div>
+                            </>
+                        )}
+                        {compactTables.length > 0 && (
+                            <>
+                                <h3 className="eyebrow mb-2.5">Livres ({compactTables.filter(t => t.status !== 'blocked').length})</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-sm:gap-2.5 items-start">
+                                    <AnimatePresence>
+                                        {compactTables.map((t, i) => renderTable(t, i))}
+                                    </AnimatePresence>
+                                </div>
+                            </>
+                        )}
+                    </>
+                );
+            })()}
 
             {/* MODAL DA MESA */}
             {/* 2026-09-22: "Adicionar Pedido" (showMenuMode) saiu deste modal
@@ -4166,22 +4196,22 @@ NOTIFY pgrst, 'reload schema';`;
                 do garçom tem que ocupar a tela toda, não uma caixa central.
                 Este modal continua isOpen só pras Views 1/2 (ações rápidas e
                 comanda completa). */}
-            <Modal isOpen={!!selectedTable && !showMenuMode} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number} - ${selectedTable?.current_host_name || 'Lojista'}`} size="lg">
+            <Modal isOpen={!!selectedTable && !showMenuMode} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number ?? ''}`} size="lg">
                 <div className="space-y-4">
-                    <div className="flex justify-between p-3 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] items-center">
-                        <span className="text-[var(--text-muted)] font-medium text-sm">Status Atual</span>
-                        <div className="flex items-center gap-2">
-                             {selectedTable?.waiter_requested && (
-                                <Badge color="bg-[var(--err)]/10 text-[var(--err)] flex items-center gap-1">
-                                    <BellRing size={12}/> CHAMANDO
-                                </Badge>
-                             )}
-                             <span className={`font-bold uppercase px-3 py-1 rounded-full text-xs ${
-                                selectedTable?.status === 'available' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--info)]/10 text-[var(--info)]'
-                            }`}>
-                                {getTableStatusLabel(selectedTable?.status || 'occupied')}
+                    {/* Subtítulo: cliente + status (ponto), no lugar da antiga caixa "Status Atual". */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 -mt-1 text-[15px] text-[var(--text-muted)]">
+                        {selectedTable?.status !== 'available' && (
+                            <span className="font-medium text-[var(--text)] truncate">{selectedTable?.current_host_name || 'Lojista'}</span>
+                        )}
+                        <span className="inline-flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full" style={{ background: selectedTable?.status === 'available' ? 'var(--ok)' : selectedTable?.status === 'waiting_bill' ? 'var(--warn)' : 'var(--brand)' }} aria-hidden />
+                            {getTableStatusLabel(selectedTable?.status || 'occupied')}
+                        </span>
+                        {selectedTable?.waiter_requested && (
+                            <span className="inline-flex items-center gap-1.5 text-[var(--err)] font-medium">
+                                <BellRing size={14}/> Chamando garçom
                             </span>
-                        </div>
+                        )}
                     </div>
 
                     {!showFullBill ? (
@@ -4190,9 +4220,11 @@ NOTIFY pgrst, 'reload schema';`;
                              {selectedTable?.waiter_requested && (
                                  <Button
                                     onClick={() => selectedTable && handleDismissWaiter(selectedTable.id)}
-                                    className="w-full bg-[var(--err)] hover:bg-[var(--err)]/90 text-white animate-pulse mb-2 shadow-[var(--err)]/20 shadow-lg"
+                                    variant="danger"
+                                    size="lg"
+                                    className="w-full"
                                  >
-                                     <BellRing size={20} className="mr-2"/> CONFIRMAR ATENDIMENTO
+                                     <BellRing size={18}/> Confirmar atendimento
                                  </Button>
                              )}
                              
@@ -4200,50 +4232,57 @@ NOTIFY pgrst, 'reload schema';`;
                                  <div className="space-y-3 animate-fade-in">
                                      <div className="grid grid-cols-2 gap-3">
                                          <Button
-                                            className="h-24 flex flex-col items-center justify-center gap-2 bg-[var(--info)] hover:bg-[var(--info)]/90 text-white shadow-lg shadow-[var(--info)]/20"
+                                            size="lg"
+                                            className="!h-14 !rounded-[16px] text-[16px]"
                                             onClick={() => setShowMenuMode(true)}
                                          >
-                                             <Plus size={28} />
-                                             <span className="font-bold text-sm">Adicionar Pedido</span>
+                                             <Plus size={20} />
+                                             Adicionar Pedido
                                          </Button>
                                          <Button
-                                            className="h-24 flex flex-col items-center justify-center gap-2 bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white shadow-lg shadow-[var(--brand)]/20 transition-colors"
+                                            variant="secondary"
+                                            size="lg"
+                                            className="!h-14 !rounded-[16px] text-[16px] min-w-0"
                                             onClick={() => setShowFullBill(true)}
                                          >
-                                             <Receipt size={28} />
-                                             <div className="text-center leading-tight">
-                                                 <span className="block font-bold text-sm">Ver Comanda</span>
-                                                 <span className="text-xs font-normal">
-                                                     R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
-                                                 </span>
-                                             </div>
+                                             <Receipt size={20} className="shrink-0" />
+                                             <span className="truncate">Ver Comanda</span>
+                                             <span className="font-normal text-[var(--text-muted)] num max-sm:hidden">
+                                                 · R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
+                                             </span>
                                          </Button>
                                      </div>
 
-                                     <div className="border-t border-[var(--border)] pt-4 mt-2">
-                                         <p className="mb-3 font-bold text-xs text-[var(--text-muted)] uppercase tracking-wider text-center">Gestão</p>
+                                     <div className="pt-1">
                                          {/* Módulo Caixa (Task 4): quem pode finalizar (dono, universal, ou
                                              usuário com a permissão 'caixa') continua vendo exatamente o
                                              botão de sempre. Quem não pode vê "Pedir Conta" — a mesma ação
                                              que o cliente já tem no cardápio (requestTableBill), só que
                                              disparada pelo garçom. */}
                                          {canFinalize ? (
-                                             <Button onClick={() => handleOpenPayment()} variant="danger" className="w-full text-sm shadow-[var(--ok)]/20 shadow-lg bg-[var(--ok)] hover:bg-[var(--ok)]/90 border-none">
-                                                <Wallet size={18} className="mr-2"/> RECEBER & FINALIZAR
+                                             <Button onClick={() => handleOpenPayment()} size="lg" className="w-full !h-12">
+                                                <Wallet size={18}/> Receber e finalizar
                                              </Button>
                                          ) : selectedTable?.status === 'waiting_bill' ? (
-                                             <div className="w-full text-center text-sm font-bold text-[var(--warn)] bg-[var(--warn)]/10 border border-[var(--warn)]/30 rounded-[var(--r-md)] py-3">
+                                             <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
+                                                 <span className="w-2 h-2 rounded-full bg-[var(--warn)]" aria-hidden />
                                                  Conta pedida — aguardando o caixa
                                              </div>
                                          ) : (
-                                             <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} className="w-full text-sm shadow-[var(--warn)]/20 shadow-lg bg-[var(--warn)] hover:bg-[var(--warn)]/90 text-white border-none">
-                                                <Receipt size={18} className="mr-2"/> PEDIR CONTA
+                                             <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
+                                                <Receipt size={18}/> Pedir conta
                                              </Button>
                                          )}
                                          {canReassignJurisdiction && (
-                                             <Button onClick={handleOpenReassign} variant="outline" className="w-full text-sm mt-2">
-                                                <Users size={16} className="mr-2"/> Trocar Responsável
-                                             </Button>
+                                             <button
+                                                type="button"
+                                                onClick={handleOpenReassign}
+                                                className="mt-3 w-full flex items-center gap-3 px-4 h-12 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[15px] text-[var(--text)] hover:bg-[var(--border)] u-motion"
+                                             >
+                                                <Users size={17} className="text-[var(--text-muted)]"/>
+                                                <span className="flex-1 text-left">Trocar responsável</span>
+                                                <ChevronRight size={17} className="text-[var(--text-muted)]"/>
+                                             </button>
                                          )}
                                      </div>
                                  </div>
@@ -4257,7 +4296,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     value={hostNameInput}
                                     onChange={e => setHostNameInput(e.target.value)}
                                 />
-                                <Button className="w-full text-lg h-14" onClick={async () => {
+                                <Button size="lg" className="w-full !h-14 !rounded-[16px] text-[17px]" onClick={async () => {
                                     if(selectedTable) {
                                         const hostName = hostNameInput.trim() || loggedUser.name;
                                         const previousTable = selectedTable;
@@ -4308,11 +4347,8 @@ NOTIFY pgrst, 'reload schema';`;
                     ) : (
                         <div className="animate-slide-up">
                             {/* VIEW 2: COMANDA COMPLETA */}
-                            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg overflow-hidden mb-4 shadow-sm">
-                                <div className="bg-[var(--surface-2)] p-3 text-xs font-bold text-[var(--text-muted)] uppercase flex justify-between">
-                                    <span>Item</span>
-                                    <span>Subtotal</span>
-                                </div>
+                            <h4 className="eyebrow mb-1.5 px-1">Comanda</h4>
+                            <div className="bg-[var(--surface-2)] rounded-[14px] overflow-hidden mb-4">
                                 <div className="max-h-[300px] overflow-y-auto">
                                     {(() => {
                                         // Busca o resumo atualizado na hora
@@ -4338,22 +4374,22 @@ NOTIFY pgrst, 'reload schema';`;
                                                     // `notes` (createOrder, lib/api.ts), nunca extraído aqui.
                                                     const clientNote = parseItemNote(item.notes || '');
                                                     return (
-                                                    <div key={item.id} className="flex justify-between p-3 border-b border-[var(--border)] text-sm hover:bg-[var(--surface-2)] transition-colors group">
-                                                        <div className="flex-1">
-                                                            <span className="font-bold text-[var(--text)] flex items-center gap-2">
-                                                                <span className="bg-[var(--surface-2)] px-1.5 rounded text-xs text-[var(--text-muted)]">x{item.quantity}</span>
-                                                                {getOrderItemDisplayName(item)}
+                                                    <div key={item.id} className="flex justify-between items-center gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 text-[15px]">
+                                                        <div className="flex-1 min-w-0">
+                                                            <span className="text-[var(--text)] flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                <span className="text-[var(--text-muted)] num">{item.quantity}×</span>
+                                                                <span className="font-medium">{getOrderItemDisplayName(item)}</span>
                                                                 {item.added_by_role === 'garcom' ? (
-                                                                    <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-[var(--info)]/15 text-[var(--info)]">
+                                                                    <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-muted)]">
                                                                         {item.added_by_name || 'Garçom'}
                                                                     </span>
                                                                 ) : clientNote?.client ? (
-                                                                    <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-[var(--brand)]/15 text-[var(--brand)]">
+                                                                    <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
                                                                         {clientNote.client}
                                                                     </span>
                                                                 ) : null}
                                                             </span>
-                                                            <div className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-1 ml-7">
+                                                            <div className="text-[13px] text-[var(--text-muted)] flex flex-wrap items-center gap-x-2 mt-0.5">
                                                                 {orderFlow !== 'direct_print' && (
                                                                     item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
                                                                     item.status === 'preparing' ? <span className="text-[var(--info)] flex items-center gap-1"><ChefHat size={10}/> Preparando</span> :
@@ -4363,11 +4399,11 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 {clientNote?.observation && <span>• {clientNote.observation}</span>}
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
+                                                        <div className="flex items-center gap-3 shrink-0">
+                                                            <span className="num text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
-                                                                className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
+                                                                className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press"
                                                                 title="Cancelar Item"
                                                             >
                                                                 <Trash2 size={16} />
@@ -4383,16 +4419,16 @@ NOTIFY pgrst, 'reload schema';`;
                                                     o dono do projeto apontou como ambíguo pro garçom
                                                     também, não só pro cliente. */}
                                                 {summary?.isServiceFeeEnabled ? (
-                                                    <div className="flex justify-between p-3 border-b border-[var(--border)] text-sm bg-[var(--info)]/5">
+                                                    <div className="flex justify-between items-center gap-3 px-4 py-3 text-[15px]">
                                                         <div className="flex-1">
-                                                            <span className="font-bold text-[var(--text)]">Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
-                                                            <div className="text-xs text-[var(--text-muted)] mt-1">Opcional</div>
+                                                            <span className="font-medium text-[var(--text)]">Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
+                                                            <div className="text-[13px] text-[var(--text-muted)] mt-0.5">Opcional</div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(summary.serviceFee)}</span>
+                                                            <span className="num text-[var(--text)]">R$ {formatBRL(summary.serviceFee)}</span>
                                                             <button
                                                                 onClick={() => handleToggleServiceFee(selectedTable!.id, true)}
-                                                                className="text-[var(--text-muted)]/50 hover:text-[var(--err)] p-1 u-motion u-press"
+                                                                className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press"
                                                                 title="Remover Taxa"
                                                             >
                                                                 <Trash2 size={16} />
@@ -4400,8 +4436,8 @@ NOTIFY pgrst, 'reload schema';`;
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex justify-between items-center p-3 border-b border-[var(--border)] text-sm text-[var(--text-muted)]">
-                                                        <span className="italic">
+                                                    <div className="flex justify-between items-center px-4 py-3 text-[13px] text-[var(--text-muted)]">
+                                                        <span>
                                                             {summary?.isServiceFeeRemovedForTable
                                                                 ? 'Taxa de serviço opcional removida nesta mesa'
                                                                 : 'Esta loja não cobra taxa de serviço'}
@@ -4413,34 +4449,35 @@ NOTIFY pgrst, 'reload schema';`;
                                     })()}
                                 </div>
 
-                                <div className="bg-[var(--surface-2)] p-4 border-t border-[var(--border)] flex justify-between items-center">
-                                    <span className="font-bold text-lg text-[var(--text)]">Total Final</span>
-                                    <span className="font-black text-2xl text-[var(--brand)]">
+                                <div className="px-4 py-3.5 border-t border-[var(--border)] flex justify-between items-baseline">
+                                    <span className="font-semibold text-[17px] text-[var(--text)]">Total</span>
+                                    <span className="font-semibold text-[28px] num text-[var(--text)] tracking-tight">
                                         R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
                                     </span>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-2 mb-3">
-                                <Button variant="secondary" className="text-sm" onClick={() => setShowFullBill(false)}>Voltar</Button>
-                                <Button onClick={() => setShowMoveTableModal(true)} className="text-sm font-bold bg-[var(--info)] hover:bg-[var(--info)]/90 text-white">
-                                    <ArrowRightLeft size={18} className="mr-2"/> TROCAR
+                                <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowFullBill(false)}>Voltar</Button>
+                                <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowMoveTableModal(true)}>
+                                    <ArrowRightLeft size={16}/> Trocar
                                 </Button>
-                                <Button onClick={() => selectedTable && printTableBill(selectedTable.id)} className="text-sm font-bold bg-[var(--ink)] hover:bg-[var(--ink)]/90 text-white">
-                                    <Printer size={18} className="mr-2"/> IMPRIMIR
+                                <Button variant="secondary" className="max-sm:h-11" onClick={() => selectedTable && printTableBill(selectedTable.id)}>
+                                    <Printer size={16}/> Imprimir
                                 </Button>
                             </div>
                             {canFinalize ? (
-                                <Button onClick={() => handleOpenPayment()} className="w-full text-sm font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20 h-12">
-                                    <Wallet size={18} className="mr-2"/> RECEBER PAGAMENTO
+                                <Button onClick={() => handleOpenPayment()} size="lg" className="w-full !h-12">
+                                    <Wallet size={18}/> Receber pagamento
                                 </Button>
                             ) : selectedTable?.status === 'waiting_bill' ? (
-                                <div className="w-full text-center text-sm font-bold text-[var(--warn)] bg-[var(--warn)]/10 border border-[var(--warn)]/30 rounded-[var(--r-md)] py-3">
+                                <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
+                                    <span className="w-2 h-2 rounded-full bg-[var(--warn)]" aria-hidden />
                                     Conta pedida — aguardando o caixa
                                 </div>
                             ) : (
-                                <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} className="w-full text-sm font-bold bg-[var(--warn)] hover:bg-[var(--warn)]/90 text-white shadow-lg shadow-[var(--warn)]/20 h-12">
-                                    <Receipt size={18} className="mr-2"/> PEDIR CONTA
+                                <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
+                                    <Receipt size={18}/> Pedir conta
                                 </Button>
                             )}
                         </div>
@@ -5665,9 +5702,7 @@ const CounterView: React.FC<{
                                      // truncadas + minutos restantes ("1h20") —
                                      // Math.round(minutos/60) fazia qualquer coisa entre 31 e
                                      // 89min virar "1h", subestimando em até quase 3x.
-                                     const texto = minutos < 60
-                                         ? `${minutos}min`
-                                         : `${Math.floor(minutos / 60)}h${String(minutos % 60).padStart(2, '0')}`;
+                                     const texto = formatDuration(minutos);
                                      return (
                                          <span className="text-xs font-bold text-[var(--warn)]">
                                              {rotulo} há {texto}
@@ -6690,10 +6725,7 @@ const CaixaView: React.FC<{
     const formatWaitingLabel = (waitingSince: number): string => {
         const minutes = Math.max(0, Math.round((now - waitingSince) / 60000));
         if (minutes < 1) return 'agora mesmo';
-        if (minutes < 60) return `há ${minutes} min`;
-        const hours = Math.floor(minutes / 60);
-        const rest = minutes % 60;
-        return `há ${hours}h${rest > 0 ? ` ${rest}min` : ''}`;
+        return `há ${formatDuration(minutes)}`;
     };
 
     // Fase 3, Task 8: mesmo mecanismo de `handleManualReprint` em TablesView
@@ -6885,9 +6917,7 @@ const CaixaView: React.FC<{
     const abertoEm = new Date(shift.opened_at);
     const minutosAbertos = Math.max(0, Math.floor((now - abertoEm.getTime()) / 60000));
     const horasAbertas = Math.floor(minutosAbertos / 60);
-    const duracaoLabel = horasAbertas >= 24
-        ? `${Math.floor(horasAbertas / 24)}d ${horasAbertas % 24}h`
-        : horasAbertas >= 1 ? `${horasAbertas}h ${minutosAbertos % 60}min` : `${minutosAbertos}min`;
+    const duracaoLabel = formatDuration(minutosAbertos);
     // "Aberto hoje às HH:MM" só quando é mesmo hoje; senão a data completa,
     // pra nunca parecer que um turno de dias atrás foi aberto agora.
     const abertoHoje = abertoEm.toDateString() === new Date(now).toDateString();
@@ -6996,7 +7026,7 @@ const CaixaView: React.FC<{
                                     >
                                         <div className="flex items-center justify-between">
                                             <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
-                                            <span className="text-[11px] num">{t.minutesOccupied}min</span>
+                                            <span className="text-[11px] num">{formatDuration(t.minutesOccupied)}</span>
                                         </div>
                                         <p className="text-xs text-[var(--text-muted)] truncate">{t.hostName || '—'}</p>
                                         <p className="text-sm font-bold text-[var(--text)] mt-1">R$ {formatBRL(t.total)}</p>

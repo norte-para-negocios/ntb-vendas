@@ -509,3 +509,10 @@ html {
   height: max(100%, 44px);
   transform: translate(-50%, -50%);
 }
+
+/* PIN da mesa discreto (redesign 2026-09-26): em dispositivo com mouse, o chip
+   só aparece no hover/foco do cartão; em toque fica sempre visível. */
+.pin-peek { transition: opacity var(--dur) var(--ease-out); }
+@media (hover: hover) and (pointer: fine) {
+  .group:not(:hover):not(:focus-within) .pin-peek { opacity: 0; }
+}

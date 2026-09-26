@@ -11,6 +11,7 @@ import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMon
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { formatDuration } from '@/lib/formatDuration';
 import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
 
 // 4 cores por token semântico (--ok/--warn/--info/--brand) + 2 literais extras,
@@ -531,7 +532,7 @@ export const StoreDashboardView: React.FC<{
                             <AlertTriangle size={18} className="text-[var(--warn)] shrink-0" />
                             <p className="text-[var(--text)]">
                                 <span className="font-bold">Mesa {t.number}</span> sem pedido novo há{' '}
-                                <span className="font-bold">{t.minutesSinceLastItem} min</span> — pode estar esquecida.
+                                <span className="font-bold">{formatDuration(t.minutesSinceLastItem)}</span> — pode estar esquecida.
                             </p>
                         </div>
                     ))}
