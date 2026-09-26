@@ -49,6 +49,8 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
     // jsonb de sempre (stores.config), so' com show_bestsellers nova; mesmo
     // padrao otimista do toggle de taxa de servico logo acima.
     const [showBestsellersEnabled, setShowBestsellersEnabled] = useState(store.config?.show_bestsellers ?? false);
+    // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): ausente = true.
+    const [clientOrderingEnabled, setClientOrderingEnabled] = useState(store.config?.client_ordering !== false);
 
     // Melhorias no fluxo de Caixa (2026-08-28), Task 4 — contagem cega no
     // fechamento de turno: mesmo padrão jsonb de sempre (stores.config).
@@ -136,6 +138,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
         setServiceFeeEnabled(store.config?.charge_service_fee ?? false);
         setNoteSuggestions(store.config?.note_suggestions ?? []);
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
+        setClientOrderingEnabled(store.config?.client_ordering !== false);
         setBlindCountEnabled(store.config?.cash_shift_blind_count ?? false);
         setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
         setTableAlertOccupiedMin(store.config?.table_alert_occupied_minutes ?? 0);
@@ -207,6 +210,21 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
             console.error('Error updating blind count config', e);
             setBlindCountEnabled(!newValue);
             toast.error('Erro ao atualizar configuração de contagem cega.');
+        }
+    };
+
+    const handleToggleClientOrdering = async () => {
+        const newValue = !clientOrderingEnabled;
+        setClientOrderingEnabled(newValue); // otimista, mesmo padrão dos outros toggles
+        try {
+            const newConfig = { ...currentStoreConfig, client_ordering: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig });
+        } catch (e) {
+            console.error('Error updating client_ordering config', e);
+            setClientOrderingEnabled(!newValue);
+            toast.error('Erro ao atualizar o cardápio do cliente.');
         }
     };
 
@@ -386,6 +404,31 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                             Salvar Capa
                         </Button>
                     )}
+                </div>
+            </div>
+
+            {/* Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26) —
+                stores.config.client_ordering, ausente = ligado. */}
+            <div className="mb-4 flex flex-col gap-2">
+                <p className="text-[13px] font-semibold text-[var(--text-muted)]">Cardápio do cliente (QR da mesa)</p>
+                <div className="flex items-center justify-between gap-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
+                    <div>
+                        <h4 className="font-semibold text-[15px] text-[var(--text)]">Clientes podem fazer pedido pelo celular</h4>
+                        <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+                            {clientOrderingEnabled
+                                ? 'Ligado: o cliente entra na mesa com o PIN, monta o carrinho, envia pedidos e pede a conta pelo celular.'
+                                : 'Desligado: o cardápio vira só consulta. O cliente vê pratos, fotos e preços, mas não entra na mesa, não pede e não vê PIN — o pedido fica com o garçom.'}
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleToggleClientOrdering}
+                        role="switch"
+                        aria-checked={clientOrderingEnabled}
+                        aria-label="Clientes podem fazer pedido pelo celular"
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${clientOrderingEnabled ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${clientOrderingEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
                 </div>
             </div>
 

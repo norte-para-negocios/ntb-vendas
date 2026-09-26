@@ -11,6 +11,7 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
+import { dentroDoPrazoCancelamento, limiteCancelamento, mensagemPrazoEncerrado, PRAZO_CANCELAMENTO_TEXTO } from '@/lib/fiscal/prazoCancelamento';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
@@ -18,7 +19,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -11522,6 +11523,7 @@ const FISCAL_STATUS_LABELS: Record<string, string> = {
     rejeitada: 'Rejeitada',
     erro: 'Erro',
     contingencia: 'Contingência',
+    cancelada: 'Cancelada',
 };
 
 const fiscalStatusBadgeColor = (status: string): string => {
@@ -11529,6 +11531,7 @@ const fiscalStatusBadgeColor = (status: string): string => {
         case 'autorizada': return 'bg-[var(--ok)]/10 text-[var(--ok)] border border-[var(--ok)]/20';
         case 'pendente': return 'bg-[var(--info)]/10 text-[var(--info)] border border-[var(--info)]/20';
         case 'contingencia': return 'bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/20';
+        case 'cancelada': return 'bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]';
         default: return 'bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/20'; // 'erro'/'rejeitada'
     }
 };
@@ -11568,6 +11571,19 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     // — NF-e e NFC-e vinham sempre juntas na mesma lista, sem jeito de olhar
     // só um tipo. Mesmo padrão do filtro de ambiente acima.
     const [tipoFilter, setTipoFilter] = useState<'todos' | '55' | '65'>('todos');
+    const [statusFilter, setStatusFilter] = useState<'todos' | 'autorizada' | 'cancelada' | 'contingencia' | 'problema'>('todos');
+
+    // Cancelamento (evento 110111, pedido do Ramon 2026-09-26). O prazo legal
+    // (lib/fiscal/prazoCancelamento.ts) é contado da autorização; `agora`
+    // anda sozinho pra o botão sumir quando o prazo acaba com a tela aberta.
+    const [cancelingNota, setCancelingNota] = useState<FiscalNota | null>(null);
+    const [cancelJustificativa, setCancelJustificativa] = useState('');
+    const [isCanceling, setIsCanceling] = useState(false);
+    const [agora, setAgora] = useState(() => Date.now());
+    useEffect(() => {
+        const t = setInterval(() => setAgora(Date.now()), 20000);
+        return () => clearInterval(t);
+    }, []);
     // Filtro de período pro "Exportar período" (Task 5, 2026-08-23) — reaproveita
     // o mesmo padrão de Data Inicial/Data Final já usado no Histórico de Vendas
     // (StoreAdminView acima), <Input type="date"> simples. Não filtra a tabela
@@ -11578,7 +11594,56 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [isExporting, setIsExporting] = useState(false);
     const filteredNotas = notas
         .filter(n => ambienteFilter === 'todos' || n.ambiente === ambienteFilter)
-        .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter);
+        .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter)
+        .filter(n => statusFilter === 'todos'
+            || (statusFilter === 'problema' ? RETRYABLE_FISCAL_STATUSES.includes(n.status) : n.status === statusFilter));
+
+    // Início do prazo na tela: created_at da linha (a emissão síncrona grava a
+    // linha logo depois do protocolo). O servidor confere de novo usando o
+    // dhRecbto do XML autorizado, que é o horário oficial.
+    const podeCancelar = (nota: FiscalNota) =>
+        nota.status === 'autorizada' && !!nota.chave_acesso && !!nota.protocolo
+        && dentroDoPrazoCancelamento(nota.modelo, nota.created_at, new Date(agora));
+
+    const openCancel = (nota: FiscalNota) => {
+        setCancelJustificativa('');
+        setCancelingNota(nota);
+    };
+
+    const handleConfirmCancel = async () => {
+        const nota = cancelingNota;
+        if (!nota) return;
+        const justificativa = cancelJustificativa.replace(/\s+/g, ' ').trim();
+        if (justificativa.length < 15) {
+            toast.error('Escreva o motivo com pelo menos 15 caracteres.');
+            return;
+        }
+        if (!dentroDoPrazoCancelamento(nota.modelo, nota.created_at)) {
+            toast.error(mensagemPrazoEncerrado(nota.modelo));
+            setCancelingNota(null);
+            return;
+        }
+        setIsCanceling(true);
+        try {
+            const result = await cancelarFiscalNota({ storeId, notaId: nota.id, justificativa });
+            if (result?.ok) {
+                if (result.aviso) toast.error(result.aviso);
+                else toast.success('Nota cancelada na SEFAZ.');
+                setCancelingNota(null);
+                await load();
+            } else {
+                toast.error(result?.reason || 'Não foi possível cancelar a nota.');
+                if (result?.prazoEncerrado) {
+                    setCancelingNota(null);
+                    await load();
+                }
+            }
+        } catch (e: any) {
+            toast.error('Erro ao cancelar: ' + (e?.message || 'falha de conexão'));
+        } finally {
+            setIsCanceling(false);
+        }
+    };
 
     // Baixa o ZIP (XMLs + CSV) do período via app/api/fiscal/exportar — a
     // rota resolve as notas server-side só por storeId+intervalo (nunca por
@@ -11766,6 +11831,18 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <option value="homologacao">Só Homologação</option>
                                 <option value="producao">Só Produção</option>
                             </select>
+                            <select
+                                className="h-8 max-sm:h-11 px-3 text-[13px] font-medium rounded-full bg-[var(--surface-2)] text-[var(--text)] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                                aria-label="Filtrar por status"
+                            >
+                                <option value="todos">Todos os status</option>
+                                <option value="autorizada">Autorizadas</option>
+                                <option value="cancelada">Canceladas</option>
+                                <option value="contingencia">Em contingência</option>
+                                <option value="problema">Com erro ou pendentes</option>
+                            </select>
                             <Button variant="secondary" size="sm" className="max-sm:!h-11" onClick={load} isLoading={isLoading}>
                                 <RefreshCw size={14} /> Atualizar
                             </Button>
@@ -11790,6 +11867,9 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <Download size={14} /> Exportar período
                         </Button>
                     </div>
+                    <p className="text-[13px] text-[var(--text-muted)]">
+                        Cancelamento: NFC-e em até {PRAZO_CANCELAMENTO_TEXTO['65']} e NF-e em até {PRAZO_CANCELAMENTO_TEXTO['55']} depois da autorização. Depois disso a SEFAZ não aceita mais.
+                    </p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-[15px] text-left">
@@ -11841,10 +11921,15 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                             </Badge>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <Badge color={fiscalStatusBadgeColor(nota.status)}>
+                                            <Badge color={fiscalStatusBadgeColor(nota.status)} dot>
                                                 {FISCAL_STATUS_LABELS[nota.status] || nota.status}
                                             </Badge>
-                                            {nota.motivo_erro && (
+                                            {nota.status === 'cancelada' ? (
+                                                <p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs truncate" title={nota.cancelamento_justificativa || undefined}>
+                                                    {nota.cancelada_em ? `Em ${new Date(nota.cancelada_em).toLocaleDateString()} ${new Date(nota.cancelada_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Cancelada'}
+                                                    {nota.cancelamento_justificativa ? ` · ${nota.cancelamento_justificativa}` : ''}
+                                                </p>
+                                            ) : nota.motivo_erro && (
                                                 <p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs truncate" title={nota.motivo_erro}>{nota.motivo_erro}</p>
                                             )}
                                         </td>
@@ -11865,7 +11950,12 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                                         <RotateCcw size={14} className="mr-1.5" /> Reemitir
                                                     </Button>
                                                 )}
-                                                {!nota.pdf_path && !RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (
+                                                {podeCancelar(nota) && (
+                                                    <Button variant="outline" size="sm" onClick={() => openCancel(nota)}>
+                                                        <Ban size={14} className="mr-1.5" /> Cancelar nota
+                                                    </Button>
+                                                )}
+                                                {!nota.pdf_path && !RETRYABLE_FISCAL_STATUSES.includes(nota.status) && !podeCancelar(nota) && (
                                                     <span className="text-xs text-[var(--text-muted)]/70">—</span>
                                                 )}
                                             </div>
@@ -11921,6 +12011,80 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         </Button>
                     </div>
                 </div>
+            </Modal>
+
+            <Modal isOpen={!!cancelingNota} onClose={() => { if (!isCanceling) setCancelingNota(null); }} title="Cancelar nota">
+                {cancelingNota && (() => {
+                    const nota = cancelingNota;
+                    const limite = limiteCancelamento(nota.modelo, nota.created_at);
+                    const minutosRestantes = Math.max(0, Math.floor((limite.getTime() - agora) / 60000));
+                    const restante = minutosRestantes >= 120
+                        ? `${Math.floor(minutosRestantes / 60)} h`
+                        : `${minutosRestantes} min`;
+                    const justificativaLen = cancelJustificativa.replace(/\s+/g, ' ').trim().length;
+                    const justificativaOk = justificativaLen >= 15 && justificativaLen <= 255;
+                    return (
+                        <div className="space-y-4">
+                            <div className="bg-[var(--surface-2)] p-4 rounded-[14px] space-y-1.5">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[15px] font-semibold text-[var(--text)]">
+                                        {nota.modelo === '55' ? 'NF-e' : 'NFC-e'}{nota.numero ? ` nº ${nota.numero}` : ''}
+                                    </span>
+                                    <span className="text-[15px] font-semibold text-[var(--text)] num">R$ {formatBRL(nota.valor_total ?? 0)}</span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge color={nota.ambiente === 'homologacao' ? 'bg-[var(--warn)]/10 border border-[var(--warn)]/30 text-[var(--warn)]' : 'bg-[var(--err)]/10 border border-[var(--err)]/30 text-[var(--err)]'}>
+                                        {nota.ambiente === 'homologacao' ? 'Homologação' : 'Produção'}
+                                    </Badge>
+                                    <span className="text-[13px] text-[var(--text-muted)]">
+                                        Prazo: até {limite.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{minutosRestantes < 24 * 60 ? ` · faltam ${restante}` : ''}
+                                    </span>
+                                </div>
+                                {nota.chave_acesso && (
+                                    <p className="font-mono text-xs text-[var(--text-muted)] break-all">{nota.chave_acesso}</p>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2.5 p-3 rounded-[14px] bg-[var(--err)]/10 border border-[var(--err)]/25 text-[var(--err)]">
+                                <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+                                <p className="text-[13px] font-medium">
+                                    Isso cancela a nota na SEFAZ e não pode ser desfeito. Só cancele se a venda não aconteceu ou a nota saiu errada.
+                                </p>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label htmlFor="cancel-justificativa" className="block text-[13px] font-medium text-[var(--text-muted)]">
+                                    Motivo do cancelamento
+                                </label>
+                                <textarea
+                                    id="cancel-justificativa"
+                                    rows={3}
+                                    maxLength={255}
+                                    className="w-full rounded-[var(--r-md)] bg-[var(--surface-2)] px-3 py-2.5 text-[15px] max-sm:text-base text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 resize-none"
+                                    placeholder="Ex.: cliente desistiu da compra antes de receber o pedido"
+                                    value={cancelJustificativa}
+                                    onChange={(e) => setCancelJustificativa(e.target.value)}
+                                    disabled={isCanceling}
+                                />
+                                <div className="flex justify-between text-xs">
+                                    <span className={justificativaLen > 0 && justificativaLen < 15 ? 'text-[var(--err)]' : 'text-[var(--text-muted)]'}>
+                                        Mínimo de 15 caracteres. Vai junto para a SEFAZ.
+                                    </span>
+                                    <span className={`num ${justificativaOk ? 'text-[var(--ok)]' : 'text-[var(--text-muted)]'}`}>{justificativaLen}/255</span>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <Button variant="secondary" className="flex-1" onClick={() => setCancelingNota(null)} disabled={isCanceling}>
+                                    Voltar
+                                </Button>
+                                <Button variant="danger" className="flex-1" onClick={handleConfirmCancel} isLoading={isCanceling} disabled={!justificativaOk || isCanceling}>
+                                    Cancelar na SEFAZ
+                                </Button>
+                            </div>
+                        </div>
+                    );
+                })()}
             </Modal>
         </div>
     );

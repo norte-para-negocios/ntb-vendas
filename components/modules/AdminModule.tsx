@@ -207,6 +207,9 @@ export const AdminModule: React.FC = () => {
   // "Balcão paga primeiro" (pedido do André, 2026-09-11) — default false:
   // ordem de sempre, nada muda pra quem não ligar.
   const [counterPaymentFirst, setCounterPaymentFirst] = useState(false);
+  // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): config.client_ordering,
+  // ausente = true. Só grava `false`; ligar de volta remove a chave.
+  const [clientOrdering, setClientOrdering] = useState(true);
   // Subprojeto 4 (2026-08-25) — checklist de onboarding pra loja em
   // direct_print: `null` = ainda não checou (loja nova, editingId ainda
   // não existe) ou não se aplica; número = quantos membros da equipe já
@@ -409,6 +412,7 @@ export const AdminModule: React.FC = () => {
       setModAdmin(ALL_ON.admin);
       setOrderFlow('kds');
       setCounterPaymentFirst(false);
+      setClientOrdering(true);
       setLogoFile(null);
       setLogoPreview(null);
       setCoverFile(null);
@@ -509,6 +513,7 @@ export const AdminModule: React.FC = () => {
       setModAdmin(storeModules.admin);
       setOrderFlow(resolveOrderFlow(store));
       setCounterPaymentFirst(isCounterPaymentFirst(store));
+      setClientOrdering(store.config?.client_ordering !== false);
 
       setLogoPreview(store.logo_url);
       setLogoFile(null);
@@ -814,6 +819,7 @@ export const AdminModule: React.FC = () => {
               modules,
               orderFlow,
               counterPaymentFirst,
+              clientOrdering,
           };
 
           let result;
@@ -1452,6 +1458,33 @@ export const AdminModule: React.FC = () => {
                               ? 'Ao enviar, o pedido vai direto pra impressão — sem tela de acompanhamento de cozinha/bar.'
                               : 'Pedido enviado aparece na tela da Cozinha/Bar até ser preparado e entregue.'}
                       </p>
+                  </div>
+
+                  {/* Cardápio do cliente (QR da mesa) — pedido do Ramon/Sertão
+                      (2026-09-26). Mesma chave que o lojista liga/desliga em
+                      Configurações gerais (StoreSettingsView). */}
+                  <div className="pt-3 border-t border-[var(--border)] space-y-2">
+                      <label className="text-xs font-semibold text-[var(--text)]">Cardápio do cliente (QR da mesa)</label>
+                      <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[var(--surface-2)] p-3">
+                          <span className="min-w-0">
+                              <span className="block text-xs font-semibold text-[var(--text)]">Clientes podem fazer pedido pelo celular</span>
+                              <span className="block text-[11px] text-[var(--text-muted)]">
+                                  {clientOrdering
+                                      ? 'O cliente entra na mesa com o PIN, pede e pede a conta pelo celular.'
+                                      : 'Só consulta: o cliente vê o cardápio e os preços, sem PIN, carrinho nem pedido.'}
+                              </span>
+                          </span>
+                          <button
+                              type="button"
+                              role="switch"
+                              aria-checked={clientOrdering}
+                              aria-label="Clientes podem fazer pedido pelo celular"
+                              onClick={() => setClientOrdering(!clientOrdering)}
+                              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${clientOrdering ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                          >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${clientOrdering ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                      </div>
                   </div>
 
                   {/* Removido (redesign 2026-08-23): existia um seletor "Onde

@@ -1295,7 +1295,12 @@ const ProductModal: React.FC<{
     // Task 6: pílula da loja sobre a foto (logo + nome), formato iFood.
     // null enquanto currentStore ainda não carregou.
     store: Store | null,
-}> = ({ product: incomingProduct, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds, store }) => {
+    // Cardápio vitrine (stores.config.client_ordering === false, pedido do
+    // Ramon/Sertão 2026-09-26): folha só informativa — sem observação, sem
+    // quantidade, sem "Adicionar". O ClientModule também nunca chama onAdd
+    // nesse modo (defesa dupla).
+    viewOnly?: boolean,
+}> = ({ product: incomingProduct, onClose, onAdd, noteSuggestions = [], onSelectRecommended, isFavorite, onToggleFavorite, visibleCategoryIds, store, viewOnly = false }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -1463,15 +1468,17 @@ const ProductModal: React.FC<{
                             <legend className="w-full block bg-[var(--surface-2)] px-4 py-2.5 mt-4">
                                 <span className="flex items-center justify-between gap-2">
                                     <span className="text-[15px] font-bold text-[var(--text)]">{group.name}</span>
-                                    {group.required && (
+                                    {group.required && !viewOnly && (
                                         <span className="flex-shrink-0 bg-[var(--text)] text-[var(--surface)] text-[11px] font-semibold rounded-full px-2 py-0.5">
                                             Obrigatório
                                         </span>
                                     )}
                                 </span>
+                                {!viewOnly && (
                                 <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">
                                     {getOptionGroupRuleLabel(group)}
                                 </span>
+                                )}
                             </legend>
                             {visibleOptions.map(opt => {
                                 const isChecked = groupSelections.includes(opt.id);
@@ -1485,7 +1492,7 @@ const ProductModal: React.FC<{
                                         // foco assim que chega na linha, não só quando o olhar já está no
                                         // canto direito. ring-inset evita que o anel seja cortado pelo
                                         // scroll container (o modal inteiro tem overflow-y-auto).
-                                        className={`flex items-center gap-3 px-4 py-3 min-h-11 border-b border-[var(--border)] focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--brand)] ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                        className={`flex items-center gap-3 px-4 py-3 min-h-11 border-b border-[var(--border)] focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--brand)] ${viewOnly ? '' : isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                     >
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[14px] text-[var(--text)]">{opt.name}</span>
@@ -1496,7 +1503,8 @@ const ProductModal: React.FC<{
                                             )}
                                         </span>
                                         <ProductThumb src={undefined} name={opt.name} size="option" />
-                                        {group.type === 'single' ? (
+                                        {/* Vitrine: opção é só informação (nome + acréscimo), sem controle de escolha. */}
+                                        {viewOnly ? null : group.type === 'single' ? (
                                             <span className="relative flex-shrink-0 w-5 h-5">
                                                 <input
                                                     type="radio"
@@ -1549,7 +1557,8 @@ const ProductModal: React.FC<{
 
                 {/* Passo 4: observação — chips de sugestão já existentes + rótulo
                     com contador. Nenhum fluxo de "Denunciar item" (não existe
-                    aqui, regra do brief). */}
+                    aqui, regra do brief). Some no cardápio vitrine. */}
+                {!viewOnly && (
                 <div className="px-4 mt-4">
                     {noteSuggestions.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1580,6 +1589,7 @@ const ProductModal: React.FC<{
                         className="w-full h-11 rounded-[12px] border-0 bg-[var(--surface-2)] px-3.5 text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 transition-shadow max-sm:text-base"
                     />
                 </div>
+                )}
 
                 {/* "Peça também" (migration 020, Vende Mais II): cross-sell manual
                     do lojista, movido pra cima do rodapé fixo (Task 6). Clicar
@@ -1588,7 +1598,7 @@ const ProductModal: React.FC<{
                 {!!availableRecommended.length && (
                     <div className="px-4 mt-4 pb-4">
                         <h4 className="text-[13px] font-semibold text-[var(--text)] mb-2 flex items-center gap-1.5">
-                            <Sparkles size={13} className="text-[var(--brand)]" /> Peça também
+                            <Sparkles size={13} className="text-[var(--brand)]" /> {viewOnly ? 'Veja também' : 'Peça também'}
                         </h4>
                         <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
                             {availableRecommended.map(rec => (
@@ -1632,6 +1642,7 @@ const ProductModal: React.FC<{
                     seletor de quantidade — o rodapé continua tendo só 2 filhos
                     diretos (quantidade + este wrapper), "flex items-center gap-3"
                     intacto. */}
+                {!viewOnly && (<>
                 <div
                     className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-3 flex items-center gap-3"
                     style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
@@ -1677,6 +1688,8 @@ const ProductModal: React.FC<{
                     "gruda" no fim do scroll. Puramente estrutural — sem conteúdo,
                     sem cor, invisível pro leitor de tela. */}
                 <div aria-hidden="true" style={{ height: PRODUCT_MODAL_FOOTER_SPACER_HEIGHT }} />
+                </>)}
+                {viewOnly && <div aria-hidden="true" style={{ height: 'calc(1.5rem + env(safe-area-inset-bottom))' }} />}
             </div>
         </Modal>
     );
@@ -2648,6 +2661,27 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // do hero, emoji das abas) — ver lib/theme.ts.
     const theme = THEME_PRESETS[resolveThemePreset(currentStore?.config?.theme_preset)];
 
+    // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): a LOJA decide se
+    // o cliente pode pedir pelo QR. `client_ordering` ausente = true (lojas
+    // antigas seguem iguais); só `false` explícito desliga. Com false: sem
+    // PIN, sem "+", sem carrinho, sem "Adicionar", sem Conta/garçom — só
+    // navegar, buscar, ver detalhe/preço e favoritar. Todo caminho que cria
+    // sessão ou pedido checa esta flag (handleLogin, requestAccessThen,
+    // submitOrder, auto-login) — não só a UI.
+    const clientOrdering = currentStore?.config?.client_ordering !== false;
+    useEffect(() => {
+        if (clientOrdering) return;
+        setHasAccess(false);
+        setIsLoginModalOpen(false);
+        setPendingCartAction(null);
+        setIsCartOpen(false);
+        setShowBill(false);
+        setMesaOrderIds([]);
+        setTrackedOrderId(null);
+        setGlobalTable(null);
+        clearCart();
+    }, [clientOrdering, setGlobalTable, clearCart]);
+
     // Carrega loja + cardápio. Extraído do useEffect pra poder ser reusado pelo
     // botão "Tentar de novo" da tela de erro de conexão (achado de UX #4).
     const loadStoreAndMenu = useCallback(async () => {
@@ -2825,6 +2859,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         const checkSession = async () => {
             if (!slug || !currentStore) return;
 
+            // Vitrine: sessão salva de antes (mesa/balcão) é descartada, nunca restaurada.
+            if (currentStore.config?.client_ordering === false) {
+                try { localStorage.removeItem(`session_${slug}`); } catch {}
+                return;
+            }
+
             const savedSession = localStorage.getItem(`session_${slug}`);
             if (savedSession) {
                 try {
@@ -2906,8 +2946,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     }, [slug, currentStore]);
 
     const handleLogin = async (name: string, tableId: string | null, isHostResult?: boolean, table?: Table | null) => {
+        if (!currentStore || currentStore.config?.client_ordering === false) {
+            setIsLoginModalOpen(false);
+            setPendingCartAction(null);
+            return;
+        }
         setClientName(name);
-        if (!currentStore) return;
 
         // A validação de PIN e a decisão de quem é host já aconteceram no
         // servidor (LoginScreen.handleEnter -> openTableSession RPC); aqui só
@@ -2952,6 +2996,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // sem sessão, guarda a ação e abre o modal — handleLogin completa ela
     // sozinho ao validar o PIN.
     const requestAccessThen = (action: () => void) => {
+        if (currentStore?.config?.client_ordering === false) return;
         if (hasAccess) {
             action();
         } else {
@@ -2987,7 +3032,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     };
 
     const submitOrder = async () => {
-        if (!currentStore) return;
+        if (!currentStore || currentStore.config?.client_ordering === false) return;
         // Guard síncrono contra duplo clique — setIsLoading só reflete no DOM
         // no próximo render, então a janela entre 2 cliques rápidos precisa
         // de um valor checado/setado na hora, não só de estado React.
@@ -3856,6 +3901,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <Coffee size={15} className="flex-shrink-0" style={{ color: ACTION_FG }} />
                                 <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Pedido no balcão</span>
                             </div>
+                        ) : !clientOrdering ? (
+                            /* Cardápio vitrine (client_ordering=false): nada de
+                               PIN/entrar — só um aviso de como pedir. */
+                            <div className="flex w-full items-center gap-2">
+                                <UtensilsCrossed size={15} className="flex-shrink-0" style={{ color: ACTION_FG }} />
+                                <span className="flex-1 text-[13px] font-medium text-[var(--text)]">Cardápio para consulta</span>
+                                <span className="flex-shrink-0 text-[12px] text-[var(--text-muted)]">Peça ao garçom</span>
+                            </div>
                         ) : !entradaDispensada ? (
                             /* Pedido direto do dono (2026-09-13): "ter o botão
                                de também só pedir pin ou de só ver o cardápio".
@@ -4274,7 +4327,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                                     key={product.id}
                                                     product={product}
                                                     onSelect={setSelectedProduct}
-                                                    onQuickAdd={(p) => {
+                                                    onQuickAdd={!clientOrdering ? undefined : (p) => {
                                                         // Qualquer grupo de opção (obrigatório ou não) abre o
                                                         // modal completo em vez de adicionar direto — extras
                                                         // opcionais (ex.: borda de pizza) também são upsell/
@@ -4326,7 +4379,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
 
             {/* Floating Cart Button + Status da Mesa (empilham: Comanda em cima, Status embaixo) */}
-            {!isWaitingBill && (
+            {clientOrdering && !isWaitingBill && (
                 <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-40 flex flex-col gap-3">
                     <AnimatePresence>
                         {cart.length > 0 && (
@@ -4384,7 +4437,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             )}
 
             {/* Locked State Footer */}
-            {isWaitingBill && (
+            {clientOrdering && isWaitingBill && (
                  <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--ink)] text-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]" style={{boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'}}>
                     <div className="flex justify-between items-center max-w-lg mx-auto">
                         <div className="flex items-center gap-3">
@@ -4404,9 +4457,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             <ProductModal
                 product={selectedProduct}
                 onClose={() => setSelectedProduct(null)}
+                viewOnly={!clientOrdering}
                 onAdd={(qty, notes, selectedOptions) => {
                     const product = selectedProduct;
-                    if (product) {
+                    if (product && clientOrdering) {
                         requestAccessThen(() => {
                             addToCart(product, qty, notes, selectedOptions);
                             toast.success('Adicionado ao carrinho!');
@@ -4421,6 +4475,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 store={currentStore}
             />
 
+            {clientOrdering && (<>
             <CounterConfirmModal
                 isOpen={isCounterConfirmOpen}
                 onClose={() => setIsCounterConfirmOpen(false)}
@@ -4475,6 +4530,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     />
                 </div>
             )}
+            </>)}
             </div>
         </MotionConfig>
     );

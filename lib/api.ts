@@ -2267,6 +2267,23 @@ export const reemitirFiscalNota = async (params: {
   return res.json();
 };
 
+// Cancelamento de nota fiscal (evento 110111) — botão "Cancelar nota" em
+// Administração → Notas fiscais. Chamada síncrona (o lojista espera a
+// resposta da SEFAZ na tela). A rota valida loja, status, prazo legal e
+// justificativa (15–255) de novo no servidor — nada aqui é só client-side.
+export const cancelarFiscalNota = async (params: {
+  storeId: string;
+  notaId: string;
+  justificativa: string;
+}): Promise<{ ok: boolean; reason?: string; aviso?: string; cStat?: string | null; xMotivo?: string | null; protocolo?: string | null; prazoEncerrado?: boolean }> => {
+  const res = await fetch(resolverUrlApi('/api/fiscal/cancelar'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+};
+
 export interface CreateStoreParams {
   name: string;
   cnpj: string;
@@ -2289,6 +2306,8 @@ export interface CreateStoreParams {
   // "Balcão paga primeiro" (pedido do André, 2026-09-11) — ver
   // applyModulesConfigFields e lib/storeModules.ts:isCounterPaymentFirst.
   counterPaymentFirst?: boolean;
+  // Cardápio vitrine (2026-09-26): ver applyModulesConfigFields.
+  clientOrdering?: boolean;
 }
 
 // Perfil de módulos por loja (Task 1): decide se `params.modules`/
@@ -2303,7 +2322,7 @@ export interface CreateStoreParams {
 // que a function realmente usa, pra não obrigar quem chama de fora de
 // createStore/updateStore a montar um CreateStoreParams inteiro só pra
 // mudar módulos/fluxo.
-export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow; counterPaymentFirst?: boolean }): Record<string, any> => {
+export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow; counterPaymentFirst?: boolean; clientOrdering?: boolean }): Record<string, any> => {
   const next = { ...config };
   if (params.modules && !isDefaultStoreModules(params.modules)) {
     next.modules = params.modules;
@@ -2322,6 +2341,14 @@ export const applyModulesConfigFields = (config: Record<string, any>, params: { 
     next.counter_payment_first = true;
   } else {
     delete next.counter_payment_first;
+  }
+  // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): só `false` é
+  // gravado (ausente = cliente pode pedir). `undefined` = quem chamou não
+  // mexe nisso — preserva o que já está no config.
+  if (params.clientOrdering === false) {
+    next.client_ordering = false;
+  } else if (params.clientOrdering === true) {
+    delete next.client_ordering;
   }
   // Removido (redesign 2026-08-23): `print_target` deixou de existir (ver
   // lib/storeModules.ts) — apagado incondicionalmente daqui em diante pra

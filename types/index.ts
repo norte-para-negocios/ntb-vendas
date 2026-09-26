@@ -52,6 +52,12 @@ export interface Store {
     // no cardapio do cliente. undefined/false = nenhum badge aparece
     // (comportamento atual, sem mudanca).
     show_bestsellers?: boolean;
+    // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): a loja decide se
+    // o cliente pode pedir pelo QR da mesa. undefined/true = pode (comportamento
+    // de sempre); false = /c/[slug] vira só consulta (sem PIN, "+", carrinho,
+    // "Adicionar", Conta). Editável pelo lojista (StoreSettingsView) e pelo
+    // Master Admin (Editar Loja).
+    client_ordering?: boolean;
     // Perfil de módulos por loja (Task 1, plano 2026-08-22). undefined =
     // todos os módulos ligados e fluxo 'kds' — comportamento atual de todas
     // as 6 lojas reais, nenhuma delas tem essa chave. Ver
@@ -388,7 +394,7 @@ export interface FiscalNota {
   order_id: string | null;
   modelo: '55' | '65';
   ambiente: 'homologacao' | 'producao';
-  status: 'pendente' | 'autorizada' | 'rejeitada' | 'erro' | 'contingencia';
+  status: 'pendente' | 'autorizada' | 'rejeitada' | 'erro' | 'contingencia' | 'cancelada';
   chave_acesso: string | null;
   numero: number | null;
   serie: number | null;
@@ -397,6 +403,10 @@ export interface FiscalNota {
   valor_total: number | null;
   xml_path: string | null;
   pdf_path: string | null;
+  // Cancelamento (evento 110111, migration 090) — preenchidos só quando status='cancelada'.
+  cancelada_em?: string | null;
+  cancelamento_protocolo?: string | null;
+  cancelamento_justificativa?: string | null;
   created_at: string;
   updated_at: string;
 }

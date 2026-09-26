@@ -2066,6 +2066,43 @@ pedir de novo pro lojista poder mexer em módulos/fluxo sozinho, **checar
 com o dono antes** — já foi tentado e revertido no dia seguinte por ser
 incompatível com a ideia de planos pagos por funcionalidade.
 
+## Cardápio vitrine — `stores.config.client_ordering` (migration 091, 2026-09-26)
+
+Pedido do Ramon (loja "O Sertão Vai Virar Mar"): "a loja colocar para o
+cliente somente ver o cardápio. Nem clicar nada, não pedir nada, não
+solicitar o PIN". Chave jsonb em `stores.config`, sem coluna nova:
+
+- **Ausente/`true` = cliente pode pedir** (comportamento de sempre). Só
+  `false` explícito desliga. Master Admin só grava `false` e REMOVE a
+  chave ao religar (`applyModulesConfigFields`, `clientOrdering`); o
+  lojista grava true/false via `updateStoreConfig` — os dois tratam
+  ausente/true igual.
+- **Onde se liga**: lojista em Configurações gerais (`StoreSettingsView`,
+  "Cardápio do cliente (QR da mesa)" → "Clientes podem fazer pedido pelo
+  celular") E Master Admin (Editar Loja, logo abaixo de "Fluxo de
+  pedidos"). Exceção consciente à regra "operação é exclusiva do Master
+  Admin" acima: pedido explícito pra lojista também controlar.
+- **`ClientModule.tsx` com `false`** (`clientOrdering`): sem "Entrar na
+  mesa (PIN)"/"Só ver o cardápio" (no lugar, "Cardápio para consulta ·
+  Peça ao garçom"), sem "+" no card, sem carrinho/comanda/rodapé
+  flutuante, sem Conta/garçom, `ProductModal viewOnly` (sem observação,
+  quantidade, "Adicionar" nem controles de opção — opções aparecem só como
+  informação; "Peça também" vira "Veja também"). Busca, detalhe, preço e
+  favoritos continuam. Guardas também na lógica, não só na UI:
+  `handleLogin`, `requestAccessThen`, `submitOrder` e o auto-login recusam;
+  sessão salva em `localStorage` (`session_${slug}`) é APAGADA; efeito zera
+  hasAccess/mesa/carrinho. Não existe mesa na URL do QR (é só `/c/slug`),
+  então QR de mesa cai no mesmo modo.
+- **Servidor (migration 091)**: `open_table_session` (só o cliente chama)
+  recusa quando `client_ordering=false`; `create_order_secure` recusa
+  `p_added_by_role='cliente'` nessa loja. Garçom/lojista sempre mandam
+  `'garcom'` (StoreModule.tsx), nunca afetados. Limitação: o role é
+  informado pelo chamador e a function não autentica ninguém (dívida
+  anterior a isto) — fecha o caminho do app, não um atacante que forja
+  `'garcom'`.
+- Lojas com a chave em `false`: `sertao-vai-virar-mar` (desde
+  2026-09-26, pedido da gerência via Ramon).
+
 ## Caixa por operador (`cash_shifts`, migration 062)
 
 Pedido direto do dono (2026-08-28, ao vivo): "frente de caixa"
