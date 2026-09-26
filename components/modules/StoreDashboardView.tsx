@@ -18,7 +18,7 @@ import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrde
 // pois "Formas de Pagamento" pode ter até 6 fatias distintas (CREDIT/DEBIT/PIX/
 // CASH/COURTESY/MULTIPLE, ver lib/labels.ts PAYMENT_METHOD_LABELS) — mais que os
 // 4 tokens disponíveis.
-const COLORS = ['var(--ok)', 'var(--warn)', 'var(--info)', 'var(--brand)', '#8b5cf6', '#F43F5E'];
+const COLORS = ['var(--brand)', 'var(--ok)', 'var(--info)', 'var(--warn)', 'var(--err)', 'var(--text-muted)'];
 
 // Pedidos/sessões acima disso são tratados como outlier (ex.: mesa esquecida aberta, pedido travado)
 // e excluídos da média para não distorcer o número exibido.
@@ -46,7 +46,7 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
         <svg
             viewBox={`0 0 ${width} ${height}`}
             preserveAspectRatio="none"
-            className="absolute bottom-0 right-0 w-24 h-8 opacity-20 pointer-events-none"
+            className="absolute top-5 right-5 w-20 h-7 opacity-40 pointer-events-none"
         >
             <polyline points={points} fill="none" stroke={color} strokeWidth="2" />
         </svg>
@@ -267,9 +267,12 @@ export const StoreDashboardView: React.FC<{
         const isUp = value >= 0;
         const Icon = isUp ? TrendingUp : TrendingDown;
         return (
-            <span className={`inline-flex items-center gap-1 text-xs font-bold num ${isUp ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
-                <Icon size={14} />
-                {isUp ? '+' : ''}{value.toFixed(1)}% {label}
+            <span className="inline-flex items-center gap-1 text-[13px] text-[var(--text-muted)]">
+                <span className={`inline-flex items-center gap-0.5 font-semibold num ${isUp ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
+                    <Icon size={14} />
+                    {isUp ? '+' : ''}{value.toFixed(1).replace('.', ',')}%
+                </span>
+                {label}
             </span>
         );
     };
@@ -441,22 +444,22 @@ export const StoreDashboardView: React.FC<{
     const counterStats = calcStats(counterSales);
 
     const StatCard = ({ title, value, subtitle, icon: Icon, accentColor }: any) => (
-        <Card accentColor={accentColor} className="u-grow-in u-card p-4 pl-5 shadow-sm">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">{title}</p>
-                    <h3 className="text-xl font-black text-[var(--text)] mt-1 num">{value}</h3>
-                    {subtitle && <p className="text-xs text-[var(--text-muted)] mt-1">{subtitle}</p>}
+        <Card accentColor={accentColor} className="u-grow-in u-card p-5">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-[var(--text-muted)]">{title}</p>
+                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-[var(--text)] mt-1 num">{value}</h3>
+                    {subtitle && <p className="text-[13px] text-[var(--text-muted)] mt-1">{subtitle}</p>}
                 </div>
-                <div className="p-2 rounded-full bg-[var(--surface-2)]">
-                    <Icon size={20} className="text-[var(--brand)]" />
+                <div className="w-9 h-9 grid place-items-center rounded-full bg-[var(--surface-2)] flex-shrink-0">
+                    <Icon size={17} className="text-[var(--text-muted)]" />
                 </div>
             </div>
         </Card>
     );
 
-    const cardCls = 'p-4 shadow-sm border border-[var(--border)] bg-[var(--surface)]';
-    const h4Cls = 'text-sm font-bold text-[var(--text-muted)] uppercase mb-4';
+    const cardCls = 'p-5 bg-[var(--surface)]';
+    const h4Cls = 'text-[15px] font-semibold text-[var(--text)] mb-4';
 
     return (
         <div className="space-y-8">
@@ -468,11 +471,11 @@ export const StoreDashboardView: React.FC<{
                     <Card className={`${cardCls} u-grow-in u-card`}>
                         <div className="flex items-center justify-between mb-3">
                             <h3 className={h4Cls + ' mb-0'}>Hoje na loja</h3>
-                            {isLoadingTodayCard && <span className="text-xs text-[var(--text-muted)]">Atualizando...</span>}
+                            {isLoadingTodayCard && <span className="text-[13px] text-[var(--text-muted)]">Atualizando...</span>}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <p className="text-[13px] font-medium text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
                                     <Users size={13} /> Trabalhando agora
                                 </p>
                                 {workingNow.length === 0 ? (
@@ -480,8 +483,8 @@ export const StoreDashboardView: React.FC<{
                                 ) : (
                                     <ul className="space-y-1">
                                         {workingNow.map(c => (
-                                            <li key={c.id} className="text-sm font-semibold text-[var(--text)] flex items-center gap-1.5">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--ok)]" />
+                                            <li key={c.id} className="text-[15px] font-medium text-[var(--text)] flex items-center gap-2">
+                                                <span className="h-2 w-2 rounded-full bg-[var(--ok)] shrink-0" />
                                                 {c.user_name} <span className="text-[var(--text-muted)] font-normal">(trabalhando)</span>
                                             </li>
                                         ))}
@@ -489,17 +492,18 @@ export const StoreDashboardView: React.FC<{
                                 )}
                             </div>
                             <div>
-                                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <p className="text-[13px] font-medium text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
                                     <Wallet size={13} /> {openShifts.length > 1 ? `Turnos de caixa (${openShifts.length})` : 'Turno de caixa'}
                                 </p>
                                 {openShifts.length > 0 ? (
                                     <ul className="space-y-1">
                                         {openShifts.map((s) => (
-                                            <li key={s.id} className="text-sm text-[var(--text)]">
-                                                <span className="font-semibold text-[var(--ok)]">Aberto</span>
+                                            <li key={s.id} className="text-[15px] text-[var(--text)] flex items-baseline gap-2">
+                                                <span className="h-2 w-2 rounded-full bg-[var(--ok)] shrink-0 translate-y-[-1px]" />
+                                                <span><span className="font-medium">Aberto</span>
                                                 {s.operator_name ? ` — ${s.operator_name}` : ''} desde{' '}
                                                 {new Date(s.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                {' · '}fundo R$ {formatBRL(s.opening_float)}
+                                                <span className="text-[var(--text-muted)]">{' · '}fundo R$ {formatBRL(s.opening_float)}</span></span>
                                             </li>
                                         ))}
                                     </ul>
@@ -511,7 +515,7 @@ export const StoreDashboardView: React.FC<{
                                 {onNavigateToOperatorHistory && (
                                     <button
                                         onClick={onNavigateToOperatorHistory}
-                                        className="text-sm font-bold text-[var(--brand)] hover:underline flex items-center gap-1 u-motion"
+                                        className="min-h-11 text-[15px] font-medium text-[var(--brand)] hover:underline flex items-center gap-1 u-motion"
                                     >
                                         Ver histórico por operador <ArrowRight size={14} />
                                     </button>
@@ -526,67 +530,78 @@ export const StoreDashboardView: React.FC<{
                 seção quando existe pelo menos um alerta, pra não ocupar
                 espaço em dia normal. */}
             {(staleTables.length > 0 || cancellationRateAlert) && (
-                <section className="space-y-2">
-                    {staleTables.map(t => (
-                        <div key={t.number} className="flex items-center gap-3 p-3 rounded-xl border border-[var(--warn)]/30 bg-[var(--warn)]/5 text-sm">
-                            <AlertTriangle size={18} className="text-[var(--warn)] shrink-0" />
-                            <p className="text-[var(--text)]">
-                                <span className="font-bold">Mesa {t.number}</span> sem pedido novo há{' '}
-                                <span className="font-bold">{formatDuration(t.minutesSinceLastItem)}</span> — pode estar esquecida.
-                            </p>
+                <section>
+                    <Card className="u-grow-in u-card overflow-hidden">
+                        <div className="px-5 pt-4 pb-2 flex items-baseline justify-between gap-3">
+                            <h3 className="text-[15px] font-semibold text-[var(--text)]">Atenção</h3>
+                            {staleTables.length > 0 && (
+                                <span className="text-[13px] text-[var(--text-muted)]">
+                                    {staleTables.length} {staleTables.length === 1 ? 'mesa sem pedido novo' : 'mesas sem pedido novo'}
+                                </span>
+                            )}
                         </div>
+                        <ul className="divide-y divide-[var(--border)]">
+                    {staleTables.map(t => (
+                        <li key={t.number} className="flex items-center gap-3 px-5 py-3 text-[15px]">
+                            <AlertTriangle size={17} className="text-[var(--warn)] shrink-0" />
+                            <p className="text-[var(--text)] flex-1 min-w-0">
+                                <span className="font-semibold">Mesa {t.number}</span>
+                                <span className="text-[var(--text-muted)]"> · sem pedido novo há </span>
+                                <span className="num">{formatDuration(t.minutesSinceLastItem)}</span>
+                                <span className="text-[var(--text-muted)] max-sm:hidden"> — pode estar esquecida</span>
+                            </p>
+                        </li>
                     ))}
                     {cancellationRateAlert && (
-                        <div className="flex items-center gap-3 p-3 rounded-xl border border-[var(--err)]/30 bg-[var(--err)]/5 text-sm">
-                            <AlertTriangle size={18} className="text-[var(--err)] shrink-0" />
+                        <li className="flex items-center gap-3 px-5 py-3 text-[15px]">
+                            <AlertTriangle size={17} className="text-[var(--err)] shrink-0" />
                             <p className="text-[var(--text)]">
-                                <span className="font-bold">Cancelamento acima do normal hoje:</span>{' '}
+                                <span className="font-semibold">Cancelamento acima do normal hoje:</span>{' '}
                                 {(cancellationRateAlert.todayRate * 100).toFixed(0)}% dos itens, vs. média de{' '}
                                 {(cancellationRateAlert.avgRate * 100).toFixed(0)}% nos últimos 7 dias.
                             </p>
-                        </div>
+                        </li>
                     )}
+                        </ul>
+                    </Card>
                 </section>
             )}
 
             {/* Faturamento Bruto */}
             <section>
-                <h2 className="text-xl font-bold text-[var(--text)] mb-4">Faturamento Bruto</h2>
+                <h2 className="text-[22px] font-bold tracking-[-0.015em] text-[var(--text)] mb-4">Faturamento bruto</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
                         { label: 'Hoje', stats: dailyStats, prev: prevDailyStats, prevLabel: 'vs. ontem', accent: 'var(--brand)' },
-                        { label: 'Esta Semana', stats: weeklyStats, prev: prevWeeklyStats, prevLabel: 'vs. semana passada', accent: 'var(--info)' },
-                        { label: 'Este Mês', stats: monthlyStats, prev: prevMonthlyStats, prevLabel: 'vs. mês passado', accent: 'var(--ok)' },
+                        { label: 'Esta semana', stats: weeklyStats, prev: prevWeeklyStats, prevLabel: 'vs. semana passada', accent: 'var(--info)' },
+                        { label: 'Este mês', stats: monthlyStats, prev: prevMonthlyStats, prevLabel: 'vs. mês passado', accent: 'var(--ok)' },
                     ].map(({ label, stats, prev, prevLabel, accent }, i) => (
-                        <Card key={label} accentColor={accent} className={`${cardCls} u-grow-in u-card pl-5`} style={{ animationDelay: `${i * 60}ms` }}>
+                        <Card key={label} accentColor={accent} className={`${cardCls} u-grow-in u-card relative overflow-hidden`} style={{ animationDelay: `${i * 60}ms` }}>
                             {label === 'Hoje' && hasEnoughDataForSparkline && (
-                                <Sparkline values={last7DaysTotals} color={accent} />
+                                <Sparkline values={last7DaysTotals} color="var(--brand)" />
                             )}
                             <div className="flex items-center justify-between mb-2">
-                                <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</h3>
-                                <div className="p-1.5 rounded-full bg-[var(--surface-2)]">
-                                    <Receipt size={14} style={{ color: accent }} />
-                                </div>
+                                <h3 className="text-[13px] font-medium text-[var(--text-muted)]">{label}</h3>
                             </div>
                             {/* Total em destaque tipográfico (número grande primeiro,
                                 leitura de relance) + variação vs. o período anterior
                                 equivalente logo abaixo — antes eram 4 linhas de texto
                                 de mesmo peso, difícil comparar os 3 blocos num olhar. */}
-                            <p className="text-2xl font-black num" style={{ color: accent }}>R$ {formatBRL(stats.total)}</p>
+                            <p className="text-[30px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)]">R$ {formatBRL(stats.total)}</p>
                             <div className="min-h-[18px] mb-3">
                                 <ChangeBadge value={percentChange(stats.total, prev.total)} label={prevLabel} />
                             </div>
-                            <div className="space-y-2 border-t border-[var(--border)] pt-2.5">
+                            <div className="space-y-2 border-t border-[var(--border)] pt-3">
                                 <div className="flex justify-between items-center">
-                                    <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket Médio</span>
+                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket médio</span>
                                     <span className="font-medium text-[var(--text)] num">R$ {formatBRL(stats.ticket)}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>
+                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>
                                     <span className="font-medium text-[var(--text)] num">{stats.count}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="flex items-center gap-1.5 text-sm text-[var(--text-muted)]"><Users size={13} /> Pedidos de Mesa</span>
+                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Users size={13} /> Pedidos de mesa</span>
                                     <span className="font-medium text-[var(--text)] num">{stats.tableOrders}</span>
                                 </div>
                             </div>
@@ -598,23 +613,23 @@ export const StoreDashboardView: React.FC<{
             {/* Por Período */}
             <section className="border-t border-[var(--border)] pt-6">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <h2 className="text-xl font-bold text-[var(--text)]">Por Período</h2>
+                    <h2 className="text-[22px] font-bold tracking-[-0.015em] text-[var(--text)]">Por período</h2>
                     <div className="flex flex-wrap items-center gap-2">
                         <select
-                            className="px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)] outline-none transition-all text-sm max-sm:text-base"
+                            className="h-[38px] max-sm:h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] shadow-[var(--shadow-sm)] text-[var(--text)] focus:ring-2 focus:ring-[var(--brand)]/40 outline-none transition-all text-[15px] max-sm:text-base"
                             value={periodType}
                             onChange={(e) => setPeriodType(e.target.value as any)}
                         >
                             <option value="today">Hoje</option>
-                            <option value="week">Esta Semana</option>
-                            <option value="month">Este Mês</option>
-                            <option value="year">Este Ano</option>
+                            <option value="week">Esta semana</option>
+                            <option value="month">Este mês</option>
+                            <option value="year">Este ano</option>
                             <option value="custom">Últimos X dias</option>
                         </select>
                         {periodType === 'custom' && (
                             <div className="flex items-center gap-2">
-                                <Input type="number" className="w-20 h-9" value={periodDays} onChange={(e) => setPeriodDays(Number(e.target.value) || 0)} min="1" />
-                                <span className="text-sm font-medium text-[var(--text-muted)]">dias</span>
+                                <Input type="number" className="w-20 !bg-[var(--surface)] shadow-[var(--shadow-sm)]" value={periodDays} onChange={(e) => setPeriodDays(Number(e.target.value) || 0)} min="1" />
+                                <span className="text-[15px] text-[var(--text-muted)]">dias</span>
                             </div>
                         )}
                     </div>
@@ -623,40 +638,40 @@ export const StoreDashboardView: React.FC<{
                 <div className="space-y-8">
                     {/* Faturamento */}
                     <div>
-                        <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={20} className="text-[var(--brand)]" /> Faturamento</h3>
+                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={18} className="text-[var(--text-muted)]" /> Faturamento</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Total no Período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
-                            <StatCard title="Ticket Médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
+                            <StatCard title="Total no período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
+                            <StatCard title="Ticket médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className={`${cardCls} lg:col-span-2`}>
-                                <h4 className={h4Cls}>Evolução das Vendas</h4>
+                                <h4 className={h4Cls}>Evolução das vendas</h4>
                                 <div className="h-64">
                                     {salesByDay.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Sem dados</p> : (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <LineChart data={salesByDay}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                                                <XAxis dataKey="date" tick={{fontSize: 12}} />
-                                                <YAxis tick={{fontSize: 12}} tickFormatter={(v) => `R$${v}`} />
-                                                <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-                                                <Line type="monotone" dataKey="total" stroke="var(--brand)" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                                                <XAxis dataKey="date" tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${v}`} />
+                                                <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} contentStyle={{ background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' }} />
+                                                <Line type="monotone" dataKey="total" stroke="var(--brand)" strokeWidth={2.5} dot={false} activeDot={{r: 5}} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     )}
                                 </div>
                             </Card>
                             <Card className={cardCls}>
-                                <h4 className={h4Cls}>Formas de Pagamento</h4>
+                                <h4 className={h4Cls}>Formas de pagamento</h4>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={paymentMethods} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                            <Pie data={paymentMethods} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} stroke="none" dataKey="value">
                                                 {paymentMethods.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                 ))}
                                             </Pie>
-                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-                                            <Legend />
+                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' }} />
+                                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 13 }} formatter={(v: any) => <span style={{ color: 'var(--text)' }}>{v}</span>} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -666,11 +681,11 @@ export const StoreDashboardView: React.FC<{
 
                     {/* Pedidos */}
                     <div>
-                        <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={20} className="text-[var(--ok)]" /> Pedidos</h3>
+                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={18} className="text-[var(--text-muted)]" /> Pedidos</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Número de Pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, previousPeriodStats.count)} />} icon={CheckCircle} accentColor="var(--ok)" />
+                            <StatCard title="Número de pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, previousPeriodStats.count)} />} icon={CheckCircle} accentColor="var(--ok)" />
                             <StatCard
-                                title="Tempo Médio de Atendimento"
+                                title="Tempo médio de atendimento"
                                 value={`${avgDeliveryTime.avg} min`}
                                 subtitle={avgDeliveryTime.excluded > 0 ? `Criação até entrega · ${avgDeliveryTime.excluded} atípico(s) excluído(s)` : 'Criação até entrega'}
                                 icon={Clock}
@@ -679,24 +694,24 @@ export const StoreDashboardView: React.FC<{
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Card className={cardCls}>
-                                <h4 className={h4Cls}>Top 5 Mais Vendidos</h4>
+                                <h4 className={h4Cls}>Top 5 mais vendidos</h4>
                                 <div className="space-y-3">
                                     {productStats.top.map((p, i) => (
                                         <div key={i} className="flex justify-between items-center">
-                                            <span className="text-sm font-medium text-[var(--text)]">{i+1}. {p.name}</span>
-                                            <span className="text-sm font-bold text-[var(--brand)]">{p.qty} un</span>
+                                            <span className="text-[15px] text-[var(--text)] min-w-0"><span className="text-[var(--text-muted)] num mr-1.5">{i+1}</span>{p.name}</span>
+                                            <span className="text-[15px] font-semibold num text-[var(--text)]">{p.qty} un</span>
                                         </div>
                                     ))}
                                     {productStats.top.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
                                 </div>
                             </Card>
                             <Card className={cardCls}>
-                                <h4 className={h4Cls}>Top 5 Menos Vendidos</h4>
+                                <h4 className={h4Cls}>Top 5 menos vendidos</h4>
                                 <div className="space-y-3">
                                     {productStats.bottom.map((p, i) => (
                                         <div key={i} className="flex justify-between items-center">
-                                            <span className="text-sm font-medium text-[var(--text)]">{i+1}. {p.name}</span>
-                                            <span className="text-sm font-bold text-[var(--warn)]">{p.qty} un</span>
+                                            <span className="text-[15px] text-[var(--text)] min-w-0"><span className="text-[var(--text-muted)] num mr-1.5">{i+1}</span>{p.name}</span>
+                                            <span className="text-[15px] font-semibold num text-[var(--text-muted)]">{p.qty} un</span>
                                         </div>
                                     ))}
                                     {productStats.bottom.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
@@ -707,11 +722,11 @@ export const StoreDashboardView: React.FC<{
 
                     {/* Mesas */}
                     <div>
-                        <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Users size={20} className="text-[var(--info)]" /> Mesas</h3>
+                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Users size={18} className="text-[var(--text-muted)]" /> Mesas</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <StatCard title="Ocupações" value={tableOccupations} icon={Users} accentColor="var(--info)" />
                             <StatCard
-                                title="Tempo Médio de Ocupação"
+                                title="Tempo médio de ocupação"
                                 value={`${avgTableTime.avg} min`}
                                 subtitle={avgTableTime.excluded > 0 ? `Abertura até fechamento · ${avgTableTime.excluded} atípico(s) excluído(s)` : 'Abertura até fechamento'}
                                 icon={Clock}
@@ -719,15 +734,15 @@ export const StoreDashboardView: React.FC<{
                             />
                         </div>
                         <Card className={cardCls}>
-                            <h4 className={h4Cls}>Ocupação por Hora do Dia</h4>
+                            <h4 className={h4Cls}>Ocupação por hora do dia</h4>
                             <div className="h-64">
                                 {tableOccupationsByHour.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Sem dados</p> : (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={tableOccupationsByHour}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                                            <XAxis dataKey="hour" tick={{fontSize: 12}} />
-                                            <YAxis tick={{fontSize: 12}} />
-                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+                                            <XAxis dataKey="hour" tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                                            <YAxis tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' }} />
                                             <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
@@ -741,7 +756,7 @@ export const StoreDashboardView: React.FC<{
                             cor de marca proporcional à contagem (0 = célula vazia). */}
                         {occupancyHeatmap.hours.length > 0 && (
                             <Card className={`${cardCls} mt-4 overflow-x-auto`}>
-                                <h4 className={h4Cls}>Ocupação por Dia da Semana × Hora</h4>
+                                <h4 className={h4Cls}>Ocupação por dia da semana × hora</h4>
                                 <div className="inline-block min-w-full">
                                     <div className="grid gap-1" style={{ gridTemplateColumns: `48px repeat(${occupancyHeatmap.hours.length}, 1fr)` }}>
                                         <div />
@@ -750,7 +765,7 @@ export const StoreDashboardView: React.FC<{
                                         ))}
                                         {DAY_LABELS.map((label, day) => (
                                             <React.Fragment key={label}>
-                                                <div className="text-xs font-bold text-[var(--text-muted)] flex items-center">{label}</div>
+                                                <div className="text-[12px] font-medium text-[var(--text-muted)] flex items-center">{label}</div>
                                                 {occupancyHeatmap.grid[day].map((v, i) => {
                                                     const intensity = occupancyHeatmap.max > 0 ? v / occupancyHeatmap.max : 0;
                                                     return (
@@ -776,22 +791,22 @@ export const StoreDashboardView: React.FC<{
 
                         {/* Fase 4, Task 13: funil simples do período filtrado. */}
                         <Card className={`${cardCls} mt-4`}>
-                            <h4 className={h4Cls}>Funil de Conversão (Mesas)</h4>
+                            <h4 className={h4Cls}>Funil de conversão (mesas)</h4>
                             <div className="grid grid-cols-3 gap-3 text-center">
                                 <div>
-                                    <p className="text-2xl font-black text-[var(--text)] num">{funnelStats.opened}</p>
-                                    <p className="text-xs text-[var(--text-muted)] mt-1">Mesas abertas</p>
+                                    <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.opened}</p>
+                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Mesas abertas</p>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-black text-[var(--info)] num">{funnelStats.withOrder}</p>
-                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                    <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.withOrder}</p>
+                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">
                                         Com pedido
                                         {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.withOrder / funnelStats.opened * 100)}%)</span>}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-black text-[var(--ok)] num">{funnelStats.closed}</p>
-                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                    <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.closed}</p>
+                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">
                                         Fechadas com pagamento
                                         {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.closed / funnelStats.opened * 100)}%)</span>}
                                     </p>
@@ -802,21 +817,21 @@ export const StoreDashboardView: React.FC<{
 
                     {/* Balcão */}
                     <div>
-                        <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Coffee size={20} className="text-[var(--warn)]" /> Balcão</h3>
+                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Coffee size={18} className="text-[var(--text-muted)]" /> Balcão</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard title="Faturamento Balcão" value={`R$ ${formatBRL(counterStats.total)}`} icon={Receipt} accentColor="var(--warn)" />
-                            <StatCard title="Número de Pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
+                            <StatCard title="Faturamento balcão" value={`R$ ${formatBRL(counterStats.total)}`} icon={Receipt} accentColor="var(--warn)" />
+                            <StatCard title="Número de pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
                         </div>
                     </div>
 
                     {/* Avaliações */}
                     <div>
-                        <h3 className="text-lg font-bold text-[var(--text)] mb-3 flex items-center gap-2"><Star size={20} className="text-[var(--warn)]" /> Avaliações</h3>
+                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Star size={18} className="text-[var(--text-muted)]" /> Avaliações</h3>
                         <div className="grid grid-cols-1 gap-4 mb-4">
-                            <StatCard title="Nota Média" value={periodRatings.length > 0 ? avgRating.toFixed(1) : '-'} subtitle={`${periodRatings.length} avaliação(ões) no período`} icon={Star} accentColor="var(--warn)" />
+                            <StatCard title="Nota média" value={periodRatings.length > 0 ? avgRating.toFixed(1) : '-'} subtitle={`${periodRatings.length} avaliação(ões) no período`} icon={Star} accentColor="var(--warn)" />
                         </div>
                         <Card className={cardCls}>
-                            <h4 className={h4Cls}>Comentários Recentes</h4>
+                            <h4 className={h4Cls}>Comentários recentes</h4>
                             <div className="space-y-3 max-h-80 overflow-y-auto">
                                 {periodRatings.filter(r => r.comment).slice(0, 10).map((r) => (
                                     <div key={r.id} className="border-b border-[var(--border)] pb-2 last:border-0">

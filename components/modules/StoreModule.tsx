@@ -9445,7 +9445,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h3 className="font-bold text-lg text-[var(--text)]">Usuários do Sistema</h3>
+                <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Usuários do Sistema</h3>
                 <Button onClick={() => openModal()}><Plus size={18} className="mr-1"/> Novo Usuário</Button>
             </div>
 
@@ -9457,11 +9457,11 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <h4 className="font-bold text-[var(--text)]">{user.name}</h4>
                                 <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
                             </div>
-                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] border-[var(--info)]/20 uppercase text-[10px]">{getRoleLabel(user.role)}</Badge>
+                            <Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">{getRoleLabel(user.role)}</Badge>
                         </div>
 
                         <div className="mt-3 space-y-1">
-                            <p className="text-xs font-bold text-[var(--text-muted)] uppercase">Acessos:</p>
+                            <p className="text-[13px] font-medium text-[var(--text-muted)]">Acessos</p>
                             <div className="flex flex-wrap gap-1">
                                 {user.permissions?.tables && <span className="px-1.5 py-0.5 bg-[var(--ok)]/10 text-[var(--ok)] text-[10px] rounded border border-[var(--ok)]/20">Mesas</span>}
                                 {user.permissions?.counter && <span className="px-1.5 py-0.5 bg-[var(--warn)]/10 text-[var(--warn)] text-[10px] rounded border border-[var(--warn)]/20">Balcão</span>}
@@ -10304,18 +10304,18 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
     // (separador + ícone de cadeado) por ser dado sensível, não trivial como
     // "Meu Link / QR Code" ao lado.
     const ADMIN_NAV_GROUPS: { label: string; icon: React.ReactNode; tabs: { id: string; label: string; sensitive?: boolean }[] }[] = [
-        { label: 'Visão Geral', icon: <LayoutDashboard size={16} />, tabs: [
+        { label: 'Visão geral', icon: <LayoutDashboard size={14} />, tabs: [
             { id: 'dashboard', label: 'Dashboard' },
             { id: 'sales', label: 'Histórico de Vendas' },
         ]},
-        { label: 'Operação', icon: <Wallet size={16} />, tabs: [
+        { label: 'Operação', icon: <Wallet size={14} />, tabs: [
             { id: 'shifts', label: 'Turnos' },
             { id: 'impressao', label: 'Impressão' },
         ]},
-        { label: 'Time', icon: <Users size={16} />, tabs: [
+        { label: 'Time', icon: <Users size={14} />, tabs: [
             { id: 'users', label: 'Gestão de Usuários' },
         ]},
-        { label: 'Loja', icon: <StoreIcon size={16} />, tabs: [
+        { label: 'Loja', icon: <StoreIcon size={14} />, tabs: [
             { id: 'link', label: 'Meu Link / QR Code' },
             { id: 'settings', label: 'Configurações' },
             { id: 'fiscal', label: 'Notas Fiscais', sensitive: true },
@@ -10332,12 +10332,10 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             role="tab"
                             aria-selected={activeTab === tab.id}
                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                            className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap flex items-center gap-1.5 border u-motion ${
+                            className={`shrink-0 min-h-11 px-4 rounded-full text-[15px] font-medium whitespace-nowrap flex items-center gap-1.5 u-motion ${
                                 activeTab === tab.id
-                                    ? 'bg-[var(--brand)] text-white border-[var(--brand)]'
-                                    : tab.sensitive
-                                        ? 'text-[var(--warn)] border-[var(--warn)]/40 bg-[var(--surface)]'
-                                        : 'text-[var(--text-muted)] border-[var(--border)] bg-[var(--surface)]'
+                                    ? 'bg-[var(--brand)] text-white font-semibold'
+                                    : 'text-[var(--text)] bg-[var(--surface)] shadow-[var(--shadow-sm)]'
                             }`}
                         >
                             {tab.sensitive && <Lock size={12} />}
@@ -10348,22 +10346,20 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 <nav className="w-full md:w-56 flex-shrink-0 space-y-5 max-md:hidden">
                     {ADMIN_NAV_GROUPS.map((group) => (
                         <div key={group.label}>
-                            <p className="px-3 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <p className="px-3 text-[13px] font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1.5">
                                 {group.icon} {group.label}
                             </p>
-                            <div className="space-y-0.5">
+                            <div className="bg-[var(--surface)] rounded-[14px] shadow-[var(--shadow-sm)] p-1 space-y-0.5">
                                 {group.tabs.map((tab) => (
                                     <React.Fragment key={tab.id}>
-                                        {tab.sensitive && <div className="my-1.5 border-t border-[var(--warn)]/30" />}
+                                        {tab.sensitive && <div className="mx-3 my-1 border-t border-[var(--border)]" />}
                                         <button
                                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
                                             aria-current={activeTab === tab.id ? 'page' : undefined}
-                                            className={`relative isolate w-full text-left px-3 py-2 rounded-lg text-sm font-medium u-motion u-press-sm flex items-center gap-1.5 ${
+                                            className={`relative isolate w-full text-left px-3 h-9 rounded-[10px] text-[15px] u-motion u-press-sm flex items-center gap-1.5 ${
                                                 activeTab === tab.id
-                                                    ? 'text-[var(--brand)] font-bold'
-                                                    : tab.sensitive
-                                                        ? 'text-[var(--warn)] hover:bg-[var(--warn)]/5'
-                                                        : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+                                                    ? 'text-[var(--brand)] font-semibold'
+                                                    : 'text-[var(--text)] hover:bg-[var(--surface-2)]'
                                             }`}
                                         >
                                             {activeTab === tab.id && (
@@ -10371,12 +10367,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                                 // senão o indicador "voaria" de um grupo pro outro na tela toda.
                                                 <motion.div
                                                     layoutId={`admin-nav-active-${group.label}`}
-                                                    className="absolute inset-0 rounded-lg bg-[var(--brand)]/10 -z-10"
+                                                    className="absolute inset-0 rounded-[10px] bg-[var(--brand-soft)] -z-10"
                                                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                                 />
                                             )}
-                                            {tab.sensitive && <Lock size={12} />}
                                             {tab.label}
+                                            {tab.sensitive && <Lock size={13} className="ml-auto text-[var(--text-muted)]" />}
                                         </button>
                                     </React.Fragment>
                                 ))}
@@ -10398,9 +10394,9 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         >
 
             {salesDataUnavailableOffline && (activeTab === 'dashboard' || activeTab === 'sales') && (
-                <div className="mb-4 rounded-xl border-2 border-[var(--warn)]/40 bg-[var(--warn)]/10 px-4 py-3 flex items-start gap-2">
+                <div className="mb-4 rounded-[14px] bg-[var(--surface)] shadow-[var(--shadow-sm)] px-4 py-3 flex items-start gap-2.5">
                     <WifiOff size={18} className="text-[var(--warn)] shrink-0 mt-0.5" />
-                    <p className="text-sm text-[var(--warn)] font-semibold">
+                    <p className="text-[15px] text-[var(--text)]">
                         Sem conexão — não deu pra carregar os números reais agora (os valores abaixo NÃO refletem o dia). Isso não apaga nenhuma venda: assim que a internet voltar, é só recarregar esta tela.
                     </p>
                 </div>
@@ -10421,9 +10417,9 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             {activeTab === 'link' && <MeuLinkView store={store} />}
 
             {activeTab === 'shifts' && (
-                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
+                <div className="bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)] overflow-hidden">
                     <div className="p-4 border-b border-[var(--border)]">
-                        <h3 className="font-bold text-lg text-[var(--text)]">Turnos (ponto por operador)</h3>
+                        <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Turnos (ponto por operador)</h3>
                         <p className="text-sm text-[var(--text-muted)]">Cada operador marca a própria entrada/saída pelo botão "Bater ponto" no menu lateral — independente do turno de caixa.</p>
                     </div>
                     {isLoadingCheckins ? (
@@ -10433,7 +10429,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
-                                <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] text-xs uppercase">
+                                <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                                     <tr>
                                         <th className="px-4 py-2 text-left">Operador</th>
                                         <th className="px-4 py-2 text-left">Entrada</th>
@@ -10471,9 +10467,9 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 pro dashboard, migration 062) e fetchCashShiftsHistory (já
                 existia pro histórico do próprio operador) — nenhuma RPC nova. */}
             {activeTab === 'shifts' && (
-                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden mt-4">
+                <div className="bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)] overflow-hidden mt-4">
                     <div className="p-4 border-b border-[var(--border)]">
-                        <h3 className="font-bold text-lg text-[var(--text)]">Caixa por operador</h3>
+                        <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Caixa por operador</h3>
                         <p className="text-sm text-[var(--text-muted)]">Turno de caixa é individual desde a migration 062 — cada operador abre e fecha o próprio, mesmo com vários ao mesmo tempo.</p>
                     </div>
                     {isLoadingCashShiftsAll ? (
@@ -10481,7 +10477,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     ) : (
                         <div className="p-4 space-y-4">
                             <div>
-                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+                                <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">
                                     Abertos agora {openCashShiftsAll.length > 0 && `(${openCashShiftsAll.length})`}
                                 </h4>
                                 {openCashShiftsAll.length === 0 ? (
@@ -10498,7 +10494,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                                     key={s.id}
                                                     type="button"
                                                     onClick={() => setSelectedOperatorHistory(nomeOperador)}
-                                                    className={`text-left p-3 rounded-xl border u-motion u-press-sm flex items-center gap-3 ${esquecido ? 'border-[var(--warn)]/40 bg-[var(--warn)]/5' : 'border-[var(--border)] bg-[var(--surface-2)]'}`}
+                                                    className="text-left p-3 rounded-[14px] u-motion u-press-sm flex items-center gap-3 bg-[var(--surface-2)] hover:bg-[var(--border)]"
                                                 >
                                                     <div className="w-9 h-9 shrink-0"><ProductThumb name={nomeOperador} size="cart" /></div>
                                                     <div className="min-w-0 flex-1">
@@ -10515,14 +10511,14 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             </div>
 
                             <div>
-                                <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Ver histórico de um operador</h4>
+                                <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Ver histórico de um operador</h4>
                                 <div className="flex gap-2 flex-wrap">
                                     {Array.from(new Set(cashShiftsHistoryAll.map(h => h.operator_name || 'Conta universal'))).map(nome => (
                                         <button
                                             key={nome}
                                             type="button"
                                             onClick={() => setSelectedOperatorHistory(prev => prev === nome ? null : nome)}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border u-motion u-press-sm ${selectedOperatorHistory === nome ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                                            className={`text-[13px] font-semibold h-8 max-sm:h-11 px-3.5 rounded-full u-motion u-press-sm ${selectedOperatorHistory === nome ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
                                         >
                                             {nome}
                                         </button>
@@ -10540,7 +10536,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                                             {h.status === 'open' ? 'Em aberto' : `Diferença: R$ ${formatBRL(h.difference ?? 0)}`}
                                                         </p>
                                                     </div>
-                                                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
+                                                    <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
                                                         {h.status === 'open' ? 'Aberto' : 'Fechado'}
                                                     </span>
                                                 </div>
@@ -10702,8 +10698,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             pra NFC-e) mesmo quando a loja usa só um dos dois — ou nenhum. Agora só
                             aparece o bloco do tipo escolhido acima em "Modelo de emissão automática". */}
                         {fiscalModeloEmissaoAutomatica === 'nfe' && (
-                            <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
-                                <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
+                            <div className="space-y-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
+                                <p className="text-[15px] font-semibold text-[var(--text)]">NF-e (com destinatário)</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <Input type="number" inputMode="numeric" label="Série — homologação" className="num" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
                                     <Input type="number" inputMode="numeric" label="Último número — homologação" className="num" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
@@ -10726,8 +10722,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         )}
 
                         {fiscalModeloEmissaoAutomatica === 'nfce' && (
-                            <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
-                                <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
+                            <div className="space-y-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
+                                <p className="text-[15px] font-semibold text-[var(--text)]">NFC-e (cupom fiscal)</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <Input type="number" inputMode="numeric" label="Série — homologação" className="num" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
                                     <Input type="number" inputMode="numeric" label="Último número — homologação" className="num" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
@@ -10741,12 +10737,12 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                 <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Homologação</p>
+                                        <p className="text-[13px] font-semibold text-[var(--text-muted)]">CSC — Homologação</p>
                                         <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscHomologacao} onChange={e => setFiscalCscHomologacao(e.target.value)} />
                                         <Input type="password" label="CSCID" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidHomologacao} onChange={e => setFiscalCscidHomologacao(e.target.value)} />
                                     </div>
                                     <div className="space-y-2">
-                                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CSC — Produção</p>
+                                        <p className="text-[13px] font-semibold text-[var(--text-muted)]">CSC — Produção</p>
                                         <Input type="password" label="CSC" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscProducao} onChange={e => setFiscalCscProducao(e.target.value)} />
                                         <Input type="password" label="CSCID" className="font-mono" placeholder="Deixe em branco pra manter o atual" value={fiscalCscidProducao} onChange={e => setFiscalCscidProducao(e.target.value)} />
                                     </div>
@@ -10762,13 +10758,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer select-none">Outros documentos — CT-e / MDF-e (avançado)</summary>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                                 <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
+                                    <p className="text-[13px] font-semibold text-[var(--text-muted)]">CT-e</p>
                                     <Input type="number" inputMode="numeric" label="Série" className="num" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
                                     <Input type="number" inputMode="numeric" label="Último número emitido" className="num" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
                                     <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
                                 </div>
                                 <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
+                                    <p className="text-[13px] font-semibold text-[var(--text-muted)]">MDF-e</p>
                                     <Input type="number" inputMode="numeric" label="Série" className="num" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
                                     <Input type="number" inputMode="numeric" label="Último número emitido" className="num" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
                                     <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
@@ -10819,7 +10815,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             </div>
                             <Input label="Inscrição Estadual" className="num" placeholder="Opcional" value={fiscalInscricaoEstadual} onChange={e => setFiscalInscricaoEstadual(e.target.value)} />
                         </div>
-                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Endereço</p>
+                        <p className="text-[13px] font-semibold text-[var(--text-muted)]">Endereço</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input label="Logradouro" placeholder="Opcional" value={fiscalEnderecoLogradouro} onChange={e => setFiscalEnderecoLogradouro(e.target.value)} />
                             <Input label="Número" placeholder="Opcional" value={fiscalEnderecoNumero} onChange={e => setFiscalEnderecoNumero(e.target.value)} />
@@ -10870,107 +10866,98 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
             {activeTab === 'sales' && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Card accentColor="var(--brand)" className="p-6 pl-7 shadow-sm">
+                        <Card className="p-5">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Faturamento Total</p>
-                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">R$ {formatBRL(totalRevenue)}</h3>
+                                    <p className="text-[13px] font-medium text-[var(--text-muted)]">Faturamento total</p>
+                                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)] mt-1">R$ {formatBRL(totalRevenue)}</h3>
                                 </div>
-                                <div className="p-3 bg-[var(--brand)]/10 rounded-full text-[var(--brand)]">
-                                    <Receipt size={24} />
+                                <div className="w-10 h-10 grid place-items-center bg-[var(--surface-2)] rounded-full text-[var(--text-muted)]">
+                                    <Receipt size={19} />
                                 </div>
                             </div>
                         </Card>
-                        <Card accentColor="var(--ok)" className="p-6 pl-7 shadow-sm">
+                        <Card className="p-5">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Vendas Realizadas</p>
-                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">{filteredAndSortedSales.length}</h3>
+                                    <p className="text-[13px] font-medium text-[var(--text-muted)]">Vendas realizadas</p>
+                                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)] mt-1">{filteredAndSortedSales.length}</h3>
                                 </div>
-                                <div className="p-3 bg-[var(--ok)]/10 rounded-full text-[var(--ok)]">
-                                    <CheckCircle size={24} />
+                                <div className="w-10 h-10 grid place-items-center bg-[var(--surface-2)] rounded-full text-[var(--text-muted)]">
+                                    <CheckCircle size={19} />
                                 </div>
                             </div>
                         </Card>
-                        <Card accentColor="var(--info)" className="p-6 pl-7 shadow-sm">
+                        <Card className="p-5">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Ticket Médio</p>
-                                    <h3 className="text-3xl font-black text-[var(--text)] mt-1">
+                                    <p className="text-[13px] font-medium text-[var(--text-muted)]">Ticket médio</p>
+                                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)] mt-1">
                                         R$ {filteredAndSortedSales.length > 0 ? formatBRL(totalRevenue / filteredAndSortedSales.length) : '0,00'}
                                     </h3>
                                 </div>
-                                <div className="p-3 bg-[var(--info)]/10 rounded-full text-[var(--info)]">
-                                    <BarChart3 size={24} />
+                                <div className="w-10 h-10 grid place-items-center bg-[var(--surface-2)] rounded-full text-[var(--text-muted)]">
+                                    <BarChart3 size={19} />
                                 </div>
                             </div>
                         </Card>
                     </div>
 
-                    <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
-                        <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-4">
-                            <div className="flex justify-between items-center max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
-                                <div className="flex items-center gap-3 max-sm:flex-wrap">
-                                    <h3 className="font-bold text-lg text-[var(--text)]">Histórico de Vendas</h3>
-                                    <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-xs font-bold">
-                                        <button
-                                            onClick={() => setHistoryView('sale')}
-                                            className={`px-3 py-1.5 u-motion ${historyView === 'sale' ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}
-                                        >
-                                            Por Venda
-                                        </button>
-                                        <button
-                                            onClick={() => setHistoryView('product')}
-                                            className={`px-3 py-1.5 u-motion ${historyView === 'product' ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}
-                                        >
-                                            Por Produto
-                                        </button>
-                                        <button
-                                            onClick={() => setHistoryView('operator')}
-                                            className={`px-3 py-1.5 u-motion ${historyView === 'operator' ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}
-                                        >
-                                            Por Operador
-                                        </button>
-                                    </div>
+                    <Card className="overflow-hidden">
+                        <div className="p-4 sm:px-5 border-b border-[var(--border)] flex flex-col gap-4">
+                            <div className="flex flex-wrap justify-between items-center gap-3 max-sm:flex-col max-sm:items-stretch">
+                                <div className="flex items-center gap-3 flex-wrap min-w-0">
+                                    <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Histórico de vendas</h3>
+                                    <SegmentedControl
+                                        className="max-sm:flex max-sm:w-full max-sm:[&>button]:flex-1"
+                                        value={historyView}
+                                        onChange={(v) => setHistoryView(v as typeof historyView)}
+                                        options={[
+                                            { value: 'sale', label: 'Por venda' },
+                                            { value: 'product', label: 'Por produto' },
+                                            { value: 'operator', label: 'Por operador' },
+                                        ]}
+                                    />
+                                    <span className="text-[13px] text-[var(--text-muted)] num max-sm:hidden">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</span>
                                 </div>
-                                <div className="flex items-center gap-2 max-sm:flex-wrap">
-                                    <Button variant="secondary" onClick={() => setShowFilters(!showFilters)}>
-                                        <Search size={16} className="mr-2" />
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Button variant="secondary" size="sm" className="max-sm:!h-11 max-sm:flex-1" onClick={() => setShowFilters(!showFilters)} aria-pressed={showFilters}>
+                                        <Search size={15} />
                                         Filtros
                                     </Button>
-                                    <Button variant="secondary" onClick={handlePrintReport} disabled={filteredAndSortedSales.length === 0}>
-                                        <Printer size={16} className="mr-2" />
-                                        Imprimir Relatório
+                                    <Button variant="secondary" size="sm" className="max-sm:!h-11 max-sm:flex-1" onClick={handlePrintReport} disabled={filteredAndSortedSales.length === 0} title="Imprimir relatório">
+                                        <Printer size={15} />
+                                        Imprimir
                                     </Button>
-                                    <Button variant="secondary" onClick={handleExportCsv} disabled={filteredAndSortedSales.length === 0}>
-                                        <Download size={16} className="mr-2" />
-                                        Exportar CSV
+                                    <Button variant="secondary" size="sm" className="max-sm:!h-11 max-sm:flex-1" onClick={handleExportCsv} disabled={filteredAndSortedSales.length === 0} title="Exportar CSV">
+                                        <Download size={15} />
+                                        CSV
                                     </Button>
-                                    <div className="w-px h-6 bg-[var(--border)] mx-1 max-sm:hidden" />
-                                    <Button variant="outline" className="text-[var(--err)] border-[var(--err)]/20 hover:bg-[var(--err)]/5 max-sm:order-last max-sm:w-full max-sm:mt-6" onClick={handleClearSales} isLoading={isClearing}>
-                                        <Trash2 size={16} className="mr-2" />
-                                        Zerar Vendas
+                                    <div className="w-px h-5 bg-[var(--border)] mx-1 max-sm:hidden" />
+                                    <Button variant="ghost" size="sm" className="!text-[var(--err)] hover:!bg-[var(--err)]/10 max-sm:order-last max-sm:w-full max-sm:mt-4 max-sm:!h-11" onClick={handleClearSales} isLoading={isClearing}>
+                                        <Trash2 size={15} />
+                                        Zerar vendas
                                     </Button>
-                                    <Badge color="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)] max-sm:order-first">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</Badge>
+                                    <span className="text-[13px] text-[var(--text-muted)] num sm:hidden w-full">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</span>
                                 </div>
                             </div>
                             
                             {showFilters && (
-                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-[var(--surface-2)] rounded-[var(--r-md)] border border-[var(--border)]">
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
                                     <div>
-                                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Mês</label>
+                                        <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Mês</label>
                                         <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Inicial</label>
+                                        <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Data inicial</label>
                                         <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Final</label>
+                                        <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Data final</label>
                                         <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Tipo</label>
+                                        <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Tipo</label>
                                         <select 
                                             className="w-full px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)] outline-none transition-all"
                                             value={filterType} 
@@ -10982,26 +10969,26 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Cliente / Mesa</label>
+                                        <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Cliente / mesa</label>
                                         <Input placeholder="Buscar..." value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)} />
                                     </div>
                                     <div className="flex gap-2">
                                         <div className="flex-1">
-                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Min Itens</label>
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Mín. itens</label>
                                             <Input type="number" inputMode="numeric" min="0" value={filterMinItems} onChange={e => setFilterMinItems(e.target.value)} />
                                         </div>
                                         <div className="flex-1">
-                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Max Itens</label>
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Máx. itens</label>
                                             <Input type="number" inputMode="numeric" min="0" value={filterMaxItems} onChange={e => setFilterMaxItems(e.target.value)} />
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
                                         <div className="flex-1">
-                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Min Total (R$)</label>
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Mín. total (R$)</label>
                                             <Input type="number" inputMode="decimal" min="0" step="0.01" value={filterMinTotal} onChange={e => setFilterMinTotal(e.target.value)} />
                                         </div>
                                         <div className="flex-1">
-                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Max Total (R$)</label>
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Máx. total (R$)</label>
                                             <Input type="number" inputMode="decimal" min="0" step="0.01" value={filterMaxTotal} onChange={e => setFilterMaxTotal(e.target.value)} />
                                         </div>
                                     </div>
@@ -11013,18 +11000,18 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         </div>
                         {historyView === 'product' ? (
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] font-medium uppercase text-xs">
+                                <table className="w-full text-[15px] text-left">
+                                    <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                                         <tr>
-                                            <th className="px-4 py-3">Produto</th>
-                                            <th className="px-4 py-3 text-right">Quantidade</th>
-                                            <th className="px-4 py-3 text-right">Faturamento</th>
+                                            <th className="px-4 py-2.5 font-medium">Produto</th>
+                                            <th className="px-4 py-2.5 font-medium text-right">Quantidade</th>
+                                            <th className="px-4 py-2.5 font-medium text-right">Faturamento</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[var(--border)]">
                                         {productBreakdown.length === 0 ? (
                                             <tr>
-                                                <td colSpan={3} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                                <td colSpan={3} className="px-4 py-8 text-center text-[var(--text-muted)]">
                                                     Nenhuma venda encontrada com os filtros atuais.
                                                 </td>
                                             </tr>
@@ -11032,8 +11019,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                             productBreakdown.map((row, i) => (
                                                 <tr key={row.name} className="u-stagger" style={stagger(Math.min(i, 10) * 30)}>
                                                     <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
-                                                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{row.quantity}</td>
-                                                    <td className="px-4 py-3 text-right font-bold text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
+                                                    <td className="px-4 py-3 text-right num text-[var(--text-muted)]">{row.quantity}</td>
+                                                    <td className="px-4 py-3 text-right font-semibold num text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
                                                 </tr>
                                             ))
                                         )}
@@ -11042,18 +11029,18 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             </div>
                         ) : historyView === 'operator' ? (
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] font-medium uppercase text-xs">
+                                <table className="w-full text-[15px] text-left">
+                                    <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                                         <tr>
-                                            <th className="px-4 py-3">Operador</th>
-                                            <th className="px-4 py-3 text-right">Vendas Fechadas</th>
-                                            <th className="px-4 py-3 text-right">Total Recebido</th>
+                                            <th className="px-4 py-2.5 font-medium">Operador</th>
+                                            <th className="px-4 py-2.5 font-medium text-right">Vendas fechadas</th>
+                                            <th className="px-4 py-2.5 font-medium text-right">Total recebido</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[var(--border)]">
                                         {operatorBreakdown.length === 0 ? (
                                             <tr>
-                                                <td colSpan={3} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                                <td colSpan={3} className="px-4 py-8 text-center text-[var(--text-muted)]">
                                                     Nenhuma venda encontrada com os filtros atuais.
                                                 </td>
                                             </tr>
@@ -11061,8 +11048,8 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                             operatorBreakdown.map((row, i) => (
                                                 <tr key={row.name} className="u-stagger" style={stagger(Math.min(i, 10) * 30)}>
                                                     <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
-                                                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{row.sales}</td>
-                                                    <td className="px-4 py-3 text-right font-bold text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
+                                                    <td className="px-4 py-3 text-right num text-[var(--text-muted)]">{row.sales}</td>
+                                                    <td className="px-4 py-3 text-right font-semibold num text-[var(--text)]">R$ {formatBRL(row.revenue)}</td>
                                                 </tr>
                                             ))
                                         )}
@@ -11072,22 +11059,22 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         ) : (
                         <>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] font-medium uppercase text-xs">
+                            <table className="w-full text-[15px] text-left">
+                                <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                                     <tr>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-[var(--border)] transition-colors group" onClick={() => handleSort('date')}>
+                                        <th className="px-4 py-2.5 font-medium cursor-pointer hover:text-[var(--text)] transition-colors group" onClick={() => handleSort('date')}>
                                             Data <SortIcon column="date" />
                                         </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-[var(--border)] transition-colors group" onClick={() => handleSort('type')}>
+                                        <th className="px-4 py-2.5 font-medium cursor-pointer hover:text-[var(--text)] transition-colors group" onClick={() => handleSort('type')}>
                                             Tipo <SortIcon column="type" />
                                         </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-[var(--border)] transition-colors group" onClick={() => handleSort('customer')}>
-                                            Cliente / Mesa <SortIcon column="customer" />
+                                        <th className="px-4 py-2.5 font-medium cursor-pointer hover:text-[var(--text)] transition-colors group" onClick={() => handleSort('customer')}>
+                                            Cliente / mesa <SortIcon column="customer" />
                                         </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-[var(--border)] transition-colors group" onClick={() => handleSort('items')}>
+                                        <th className="px-4 py-2.5 font-medium cursor-pointer hover:text-[var(--text)] transition-colors group" onClick={() => handleSort('items')}>
                                             Itens <SortIcon column="items" />
                                         </th>
-                                        <th className="px-4 py-3 text-right cursor-pointer hover:bg-[var(--border)] transition-colors group" onClick={() => handleSort('total')}>
+                                        <th className="px-4 py-2.5 font-medium text-right cursor-pointer hover:text-[var(--text)] transition-colors group" onClick={() => handleSort('total')}>
                                             Total <SortIcon column="total" />
                                         </th>
                                     </tr>
@@ -11105,7 +11092,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                         ))
                                     ) : filteredAndSortedSales.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
+                                            <td colSpan={5} className="px-4 py-8 text-center text-[var(--text-muted)]">
                                                 Nenhuma venda encontrada com os filtros atuais.
                                             </td>
                                         </tr>
@@ -11119,14 +11106,14 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                                     style={stagger(Math.min(orderIdx, 10) * 30)}
                                                     onClick={() => setSelectedOrderDetails(order)}
                                                 >
-                                                    <td className="px-4 py-3 text-[var(--text-muted)]">
-                                                        {new Date(order.created_at).toLocaleDateString()} <span className="text-xs text-[var(--text-muted)]/70 ml-1">{new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                    <td className="px-4 py-3 text-[var(--text-muted)] num">
+                                                        {new Date(order.created_at).toLocaleDateString()} <span className="text-[13px] text-[var(--text-muted)]/70 ml-1">{new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {order.order_type === 'counter' ? (
-                                                            <Badge color="bg-[var(--warn)]/10 text-[var(--warn)] border-[var(--warn)]/20">Balcão</Badge>
+                                                            <Badge color="bg-[var(--warn)]/12 text-[var(--warn)]">Balcão</Badge>
                                                         ) : (
-                                                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] border-[var(--info)]/20">Mesa</Badge>
+                                                            <Badge color="bg-[var(--surface-2)] text-[var(--text)]">Mesa</Badge>
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3 font-medium text-[var(--text)]">
@@ -11146,7 +11133,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-[var(--text)]">
+                                                    <td className="px-4 py-3 text-right font-semibold num text-[var(--text)]">
                                                         R$ {formatBRL(orderTotal)}
                                                     </td>
                                                 </tr>
@@ -11157,16 +11144,16 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             </table>
                         </div>
                         {filteredAndSortedSales.length > 0 && (
-                            <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border)] bg-[var(--surface-2)]">
-                                <span className="text-xs text-[var(--text-muted)]">
+                            <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border)]">
+                                <span className="text-[13px] text-[var(--text-muted)]">
                                     Página {salesPage + 1} de {salesTotalPages}
                                 </span>
                                 <div className="flex items-center gap-2">
-                                    <Button variant="secondary" className="h-8 px-3 text-xs" disabled={salesPage === 0} onClick={() => setSalesPage(p => Math.max(0, p - 1))}>
-                                        <ChevronLeft size={14} className="mr-1" /> Anterior
+                                    <Button variant="secondary" size="sm" className="max-sm:!h-11" disabled={salesPage === 0} onClick={() => setSalesPage(p => Math.max(0, p - 1))}>
+                                        <ChevronLeft size={14} /> Anterior
                                     </Button>
-                                    <Button variant="secondary" className="h-8 px-3 text-xs" disabled={salesPage >= salesTotalPages - 1} onClick={() => setSalesPage(p => Math.min(salesTotalPages - 1, p + 1))}>
-                                        Próxima <ChevronRight size={14} className="ml-1" />
+                                    <Button variant="secondary" size="sm" className="max-sm:!h-11" disabled={salesPage >= salesTotalPages - 1} onClick={() => setSalesPage(p => Math.min(salesTotalPages - 1, p + 1))}>
+                                        Próxima <ChevronRight size={14} />
                                     </Button>
                                 </div>
                             </div>
@@ -11181,7 +11168,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                     </AnimatePresence>
 
             {/* Modal de Detalhes da Venda */}
-            <Modal isOpen={!!selectedOrderDetails} onClose={() => setSelectedOrderDetails(null)} title="Detalhes da Venda">
+            <Modal isOpen={!!selectedOrderDetails} onClose={() => setSelectedOrderDetails(null)} title="Detalhes da venda">
                 {selectedOrderDetails && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -11206,7 +11193,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         </div>
 
                         <div>
-                            <h4 className="font-bold text-[var(--text)] mb-2 border-b border-[var(--border)] pb-1">Itens do Pedido</h4>
+                            <h4 className="font-semibold text-[15px] text-[var(--text)] mb-2">Itens do pedido</h4>
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                                 {selectedOrderDetails.order_items?.map(item => (
                                     <div key={item.id} className="flex justify-between text-sm">
@@ -11327,7 +11314,7 @@ const fiscalStatusBadgeColor = (status: string): string => {
     switch (status) {
         case 'autorizada': return 'bg-[var(--ok)]/10 text-[var(--ok)] border border-[var(--ok)]/20';
         case 'pendente': return 'bg-[var(--info)]/10 text-[var(--info)] border border-[var(--info)]/20';
-        case 'contingencia': return 'bg-amber-500/10 text-amber-600 border border-amber-500/20';
+        case 'contingencia': return 'bg-[var(--warn)]/10 text-[var(--warn)] border border-[var(--warn)]/20';
         default: return 'bg-[var(--err)]/10 text-[var(--err)] border border-[var(--err)]/20'; // 'erro'/'rejeitada'
     }
 };
@@ -11535,7 +11522,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 const UMA_HORA_MS = 60 * 60 * 1000;
                 const antigas = emContingencia.filter((n) => Date.now() - new Date(n.created_at).getTime() > 2 * UMA_HORA_MS);
                 return (
-                    <div className={`p-3 rounded-lg border text-sm font-medium ${antigas.length > 0 ? 'bg-[var(--err)]/10 border-[var(--err)]/30 text-[var(--err)]' : 'bg-amber-500/10 border-amber-500/30 text-amber-700'}`}>
+                    <div className={`p-3 rounded-lg border text-sm font-medium ${antigas.length > 0 ? 'bg-[var(--err)]/10 border-[var(--err)]/30 text-[var(--err)]' : 'bg-[var(--warn)]/10 border-[var(--warn)]/30 text-[var(--warn)]'}`}>
                         {antigas.length > 0
                             ? `${antigas.length} nota(s) em contingência pendente(s) há mais de 2h — verifique a conexão com a SEFAZ. (${emContingencia.length} no total aguardando confirmação.)`
                             : `${emContingencia.length} nota(s) em contingência aguardando confirmação automática da SEFAZ.`}
@@ -11545,7 +11532,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
             <Card className="overflow-hidden shadow-sm border border-[var(--border)]">
                 <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-3">
                     <div className="flex justify-between items-center flex-wrap gap-2">
-                        <h3 className="font-bold text-lg text-[var(--text)]">Notas Fiscais</h3>
+                        <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Notas Fiscais</h3>
                         <div className="flex items-center gap-2 flex-wrap">
                             <select
                                 className="h-8 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] max-sm:text-base"
@@ -11578,11 +11565,11 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         storeId + este intervalo, nunca por uma lista mandada daqui. */}
                     <div className="flex items-end gap-2 flex-wrap">
                         <div>
-                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Inicial</label>
+                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Data inicial</label>
                             <Input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="h-8 text-xs" />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Data Final</label>
+                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Data final</label>
                             <Input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="h-8 text-xs" />
                         </div>
                         <Button variant="secondary" className="h-8 px-3 text-xs" onClick={handleExportPeriodo} isLoading={isExporting}>
@@ -11592,7 +11579,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-[var(--surface-2)] text-[var(--text-muted)] uppercase text-xs">
+                        <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
                             <tr>
                                 <th className="px-4 py-3">Data</th>
                                 <th className="px-4 py-3 text-right">Valor</th>
