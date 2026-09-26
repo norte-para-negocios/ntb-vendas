@@ -733,7 +733,7 @@ function OrderStatusModal({ isOpen, onClose, orders, orderFlow = 'kds' }: { isOp
 
                     {history.length > 0 && (
                         <div>
-                            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2 px-1">Pedidos anteriores desta visita</h4>
+                            <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-2 px-1">Pedidos anteriores desta visita</h4>
                             <div className="space-y-2">
                                 {history.map(h => (
                                     <div key={h.orderId} className="flex items-center justify-between gap-2 p-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)]">
@@ -1415,7 +1415,7 @@ const ProductModal: React.FC<{
                         muted: eyebrow + texto no --text (não --text-muted), mais respiro. */}
                     {!!product.description && (
                         <div className="mt-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand)]">Sobre este prato</p>
+                            <p className="text-[13px] font-semibold text-[var(--text-muted)]">Sobre este prato</p>
                             <p className="text-[15px] leading-relaxed text-[var(--text)] mt-1">{product.description}</p>
                         </div>
                     )}
@@ -1464,8 +1464,8 @@ const ProductModal: React.FC<{
                                 <span className="flex items-center justify-between gap-2">
                                     <span className="text-[15px] font-bold text-[var(--text)]">{group.name}</span>
                                     {group.required && (
-                                        <span className="flex-shrink-0 bg-[var(--ink)] text-white text-[10px] font-bold tracking-wide rounded px-1.5 py-0.5">
-                                            OBRIGATÓRIO
+                                        <span className="flex-shrink-0 bg-[var(--text)] text-[var(--surface)] text-[11px] font-semibold rounded-full px-2 py-0.5">
+                                            Obrigatório
                                         </span>
                                     )}
                                 </span>
@@ -2257,7 +2257,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                             {tab === 'split' && (
                                 <div className="space-y-6 animate-fade-in pt-2">
                                     <div className="bg-[var(--brand)]/5 p-4 rounded-[var(--r-lg)] border border-[var(--brand)]/10 text-center">
-                                        <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
+                                        <p className="text-[13px] text-[var(--text-muted)] font-semibold">Total da mesa</p>
                                         <p className="text-3xl font-black text-[var(--brand)] mt-1 num">R$ {formatBRL(total)}</p>
                                         {/* Guard `items.length > 0` no ramo desligado (achado da
                                             revisão final, 2026-08-22): esta aba mostrava
@@ -2282,7 +2282,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                         <button onClick={() => setPeople(Math.max(1, people - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
                                         <div className="text-center min-w-[80px]">
                                             <span className="block text-2xl font-bold text-[var(--text)]">{people}</span>
-                                            <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">Pessoas</span>
+                                            <span className="text-[12px] text-[var(--text-muted)] font-semibold">Pessoas</span>
                                         </div>
                                         <button onClick={() => setPeople(people + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Plus size={18}/></button>
                                     </div>
@@ -2292,7 +2292,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                                     </div>
                                     {/* List All Items for Context */}
                                     <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                                        <p className="text-xs text-[var(--text-muted)] font-bold uppercase mb-2">Itens da Mesa</p>
+                                        <p className="text-[13px] text-[var(--text-muted)] font-semibold mb-2">Itens da mesa</p>
                                         <ul className="text-sm space-y-1 text-[var(--text-muted)]">
                                             {items.map((it, idx) => (
                                                 <li key={idx} className="flex justify-between items-center py-1">
@@ -3660,8 +3660,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                        recalcular a altura da capa: funciona pra qualquer
                        h-[...] da capa, desde que >= metade do logo. */}
                 <div
-                    className="relative z-[5] mx-4 -mt-4 rounded-2xl bg-[var(--surface)] px-4 pb-3 pt-10"
-                    style={{ boxShadow: 'var(--shadow-md)' }}
+                    className="relative z-[5] mx-4 -mt-4 rounded-[22px] bg-[var(--surface)] px-4 pb-4 pt-10"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 28px -6px rgba(0,0,0,0.12)' }}
                 >
                     {/* Selo de logo: SEMPRE renderiza (com logo_url real ou
                         placeholder desenhado — mesmo ProductThumb size="store"
@@ -3729,7 +3729,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 className={`flex h-8 flex-shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-semibold u-motion ${
                                     isWaitingBill
                                         ? 'bg-[var(--warn)] text-white'
-                                        : 'border border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-2)]'
+                                        : 'bg-[var(--surface-2)] text-[var(--text)]'
                                 }`}
                             >
                                 {isWaitingBill ? <Clock size={12} /> : <Receipt size={12} />} Conta
@@ -3792,11 +3792,11 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         requestAccessThen), mesma condição de antes. */}
                     {hasAccess && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                            <span className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text-muted)]">
+                            <span className="flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[var(--text-muted)]">
                                 <User size={10} /> {clientName} {isHost ? '(Host)' : ''}
                             </span>
                             {currentTable ? (
-                                <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-semibold text-[var(--text)]">
+                                <span className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-[var(--text)]">
                                     Mesa {currentTable.number}
                                 </span>
                             ) : (
@@ -3871,18 +3871,18 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 <button
                                     type="button"
                                     onClick={() => setIsLoginModalOpen(true)}
-                                    className="flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] py-3 max-sm:min-h-11 u-motion u-press-sm"
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-full h-11 u-motion u-press-sm"
                                     style={{ backgroundColor: ACTION_BG }}
                                 >
                                     <LogIn size={16} className="flex-shrink-0 text-white" />
-                                    <span className="text-[13px] font-bold text-white">Entrar na mesa (PIN)</span>
+                                    <span className="text-[14px] font-semibold text-white">Entrar na mesa (PIN)</span>
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setEntradaDispensada(true)}
-                                    className="flex items-center justify-center gap-2 rounded-[var(--r-md)] border border-[var(--border)] px-3 py-3 max-sm:min-h-11 u-motion u-press-sm"
+                                    className="flex items-center justify-center gap-2 rounded-full bg-[var(--surface-2)] px-4 h-11 u-motion u-press-sm"
                                 >
-                                    <span className="text-[13px] font-semibold text-[var(--text-muted)]">Só ver o cardápio</span>
+                                    <span className="text-[14px] font-semibold text-[var(--text)]">Só ver o cardápio</span>
                                 </button>
                             </div>
                         ) : (
@@ -3954,7 +3954,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 vitrine é além, não em vez disso. */}
             {featuredProducts.length > 0 && (
                 <div className={`px-4 pt-4 ${isWaitingBill ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                    <h2 className="text-[19px] font-bold text-[var(--text)] mb-1.5 u-grow-in">Destaques</h2>
+                    <h2 className="text-[22px] font-bold tracking-[-0.02em] text-[var(--text)] mb-2 u-grow-in" style={{ fontFamily: theme.displayFont }}>Destaques</h2>
                     {/* Fade nas duas pontas sinalizando que dá pra rolar mais (útil em
                         desktop sem trackpad/touch, onde não há nenhuma outra pista
                         visual de overflow horizontal) — mesmo princípio do fade da
@@ -3986,7 +3986,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 Solicitada" (também sticky, z-30, top-0). */}
             <div
                 ref={stickyBarRef}
-                className={`bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-30`}
+                className={`mt-3 bg-[var(--surface)]/90 backdrop-blur-xl backdrop-saturate-150 border-b border-[var(--border)] sticky ${isWaitingBill ? 'top-9' : 'top-0'} z-30`}
             >
                 <div className="px-4 pt-3 pb-2 flex gap-2">
                     <div className="relative flex-1">
@@ -3996,7 +3996,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             type="text"
                             aria-label={`Buscar em ${currentStore.name}`}
                             placeholder={`Buscar em ${currentStore.name}`}
-                            className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border border-transparent text-base sm:text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border)] transition-colors"
+                            className="w-full h-11 pl-11 pr-4 rounded-full bg-[var(--surface-2)] border-0 text-base sm:text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 transition-shadow"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />

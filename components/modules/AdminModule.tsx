@@ -94,12 +94,12 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     if (needsChange) {
         return (
             <AuthBackdrop>
-                <Card className="u-grow-in w-full max-w-md p-8" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+                <Card className="u-grow-in w-full max-w-md p-7 rounded-[22px]!" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.45)' }}>
                     <div className="text-center mb-6">
                         <div className="bg-[var(--warn)]/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--warn)]">
                             <Lock size={32} />
                         </div>
-                        <h2 className="text-2xl font-bold text-[var(--text)]">Redefinição Obrigatória</h2>
+                        <h2 className="text-[24px] font-bold tracking-[-0.02em] text-[var(--text)]">Redefinição Obrigatória</h2>
                         <p className="text-[var(--text-muted)] text-sm mt-1">Por segurança, altere sua senha provisória.</p>
                     </div>
 
@@ -109,7 +109,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
                         {error && <p className="text-[var(--err)] text-sm text-center font-medium">{error}</p>}
 
-                        <Button className="w-full" onClick={handleChangePassword} isLoading={isLoading}>
+                        <Button className="w-full h-12 text-[16px]" onClick={handleChangePassword} isLoading={isLoading}>
                             Atualizar Senha
                         </Button>
                     </div>
@@ -128,7 +128,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                     <h1 className="text-3xl font-bold text-white tracking-tight">Painel Master</h1>
                     <p className="text-white/75 text-sm mt-1.5">Acesso restrito da Norte Para Negócios</p>
                 </div>
-                <Card className="u-grow-in p-8" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.5)' }}>
+                <Card className="u-grow-in p-7 rounded-[22px]!" style={{ boxShadow: '0 30px 60px -18px rgba(30,27,75,0.45)' }}>
                     <div className="space-y-4">
                         <div className="relative">
                             <User className="absolute left-3 top-9 text-[var(--text-muted)]" size={18} />
@@ -140,12 +140,12 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                         </div>
 
                         {error && (
-                            <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded text-sm flex items-center gap-2">
+                            <div className="bg-[var(--err)]/10 text-[var(--err)] px-3 py-2.5 rounded-[12px] text-[13px] font-medium flex items-center gap-2">
                                 <AlertCircle size={16} /> {error}
                             </div>
                         )}
 
-                        <Button className="w-full h-12 text-lg group" onClick={handleLogin} isLoading={isLoading}>
+                        <Button className="w-full h-12 text-[16px] group" onClick={handleLogin} isLoading={isLoading}>
                             Entrar
                             {!isLoading && <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />}
                         </Button>

@@ -11,7 +11,6 @@ import { stagger } from '@/components/Skeleton';
 // Paleta e formas extraídas do site de produção norteparanegocios.com.br.
 const BG = '#484DB5';
 const BG_SHAPE = '#3A40B2';
-const HIGHLIGHT = '#c7d2fe';
 
 export default function HomePage() {
   const cloudBackRef = useRef<HTMLDivElement>(null);
@@ -44,35 +43,39 @@ export default function HomePage() {
 
       <div className="relative z-[1] flex flex-col items-center w-full max-w-md">
         <span
-          className="u-stagger inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider rounded-full px-3 py-1 mb-6 bg-white/10 border border-white/20 text-white"
+          className="u-stagger inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-full px-3 py-1 mb-5 bg-white/12 text-white"
           style={stagger(0)}
         >
           Norte Para Negócios
         </span>
 
+        {/* Cartão branco raio 22 sobre o azul (mesma linguagem do login do
+            lojista, redesign estilo Apple 2026-09-26). Copy e links intactos. */}
         <div
-          className="u-stagger w-20 h-20 rounded-3xl flex items-center justify-center mb-6 md:hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg"
-          style={stagger(50)}
+          className="u-stagger w-full rounded-[22px] bg-white px-7 pt-8 pb-7 text-center"
+          style={{ ...stagger(60), boxShadow: '0 30px 60px -18px rgba(30,27,75,0.45)' }}
         >
-          <UtensilsCrossed className="w-10 h-10 text-white" />
+          <div className="w-16 h-16 rounded-[18px] flex items-center justify-center mx-auto mb-5" style={{ background: '#eceefb' }}>
+            <UtensilsCrossed className="w-8 h-8" style={{ color: BG }} />
+          </div>
+
+          <h1 className="text-[32px] md:text-[36px] font-bold tracking-[-0.025em] leading-tight mb-2 text-[#1d1d1f]">
+            Cardápio <span style={{ color: BG }}>Digital</span>
+          </h1>
+          <p className="text-[15px] leading-relaxed mb-7 text-[#6e6e73]">
+            Pedidos, cozinha, mesas e pagamento em um só sistema.
+          </p>
+
+          <Link
+            href="/loja"
+            className="u-motion u-press group w-full h-12 rounded-full text-[16px] font-semibold flex items-center justify-center gap-2 text-white"
+            style={{ background: BG }}
+          >
+            <Store size={19} />
+            Área do Lojista
+            <ArrowRight size={17} className="u-motion group-hover:translate-x-1" />
+          </Link>
         </div>
-
-        <h1 className="u-stagger text-4xl md:text-5xl font-extrabold tracking-tight mb-4 text-white" style={stagger(100)}>
-          Cardápio <span style={{ color: HIGHLIGHT }}>Digital</span>
-        </h1>
-        <p className="u-stagger leading-relaxed mb-10 max-w-sm text-white/75" style={stagger(150)}>
-          Pedidos, cozinha, mesas e pagamento em um só sistema.
-        </p>
-
-        <Link
-          href="/loja"
-          className="u-stagger u-motion u-press group w-full sm:w-auto px-8 py-4 rounded-2xl font-bold shadow-lg hover:shadow-xl flex items-center justify-center gap-2 bg-white text-[var(--brand)]"
-          style={stagger(200)}
-        >
-          <Store size={20} />
-          Área do Lojista
-          <ArrowRight size={18} className="u-motion group-hover:translate-x-1" />
-        </Link>
       </div>
 
       <div ref={cloudBackRef} className="absolute bottom-0 pointer-events-none transition-transform duration-75 ease-linear will-change-transform" style={{ opacity: 0.5, left: '-6%', width: '112%', height: 'clamp(130px, 22vh, 260px)' }} aria-hidden="true">

@@ -11,8 +11,6 @@ import { stagger } from '@/components/Skeleton';
 const BG = '#484DB5';
 const BG_SHAPE = '#3A40B2';
 const PRIMARY = '#6b71f2';
-const HIGHLIGHT = '#c7d2fe';
-const ACCENT = '#F43F5E';
 
 export default function HomePage() {
   const cloudBackRef = useRef<HTMLDivElement>(null);
@@ -59,48 +57,52 @@ export default function HomePage() {
 
       <div className="relative z-[1] flex flex-col items-center w-full max-w-md">
         <span
-          className="u-stagger inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider rounded-full px-3 py-1 mb-6 bg-white/10 border border-white/20 text-white"
+          className="u-stagger inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-full px-3 py-1 mb-5 bg-white/12 text-white"
           style={stagger(0)}
         >
           Norte Para Negócios
         </span>
 
+        {/* Cartão branco raio 22 sobre o azul (mesma linguagem do login do
+            lojista, redesign estilo Apple 2026-09-26). Copy e links intactos. */}
         <div
-          className="u-stagger w-20 h-20 rounded-3xl flex items-center justify-center mb-6 md:hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg"
-          style={stagger(50)}
+          className="u-stagger w-full rounded-[22px] bg-white px-7 pt-8 pb-7 text-center"
+          style={{ ...stagger(60), boxShadow: '0 30px 60px -18px rgba(30,27,75,0.45)' }}
         >
-          <UtensilsCrossed className="w-10 h-10 text-white" />
-        </div>
+          <div className="w-16 h-16 rounded-[18px] flex items-center justify-center mx-auto mb-5" style={{ background: '#eceefb' }}>
+            <UtensilsCrossed className="w-8 h-8" style={{ color: BG }} />
+          </div>
 
-        <h1 className="u-stagger text-4xl md:text-5xl font-extrabold tracking-tight mb-4 text-white" style={stagger(100)}>
-          Cardápio <span style={{ color: HIGHLIGHT }}>Digital</span>
-        </h1>
-        <p className="u-stagger leading-relaxed mb-10 max-w-sm text-white/75" style={stagger(150)}>
-          Pedidos, cozinha, mesas e pagamento em um só sistema.
-        </p>
+          <h1 className="text-[32px] md:text-[36px] font-bold tracking-[-0.025em] leading-tight mb-2 text-[#1d1d1f]">
+            Cardápio <span style={{ color: BG }}>Digital</span>
+          </h1>
+          <p className="text-[15px] leading-relaxed mb-7 text-[#6e6e73]">
+            Pedidos, cozinha, mesas e pagamento em um só sistema.
+          </p>
 
-        <div className="u-stagger flex flex-col sm:flex-row gap-3 w-full mb-10" style={stagger(200)}>
-          <Link
-            href="/painel"
-            className="u-motion u-press px-6 py-3.5 rounded-2xl font-bold shadow-lg hover:shadow-xl flex-1 flex items-center justify-center gap-2 text-white"
-            style={{ background: ACCENT }}
-          >
-            <LayoutDashboard size={18} />
-            Painel Master
-          </Link>
-          <Link
-            href="/loja"
-            className="u-motion u-press px-6 py-3.5 rounded-2xl font-bold flex-1 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-sm hover:bg-white/15 text-white border border-white/20"
-          >
-            <Store size={18} />
-            Área do Lojista
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+            <Link
+              href="/painel"
+              className="u-motion u-press h-12 rounded-full text-[16px] font-semibold flex-1 flex items-center justify-center gap-2 text-white"
+              style={{ background: BG }}
+            >
+              <LayoutDashboard size={18} />
+              Painel Master
+            </Link>
+            <Link
+              href="/loja"
+              className="u-motion u-press h-12 rounded-full text-[16px] font-semibold flex-1 flex items-center justify-center gap-2 bg-[#f2f2f7] text-[#1d1d1f]"
+            >
+              <Store size={18} />
+              Área do Lojista
+            </Link>
+          </div>
         </div>
 
         {!isElectronApp && (
           <Link
             href="/c/bistro"
-            className="u-stagger u-motion group inline-flex items-center gap-1.5 text-sm font-medium text-white/70 hover:text-white border-b border-transparent hover:border-white/60 pb-0.5"
+            className="u-stagger u-motion group mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-white/75 hover:text-white"
             style={stagger(240)}
           >
             Ver cardápio de demonstração
