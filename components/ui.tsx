@@ -394,7 +394,7 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${resolvedWidth} ${surface === 'opaque' ? 'rounded-t-[22px] sm:rounded-[22px]' : 'rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)]'} overflow-hidden u-sheet-h flex flex-col ${
+              className={`w-full ${resolvedWidth} ${surface === 'opaque' ? 'rounded-t-[22px] sm:rounded-[22px]' : 'rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)]'} relative overflow-hidden u-sheet-h flex flex-col ${
                 surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
               }`}
               style={
@@ -407,10 +407,17 @@ export const Modal: React.FC<{
               <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
                 <div className={`w-10 h-1 rounded-full ${surface === 'opaque' ? 'bg-[var(--border)]' : 'bg-white/20'}`} />
               </div>
+              {/* hideTitle: a barra de título vazia (só com o X) ocupava uma
+                  faixa branca inteira acima da foto do produto (varredura
+                  final 2026-09-26). Sem título visível, o X vira um botão
+                  redondo flutuando no canto ESQUERDO do conteúdo (o direito
+                  é do coração de favoritar no ProductModal). */}
               <div
-                className={`flex items-center justify-between px-5 py-3 flex-shrink-0 ${
-                  surface === 'opaque' ? 'border-b border-[var(--border)]' : 'border-b border-white/10'
-                }`}
+                className={hideTitle
+                  ? 'absolute left-3 top-6 z-20'
+                  : `flex items-center justify-between px-5 py-3 flex-shrink-0 ${
+                      surface === 'opaque' ? 'border-b border-[var(--border)]' : 'border-b border-white/10'
+                    }`}
               >
                 {/* hideTitle: some sheets (ProductModal) já mostram o nome no
                     próprio conteúdo (<h2>) e não querem repeti-lo na barra —
@@ -424,13 +431,16 @@ export const Modal: React.FC<{
                 </h3>
                 <button
                   onClick={onClose}
-                  className={`p-1 rounded-[var(--r-sm)] u-motion ${hideTitle ? 'ml-auto' : ''} ${
-                    surface === 'opaque'
-                      ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-                      : 'text-white/60 hover:text-white hover:bg-white/10'
-                  }`}
+                  aria-label="Fechar"
+                  className={hideTitle
+                    ? 'w-9 h-9 rounded-full flex items-center justify-center bg-black/40 text-white backdrop-blur-md u-motion u-press'
+                    : `p-1 rounded-[var(--r-sm)] u-motion ${
+                        surface === 'opaque'
+                          ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
+                          : 'text-white/60 hover:text-white hover:bg-white/10'
+                      }`}
                 >
-                  <X size={16} />
+                  <X size={hideTitle ? 18 : 16} />
                 </button>
               </div>
               <div className="p-5 overflow-y-auto">{children}</div>
