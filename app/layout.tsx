@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AppProvider } from '@/context/AppContext';
 import { ToastViewport } from '@/components/Toast';
+import { SuccessCheckViewport } from '@/components/SuccessCheck';
 import { ConfirmDialogRoot } from '@/components/ConfirmDialog';
 import { AlertDialogRoot } from '@/components/AlertDialog';
 import { THEME_INIT_SCRIPT } from '@/components/ThemeToggle';
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full antialiased">
         <AppProvider>{children}</AppProvider>
         <ToastViewport />
+        <SuccessCheckViewport />
         <ConfirmDialogRoot />
         <AlertDialogRoot />
         <DesktopUpdateBanner />

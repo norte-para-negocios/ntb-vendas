@@ -11,6 +11,7 @@ import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMon
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { formatDuration } from '@/lib/formatDuration';
 import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
 
@@ -587,14 +588,14 @@ export const StoreDashboardView: React.FC<{
                                 leitura de relance) + variação vs. o período anterior
                                 equivalente logo abaixo — antes eram 4 linhas de texto
                                 de mesmo peso, difícil comparar os 3 blocos num olhar. */}
-                            <p className="text-[30px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)]">R$ {formatBRL(stats.total)}</p>
+                            <p className="text-[30px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)]">R$ <AnimatedNumber value={stats.total} format={formatBRL} /></p>
                             <div className="min-h-[18px] mb-3">
                                 <ChangeBadge value={percentChange(stats.total, prev.total)} label={prevLabel} />
                             </div>
                             <div className="space-y-2 border-t border-[var(--border)] pt-3">
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket médio</span>
-                                    <span className="font-medium text-[var(--text)] num">R$ {formatBRL(stats.ticket)}</span>
+                                    <span className="font-medium text-[var(--text)] num">R$ <AnimatedNumber value={stats.ticket} format={formatBRL} /></span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>

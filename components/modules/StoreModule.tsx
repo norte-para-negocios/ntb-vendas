@@ -3,8 +3,10 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { motion, AnimatePresence, MotionConfig, useDragControls } from 'motion/react';
-import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
+import { motion, AnimatePresence, MotionConfig, useDragControls, useAnimate, useReducedMotion } from 'motion/react';
+import { SPRING_TAP, SPRING_SHEET, SPRING_UI, LIST_ITEM_MOTION } from '@/lib/motion';
+import { AnimatedNumber } from '@/components/AnimatedNumber';
+import { flashSuccessCheck } from '@/components/SuccessCheck';
 import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
@@ -376,8 +378,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                                     type="button"
                                     disabled={isLoading}
                                     onClick={() => entrarComConta(conta)}
-                                    whileHover={editandoContas ? undefined : { scale: 1.06 }}
-                                    whileTap={editandoContas ? undefined : { scale: 0.95 }}
+                                    whileTap={editandoContas ? undefined : { scale: 0.97 }}
                                     transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
                                     className="w-32 flex flex-col items-center gap-3 text-white disabled:opacity-70 outline-none focus-visible:[&>div:first-child]:ring-2 focus-visible:[&>div:first-child]:ring-white"
                                 >
@@ -417,8 +418,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                                 initial={{ opacity: 0, y: 12 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ type: 'spring', bounce: 0, duration: 0.45, delay: Math.min(contas.length, 8) * 0.04 }}
-                                whileHover={{ scale: 1.06 }}
-                                whileTap={{ scale: 0.95 }}
+                                whileTap={{ scale: 0.97 }}
                                 onClick={() => { setContaEscolhida(null); setEmail(''); setPassword(''); setLembrarSenha(false); setError(''); setMostrarFormulario(true); }}
                                 className="w-32 flex flex-col items-center gap-3 text-white/85"
                             >
@@ -1126,11 +1126,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           <ThemeToggle />
       </header>
 
-      {/* Mobile Menu Drawer (Off-canvas) */}
+      {/* Mobile Menu Drawer (Off-canvas) — entra/sai pela esquerda (Task 10). */}
+      <AnimatePresence>
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex md:hidden">
-            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] sidebar-blue shadow-[var(--shadow-md)] flex flex-col animate-[slideRight_0.25s_cubic-bezier(0.22,1,0.36,1)] text-left">
+        <motion.div key="drawer" className="fixed inset-0 z-50 flex md:hidden" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }}>
+            <motion.div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}></motion.div>
+            <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={SPRING_UI} className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] sidebar-blue shadow-[var(--shadow-md)] flex flex-col text-left">
                 <div className="pl-4 pr-2 py-2 flex justify-between items-center">
                     <span className="font-semibold text-white text-[17px] tracking-[-0.01em]">Menu Lojista</span>
                     <div className="flex items-center gap-1">
@@ -1156,10 +1157,13 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                         <button
                           key={item.id}
                           onClick={() => { onTabChange(item.id); setIsMobileMenuOpen(false); }}
-                          className={`flex items-center w-full px-3 min-h-[44px] rounded-[10px] text-[15px] u-motion gap-3
-                            ${currentTab === item.id ? 'bg-white/[0.18] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
+                          className={`relative isolate flex items-center w-full px-3 min-h-[44px] rounded-[10px] text-[15px] u-motion u-press gap-3
+                            ${currentTab === item.id ? 'text-white font-semibold' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
                           `}
                         >
+                          {currentTab === item.id && (
+                            <motion.div layoutId="nav-ativo-gaveta" transition={SPRING_UI} className="absolute inset-0 -z-10 rounded-[10px] bg-white/[0.18] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]" />
+                          )}
                           <div className="relative">
                               <item.icon size={18} className="shrink-0" />
                               {!!item.count && item.count > 0 && (
@@ -1209,9 +1213,10 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                         </button>
                     )}
                 </div>
-            </div>
-        </div>
+            </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Desktop Sidebar */}
       <aside className={`fixed left-0 top-0 h-full sidebar-blue border-r border-white/[0.08] hidden md:flex flex-col z-10 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'w-20' : 'w-64'}`}>
@@ -1251,12 +1256,16 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[14px] u-motion group relative
-                ${currentTab === item.id ? 'bg-white/[0.18] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
+              className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press group relative isolate
+                ${currentTab === item.id ? 'text-white font-semibold' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
                 ${isCollapsed ? 'justify-center' : 'gap-3'}
               `}
               title={isCollapsed ? item.label : ''}
             >
+              {/* Pílula do item ativo desliza entre os itens (Task 10 Step 2). */}
+              {currentTab === item.id && (
+                <motion.div layoutId="nav-ativo" transition={SPRING_UI} className="absolute inset-0 -z-10 rounded-[10px] bg-white/[0.18] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]" />
+              )}
               <div className="relative shrink-0">
                 <item.icon size={18} />
                 {isCollapsed && !!item.count && item.count > 0 && (
@@ -1368,7 +1377,10 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     {bottomNavTabs.length > 0 && (
         <div className="fixed bottom-0 left-0 w-full bg-[var(--surface)]/85 backdrop-blur-xl border-t border-[var(--border)] flex justify-around px-2 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-40">
            {bottomNavTabs.map(item => (
-            <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[64px] text-[11px] px-3 py-1 rounded-[var(--r-md)] u-motion ${currentTab === item.id ? 'text-[var(--brand)] font-semibold' : 'text-[var(--text-muted)] font-medium'}`}>
+            <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative isolate flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[64px] text-[11px] px-3 py-1 rounded-[var(--r-md)] u-motion u-press ${currentTab === item.id ? 'text-[var(--brand)] font-semibold' : 'text-[var(--text-muted)] font-medium'}`}>
+              {currentTab === item.id && (
+                <motion.div layoutId="nav-ativo-barra" transition={SPRING_UI} className="absolute inset-0 -z-10 rounded-[var(--r-md)] bg-[var(--brand-soft)]" />
+              )}
               <div className="relative">
                   <item.icon size={20} />
                   {!!item.count && item.count > 0 && (
@@ -1403,7 +1415,18 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         </div>
       </header>
       
-      {children}
+      {/* Troca de aba (Task 10 Step 3): entra com fade + subida de 8px em
+          220ms, sai só com fade em 120ms. Movimento reduzido = só fade. */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={currentTab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
+          exit={{ opacity: 0, transition: { duration: 0.12, ease: 'easeOut' } }}
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
     </main>
   </div>
   <MyProfileModal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)} user={user} onUserUpdate={onUserUpdate} />
@@ -1728,8 +1751,10 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                 />
             </div>
         )}
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
-            <AnimatePresence>
+        <div className="relative grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
+            {/* Lista viva (Task 10 Step 6): chave estável por item — a cada
+                poll/realtime só o que entra/sai anima; o resto se reorganiza. */}
+            <AnimatePresence mode="popLayout">
             {visibleOrders.map(item => {
                 const { client, observation } = parseItemNote(item.notes || '');
                 const late = isItemLate(item);
@@ -1739,11 +1764,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                 return (
                     <motion.div
                         key={item.id}
-                        layout
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.92 }}
-                        transition={SPRING_TAP}
+                        {...LIST_ITEM_MOTION}
                     >
                     <Card className={`p-4 ${late ? 'ring-2 ring-[var(--err)]/40' : ''}`} style={late ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
                         <div className="flex justify-between items-start gap-2 mb-2">
@@ -2452,7 +2473,7 @@ const PaymentCaptureFields: React.FC<{
     <div className="space-y-6 pt-2">
         <div className="text-center pt-1">
             <p className="text-[13px] font-medium text-[var(--text-muted)]">Total a receber</p>
-            <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ {formatBRL(total)}</p>
+            <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ <AnimatedNumber value={total} format={formatBRL} /></p>
             {serviceFeeToggle}
         </div>
 
@@ -2583,7 +2604,7 @@ const PaymentCaptureFields: React.FC<{
                 <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Restante a pagar</span>
                     <span className="font-semibold num text-[var(--err)]">
-                        R$ {formatBRL(remainingToPay)}
+                        R$ <AnimatedNumber value={remainingToPay} format={formatBRL} />
                     </span>
                 </div>
                 {finishDisabled && (
@@ -2595,7 +2616,7 @@ const PaymentCaptureFields: React.FC<{
                     <div className="flex justify-between text-sm">
                         <span className="text-[var(--text-muted)]">Troco</span>
                         <span className="font-semibold num text-[var(--ok)]">
-                            R$ {formatBRL(changeDue)}
+                            R$ <AnimatedNumber value={changeDue} format={formatBRL} />
                         </span>
                     </div>
                 )}
@@ -2694,7 +2715,7 @@ const WaiterOrderSurface: React.FC<{
                         initial={isPhone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
                         animate={isPhone ? { y: 0 } : { opacity: 1, scale: 1 }}
                         exit={isPhone ? { y: '100%' } : { opacity: 0, scale: 0.96 }}
-                        transition={SPRING_SHEET}
+                        transition={isPhone ? SPRING_SHEET : SPRING_UI}
                         drag={isPhone ? 'y' : false}
                         dragListener={false}
                         dragControls={dragControls}
@@ -2734,6 +2755,70 @@ const WaiterOrderSurface: React.FC<{
         </AnimatePresence>
     );
 };
+
+// Mesa mudando de status (Task 10 Step 9). A memória fica no TablesView
+// (sobrevive ao cartão trocar de grade Livres→Ocupadas, que remonta o
+// cartão): o ponto troca de cor com crossfade e o cartão dá UM "respiro"
+// (scale 1→1.02→1). Mesa que só é redesenhada pelo polling sem mudar de
+// status não anima nada.
+type TableVisualMemo = React.MutableRefObject<Map<string, { status: string; color: string }>>;
+
+const TableStatusDot: React.FC<{ tableId: string; color: string; memo: TableVisualMemo; pulse?: boolean }> = ({ tableId, color, memo, pulse }) => {
+    // Cor anterior lida só na montagem (cartão que acabou de trocar de grade).
+    const [from] = useState(() => memo.current.get(tableId)?.color);
+    return (
+        <span className={`relative w-2 h-2 rounded-full shrink-0 ${pulse ? 'u-pulse-dot' : ''}`} style={{ color }} aria-hidden>
+            <AnimatePresence initial={false}>
+                <motion.span
+                    key={color}
+                    className="absolute inset-0 rounded-full"
+                    style={{ background: color }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                />
+            </AnimatePresence>
+            {from && from !== color && (
+                <motion.span
+                    className="absolute inset-0 rounded-full"
+                    style={{ background: from }}
+                    initial={{ opacity: 1 }}
+                    animate={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                />
+            )}
+        </span>
+    );
+};
+
+const TableMotionCard = React.forwardRef<HTMLDivElement, {
+    tableId: string;
+    statusKey: string;
+    dotColor: string;
+    memo: TableVisualMemo;
+    children: React.ReactNode;
+}>(function TableMotionCard({ tableId, statusKey, dotColor, memo, children }, ref) {
+    const [scope, animate] = useAnimate<HTMLDivElement>();
+    const reduce = useReducedMotion();
+    useEffect(() => {
+        const prev = memo.current.get(tableId)?.status;
+        memo.current.set(tableId, { status: statusKey, color: dotColor });
+        if (prev !== undefined && prev !== statusKey && !reduce && scope.current) {
+            animate(scope.current, { scale: [1, 1.02, 1] }, { duration: 0.45, ease: 'easeInOut' });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [statusKey]);
+    useEffect(() => {
+        const cur = memo.current.get(tableId);
+        if (cur) cur.color = dotColor;
+    }, [tableId, dotColor, memo]);
+    return (
+        <motion.div ref={ref} {...LIST_ITEM_MOTION}>
+            <div ref={scope}>{children}</div>
+        </motion.div>
+    );
+});
 
 const TablesView: React.FC<{
     store: Store;
@@ -2845,6 +2930,7 @@ const TablesView: React.FC<{
     // combinam.
     const [closedTodayOrders, setClosedTodayOrders] = useState<Order[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+    const tableVisualMemo: TableVisualMemo = useRef(new Map<string, { status: string; color: string }>());
     const [hostNameInput, setHostNameInput] = useState('');
     useEffect(() => { setHostNameInput(''); }, [selectedTable?.id]);
     const [showFullBill, setShowFullBill] = useState(false);
@@ -3792,6 +3878,9 @@ NOTIFY pgrst, 'reload schema';`;
             const result = await closeTableSession(selectedTable.id, paymentData, destinatario);
 
             if (result.success) {
+                // Só visual (Task 10 Step 8): dispara e segue — não segura
+                // impressão, nota nem o fechamento da janela.
+                flashSuccessCheck();
                 if (result.message && result.message.includes("Colunas ausentes")) {
                     setShowFixDbModal(true);
                 } else if (result.message) {
@@ -4289,16 +4378,11 @@ NOTIFY pgrst, 'reload schema';`;
                     const statusLabel = getTableStatusLabel(isBlocked ? 'blocked' : isOccupied ? table.status : 'available');
                     const open = () => { if(!isBlocked && inJurisdiction) { setSelectedTable(table); setShowFullBill(false); setShowMenuMode(false); } };
 
+                    const statusKey = isBlocked ? 'blocked' : isWaiterRequested ? 'waiter' : isOccupied ? String(table.status) : 'available';
+
                     if (!isFullCard(table)) {
                         return (
-                            <motion.div
-                                key={table.id}
-                                layout
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                transition={SPRING_TAP}
-                            >
+                            <TableMotionCard key={table.id} tableId={table.id} statusKey={statusKey} dotColor={dotColor} memo={tableVisualMemo}>
                             <Card
                                 hoverable={inJurisdiction && !isBlocked}
                                 onClick={open}
@@ -4313,25 +4397,18 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                                 <div className="flex items-center justify-between gap-2 min-w-0">
                                     <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] min-w-0">
-                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} aria-hidden />
+                                        <TableStatusDot tableId={table.id} color={dotColor} memo={tableVisualMemo} />
                                         <span className="truncate">{!inJurisdiction ? TABLE_OUT_OF_JURISDICTION_LABEL : statusLabel}</span>
                                     </span>
                                     {!isBlocked && renderPinChip(table, inJurisdiction)}
                                 </div>
                             </Card>
-                            </motion.div>
+                            </TableMotionCard>
                         );
                     }
 
                     return (
-                        <motion.div
-                            key={table.id}
-                            layout
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={SPRING_TAP}
-                        >
+                        <TableMotionCard key={table.id} tableId={table.id} statusKey={statusKey} dotColor={dotColor} memo={tableVisualMemo}>
                         <Card
                             hoverable={inJurisdiction}
                             onClick={open}
@@ -4344,7 +4421,7 @@ NOTIFY pgrst, 'reload schema';`;
                             <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-[17px] font-semibold text-[var(--text)] shrink-0">Mesa {table.number}</span>
                                 <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] min-w-0">
-                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isWaiterRequested ? 'u-pulse-dot' : ''}`} style={{ background: dotColor, color: dotColor }} aria-hidden />
+                                    <TableStatusDot tableId={table.id} color={dotColor} memo={tableVisualMemo} pulse={isWaiterRequested} />
                                     <span className="truncate">{isWaiterRequested ? 'Chamando garçom' : statusLabel}</span>
                                 </span>
                                 <div className="ml-auto flex items-center gap-1 shrink-0">
@@ -4370,7 +4447,7 @@ NOTIFY pgrst, 'reload schema';`;
                             )}
 
                             {isOccupied && (
-                                <p className="text-[22px] font-semibold num text-[var(--text)] mt-2 leading-none">R$ {formatBRL(summary.total)}</p>
+                                <p className="text-[22px] font-semibold num text-[var(--text)] mt-2 leading-none">R$ <AnimatedNumber value={summary.total} format={formatBRL} /></p>
                             )}
 
                             {/* Avisos de tempo (pedido do dono, 2026-08-29) — nos dois modos. */}
@@ -4421,7 +4498,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </Button>
                             )}
                         </Card>
-                        </motion.div>
+                        </TableMotionCard>
                     );
                 };
 
@@ -4432,8 +4509,8 @@ NOTIFY pgrst, 'reload schema';`;
                                 <h3 className="eyebrow mb-2.5">Ocupadas ({fullTables.length})</h3>
                                 {/* items-start (pedido do dono, 2026-08-29): cada card só ocupa a
                                     altura do próprio conteúdo, sem esticar pela vizinha mais alta. */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-sm:gap-3 items-start mb-7">
-                                    <AnimatePresence>
+                                <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-sm:gap-3 items-start mb-7">
+                                    <AnimatePresence mode="popLayout">
                                         {fullTables.map((t, i) => renderTable(t, i))}
                                     </AnimatePresence>
                                 </div>
@@ -4442,8 +4519,8 @@ NOTIFY pgrst, 'reload schema';`;
                         {compactTables.length > 0 && (
                             <>
                                 <h3 className="eyebrow mb-2.5">Livres ({compactTables.filter(t => t.status !== 'blocked').length})</h3>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-sm:gap-2.5 items-start">
-                                    <AnimatePresence>
+                                <div className="relative grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-sm:gap-2.5 items-start">
+                                    <AnimatePresence mode="popLayout">
                                         {compactTables.map((t, i) => renderTable(t, i))}
                                     </AnimatePresence>
                                 </div>
@@ -4716,7 +4793,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="px-4 py-3.5 border-t border-[var(--border)] flex justify-between items-baseline">
                                     <span className="font-semibold text-[17px] text-[var(--text)]">Total</span>
                                     <span className="font-semibold text-[28px] num text-[var(--text)] tracking-tight">
-                                        R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
+                                        R$ <AnimatedNumber value={selectedTable ? getTableSummary(selectedTable.id).total : 0} format={formatBRL} />
                                     </span>
                                 </div>
                             </div>
@@ -4820,7 +4897,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                                 <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] flex items-baseline justify-between flex-shrink-0">
                                     <span className="font-medium text-[15px] text-[var(--text-muted)]">Total</span>
-                                    <span className="font-bold text-[28px] max-md:text-[22px] num tracking-[-0.02em] text-[var(--text)]">R$ {formatBRL(resumo.total || 0)}</span>
+                                    <span className="font-bold text-[28px] max-md:text-[22px] num tracking-[-0.02em] text-[var(--text)]">R$ <AnimatedNumber value={resumo.total || 0} format={formatBRL} /></span>
                                 </div>
                             </div>
                         </div>
@@ -4978,7 +5055,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 )}
                                 <div className="text-center pt-1">
                                     <p className="text-[13px] font-medium text-[var(--text-muted)]">Total da mesa</p>
-                                    <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ {formatBRL(currentTableSummary.total)}</p>
+                                    <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ <AnimatedNumber value={currentTableSummary.total} format={formatBRL} /></p>
                                     <p className="text-[13px] text-[var(--text-muted)] mt-1">
                                         {currentTableSummary.isServiceFeeEnabled
                                             ? `Inclui R$ ${formatBRL(currentTableSummary.serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
@@ -4997,7 +5074,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                                 <div className="bg-[var(--surface-2)] rounded-[14px] p-4 text-center">
                                     <p className="text-[var(--text-muted)] text-[13px] mb-0.5">Valor por pessoa</p>
-                                    <p className="text-[28px] font-bold num tracking-[-0.01em] text-[var(--text)]">R$ {formatBRL(currentTableSummary.total / paymentPeople)}</p>
+                                    <p className="text-[28px] font-bold num tracking-[-0.01em] text-[var(--text)]">R$ <AnimatedNumber value={currentTableSummary.total / paymentPeople} format={formatBRL} /></p>
                                     <Button
                                         className="mt-3"
                                         variant="primary"
@@ -5754,6 +5831,9 @@ const CounterView: React.FC<{
             } else {
                 await closeOrderNow(paymentOrder.id, paymentData, destinatario);
             }
+            // Só visual (Task 10 Step 8): dispara e segue — não segura
+            // impressão, nota nem o fechamento da janela.
+            flashSuccessCheck();
 
             // Comprovante com forma de pagamento — só quando quem fechou é
             // de fato um CAIXA (mesma distinção de
@@ -5901,8 +5981,8 @@ const CounterView: React.FC<{
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
-            <AnimatePresence>
+        <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+            <AnimatePresence mode="popLayout">
             {orders.map(order => {
                 const itemCount = order.order_items?.reduce((a,b) => a+b.quantity, 0) || 0;
                 const total = order.order_items?.reduce((a,b) => a+(b.quantity * b.price_at_time), 0) || 0;
@@ -5916,11 +5996,7 @@ const CounterView: React.FC<{
                 return (
                     <motion.div
                         key={order.id}
-                        layout
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={SPRING_TAP}
+                        {...LIST_ITEM_MOTION}
                     >
                     <Card accentColor="var(--brand)" className="flex flex-col p-4 pl-5">
                          <div className="flex justify-between items-start mb-2">
@@ -5994,7 +6070,7 @@ const CounterView: React.FC<{
                          <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
                              <div>
                                  <p className="text-[13px] text-[var(--text-muted)]">Total</p>
-                                 <p className="text-[22px] font-semibold text-[var(--text)] num leading-tight">R$ {formatBRL(total)}</p>
+                                 <p className="text-[22px] font-semibold text-[var(--text)] num leading-tight">R$ <AnimatedNumber value={total} format={formatBRL} /></p>
                              </div>
                              <button
                                  onClick={() => printCounterReceipt(order)}
@@ -7343,18 +7419,15 @@ const CaixaView: React.FC<{
                         <p className="text-[13px] text-[var(--text-muted)] mt-1">Mesas que pedirem a conta e vendas de balcão aparecem aqui.</p>
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        <AnimatePresence>
+                    <div className="relative space-y-2">
+                        <AnimatePresence mode="popLayout">
                         {queueItems.map(item => (
                             <motion.button
                                 key={item.key}
-                                layout
-                                initial={{ opacity: 0, y: -8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0 }}
-                                transition={SPRING_TAP}
+                                {...LIST_ITEM_MOTION}
+                                whileTap={{ scale: 0.97 }}
                                 onClick={() => item.kind === 'table' ? onOpenTablePayment(item.id) : onOpenCounterPayment(item.id)}
-                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] shadow-[var(--shadow-sm)] rounded-[var(--r-lg)] hover:shadow-[var(--shadow-md)] u-motion u-press-sm text-left"
+                                className="w-full flex items-center justify-between gap-3 p-4 bg-[var(--surface)] shadow-[var(--shadow-sm)] rounded-[var(--r-lg)] hover:shadow-[var(--shadow-md)] u-motion text-left"
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="h-9 w-9 rounded-full bg-[var(--warn)]/10 flex items-center justify-center text-[var(--warn)] shrink-0">
@@ -11006,7 +11079,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-[13px] font-medium text-[var(--text-muted)]">Faturamento total</p>
-                                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)] mt-1">R$ {formatBRL(totalRevenue)}</h3>
+                                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)] mt-1">R$ <AnimatedNumber value={totalRevenue} format={formatBRL} /></h3>
                                 </div>
                                 <div className="w-10 h-10 grid place-items-center bg-[var(--surface-2)] rounded-full text-[var(--text-muted)]">
                                     <Receipt size={19} />
