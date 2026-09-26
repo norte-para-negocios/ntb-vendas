@@ -320,8 +320,9 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
 
     const relogio = (
         <div className="text-center text-white mb-10 select-none">
-            <p className="text-[15px] font-medium text-white/75 capitalize">{agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-            <p className="text-[64px] leading-none font-semibold tracking-[-0.03em] tabular-nums mt-1">{agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+            <p className="text-[15px] font-medium text-white/75">{(() => { const d = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }); return d.charAt(0).toUpperCase() + d.slice(1); })()}</p>
+            {/* Fonte do sistema no relógio (SF no Mac, Segoe no Windows): a do app tem zero cortado. */}
+            <p className="text-[72px] leading-none font-semibold tracking-[-0.02em] tabular-nums mt-1" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif' }}>{agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
         </div>
     );
 
