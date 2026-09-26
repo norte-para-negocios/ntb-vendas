@@ -68,6 +68,8 @@
 
   /* Tinta: superfície escura de destaque (igual ao site institucional) */
   --ink: #1E1B4B;
+  --sidebar-bg: #484DB5;
+  --sidebar-bg-2: #3A3E91;
 
   /* Raios */
   --r-sm: 0.5rem;
@@ -135,6 +137,8 @@
   --err: #d70015;
   --info: #0066cc;
   --ink: #1E1B4B;
+  --sidebar-bg: #484DB5;
+  --sidebar-bg-2: #3A3E91;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 12px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   --shimmer: rgba(255, 255, 255, 0.55);
@@ -175,6 +179,8 @@
   --err: #ff6961;
   --info: #409cff;
   --ink: #0a0d13;
+  --sidebar-bg: #23256b;
+  --sidebar-bg-2: #16174a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
   --shimmer: rgba(255, 255, 255, 0.06);
@@ -515,4 +521,12 @@ html {
 .pin-peek { transition: opacity var(--dur) var(--ease-out); }
 @media (hover: hover) and (pointer: fine) {
   .group:not(:hover):not(:focus-within) .pin-peek { opacity: 0; }
+}
+
+/* Menu lateral azul da marca (2026-09-26, pedido do dono: "era a cara do
+   cardápio"). Tokens --sidebar-bg/-2 têm par claro (:root/.force-light) e
+   escuro (.dark). Texto/ícones em branco nas classes do próprio menu. */
+.sidebar-blue {
+  background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-2) 100%);
+  color: #fff;
 }

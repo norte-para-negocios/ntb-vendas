@@ -945,6 +945,20 @@ const SyncStatusBadge: React.FC<{ status: { pending: number; failed: number } }>
   );
 };
 
+// Avatar do menu lateral azul (2026-09-26, "menu volta ao azul da marca"):
+// com foto, a foto; sem foto, inicial branca num círculo translúcido.
+const SidebarAvatar: React.FC<{ photoUrl?: string | null; name: string; className?: string }> = ({ photoUrl, name, className = '' }) => (
+    <div className={`shrink-0 rounded-full overflow-hidden ${className}`}>
+        {photoUrl ? (
+            <div className="w-full h-full [&>*]:!w-full [&>*]:!h-full [&>*]:!rounded-full"><ProductThumb src={photoUrl} name={name} size="cart" /></div>
+        ) : (
+            <div className="w-full h-full flex items-center justify-center bg-white/15 text-white font-semibold">
+                {(name || '?').trim().charAt(0).toUpperCase()}
+            </div>
+        )}
+    </div>
+);
+
 const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store }, onUserUpdate?: (patch: Partial<StoreUser>) => void }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user, onUserUpdate }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -1094,12 +1108,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
             <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-[var(--surface)]/90 backdrop-blur-xl border-r border-[var(--border)] shadow-[var(--shadow-md)] flex flex-col animate-[slideRight_0.25s_cubic-bezier(0.22,1,0.36,1)] text-left">
+            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] sidebar-blue shadow-[var(--shadow-md)] flex flex-col animate-[slideRight_0.25s_cubic-bezier(0.22,1,0.36,1)] text-left">
                 <div className="pl-4 pr-2 py-2 flex justify-between items-center">
-                    <span className="font-semibold text-[var(--text)] text-[17px] tracking-[-0.01em]">Menu Lojista</span>
+                    <span className="font-semibold text-white text-[17px] tracking-[-0.01em]">Menu Lojista</span>
                     <div className="flex items-center gap-1">
-                        <ThemeToggle className="!w-11 !h-11" />
-                        <button onClick={() => setIsMobileMenuOpen(false)} aria-label="Fechar menu" className="w-11 h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] rounded-full u-motion">
+                        <ThemeToggle variant="sidebar" className="!w-11 !h-11" />
+                        <button onClick={() => setIsMobileMenuOpen(false)} aria-label="Fechar menu" className="w-11 h-11 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 rounded-full u-motion">
                             <X size={18}/>
                         </button>
                     </div>
@@ -1107,12 +1121,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                 <button
                     type="button"
                     onClick={() => { setShowProfileModal(true); setIsMobileMenuOpen(false); }}
-                    className="flex items-center gap-3 mx-3 px-2 py-2 rounded-[var(--r-md)] hover:bg-[var(--surface-2)] u-motion text-left"
+                    className="flex items-center gap-3 mx-3 px-2 py-2 rounded-[var(--r-md)] hover:bg-white/10 u-motion text-left"
                 >
-                    <div className="w-11 h-11 shrink-0 rounded-full overflow-hidden [&>*]:!w-full [&>*]:!h-full [&>*]:!rounded-full"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
+                    <SidebarAvatar photoUrl={user.photo_url} name={user.name} className="w-11 h-11 text-[16px]" />
                     <div className="min-w-0 flex-1">
-                        <p className="text-[15px] font-semibold text-[var(--text)] truncate">{user.name}</p>
-                        <p className="text-[13px] text-[var(--text-muted)]">Meu Perfil</p>
+                        <p className="text-[15px] font-semibold text-white truncate">{user.name}</p>
+                        <p className="text-[13px] text-white/60">Meu Perfil</p>
                     </div>
                 </button>
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
@@ -1121,7 +1135,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                           key={item.id}
                           onClick={() => { onTabChange(item.id); setIsMobileMenuOpen(false); }}
                           className={`flex items-center w-full px-3 min-h-[44px] rounded-[10px] text-[15px] u-motion gap-3
-                            ${currentTab === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] font-medium hover:bg-[var(--surface-2)]'}
+                            ${currentTab === item.id ? 'bg-white/[0.18] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
                           `}
                         >
                           <div className="relative">
@@ -1143,30 +1157,30 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                         </button>
                     ))}
                 </div>
-                <div className="p-3 border-t border-[var(--border)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                <div className="p-3 border-t border-white/[0.12] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                     <button
                         onClick={handleToggleCheckin}
                         disabled={checkinBusy}
-                        className="flex items-center gap-3 w-full px-3 min-h-[44px] rounded-[10px] u-motion text-[15px] text-[var(--text)] hover:bg-[var(--surface-2)] disabled:opacity-50 whitespace-nowrap"
+                        className="flex items-center gap-3 w-full px-3 min-h-[44px] rounded-[10px] u-motion text-[15px] text-white hover:bg-white/10 disabled:opacity-50 whitespace-nowrap"
                     >
                         {openCheckin
                           ? <span className="w-[18px] flex justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-[var(--ok)]" /></span>
-                          : <Clock size={18} className="shrink-0 text-[var(--text-muted)]"/>}
+                          : <Clock size={18} className="shrink-0 text-white/60"/>}
                         <span className="truncate">{openCheckin ? `Encerrar turno (${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto'}</span>
                     </button>
                     {user.role === 'universal' && onSwitchStore && (
-                        <button onClick={onSwitchStore} className="flex items-center gap-3 w-full px-3 min-h-[44px] text-[var(--text)] hover:bg-[var(--surface-2)] rounded-[10px] u-motion text-[15px] whitespace-nowrap">
-                            <RefreshCw size={18} className="text-[var(--text-muted)]"/> Trocar de Loja
+                        <button onClick={onSwitchStore} className="flex items-center gap-3 w-full px-3 min-h-[44px] text-white hover:bg-white/10 rounded-[10px] u-motion text-[15px] whitespace-nowrap">
+                            <RefreshCw size={18} className="text-white/60"/> Trocar de Loja
                         </button>
                     )}
-                    <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 min-h-[44px] text-[var(--err)] hover:bg-[var(--surface-2)] rounded-[10px] u-motion text-[15px]">
+                    <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 min-h-[44px] text-white/80 hover:text-white hover:bg-white/10 rounded-[10px] u-motion text-[15px]">
                         <LogOut size={18}/> Sair
                     </button>
                     {typeof window !== 'undefined' && window.electronApp?.version && (
                         <button
                             onClick={handleProcurarAtualizacao}
                             disabled={procurandoUpdate}
-                            className="w-full text-center text-[12px] text-[var(--text-muted)] hover:text-[var(--text)] pt-2 u-motion disabled:opacity-50 truncate whitespace-nowrap"
+                            className="w-full text-center text-[12px] text-white/60 hover:text-white pt-2 u-motion disabled:opacity-50 truncate whitespace-nowrap"
                             title="Procurar atualização"
                         >
                             App {formatAppVersion(window.electronApp.version)} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
@@ -1178,17 +1192,17 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
       )}
 
       {/* Desktop Sidebar */}
-      <aside className={`fixed left-0 top-0 h-full bg-[var(--surface)]/80 backdrop-blur-xl border-r border-[var(--border)] hidden md:flex flex-col z-10 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`fixed left-0 top-0 h-full sidebar-blue border-r border-white/[0.08] hidden md:flex flex-col z-10 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'w-20' : 'w-64'}`}>
         <div className={`px-4 pt-5 pb-3 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isCollapsed && (
             <div className="overflow-hidden">
-              <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)] truncate">{storeName}</h1>
-              <p className="text-[13px] text-[var(--text-muted)] mt-0.5 truncate">Painel Lojista</p>
+              <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-white truncate">{storeName}</h1>
+              <p className="text-[13px] text-white/60 mt-0.5 truncate">Painel Lojista</p>
             </div>
           )}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className={`text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] w-8 h-8 flex items-center justify-center shrink-0 rounded-full u-motion ${isCollapsed ? '' : 'ml-2'}`}
+            className={`text-white/60 hover:text-white hover:bg-white/10 w-8 h-8 flex items-center justify-center shrink-0 rounded-full u-motion ${isCollapsed ? '' : 'ml-2'}`}
             title={isCollapsed ? "Expandir Menu" : "Recolher Menu"}
           >
             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
@@ -1198,14 +1212,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         <button
             type="button"
             onClick={() => setShowProfileModal(true)}
-            className={`flex items-center mx-3 px-2 py-2 rounded-[var(--r-md)] hover:bg-[var(--surface-2)] u-motion text-left ${isCollapsed ? 'justify-center' : 'gap-3'}`}
+            className={`flex items-center mx-3 px-2 py-2 rounded-[var(--r-md)] hover:bg-white/10 u-motion text-left ${isCollapsed ? 'justify-center' : 'gap-3'}`}
             title={isCollapsed ? 'Meu Perfil' : undefined}
         >
-            <div className="w-10 h-10 shrink-0 rounded-full overflow-hidden [&>*]:!w-full [&>*]:!h-full [&>*]:!rounded-full"><ProductThumb src={user.photo_url} name={user.name} size="cart" /></div>
+            <SidebarAvatar photoUrl={user.photo_url} name={user.name} className="w-10 h-10 text-[15px]" />
             {!isCollapsed && (
                 <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold text-[var(--text)] truncate">{user.name}</p>
-                    <p className="text-[12px] text-[var(--text-muted)]">Meu Perfil</p>
+                    <p className="text-[14px] font-semibold text-white truncate">{user.name}</p>
+                    <p className="text-[12px] text-white/60">Meu Perfil</p>
                 </div>
             )}
         </button>
@@ -1216,7 +1230,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[14px] u-motion group relative
-                ${currentTab === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] font-medium hover:bg-[var(--surface-2)]'}
+                ${currentTab === item.id ? 'bg-white/[0.18] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
                 ${isCollapsed ? 'justify-center' : 'gap-3'}
               `}
               title={isCollapsed ? item.label : ''}
@@ -1254,7 +1268,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           <button
             onClick={handleToggleCheckin}
             disabled={checkinBusy}
-            className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[13px] font-medium u-motion disabled:opacity-50 whitespace-nowrap text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]
+            className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[13px] font-medium u-motion disabled:opacity-50 whitespace-nowrap text-white/60 hover:bg-white/10 hover:text-white
               ${isCollapsed ? 'justify-center' : 'gap-3'}
             `}
             title={isCollapsed ? (openCheckin ? `Encerrar turno (desde ${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto') : ''}
@@ -1273,22 +1287,22 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         {/* Rodapé (redesign 2026-09-26): uma linha só — tema à esquerda,
             Trocar de Loja/Sair à direita; nada quebra em 2 linhas. Com
             "Trocar de Loja" visível, Sair vira só ícone (title/aria-label). */}
-        <div className={`p-3 border-t border-[var(--border)] ${isCollapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-1'}`}>
-          <ThemeToggle className={isCollapsed ? '' : 'mr-auto'} />
+        <div className={`p-3 border-t border-white/[0.12] ${isCollapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-1'}`}>
+          <ThemeToggle variant="sidebar" className={isCollapsed ? '' : 'mr-auto'} />
           {user.role === 'universal' && onSwitchStore && (
             <button
               onClick={onSwitchStore}
-              className={`flex items-center h-9 text-[var(--text)] hover:bg-[var(--surface-2)] rounded-full u-motion text-[13px] font-medium whitespace-nowrap ${isCollapsed ? 'w-9 justify-center' : 'px-3 gap-2'}`}
+              className={`flex items-center h-9 text-white hover:bg-white/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap ${isCollapsed ? 'w-9 justify-center' : 'px-3 gap-2'}`}
               title="Trocar de Loja"
               aria-label="Trocar de Loja"
             >
-              <RefreshCw size={16} className="shrink-0 text-[var(--text-muted)]" />
+              <RefreshCw size={16} className="shrink-0 text-white/60" />
               {!isCollapsed && <span>Trocar de Loja</span>}
             </button>
           )}
           <button
             onClick={onLogout}
-            className={`flex items-center h-9 text-[var(--err)] hover:bg-[var(--err)]/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap ${isCollapsed || (user.role === 'universal' && onSwitchStore) ? 'w-9 justify-center' : 'px-3 gap-2'}`}
+            className={`flex items-center h-9 text-white/80 hover:text-white hover:bg-white/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap ${isCollapsed || (user.role === 'universal' && onSwitchStore) ? 'w-9 justify-center' : 'px-3 gap-2'}`}
             title="Sair"
             aria-label="Sair"
           >
@@ -1309,7 +1323,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               // valor já usado no seletor de adicionais e nos +/- do
               // carrinho) — o PDV pode rodar em touchscreen, e só `pb-3`
               // deixava o botão com 30px de altura.
-              className="flex items-center justify-center w-full min-h-[44px] px-3 pb-2 text-[var(--text-muted)] hover:text-[var(--text)] u-motion disabled:opacity-50"
+              className="flex items-center justify-center w-full min-h-[44px] px-3 pb-2 text-white/60 hover:text-white u-motion disabled:opacity-50"
               title={`App ${formatAppVersion(window.electronApp.version)} — procurar atualização`}
               aria-label="Procurar atualização"
             >
@@ -1319,7 +1333,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             <button
               onClick={handleProcurarAtualizacao}
               disabled={procurandoUpdate}
-              className="w-full px-3 text-center text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] pb-3 u-motion disabled:opacity-50 truncate whitespace-nowrap"
+              className="w-full px-3 text-center text-[11px] text-white/60 hover:text-white pb-3 u-motion disabled:opacity-50 truncate whitespace-nowrap"
               title="Procurar atualização"
             >
               App {formatAppVersion(window.electronApp.version)} · {procurandoUpdate ? 'procurando...' : 'procurar atualização'}
@@ -6941,7 +6955,7 @@ const CaixaView: React.FC<{
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING_TAP}>
             <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 shrink-0 rounded-full overflow-hidden"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" /></div>
+                    <div className="w-12 h-12 shrink-0 rounded-full overflow-hidden"><ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="cart" /></div>
                     <div className="min-w-0">
                         <p className="text-[17px] font-semibold text-[var(--text)] truncate tracking-[-0.01em]">Caixa de {loggedUser.name}</p>
                         <p className="text-[13px] text-[var(--text-muted)]">

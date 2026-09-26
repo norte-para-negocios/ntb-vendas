@@ -974,16 +974,16 @@ export const AdminModule: React.FC = () => {
         </div>
       </header>
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 bg-[var(--surface)]/80 backdrop-blur-xl border-r border-[var(--border)] text-[var(--text)] px-3 pt-5 pb-3 hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen">
+      <aside className="w-64 shrink-0 sidebar-blue border-r border-white/[0.08] text-white px-3 pt-5 pb-3 hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen">
         <div className="flex items-center justify-between px-2 mb-5">
-          <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">Master Admin</h1>
-          <ThemeToggle />
+          <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-white">Master Admin</h1>
+          <ThemeToggle variant="sidebar" />
         </div>
         <nav className="space-y-0.5">
-          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press-sm whitespace-nowrap ${view === 'stores' ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] font-medium hover:bg-[var(--surface-2)]'}`}>
+          <button onClick={() => setView('stores')} className={`flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press-sm whitespace-nowrap ${view === 'stores' ? 'bg-white/[0.18] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}`}>
             <StoreIcon size={18} /> Lojas
           </button>
-          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press-sm whitespace-nowrap ${view === 'users' ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] font-medium hover:bg-[var(--surface-2)]'}`}>
+          <button onClick={() => setView('users')} className={`flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press-sm whitespace-nowrap ${view === 'users' ? 'bg-white/[0.18] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}`}>
             <Users size={18} /> Usuários (Lojistas)
           </button>
         </nav>
