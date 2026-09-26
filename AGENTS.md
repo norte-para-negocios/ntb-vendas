@@ -2044,6 +2044,67 @@ mesmo par arquivo/senha) antes de tentar de novo. O resto da configuração
 (série, endereço, CSC, NCM do produto de teste) já está pronto — só falta a
 senha certa pra completar a validação real.
 
+### Cancelamento de nota fiscal (evento 110111, migration 090, 2026-09-26)
+
+Pedido do Ramon (Sertão). Rota `app/api/fiscal/cancelar/route.ts` (service
+role, mesmo padrão de `emitir`, sempre responde JSON); lógica em
+`lib/fiscal/cancelamento.ts` (monta/assina/transmite/parseia — isolado do
+pipeline de emissão, que não foi tocado) e o prazo em
+`lib/fiscal/prazoCancelamento.ts` (sem dependência de Node, usado pela UI E
+pelo servidor). UI: Administração → Notas fiscais, botão "Cancelar nota" só
+em `autorizada` dentro do prazo, janela com justificativa (15–255, contador)
+e aviso de irreversível; status "Cancelada" (pílula cinza com ponto) +
+filtro de status novo.
+
+- **Endpoints do `NFeRecepcaoEvento4`** (fonte: nfephp-org/sped-nfe
+  `storage/wsnfe_4.00_mod55.xml` `<BA>` e `_mod65.xml` `<SVRS>`) — mesma
+  divisão da autorização:
+  - NFC-e (65) BA → SVRS: `https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx`
+    (produção `nfce.svrs.rs.gov.br`, mesmo caminho).
+  - NF-e (55) BA → SEFAZ-BA: `https://hnfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx`
+    (produção `nfe.sefaz.ba.gov.br`). **Não testado ao vivo ainda** (só NFC-e foi).
+  - SOAP 1.2, `nfeDadosMsg xmlns=".../wsdl/NFeRecepcaoEvento4"`, action
+    `.../NFeRecepcaoEvento4/nfeRecepcaoEvento`, `envEvento versao="1.00"`.
+- **XML**: `infEvento Id="ID110111"+chave+"01"`, `cOrgao` = UF da chave (29
+  mesmo indo pra SVRS), `CNPJ` = dígitos 7–20 da chave, `dhEvento` em
+  America/Sao_Paulo com `-03:00`, `detEvento versao="1.00"` com
+  `descEvento=Cancelamento`, `nProt` (da autorização), `xJust`. Assinatura
+  igual à da NF-e (C14N + RSA-SHA1), referência no `infEvento`, `Signature`
+  logo depois dele dentro de `<evento>`. mTLS com `certComCadeia`.
+- **Ambiente = o DA NOTA** (`fiscal_notas.ambiente`, conferido contra o
+  `tpAmb` do `<ide>` do nfeProc no Storage), nunca o atual da loja.
+  `transmitirEvento` recusa se o `tpAmb` do evento não bate com o host
+  (homologação = `hnfe.`/`*homologacao*`) e loga `tpAmb`+URL antes de enviar.
+- **Prazos (Bahia)**: NFC-e **30 minutos** (RICMS-BA art. 107-H, I, redação do
+  Decreto 19.142/2019 — o inciso II, 168h, é só pra NFC-e duplicada por
+  contingência, que usaria o evento 110112 "por substituição", não
+  implementado); NF-e **24 horas** (RICMS-BA art. 92). O servidor conta a
+  partir do `dhRecbto` do `protNFe` (fallback `created_at`); a UI usa
+  `created_at` (aprox.). Passou do prazo → bloqueia antes de chamar a SEFAZ
+  (a SEFAZ devolveria `501`).
+- **cStats**: lote `128` "Lote de Evento Processado" (não é o resultado!);
+  evento `135` "Evento registrado e vinculado a NF-e" e `155` (fora de prazo)
+  = cancelada → grava `status='cancelada'`, `cancelada_em` (dhRegEvento),
+  `cancelamento_protocolo`, `cancelamento_justificativa`, `cancelamento_xml`
+  (procEventoNFe) e libera `order_items.fiscal_nota_id` (mesmo princípio da
+  retransmissão rejeitada). Rejeições mapeadas em
+  `mensagemRejeicaoCancelamento`: `501`/`220` prazo, `573` duplicidade de
+  evento, `218` já cancelada, `580`/`420` nota não autorizada, `222`
+  protocolo diferente, `217` nota inexistente, `108`/`109` SEFAZ fora.
+- **Teste real (homologação, SVRS)**: NFC-e nova emitida por script isolado
+  com o certificado/CSC de homologação da Sertão em **série 99** (não mexe na
+  numeração da loja), `cStat=100`; linha gravada na ZZ Laboratorio (com o
+  certificado da Sertão ligado temporariamente) e cancelada pela UI em
+  testvendase: **`cStat=135` "Evento registrado e vinculado a NF-e"**
+  (lote 128). Reenvio do mesmo evento direto à SEFAZ: `cStat=573` "Rejeicao:
+  Duplicidade de Evento". Tudo limpo depois (nota, XML no Storage,
+  certificado/senha da ZZ, usuário QA temporário).
+- **Limitação**: como `emitir`/`pdf-url`, a rota não autentica o chamador
+  (o projeto não tem sessão verificável no servidor); a proteção é
+  `notaId` + `storeId` batendo com a linha. PDF da nota cancelada não é
+  regerado — só a lista marca "Cancelada". Exportação de período lista o
+  status mas não inclui o XML do evento no ZIP.
+
 ## Configurar operação da loja é EXCLUSIVO do Master Admin (revertido 2026-08-28)
 
 A aba "Operação" (Administração, painel do lojista) — que deixava o
