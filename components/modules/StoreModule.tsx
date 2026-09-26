@@ -12,7 +12,7 @@ import StoreSettingsView from '@/components/modules/StoreSettingsView';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
-import { Button, Card, Badge, Modal, Input, Collapsible } from '@/components/ui';
+import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
@@ -1875,15 +1875,15 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
     const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
     return (
-        <Modal isOpen={!!product} onClose={onClose} title="Adicionar Item" size="md">
+        <Modal isOpen={!!product} onClose={onClose} title="Adicionar item" size="md">
             <div className="space-y-4">
                 <div className="flex gap-4">
                     {product.image_url && (
-                        <Image src={product.image_url} alt={product.name} width={96} height={96} className="w-24 h-24 object-cover rounded-lg shadow-sm" />
+                        <Image src={product.image_url} alt={product.name} width={96} height={96} className="w-24 h-24 object-cover rounded-[14px]" />
                     )}
                     <div>
-                        <h4 className="font-bold text-lg">{product.name}</h4>
-                        <p className="text-[var(--text-muted)] text-sm line-clamp-2">{product.description}</p>
+                        <h4 className="font-semibold text-[20px] tracking-[-0.01em] text-[var(--text)]">{product.name}</h4>
+                        <p className="text-[var(--text-muted)] text-[13px] line-clamp-2">{product.description}</p>
                         {/* Preço promocional (migration 019): garçom precisa ver/calcular
                             o mesmo preço efetivo que create_order_secure cobra no servidor,
                             senão diverge do que é dito ao cliente na mesa. Mesmo padrão
@@ -1894,59 +1894,59 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                             const hasActivePromo = effectivePrice < product.price;
                             return hasActivePromo ? (
                                 <span className="flex items-baseline gap-1.5 mt-1">
-                                    <span className="text-xs text-[var(--text-muted)] line-through">R$ {formatBRL(product.price)}</span>
-                                    <span className="text-[var(--brand)] font-bold">R$ {formatBRL(effectivePrice)}</span>
+                                    <span className="text-[13px] text-[var(--text-muted)] line-through num">R$ {formatBRL(product.price)}</span>
+                                    <span className="text-[var(--brand)] font-semibold text-[17px] num">R$ {formatBRL(effectivePrice)}</span>
                                 </span>
                             ) : (
-                                <span className="text-[var(--brand)] font-bold mt-1 block">R$ {formatBRL(product.price)}</span>
+                                <span className="text-[var(--text)] font-semibold text-[17px] num mt-1 block">R$ {formatBRL(product.price)}</span>
                             );
                         })()}
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
-                    <span className="text-sm font-bold text-[var(--text)]">Quantidade</span>
-                    <div className="flex items-center gap-4 bg-[var(--surface)] px-2 py-1 rounded-lg shadow-sm border border-[var(--border)]">
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="max-sm:min-w-11 max-sm:min-h-11 max-sm:grid max-sm:place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Minus size={18} /></button>
-                        <span className="font-bold text-lg w-8 text-center">{qty}</span>
-                        <button onClick={() => setQty(qty + 1)} className="max-sm:min-w-11 max-sm:min-h-11 max-sm:grid max-sm:place-items-center p-2 text-[var(--brand)] hover:bg-[var(--surface-2)] rounded-md u-motion u-press-sm"><Plus size={18} /></button>
+                <div className="flex items-center justify-between bg-[var(--surface-2)] pl-4 pr-2 py-2 rounded-[14px]">
+                    <span className="text-[15px] font-medium text-[var(--text)]">Quantidade</span>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setQty(Math.max(1, qty - 1))} aria-label="Diminuir quantidade" className="w-9 h-9 max-sm:w-11 max-sm:h-11 grid place-items-center rounded-full bg-[var(--surface)] text-[var(--brand)] shadow-[var(--shadow-sm)] u-motion u-press-sm"><Minus size={18} /></button>
+                        <span className="font-semibold text-[17px] num w-8 text-center">{qty}</span>
+                        <button onClick={() => setQty(qty + 1)} aria-label="Aumentar quantidade" className="w-9 h-9 max-sm:w-11 max-sm:h-11 grid place-items-center rounded-full bg-[var(--surface)] text-[var(--brand)] shadow-[var(--shadow-sm)] u-motion u-press-sm"><Plus size={18} /></button>
                     </div>
                 </div>
 
                 {groups.map(group => (
-                    <div key={group.id} className="border border-[var(--border)] rounded-xl p-3 bg-[var(--surface-2)]">
-                        <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-bold text-sm text-[var(--text)]">{group.name}</h4>
+                    <div key={group.id} className="rounded-[14px] px-4 py-3 bg-[var(--surface-2)]">
+                        <div className="flex items-center justify-between mb-1">
+                            <h4 className="font-semibold text-[15px] text-[var(--text)]">{group.name}</h4>
                             {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
                         </div>
                         {group.options.map(opt => (
-                            <label key={opt.id} className="flex items-center justify-between py-2 px-1 cursor-pointer min-h-11">
-                                <span className="flex items-center gap-2 text-sm text-[var(--text)]">
+                            <label key={opt.id} className="flex items-center justify-between py-2 cursor-pointer min-h-11 border-t border-[var(--border)] first-of-type:border-t-0">
+                                <span className="flex items-center gap-3 text-[15px] text-[var(--text)]">
                                     <input
                                         type={group.type === 'single' ? 'radio' : 'checkbox'}
                                         name={`store-group-${group.id}`}
                                         checked={(selections[group.id] || []).includes(opt.id)}
                                         onChange={() => toggleOption(group, opt.id)}
-                                        className="w-4 h-4 accent-[var(--brand)]"
+                                        className="w-[18px] h-[18px] accent-[var(--brand)]"
                                     />
                                     {opt.name}
                                 </span>
-                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-xs font-semibold">+R$ {formatBRL(opt.price_delta)}</span>}
+                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-[13px] font-medium num">+R$ {formatBRL(opt.price_delta)}</span>}
                             </label>
                         ))}
                     </div>
                 ))}
 
                 <Input
-                    label="Observação (Opcional)"
+                    label="Observação (opcional)"
                     placeholder="Ex: Lojista: Sem cebola"
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                 />
 
                 <div className="max-sm:sticky max-sm:bottom-[calc(-1*max(1.25rem,env(safe-area-inset-bottom)))] max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pt-2 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:border-t max-sm:border-[var(--border)] max-sm:z-10">
-                    <Button className="w-full mt-4 max-sm:mt-1 h-12 text-lg" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
-                        Lançar Pedido • R$ {formatBRL(unitPrice * qty)}
+                    <Button size="lg" className="w-full mt-4 max-sm:mt-1 !h-[52px] !text-[17px]" disabled={missingRequired} onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}>
+                        Lançar pedido · R$ {formatBRL(unitPrice * qty)}
                     </Button>
                     {missingRequired && <p className="text-xs text-center text-[var(--err)] mt-4 max-sm:mt-1">Escolha uma opção obrigatória para continuar.</p>}
                 </div>
@@ -2169,7 +2169,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                             flushLoose();
                             nodes.push(
                                 <div key={item.group.id}>
-                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">{item.group.name}</p>
+                                    <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">{item.group.name}</p>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         {item.categories.map(renderCategoryButton)}
                                     </div>
@@ -2314,9 +2314,9 @@ const PaymentCaptureFields: React.FC<{
     showEmitirNotaToggle, emitirNota, onEmitirNotaChange, serviceFeeToggle, children,
 }) => (
     <div className="space-y-6 pt-2">
-        <div className="bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] text-center">
-            <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total a Receber</p>
-            <p className="text-4xl font-black text-[var(--text)] mt-1">R$ {formatBRL(total)}</p>
+        <div className="text-center pt-1">
+            <p className="text-[13px] font-medium text-[var(--text-muted)]">Total a receber</p>
+            <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ {formatBRL(total)}</p>
             {serviceFeeToggle}
         </div>
 
@@ -2332,14 +2332,14 @@ const PaymentCaptureFields: React.FC<{
                 <button
                     key={m.id}
                     onClick={() => onMethodChange(m.id)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 u-motion u-press-sm ${
+                    className={`flex flex-col items-center justify-center min-h-[72px] p-3 rounded-[14px] u-motion u-press-sm ${
                         currentMethod === m.id
-                        ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
-                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border)]'
+                        ? 'ring-2 ring-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]'
+                        : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
                     }`}
                 >
-                    <m.icon size={24} className="mb-1" />
-                    <span className="text-xs font-bold">{m.label}</span>
+                    <m.icon size={22} className="mb-1.5" />
+                    <span className="text-[13px] font-semibold">{m.label}</span>
                 </button>
             ))}
         </div>
@@ -2351,16 +2351,16 @@ const PaymentCaptureFields: React.FC<{
             bloqueia lançar pagamento de cartão sem bandeira escolhida. */}
         {(currentMethod === 'CREDIT' || currentMethod === 'DEBIT') && (
             <div className="animate-fade-in">
-                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Bandeira</p>
-                <div className="grid grid-cols-3 gap-2">
+                <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Bandeira</p>
+                <div className="flex flex-wrap gap-2">
                     {Object.entries(CARD_BRAND_LABELS).map(([id, label]) => (
                         <button
                             key={id}
                             onClick={() => onBrandChange(currentBrand === id ? '' : id)}
-                            className={`py-2 max-sm:py-3 rounded-lg border-2 text-xs font-bold u-motion u-press-sm ${
+                            className={`h-9 max-sm:h-11 px-4 rounded-full text-[13px] font-semibold u-motion u-press-sm ${
                                 currentBrand === id
-                                ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]'
-                                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
+                                ? 'bg-[var(--brand)] text-white'
+                                : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
                             }`}
                         >
                             {label}
@@ -2373,38 +2373,38 @@ const PaymentCaptureFields: React.FC<{
         {/* Amount Input */}
         <div className="flex gap-2">
             <div className="flex-1 relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-semibold">R$</span>
                 <input
                     type="number"
                     inputMode="decimal"
                     min="0"
                     step="0.01"
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                    className="w-full h-12 pl-11 pr-4 rounded-[14px] bg-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 font-semibold text-lg num"
                     placeholder="0.00"
                     value={currentAmount}
                     onChange={e => onAmountChange(e.target.value)}
                 />
             </div>
-            <Button onClick={onAddPayment} className="px-6 bg-[var(--ink)] text-white">
-                <Plus size={20} />
+            <Button onClick={onAddPayment} aria-label="Lançar pagamento" className="!w-12 !h-12 !px-0 shrink-0">
+                <Plus size={22} />
             </Button>
         </div>
 
         {/* Payment List */}
-        <div className="bg-[var(--surface-2)] rounded-xl p-3 border border-[var(--border)] min-h-[100px]">
+        <div className="bg-[var(--surface-2)] rounded-[14px] overflow-hidden">
             {methods.length > 0 ? (
-                <ul className="space-y-2">
+                <ul className="divide-y divide-[var(--border)]">
                     {methods.map((p, idx) => (
-                        <li key={idx} className="flex justify-between items-center text-sm bg-[var(--surface)] p-2 rounded border border-[var(--border)] shadow-sm">
+                        <li key={idx} className="flex justify-between items-center text-[15px] px-4 py-2.5">
                             <div className="flex items-center gap-2">
-                                <span className="font-bold text-[var(--text)]">
+                                <span className="font-semibold text-[var(--text)]">
                                     {getPaymentMethodLabel(p.method)}
                                     {p.brand && <span className="font-normal text-[var(--text-muted)]"> · {getCardBrandLabel(p.brand)}</span>}
                                 </span>
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="num font-bold">R$ {formatBRL(p.amount)}</span>
-                                <button onClick={() => onRemovePayment(idx)} className="max-sm:p-2.5 text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
+                                <span className="num font-semibold">R$ {formatBRL(p.amount)}</span>
+                                <button onClick={() => onRemovePayment(idx)} aria-label="Remover pagamento" className="p-1.5 max-sm:p-2.5 rounded-full text-[var(--err)]/70 hover:text-[var(--err)] hover:bg-[var(--err)]/10 u-motion u-press">
                                     <Trash2 size={16} />
                                 </button>
                             </div>
@@ -2412,7 +2412,7 @@ const PaymentCaptureFields: React.FC<{
                     ))}
                 </ul>
             ) : (
-                <p className="text-center text-[var(--text-muted)] text-xs py-8">Nenhum pagamento lançado</p>
+                <p className="text-center text-[var(--text-muted)] text-[13px] py-6">Nenhum pagamento lançado</p>
             )}
         </div>
 
@@ -2424,8 +2424,8 @@ const PaymentCaptureFields: React.FC<{
             nenhum precisa de texto explicativo aqui, o toggle já é
             autoexplicativo. */}
         {showEmitirNotaToggle && (
-            <div className="flex items-center justify-between bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
-                <span className="text-sm font-bold text-[var(--text)]">Emitir nota fiscal desta venda</span>
+            <div className="flex items-center justify-between bg-[var(--surface-2)] px-4 py-3 rounded-[14px]">
+                <span className="text-[15px] font-medium text-[var(--text)]">Emitir nota fiscal desta venda</span>
                 <button
                     type="button"
                     onClick={() => onEmitirNotaChange?.(!emitirNota)}
@@ -2445,8 +2445,8 @@ const PaymentCaptureFields: React.FC<{
         <div className="border-t border-[var(--border)] pt-4 max-sm:sticky max-sm:bottom-[calc(-1*max(1.25rem,env(safe-area-inset-bottom)))] max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:bg-[var(--surface)] max-sm:z-10">
             <div className="space-y-1 mb-4 px-2">
                 <div className="flex justify-between text-sm">
-                    <span className="text-[var(--text-muted)]">Restante a Pagar:</span>
-                    <span className="font-bold text-[var(--err)]">
+                    <span className="text-[var(--text-muted)]">Restante a pagar</span>
+                    <span className="font-semibold num text-[var(--err)]">
                         R$ {formatBRL(remainingToPay)}
                     </span>
                 </div>
@@ -2457,8 +2457,8 @@ const PaymentCaptureFields: React.FC<{
                 )}
                 {changeDue > 0 && (
                     <div className="flex justify-between text-sm">
-                        <span className="text-[var(--text-muted)]">Troco:</span>
-                        <span className="font-bold text-[var(--ok)]">
+                        <span className="text-[var(--text-muted)]">Troco</span>
+                        <span className="font-semibold num text-[var(--ok)]">
                             R$ {formatBRL(changeDue)}
                         </span>
                     </div>
@@ -2476,10 +2476,11 @@ const PaymentCaptureFields: React.FC<{
                 // funcionava. `() => onFinish()` garante que nenhum argumento é
                 // repassado, sempre caindo no fallback correto (`paymentMethods`).
                 onClick={() => onFinish()}
-                className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white shadow-lg shadow-[var(--ok)]/20"
+                size="lg"
+                className="w-full !h-[52px] !text-[17px]"
                 disabled={finishDisabled}
             >
-                <CheckCircle size={20} className="mr-2"/> {finishLabel}
+                <CheckCircle size={20} /> {finishLabel}
             </Button>
         </div>
     </div>
@@ -4515,11 +4516,11 @@ NOTIFY pgrst, 'reload schema';`;
                 return (
                     <div className="fixed inset-0 z-50 bg-[var(--surface)] flex flex-col">
                         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)]">
-                            <h3 className="font-bold text-[var(--text)] flex items-center gap-2 min-w-0">
-                                <UtensilsCrossed size={18} className="flex-shrink-0" />
-                                <span className="truncate">Mesa {selectedTable.number} — Adicionar Pedido</span>
+                            <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)] flex items-center gap-2 min-w-0">
+                                <UtensilsCrossed size={18} className="flex-shrink-0 text-[var(--text-muted)]" />
+                                <span className="truncate">Mesa {selectedTable.number} <span className="text-[var(--text-muted)] font-normal">· Adicionar pedido</span></span>
                             </h3>
-                            <Button variant="secondary" size="sm" onClick={() => setShowMenuMode(false)} className="flex-shrink-0">
+                            <Button variant="secondary" size="sm" onClick={() => setShowMenuMode(false)} className="flex-shrink-0 max-sm:!h-11">
                                 <X size={16} className="mr-1.5" /> Sair
                             </Button>
                         </div>
@@ -4533,8 +4534,8 @@ NOTIFY pgrst, 'reload schema';`;
                                 (otimista no handleAddItem + Realtime). */}
                             <div className="lg:w-[30%] lg:min-w-[300px] lg:max-w-[420px] flex-shrink-0 border-t lg:border-t-0 lg:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
                                 <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface)] flex-shrink-0">
-                                    <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Receipt size={16}/> Já pedido nesta mesa</h4>
-                                    <span className="text-xs text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
+                                    <h4 className="font-semibold text-[15px] text-[var(--text)] flex items-center gap-2"><Receipt size={16} className="text-[var(--text-muted)]"/> Já pedido nesta mesa</h4>
+                                    <span className="text-[13px] text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
                                 </div>
                                 <div className="flex-1 overflow-y-auto min-h-[120px]">
                                     {itens.length === 0 ? (
@@ -4542,11 +4543,11 @@ NOTIFY pgrst, 'reload schema';`;
                                     ) : itens.map(item => (
                                         <div key={item.id} className="flex items-start justify-between gap-2 p-3 border-b border-[var(--border)] text-sm bg-[var(--surface)]">
                                             <div className="min-w-0 flex-1">
-                                                <div className="font-bold text-[var(--text)] leading-tight">
-                                                    <span className="text-xs text-[var(--text-muted)] mr-1">x{item.quantity}</span>
+                                                <div className="font-semibold text-[15px] text-[var(--text)] leading-tight">
+                                                    <span className="text-[13px] font-medium text-[var(--text-muted)] mr-1 num">{item.quantity}×</span>
                                                     {getOrderItemDisplayName(item)}
                                                 </div>
-                                                <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                                                <div className="text-[13px] text-[var(--text-muted)] mt-0.5 num">
                                                     R$ {formatBRL(item.price_at_time * item.quantity)}
                                                     {orderFlow !== 'direct_print' && (
                                                         <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
@@ -4568,8 +4569,8 @@ NOTIFY pgrst, 'reload schema';`;
                                     ))}
                                 </div>
                                 <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between flex-shrink-0">
-                                    <span className="font-bold text-[var(--text)]">Total</span>
-                                    <span className="font-black text-lg text-[var(--brand)]">R$ {formatBRL(resumo.total || 0)}</span>
+                                    <span className="font-medium text-[15px] text-[var(--text-muted)]">Total</span>
+                                    <span className="font-bold text-[22px] num tracking-[-0.01em] text-[var(--text)]">R$ {formatBRL(resumo.total || 0)}</span>
                                 </div>
                             </div>
                         </div>
@@ -4620,28 +4621,22 @@ NOTIFY pgrst, 'reload schema';`;
             </Modal>
 
             {/* PAYMENT MODAL */}
-            <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Receber Pagamento" size="lg">
+            <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Receber pagamento" size="lg">
                 <div className="space-y-4">
-                    {/* Tabs */}
-                    <div className="flex p-1 bg-[var(--surface-2)] rounded-lg">
-                        <button onClick={() => setPaymentTab('payment')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'payment' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
-                            <Wallet size={14}/> Pagamento
-                        </button>
-                        <button onClick={() => setPaymentTab('split')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'split' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
-                            <Users size={14}/> Dividir igual
-                        </button>
-                        {/* Reunião 2026-09-10 (min 32:14): pediram "emitir nota fiscal
-                            diferente para cada pessoa" — recurso que já existia AQUI
-                            (migration 055), mas com o rótulo "Por Cliente" ninguém
-                            associou, e quem estava dividindo a conta ficou na aba ao
-                            lado achando que não existia ("não entendi nada disso aqui"). */}
-                        <button onClick={() => setPaymentTab('users')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'users' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
-                            <List size={14}/> Por pessoa
-                        </button>
-                        <button onClick={() => setPaymentTab('calculator')} className={`flex-1 py-1.5 text-xs max-sm:py-2.5 max-sm:text-[13px] font-bold rounded-md u-motion u-press-sm flex flex-col items-center gap-1 ${paymentTab === 'calculator' ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}>
-                            <Calculator size={14}/> Calculadora
-                        </button>
-                    </div>
+                    {/* Tabs — Reunião 2026-09-10 (min 32:14): "Por Cliente" virou
+                        "Por pessoa" porque ninguém associava ao recurso de nota
+                        fiscal por pessoa (migration 055). */}
+                    <SegmentedControl
+                        className="flex w-full [&>button]:flex-1 max-sm:[&>button]:px-1.5"
+                        value={paymentTab}
+                        onChange={(v) => setPaymentTab(v as typeof paymentTab)}
+                        options={[
+                            { value: 'payment', label: 'Pagamento' },
+                            { value: 'split', label: 'Dividir igual' },
+                            { value: 'users', label: 'Por pessoa' },
+                            { value: 'calculator', label: 'Calculadora' },
+                        ]}
+                    />
 
                     <div className="sm:max-h-[60vh] sm:overflow-y-auto sm:pr-1">
                         {paymentTab === 'payment' && (
@@ -4660,7 +4655,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 changeDue={changeDue}
                                 onFinish={handleFinishPayment}
                                 finishDisabled={remainingToPay > 0.01}
-                                finishLabel="FINALIZAR MESA"
+                                finishLabel="Finalizar mesa"
                                 showEmitirNotaToggle={emissaoFiscalConfigurada}
                                 emitirNota={emitirNotaFiscal}
                                 onEmitirNotaChange={setEmitirNotaFiscal}
@@ -4668,7 +4663,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <button
                                         type="button"
                                         onClick={() => handleToggleServiceFee(selectedTable.id, !currentTableSummary?.isServiceFeeRemovedForTable)}
-                                        className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-[var(--r-md)] border border-dashed border-[var(--border)] text-[12px] font-bold text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--brand)] u-motion u-press-sm"
+                                        className="mt-2 inline-flex items-center justify-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion u-press-sm"
                                     >
                                         {currentTableSummary?.isServiceFeeRemovedForTable
                                             ? <><Plus size={14} /> Cobrar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>
@@ -4680,15 +4675,15 @@ NOTIFY pgrst, 'reload schema';`;
                                     lib/fiscal/xml.ts) — nome só é usado no <dest> da NF-e
                                     (NFC-e manda só o documento, sem endereço/xNome). */}
                                 {(nfeModeloAtivo || nfceModeloAtivo) && (
-                                    <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
-                                        <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                                    <div className="bg-[var(--surface-2)] p-4 rounded-[14px] space-y-2">
+                                        <p className="text-[13px] font-semibold text-[var(--text-muted)]">
                                             Documento do destinatário (opcional)
                                         </p>
                                         <input
                                             type="text"
                                             inputMode="numeric"
                                             autoComplete="off"
-                                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                                            className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                                             placeholder="CPF ou CNPJ do cliente"
                                             value={paymentDestCpfCnpj}
                                             onChange={(e) => setPaymentDestCpfCnpj(e.target.value)}
@@ -4696,7 +4691,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         {nfeModeloAtivo && (
                                             <input
                                                 type="text"
-                                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                                                className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                                                 placeholder="Nome do cliente"
                                                 value={paymentDestNome}
                                                 onChange={(e) => setPaymentDestNome(e.target.value)}
@@ -4723,18 +4718,18 @@ NOTIFY pgrst, 'reload schema';`;
                                     <button
                                         type="button"
                                         onClick={() => setPaymentTab('users')}
-                                        className="w-full flex items-center justify-between gap-2 p-3 rounded-[var(--r-md)] bg-[var(--brand)]/10 border border-[var(--brand)]/30 text-left u-motion u-press-sm"
+                                        className="w-full flex items-center justify-between gap-2 p-3 rounded-[14px] bg-[var(--brand-soft)] text-left u-motion u-press-sm"
                                     >
-                                        <span className="text-[12px] font-bold text-[var(--brand)]">
+                                        <span className="text-[13px] font-medium text-[var(--brand)]">
                                             Esta mesa tem {Object.keys(usersBreakdown).length} pessoas identificadas — dá pra cobrar e emitir nota fiscal separada pra cada uma.
                                         </span>
                                         <ArrowRight size={16} className="text-[var(--brand)] shrink-0" />
                                     </button>
                                 )}
-                                <div className="bg-[var(--brand)]/5 p-4 rounded-xl border border-[var(--brand)]/10 text-center">
-                                    <p className="text-sm text-[var(--text-muted)] uppercase font-bold tracking-wider">Total da Mesa</p>
-                                    <p className="text-3xl font-black text-[var(--brand)] mt-1">R$ {formatBRL(currentTableSummary.total)}</p>
-                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                <div className="text-center pt-1">
+                                    <p className="text-[13px] font-medium text-[var(--text-muted)]">Total da mesa</p>
+                                    <p className="text-[40px] leading-tight font-bold num tracking-[-0.02em] text-[var(--text)] mt-0.5">R$ {formatBRL(currentTableSummary.total)}</p>
+                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">
                                         {currentTableSummary.isServiceFeeEnabled
                                             ? `Inclui R$ ${formatBRL(currentTableSummary.serviceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : currentTableSummary.isServiceFeeRemovedForTable
@@ -4743,25 +4738,25 @@ NOTIFY pgrst, 'reload schema';`;
                                     </p>
                                 </div>
                                 <div className="flex items-center justify-center gap-6 py-2">
-                                    <button onClick={() => setPaymentPeople(Math.max(1, paymentPeople - 1))} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
+                                    <button onClick={() => setPaymentPeople(Math.max(1, paymentPeople - 1))} aria-label="Menos uma pessoa" className="w-11 h-11 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Minus size={18} /></button>
                                     <div className="text-center min-w-[80px]">
-                                        <span className="block text-2xl font-bold text-[var(--text)]">{paymentPeople}</span>
-                                        <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase">Pessoas</span>
+                                        <span className="block text-[28px] font-bold num text-[var(--text)]">{paymentPeople}</span>
+                                        <span className="text-[13px] text-[var(--text-muted)]">Pessoas</span>
                                     </div>
-                                    <button onClick={() => setPaymentPeople(paymentPeople + 1)} className="w-10 h-10 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Plus size={18}/></button>
+                                    <button onClick={() => setPaymentPeople(paymentPeople + 1)} aria-label="Mais uma pessoa" className="w-11 h-11 bg-[var(--surface-2)] rounded-full flex items-center justify-center hover:bg-[var(--border)] u-motion u-press-sm"><Plus size={18}/></button>
                                 </div>
-                                <div className="border-t border-dashed border-[var(--border)] pt-4 text-center">
-                                    <p className="text-[var(--text-muted)] text-sm mb-1">Valor por pessoa</p>
-                                    <p className="text-2xl font-bold text-[var(--text)]">R$ {formatBRL(currentTableSummary.total / paymentPeople)}</p>
-                                    <Button 
-                                        className="mt-4" 
-                                        variant="secondary"
+                                <div className="bg-[var(--surface-2)] rounded-[14px] p-4 text-center">
+                                    <p className="text-[var(--text-muted)] text-[13px] mb-0.5">Valor por pessoa</p>
+                                    <p className="text-[28px] font-bold num tracking-[-0.01em] text-[var(--text)]">R$ {formatBRL(currentTableSummary.total / paymentPeople)}</p>
+                                    <Button
+                                        className="mt-3"
+                                        variant="primary"
                                         onClick={() => {
                                             setCurrentPaymentAmount((currentTableSummary.total / paymentPeople).toFixed(2));
                                             setPaymentTab('payment');
                                         }}
                                     >
-                                        Preencher Valor no Pagamento
+                                        Preencher valor no pagamento
                                     </Button>
                                 </div>
                             </div>
@@ -4772,7 +4767,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 {/* Reunião 2026-09-10 (min 33:06): ao chegar nesta aba, a
                                     reação foi "não entendi nada disso aqui" — os botões
                                     existiam mas nada dizia o que faziam. */}
-                                <p className="text-[11px] text-[var(--text-muted)] px-1">
+                                <p className="text-[13px] text-[var(--text-muted)] px-1">
                                     Cobre cada pessoa separadamente. "Emitir nota" gera uma nota fiscal só com os itens daquela pessoa — o que já foi faturado aqui não entra de novo na nota do fechamento da mesa.
                                 </p>
                                 {/* Task 3: uma nota só (não por cartão de pessoa) quando a
@@ -4785,14 +4780,14 @@ NOTIFY pgrst, 'reload schema';`;
                                     </p>
                                 )}
                                 {Object.entries(usersBreakdown).map(([name, data]: [string, any]) => (
-                                    <div key={name} className="border border-[var(--border)] rounded-xl overflow-hidden">
-                                        <div className="bg-[var(--surface-2)] p-3 flex justify-between items-center border-b border-[var(--border)]">
-                                            <span className="font-bold text-[var(--text)] flex items-center gap-2"><User size={14}/> {name}</span>
-                                            <span className="font-bold text-[var(--brand)]">R$ {formatBRL(data.total)}</span>
+                                    <div key={name} className="bg-[var(--surface-2)] rounded-[14px] overflow-hidden">
+                                        <div className="px-4 py-3 flex justify-between items-center">
+                                            <span className="font-semibold text-[var(--text)] flex items-center gap-2"><User size={15} className="text-[var(--text-muted)]"/> {name}</span>
+                                            <span className="font-semibold num text-[var(--text)]">R$ {formatBRL(data.total)}</span>
                                         </div>
                                         <div className="p-2 space-y-1">
                                             {data.items.map((it: any) => (
-                                                <div key={it.id} className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1">
+                                                <div key={it.id} className="flex justify-between items-center text-[13px] text-[var(--text-muted)] px-2 py-1">
                                                     <div className="flex items-center gap-1.5">
                                                         <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
                                                     </div>
@@ -4800,32 +4795,34 @@ NOTIFY pgrst, 'reload schema';`;
                                                 </div>
                                             ))}
                                             {currentTableSummary?.isServiceFeeEnabled && (
-                                                <div className="flex justify-between items-center text-xs text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
-                                                    <span>Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
+                                                <div className="flex justify-between items-center text-[13px] text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
+                                                    <span>Taxa de serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
                                                     <span>{data.serviceFee.toFixed(2)}</span>
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="p-2 border-t border-[var(--border)] space-y-1.5">
+                                        <div className="p-3 pt-1 flex flex-col sm:flex-row gap-2">
                                             <Button
-                                                className="w-full text-xs h-8"
-                                                variant="secondary"
+                                                className="w-full sm:flex-1 max-sm:!h-11"
+                                                size="sm"
+                                                variant="primary"
                                                 onClick={() => {
                                                     setCurrentPaymentAmount(data.total.toFixed(2));
                                                     setPaymentTab('payment');
                                                 }}
                                             >
-                                                Lançar Pagamento de {name}
+                                                Lançar pagamento de {name}
                                             </Button>
                                             {emissaoFiscalConfigurada && (
                                                 <Button
-                                                    className="w-full text-xs h-8"
+                                                    className="w-full sm:flex-1 max-sm:!h-11 !bg-[var(--surface)]"
+                                                    size="sm"
                                                     variant="outline"
                                                     isLoading={emitindoNotaDe === name}
                                                     disabled={emitindoNotaDe !== null}
                                                     onClick={() => handleEmitirNotaIndividual(name, data.items)}
                                                 >
-                                                    Emitir Nota Fiscal de {name}
+                                                    Emitir nota fiscal de {name}
                                                 </Button>
                                             )}
                                         </div>
@@ -4837,7 +4834,7 @@ NOTIFY pgrst, 'reload schema';`;
 
                         {paymentTab === 'calculator' && currentTableSummary && (
                             <div className="space-y-2 pt-2 animate-fade-in">
-                                <div className="bg-[var(--info)]/10 p-3 rounded-lg text-xs text-[var(--info)] mb-2">
+                                <div className="px-1 text-[13px] text-[var(--text-muted)] mb-2">
                                     Selecione os itens para calcular um subtotal.
                                 </div>
                                 {currentTableSummary.allItems.map(item => {
@@ -4845,16 +4842,16 @@ NOTIFY pgrst, 'reload schema';`;
                                     const selectedQty = paymentSelectedItems[item.id] || 0;
 
                                     return (
-                                        <div key={item.id} onClick={() => toggleSelection(item.id, item.quantity)} className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'border-[var(--brand)] bg-[var(--brand)]/5' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+                                        <div key={item.id} onClick={() => toggleSelection(item.id, item.quantity)} className={`flex items-center gap-3 p-3 rounded-[14px] transition-all cursor-pointer ${isSelected ? 'ring-2 ring-[var(--brand)] bg-[var(--brand-soft)]' : 'bg-[var(--surface-2)]'}`}>
                                             <div className={`text-[var(--brand)] ${isSelected ? 'opacity-100' : 'opacity-30'}`}>
                                                 {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
                                             </div>
                                             <div className="flex-1">
                                                 <div className="flex justify-between items-start">
-                                                    <span className={`text-sm font-bold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>
+                                                    <span className={`text-[15px] font-semibold ${isSelected ? 'text-[var(--brand)]' : 'text-[var(--text)]'}`}>
                                                         {getOrderItemDisplayName(item)}
                                                     </span>
-                                                    <span className="text-sm font-medium">R$ {formatBRL(item.price_at_time)}</span>
+                                                    <span className="text-[15px] font-medium num">R$ {formatBRL(item.price_at_time)}</span>
                                                 </div>
 
                                                 {isSelected && item.quantity > 1 && (
@@ -4874,12 +4871,12 @@ NOTIFY pgrst, 'reload schema';`;
                                     );
                                 })}
 
-                                <div className="mt-4 p-4 bg-[var(--ink)] text-white rounded-xl">
+                                <div className="mt-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
                                     <div className="flex justify-between items-center">
-                                        <span className="font-bold">Total Selecionado</span>
-                                        <span className="font-black text-xl">R$ {formatBRL(calculatorTotal)}</span>
+                                        <span className="font-semibold text-[var(--text)]">Total selecionado</span>
+                                        <span className="font-bold num text-[22px] tracking-[-0.01em] text-[var(--text)]">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
-                                    <div className="text-xs text-white/50 mt-1 text-right">
+                                    <div className="text-[13px] text-[var(--text-muted)] mt-1 text-right">
                                         {currentTableSummary.isServiceFeeEnabled
                                             ? `Inclui R$ ${formatBRL(calculatorServiceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : currentTableSummary.isServiceFeeRemovedForTable
@@ -4887,14 +4884,14 @@ NOTIFY pgrst, 'reload schema';`;
                                                 : 'Esta loja não cobra taxa de serviço'}
                                     </div>
                                     <Button
-                                        className="w-full mt-3 bg-white text-[var(--ink)] hover:bg-[var(--surface-2)]"
+                                        className="w-full mt-3"
                                         onClick={() => {
                                             setCurrentPaymentAmount(calculatorTotal.toFixed(2));
                                             setPaymentTab('payment');
                                         }}
                                         disabled={calculatorTotal <= 0}
                                     >
-                                        Preencher Valor no Pagamento
+                                        Preencher valor no pagamento
                                     </Button>
                                 </div>
                             </div>
@@ -5907,15 +5904,15 @@ const CounterView: React.FC<{
                 NF-e, ver lib/fiscal/xml.ts. */}
             <Modal isOpen={!!closingOrder} onClose={() => setClosingOrder(null)} title="Fechar Pedido">
                 <div className="space-y-4">
-                    <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
-                        <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                    <div className="bg-[var(--surface-2)] p-4 rounded-[14px] space-y-2">
+                        <p className="text-[13px] font-semibold text-[var(--text-muted)]">
                             Documento do destinatário (opcional)
                         </p>
                         <input
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                            className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                             placeholder="CPF ou CNPJ do cliente"
                             value={destCpfCnpj}
                             onChange={(e) => setDestCpfCnpj(e.target.value)}
@@ -5923,7 +5920,7 @@ const CounterView: React.FC<{
                         {nfeModeloAtivo && (
                             <input
                                 type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                                className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                                 placeholder="Nome do cliente"
                                 value={destNome}
                                 onChange={(e) => setDestNome(e.target.value)}
@@ -5952,7 +5949,7 @@ const CounterView: React.FC<{
                 TablesView usa pra mesa (PaymentCaptureFields), nunca uma UI
                 paralela — "one payment mechanism", ver comentário do
                 componente. */}
-            <Modal isOpen={!!paymentOrder} onClose={() => setPaymentOrder(null)} title="Receber Pagamento" size="lg">
+            <Modal isOpen={!!paymentOrder} onClose={() => setPaymentOrder(null)} title="Receber pagamento" size="lg">
                 <PaymentCaptureFields
                     total={paymentTotalDue}
                     methods={paymentMethods}
@@ -5970,7 +5967,7 @@ const CounterView: React.FC<{
                     finishDisabled={remainingToPay > 0.01}
                     // No "paga primeiro" este botão NÃO finaliza a venda —
                     // o pedido ainda vai ser preparado e entregue depois.
-                    finishLabel={paymentFirst ? "RECEBER PAGAMENTO" : "FINALIZAR VENDA"}
+                    finishLabel={paymentFirst ? "Receber pagamento" : "Finalizar venda"}
                     showEmitirNotaToggle={emissaoFiscalConfigurada}
                     emitirNota={emitirNotaFiscal}
                     onEmitirNotaChange={setEmitirNotaFiscal}
@@ -5978,15 +5975,15 @@ const CounterView: React.FC<{
                     {/* Destinatário (Task 17; 2026-09-21: NF-e ou NFC-e) —
                         mesma posição/campos que TablesView usa. */}
                     {(nfeModeloAtivo || nfceModeloAtivo) && (
-                        <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
-                            <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                        <div className="bg-[var(--surface-2)] p-4 rounded-[14px] space-y-2">
+                            <p className="text-[13px] font-semibold text-[var(--text-muted)]">
                                 Documento do destinatário (opcional)
                             </p>
                             <input
                                 type="text"
                                 inputMode="numeric"
                                 autoComplete="off"
-                                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                                className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                                 placeholder="CPF ou CNPJ do cliente"
                                 value={destCpfCnpj}
                                 onChange={(e) => setDestCpfCnpj(e.target.value)}
@@ -5994,7 +5991,7 @@ const CounterView: React.FC<{
                             {nfeModeloAtivo && (
                                 <input
                                     type="text"
-                                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                                    className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                                     placeholder="Nome do cliente"
                                     value={destNome}
                                     onChange={(e) => setDestNome(e.target.value)}
@@ -6862,13 +6859,13 @@ const CaixaView: React.FC<{
                             Fundo de troco
                         </label>
                         <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-semibold">R$</span>
                             <input
                                 type="number"
                                 inputMode="decimal"
                                 min="0"
                                 step="0.01"
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                                className="w-full h-12 pl-11 pr-4 rounded-[14px] bg-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 font-semibold text-lg num"
                                 placeholder="0.00"
                                 value={openingFloat}
                                 onChange={e => setOpeningFloat(e.target.value)}
@@ -7198,14 +7195,14 @@ const CaixaView: React.FC<{
                             Valor
                         </label>
                         <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">R$</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-semibold">R$</span>
                             <input
                                 type="number"
                                 inputMode="decimal"
                                 min="0.01"
                                 step="0.01"
                                 autoFocus
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-[var(--border)] focus:border-[var(--brand)] focus:outline-none font-bold text-lg"
+                                className="w-full h-12 pl-11 pr-4 rounded-[14px] bg-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 font-semibold text-lg num"
                                 placeholder="0.00"
                                 value={movementAmount}
                                 onChange={e => setMovementAmount(e.target.value)}
@@ -11567,22 +11564,22 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 (handleRetryClick decide isso antes). */}
             <Modal isOpen={!!retryingNota} onClose={() => setRetryingNota(null)} title="Reemitir Nota">
                 <div className="space-y-4">
-                    <div className="bg-[var(--info)]/5 p-3 rounded-xl border border-[var(--info)]/20 space-y-2">
-                        <p className="text-xs font-bold text-[var(--info)] uppercase tracking-wide">
+                    <div className="bg-[var(--surface-2)] p-4 rounded-[14px] space-y-2">
+                        <p className="text-[13px] font-semibold text-[var(--text-muted)]">
                             Documento do destinatário (opcional)
                         </p>
                         <input
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                            className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                             placeholder="CPF ou CNPJ do cliente"
                             value={retryDestCpfCnpj}
                             onChange={(e) => setRetryDestCpfCnpj(e.target.value)}
                         />
                         <input
                             type="text"
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:border-[var(--brand)] focus:outline-none text-base sm:text-sm"
+                            className="w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px]"
                             placeholder="Nome do cliente"
                             value={retryDestNome}
                             onChange={(e) => setRetryDestNome(e.target.value)}
