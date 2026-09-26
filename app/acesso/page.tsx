@@ -83,7 +83,7 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-2.5 w-full">
             <Link
               href="/painel"
-              className="u-motion u-press h-12 rounded-full text-[16px] font-semibold flex-1 flex items-center justify-center gap-2 text-white"
+              className="u-motion u-press h-12 rounded-full text-[16px] font-semibold sm:flex-1 flex items-center justify-center gap-2 text-white"
               style={{ background: BG }}
             >
               <LayoutDashboard size={18} />
@@ -91,7 +91,7 @@ export default function HomePage() {
             </Link>
             <Link
               href="/loja"
-              className="u-motion u-press h-12 rounded-full text-[16px] font-semibold flex-1 flex items-center justify-center gap-2 bg-[#f2f2f7] text-[#1d1d1f]"
+              className="u-motion u-press h-12 rounded-full text-[16px] font-semibold sm:flex-1 flex items-center justify-center gap-2 bg-[#f2f2f7] text-[#1d1d1f]"
             >
               <Store size={18} />
               Área do Lojista

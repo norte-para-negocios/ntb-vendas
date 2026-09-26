@@ -1558,7 +1558,7 @@ const ProductModal: React.FC<{
                                     key={idx}
                                     type="button"
                                     onClick={() => setNotes(prev => (prev.trim() ? `${prev.trim()}, ${suggestion}` : suggestion).slice(0, 140))}
-                                    className="inline-flex items-center min-h-11 text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)] hover:text-[var(--text)] u-motion u-press-sm"
+                                    className="inline-flex items-center h-9 text-[13px] font-medium px-3.5 rounded-full bg-[var(--surface-2)] text-[var(--text)] u-motion u-press-sm"
                                 >
                                     {suggestion}
                                 </button>
@@ -1577,7 +1577,7 @@ const ProductModal: React.FC<{
                         placeholder="Ex: tirar a cebola, maionese à parte etc."
                         value={notes}
                         onChange={e => setNotes(e.target.value)}
-                        className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition-all max-sm:text-base"
+                        className="w-full h-11 rounded-[12px] border-0 bg-[var(--surface-2)] px-3.5 text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 transition-shadow max-sm:text-base"
                     />
                 </div>
 
@@ -1596,7 +1596,7 @@ const ProductModal: React.FC<{
                                     key={rec.id}
                                     type="button"
                                     onClick={() => onSelectRecommended(rec)}
-                                    className="flex-shrink-0 w-24 text-left border border-[var(--border)] rounded-[var(--r-md)] overflow-hidden bg-[var(--surface)] u-motion hover:border-[var(--brand)]"
+                                    className="flex-shrink-0 w-24 text-left rounded-[12px] overflow-hidden bg-[var(--surface-2)] u-motion u-press-sm"
                                 >
                                     <div className="w-full h-16 bg-[var(--surface-2)] overflow-hidden">
                                         {/* Fix round 1 (revisão, Minor #3): size="option" do ProductThumb é
@@ -1636,10 +1636,10 @@ const ProductModal: React.FC<{
                     className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-3 flex items-center gap-3"
                     style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
                 >
-                    <div className="flex items-center gap-3 bg-[var(--surface-2)] px-1.5 py-1 rounded-[var(--r-sm)] border border-[var(--border)] flex-shrink-0">
-                        <button onClick={() => setQty(Math.max(1, qty - 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)] rounded-[var(--r-sm)] u-motion"><Minus size={16} /></button>
-                        <span className="font-semibold text-[var(--text)] w-6 text-center num">{qty}</span>
-                        <button onClick={() => setQty(q => Math.min(99, q + 1))} className="min-w-11 min-h-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)] rounded-[var(--r-sm)] u-motion"><Plus size={16} /></button>
+                    <div className="flex items-center gap-1 bg-[var(--surface-2)] h-12 px-1 rounded-full flex-shrink-0">
+                        <button aria-label="Diminuir quantidade" onClick={() => setQty(Math.max(1, qty - 1))} className="w-10 h-10 flex items-center justify-center text-[var(--text)] rounded-full u-motion u-press-sm"><Minus size={17} /></button>
+                        <span className="font-semibold text-[16px] text-[var(--text)] w-6 text-center num">{qty}</span>
+                        <button aria-label="Aumentar quantidade" onClick={() => setQty(q => Math.min(99, q + 1))} className="w-10 h-10 flex items-center justify-center text-[var(--text)] rounded-full u-motion u-press-sm"><Plus size={17} /></button>
                     </div>
                     <div className="flex-1 flex flex-col gap-1 min-w-0">
                         {missingRequired && (
@@ -4250,7 +4250,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         key={cat.id}
                                         ref={el => { sectionRefs.current[cat.id] = el; }}
                                         data-category-id={cat.id}
-                                        style={{ scrollMarginTop: spyOffset }}
+                                        style={{ scrollMarginTop: spyOffset + 8 }}
                                         className={idx > 0 ? (lightHeader ? 'pt-3' : 'pt-5') : ''}
                                     >
                                         {idx === 0 && (
