@@ -37,13 +37,13 @@ export const Button: React.FC<
 
   const variants = {
     primary:
-      'bg-[var(--brand)] hover:bg-[var(--brand-strong)] text-white focus-visible:ring-[var(--brand)]',
+      'bg-[var(--brand-fill)] hover:bg-[var(--brand-strong)] text-white focus-visible:ring-[var(--brand)]',
     secondary:
       'bg-[var(--surface-2)] hover:bg-[var(--border)] text-[var(--text)] focus-visible:ring-[var(--brand)]',
     outline:
       'border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)] focus-visible:ring-[var(--brand)]',
     danger:
-      'bg-[var(--err)] hover:opacity-90 text-white focus-visible:ring-[var(--err)]',
+      'bg-[var(--err-fill)] hover:opacity-90 text-white focus-visible:ring-[var(--err)]',
     ghost:
       'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-[var(--brand)]',
   };

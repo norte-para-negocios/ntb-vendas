@@ -396,7 +396,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 </div>
                 <button
                     onClick={handleToggleServiceFee}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${serviceFeeEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${serviceFeeEnabled ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${serviceFeeEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -411,7 +411,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 </div>
                 <button
                     onClick={handleToggleBlindCount}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${blindCountEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${blindCountEnabled ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${blindCountEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -429,7 +429,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                     role="switch"
                     aria-checked={showBestsellersEnabled}
                     aria-label="Mostrar mais vendidos automaticamente no cardápio"
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${showBestsellersEnabled ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${showBestsellersEnabled ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBestsellersEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>

@@ -1119,7 +1119,7 @@ export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStatio
   if (!status.active) return null;
   if (!status.online) {
     return (
-      <div className="bg-[var(--warn)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+      <div className="bg-[var(--warn-fill)] text-white text-center text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
         <WifiOff size={14} className="shrink-0" />
         Sem conexão com a internet — pedidos, mesas e caixa continuam funcionando normalmente e sincronizam sozinhos quando a conexão voltar. Só a impressão automática fica pausada até reconectar.
       </div>
@@ -1127,7 +1127,7 @@ export const CaixaPrintStationOfflineBanner: React.FC<{ status: CaixaPrintStatio
   }
   if (!status.backlogGapSince) return null;
   return (
-    <div className="bg-[var(--info)] text-white text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
+    <div className="bg-[var(--info-fill)] text-white text-xs sm:text-sm font-bold px-4 py-2 flex items-center justify-center gap-2">
       <AlertTriangle size={14} className="shrink-0" />
       <span className="text-center">
         A impressão automática ficou fora do ar por um tempo (desde {new Date(status.backlogGapSince).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}). Pode ter ficado pedido sem imprimir — confira "Pedidos do Dia" e use Reimprimir.
@@ -1204,10 +1204,10 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
           isAlarmed ? 'text-[var(--err)]' : 'text-[var(--text-muted)]'
         } ${className || ''}`}
       >
-        <span className={`w-2 h-2 rounded-full shrink-0 ${isAlarmed ? 'bg-[var(--err)]' : 'bg-[var(--ok)]'}`} />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${isAlarmed ? 'bg-[var(--err-fill)]' : 'bg-[var(--ok-fill)]'}`} />
         <span>Impressão</span>
         {hasFailures && (
-          <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[var(--err)] text-white text-[10px] font-bold num">
+          <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[var(--err-fill)] text-white text-[10px] font-bold num">
             {status.failedItems.length}
           </span>
         )}
@@ -1266,7 +1266,7 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
 
           {hasFailures ? (
             <div className="space-y-2">
-              <p className="text-xs font-bold text-[var(--err)] uppercase tracking-wide">
+              <p className="text-[13px] font-semibold text-[var(--err)]">
                 {status.failedItems.length} impressão(ões) falharam
               </p>
               {status.failedItems.map((entry) => (

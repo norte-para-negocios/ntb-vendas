@@ -324,7 +324,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
               type="button"
               onClick={() => setTestPaperWidth(mm)}
               className={`h-8 max-sm:h-11 px-3.5 rounded-full text-[13px] font-semibold num u-motion u-press-sm ${
-                testPaperWidth === mm ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
+                testPaperWidth === mm ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
               }`}
             >
               {mm}mm
@@ -460,7 +460,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                   type="button"
                   onClick={() => setDestination(dest)}
                   className={`h-8 max-sm:h-11 px-3.5 rounded-full text-[13px] font-medium u-motion u-press-sm ${
-                    destination === dest ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
+                    destination === dest ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
                   }`}
                 >
                   {DESTINATION_LABELS[dest]}

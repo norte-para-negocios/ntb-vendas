@@ -66,6 +66,17 @@
   --err: #d70015;
   --info: #0066cc;
 
+  /* Preenchimentos sólidos com texto branco por cima (botões, selos cheios).
+     No claro = a própria cor; no escuro ficam mais fundos que o texto de
+     destaque (#8b90ea/#30d158/... com branco em cima dava ~2:1). */
+  --brand-fill: #484DB5;
+  --ok-fill: #248a3d;
+  --warn-fill: #b25000;
+  --err-fill: #d70015;
+  --info-fill: #0066cc;
+  /* Preço promocional (roxo iFood) como TEXTO — no escuro clareia. */
+  --promo: #8E1CA8;
+
   /* Tinta: superfície escura de destaque (igual ao site institucional) */
   --ink: #1E1B4B;
   --sidebar-bg: #484DB5;
@@ -136,6 +147,13 @@
   --warn: #b25000;
   --err: #d70015;
   --info: #0066cc;
+  --brand-fill: #484DB5;
+  --ok-fill: #248a3d;
+  --warn-fill: #b25000;
+  --err-fill: #d70015;
+  --info-fill: #0066cc;
+  --promo: #8E1CA8;
+  color-scheme: light;
   --ink: #1E1B4B;
   --sidebar-bg: #484DB5;
   --sidebar-bg-2: #3A3E91;
@@ -172,12 +190,19 @@
   --text-muted: #98989d;
   --border: rgba(84, 84, 88, 0.45);
   --brand: #8b90ea;
-  --brand-strong: #a6aaf0;
+  --brand-strong: #5256c8; /* só usado como hover do botão cheio (ui.tsx) */
   --brand-soft: rgba(139, 144, 234, 0.18);
   --ok: #30d158;
   --warn: #ffb340;
   --err: #ff6961;
   --info: #409cff;
+  --brand-fill: #5e62d6;
+  --ok-fill: #248a3d;
+  --warn-fill: #b25000;
+  --err-fill: #d70015;
+  --info-fill: #0a6fd6;
+  --promo: #d17ae6;
+  color-scheme: dark;
   --ink: #0a0d13;
   --sidebar-bg: #23256b;
   --sidebar-bg-2: #16174a;

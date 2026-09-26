@@ -37,7 +37,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <div className="flex gap-2">
           <button
             onClick={() => reset()}
-            className="flex-1 h-11 rounded-[var(--r-md)] bg-[var(--brand)] text-white font-semibold"
+            className="flex-1 h-11 rounded-[var(--r-md)] bg-[var(--brand-fill)] text-white font-semibold"
           >
             Tentar de novo
           </button>

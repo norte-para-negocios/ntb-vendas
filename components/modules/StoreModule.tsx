@@ -1167,7 +1167,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                           <div className="relative">
                               <item.icon size={18} className="shrink-0" />
                               {!!item.count && item.count > 0 && (
-                                 <div className="absolute -top-1.5 -right-1.5 bg-[var(--err)] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full num">
+                                 <div className="absolute -top-1.5 -right-1.5 bg-[var(--err-fill)] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full num">
                                     {item.count > 9 ? '9+' : item.count}
                                  </div>
                               )}
@@ -1175,7 +1175,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                           <div className="flex-1 flex items-center justify-between truncate">
                               <span className="truncate">{item.label}</span>
                               {!!item.count && item.count > 0 && (
-                                 <span className="bg-[var(--err)] text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-full num ml-2 shrink-0">
+                                 <span className="bg-[var(--err-fill)] text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-full num ml-2 shrink-0">
                                     {item.count}
                                  </span>
                               )}
@@ -1190,7 +1190,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                         className="flex items-center gap-3 w-full px-3 min-h-[44px] rounded-[10px] u-motion text-[15px] text-white hover:bg-white/10 disabled:opacity-50 whitespace-nowrap"
                     >
                         {openCheckin
-                          ? <span className="w-[18px] flex justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-[var(--ok)]" /></span>
+                          ? <span className="w-[18px] flex justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-[var(--ok-fill)]" /></span>
                           : <Clock size={18} className="shrink-0 text-white/60"/>}
                         <span className="truncate">{openCheckin ? `Encerrar turno (${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto'}</span>
                     </button>
@@ -1269,7 +1269,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               <div className="relative shrink-0">
                 <item.icon size={18} />
                 {isCollapsed && !!item.count && item.count > 0 && (
-                   <div className="absolute -top-1.5 -right-1.5 bg-[var(--err)] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full num">
+                   <div className="absolute -top-1.5 -right-1.5 bg-[var(--err-fill)] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full num">
                       {item.count > 9 ? '9+' : item.count}
                    </div>
                 )}
@@ -1278,7 +1278,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                   <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">{item.label}</span>
                       {!!item.count && item.count > 0 && (
-                          <span className="bg-[var(--err)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-2 shrink-0 num">
+                          <span className="bg-[var(--err-fill)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-2 shrink-0 num">
                               {item.count}
                           </span>
                       )}
@@ -1305,7 +1305,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             title={isCollapsed ? (openCheckin ? `Encerrar turno (desde ${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto') : ''}
           >
             {openCheckin
-              ? <span className="w-[18px] h-[18px] flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-[var(--ok)]" /></span>
+              ? <span className="w-[18px] h-[18px] flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-[var(--ok-fill)]" /></span>
               : <Clock size={18} className="shrink-0" />}
             {!isCollapsed && (
               <span className="truncate">
@@ -1384,7 +1384,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               <div className="relative">
                   <item.icon size={20} />
                   {!!item.count && item.count > 0 && (
-                       <div className="absolute -top-1.5 -right-2 bg-[var(--err)] text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-0.5 num">
+                       <div className="absolute -top-1.5 -right-2 bg-[var(--err-fill)] text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-0.5 num">
                           {item.count > 9 ? '9+' : item.count}
                        </div>
                   )}
@@ -1514,13 +1514,13 @@ const MyProfileModal: React.FC<{
                 <div className="flex items-center gap-4">
                     <button type="button" onClick={handlePickPhoto} className="relative shrink-0 u-motion u-press-sm" title="Trocar foto">
                         <div className="w-16 h-16"><ProductThumb src={photoUrl} name={name || user.name} size="store" /></div>
-                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[var(--brand)] text-white flex items-center justify-center border-2 border-[var(--surface)]">
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[var(--brand-fill)] text-white flex items-center justify-center border-2 border-[var(--surface)]">
                             {isUploadingPhoto ? <RefreshCw size={12} className="animate-spin" /> : <Camera size={12} />}
                         </div>
                     </button>
                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                     <div className="flex-1 min-w-0">
-                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Nome</label>
+                        <label className="block text-[13px] font-semibold text-[var(--text-muted)] mb-1">Nome</label>
                         <Input value={name} onChange={e => setName(e.target.value)} placeholder="Seu nome" />
                     </div>
                 </div>
@@ -1530,7 +1530,7 @@ const MyProfileModal: React.FC<{
                 </Button>
 
                 <div className="pt-2 border-t border-[var(--border)]">
-                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Meu histórico de turnos de caixa</h4>
+                    <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Meu histórico de turnos de caixa</h4>
                     {isLoadingHistory ? (
                         <p className="text-sm text-[var(--text-muted)] py-4 text-center">Carregando...</p>
                     ) : !history || history.length === 0 ? (
@@ -1547,7 +1547,7 @@ const MyProfileModal: React.FC<{
                                             {h.status === 'open' ? 'Em aberto' : `Diferença: R$ ${formatBRL(h.difference ?? 0)}`}
                                         </p>
                                     </div>
-                                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
                                         {h.status === 'open' ? 'Aberto' : 'Fechado'}
                                     </span>
                                 </div>
@@ -1844,7 +1844,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                             <Button
                                 size="lg"
                                 onClick={() => advanceStatus(item)}
-                                className={`w-full max-sm:h-12 ${item.status === 'preparing' ? '!bg-[var(--ok)] hover:!opacity-90' : ''}`}
+                                className={`w-full max-sm:h-12 ${item.status === 'preparing' ? '!bg-[var(--ok-fill)] hover:!opacity-90' : ''}`}
                             >
                                 {(item.status === 'pending' || item.status === 'accepted') && 'Iniciar preparo'}
                                 {item.status === 'preparing' && 'Marcar pronto'}
@@ -2004,7 +2004,6 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
 // vermelho iFood). Duplicada de propósito — painéis não compartilham
 // componente, só o valor da cor.
 const GARCOM_ACTION = 'var(--brand)';
-const GARCOM_IFOOD_PURPLE = '#8E1CA8';
 
 // Cardápio do garçom em camadas (pedido do dono, 2026-09-26): barra de
 // categorias em cima + lista embaixo não era intuitivo ("tenho que clicar
@@ -2178,7 +2177,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
                     )}
                     <div className="mt-1 flex items-center gap-2">
-                        <span className="font-semibold text-[15px] num" style={{ color: hasActivePromo ? GARCOM_IFOOD_PURPLE : 'var(--text)' }}>
+                        <span className="font-semibold text-[15px] num" style={{ color: hasActivePromo ? 'var(--promo)' : 'var(--text)' }}>
                             {variablePricing && (
                                 <span className="font-normal text-[var(--text-muted)] text-[13px] mr-0.5">A partir de</span>
                             )}
@@ -2519,7 +2518,7 @@ const PaymentCaptureFields: React.FC<{
                             onClick={() => onBrandChange(currentBrand === id ? '' : id)}
                             className={`h-9 max-sm:h-11 px-4 rounded-full text-[13px] font-semibold u-motion u-press-sm ${
                                 currentBrand === id
-                                ? 'bg-[var(--brand)] text-white'
+                                ? 'bg-[var(--brand-fill)] text-white'
                                 : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
                             }`}
                         >
@@ -2592,7 +2591,7 @@ const PaymentCaptureFields: React.FC<{
                     role="switch"
                     aria-checked={!!emitirNota}
                     aria-label="Emitir nota fiscal desta venda"
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${emitirNota ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${emitirNota ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emitirNota ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -4261,7 +4260,7 @@ NOTIFY pgrst, 'reload schema';`;
                         title="Se ativado, novos clientes precisarão do PIN para abrir a mesa"
                     >
                         {pinBlockEnabled
-                            ? <span className="w-2 h-2 rounded-full bg-[var(--err)] shrink-0" aria-hidden />
+                            ? <span className="w-2 h-2 rounded-full bg-[var(--err-fill)] shrink-0" aria-hidden />
                             : <Unlock size={15} className="text-[var(--text-muted)]" />}
                         {pinBlockEnabled ? "Bloqueio PIN ativo" : "Bloqueio PIN inativo"}
                     </Button>
@@ -4609,7 +4608,7 @@ NOTIFY pgrst, 'reload schema';`;
                                              </Button>
                                          ) : selectedTable?.status === 'waiting_bill' ? (
                                              <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
-                                                 <span className="w-2 h-2 rounded-full bg-[var(--warn)]" aria-hidden />
+                                                 <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
                                                  Conta pedida — aguardando o caixa
                                              </div>
                                          ) : (
@@ -4816,7 +4815,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </Button>
                             ) : selectedTable?.status === 'waiting_bill' ? (
                                 <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
-                                    <span className="w-2 h-2 rounded-full bg-[var(--warn)]" aria-hidden />
+                                    <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
                                     Conta pedida — aguardando o caixa
                                 </div>
                             ) : (
@@ -4942,7 +4941,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <Button
                             onClick={handleMoveTable}
                             disabled={!targetTableId}
-                            className="bg-[var(--info)] hover:bg-[var(--info)]/90 text-white"
+                            className="bg-[var(--info-fill)] hover:bg-[var(--info)]/90 text-white"
                         >
                             Confirmar Troca
                         </Button>
@@ -5307,7 +5306,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             key={l.id}
                                             type="button"
                                             onClick={() => setFiltroLocal(l.id)}
-                                            className={`shrink-0 min-h-9 max-sm:min-h-11 px-3 rounded-full text-xs font-bold border u-motion ${filtroLocal === l.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'}`}
+                                            className={`shrink-0 min-h-9 max-sm:min-h-11 px-3 rounded-full text-xs font-bold border u-motion ${filtroLocal === l.id ? 'bg-[var(--brand-fill)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'}`}
                                         >
                                             {l.nome} <span className="opacity-70">({qtd})</span>
                                         </button>
@@ -5405,7 +5404,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             <p className="text-sm font-bold text-[var(--text)] truncate flex items-center gap-1.5">
                                                 {member.name}
                                                 {!member.hasOpenCheckin && (
-                                                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[var(--warn)]/10 text-[var(--warn)]">
+                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--warn)]/10 text-[var(--warn)]">
                                                         sem ponto
                                                     </span>
                                                 )}
@@ -6667,7 +6666,7 @@ const CaixaView: React.FC<{
                                     )}
                                 </div>
                                 <div className="space-y-1.5">
-                                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                    <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                         Total por forma de pagamento
                                     </h4>
                                     {Object.keys(historySummary.totals_by_method).length === 0 ? (
@@ -6685,7 +6684,7 @@ const CaixaView: React.FC<{
                                 </div>
                                 {Object.keys(historySummary.totals_by_brand).length > 0 && (
                                     <div className="space-y-1.5">
-                                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                        <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                             Total por bandeira
                                         </h4>
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
@@ -6820,7 +6819,7 @@ const CaixaView: React.FC<{
                                         audita que aquele pedido precisa ser conferido à mão)
                                         não chegava em ninguém. */}
                                     {ev.event_type === 'pagamento_estornado' && ev.details?.resultado === 'incerto' && (
-                                        <p className="mt-1 inline-flex items-center gap-1 rounded-[var(--r-sm)] bg-[var(--warn)]/10 px-2 py-0.5 text-[11px] font-bold uppercase text-[var(--warn)] border border-[var(--warn)]/30">
+                                        <p className="mt-1 inline-flex items-center gap-1 rounded-[var(--r-sm)] bg-[var(--warn)]/10 px-2 py-0.5 text-[11px] font-bold text-[var(--warn)] border border-[var(--warn)]/30">
                                             <AlertTriangle size={12} /> Não confirmado — conferir o pedido
                                         </p>
                                     )}
@@ -7184,7 +7183,7 @@ const CaixaView: React.FC<{
                         o turno fica só seu, outros operadores podem abrir o deles ao mesmo tempo.
                     </p>
                     <div className="text-left space-y-3">
-                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                        <label className="block text-[13px] font-semibold text-[var(--text-muted)]">
                             Fundo de troco
                         </label>
                         <div className="relative">
@@ -7218,7 +7217,7 @@ const CaixaView: React.FC<{
                         <Button
                             onClick={handleOpenShift}
                             isLoading={isOpeningShift}
-                            className="w-full h-12 text-lg font-bold bg-[var(--ok)] hover:bg-[var(--ok)]/90 text-white"
+                            className="w-full h-12 text-lg font-bold bg-[var(--ok-fill)] hover:bg-[var(--ok)]/90 text-white"
                         >
                             <Unlock size={20} className="mr-2" /> Abrir Caixa
                         </Button>
@@ -7481,7 +7480,7 @@ const CaixaView: React.FC<{
                 const total = pagosNaoEntregues.reduce((s, o) => s + getOrderDisplayTotal(o), 0);
                 return (
                     <Card className="p-3 bg-[var(--warn)]/10 border-[var(--warn)]/30">
-                        <p className="text-xs font-bold text-[var(--warn)] uppercase tracking-wide mb-1">
+                        <p className="text-[13px] font-semibold text-[var(--warn)] mb-1">
                             Pago e ainda não entregue ({pagosNaoEntregues.length})
                         </p>
                         <p className="text-[12px] text-[var(--text-muted)]">
@@ -7517,7 +7516,7 @@ const CaixaView: React.FC<{
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                        <label className="block text-[13px] font-semibold text-[var(--text-muted)] mb-1.5">
                             Valor
                         </label>
                         <div className="relative">
@@ -7537,7 +7536,7 @@ const CaixaView: React.FC<{
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                        <label className="block text-[13px] font-semibold text-[var(--text-muted)] mb-1.5">
                             Motivo
                         </label>
                         <Input
@@ -7600,7 +7599,7 @@ const CaixaView: React.FC<{
                                     </div>
                                 )}
                                 <div className="space-y-1.5">
-                                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                    <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                         Total por forma de pagamento
                                     </h4>
                                     {Object.keys(closeSummary.totals_by_method).length === 0 ? (
@@ -7624,7 +7623,7 @@ const CaixaView: React.FC<{
                                     (campo opcional) não aparece aqui de propósito. */}
                                 {Object.keys(closeSummary.totals_by_brand).length > 0 && (
                                     <div className="space-y-1.5">
-                                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                        <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                             Total por bandeira
                                         </h4>
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
@@ -7659,7 +7658,7 @@ const CaixaView: React.FC<{
                         )}
 
                         <div>
-                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                            <label className="block text-[13px] font-semibold text-[var(--text-muted)] mb-1.5">
                                 Contagem da gaveta
                             </label>
                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -8513,7 +8512,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             type="button"
                             onClick={() => toggleProductForGroup(prod.id)}
                             aria-pressed={selectedForGroup.has(prod.id)}
-                            className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-[var(--r-lg)] ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
+                            className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-[var(--r-lg)] ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
                         >
                             {selectedForGroup.has(prod.id) ? <CheckSquare size={18} /> : <Square size={18} />}
                         </button>
@@ -8576,7 +8575,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
                     {!prod.available && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="inline-flex items-center gap-1.5 bg-[var(--surface)] text-[var(--text)] px-2.5 py-1 rounded-full text-[12px] font-medium shadow-[var(--shadow-md)]"><span className="w-2 h-2 rounded-full bg-[var(--err)]" />Indisponível</span>
+                            <span className="inline-flex items-center gap-1.5 bg-[var(--surface)] text-[var(--text)] px-2.5 py-1 rounded-full text-[12px] font-medium shadow-[var(--shadow-md)]"><span className="w-2 h-2 rounded-full bg-[var(--err-fill)]" />Indisponível</span>
                         </div>
                     )}
                 </Card>
@@ -8687,7 +8686,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         <button
                             onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
                             disabled={!ntbEstoqueStatus.configurado}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                         >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
@@ -8845,7 +8844,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <div className="flex items-center gap-2">
                                 {groupSelectMode && selectedGroupProducts.length >= 2 && (
                                     selectedGroupSameCategory ? (
-                                        <Button onClick={openGroupModal} className="!bg-[var(--brand)]">
+                                        <Button onClick={openGroupModal} className="!bg-[var(--brand-fill)]">
                                             Agrupar como variações ({selectedGroupProducts.length})
                                         </Button>
                                     ) : (
@@ -9230,7 +9229,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             aria-checked={pFeatured}
                             aria-label="Destacar no topo do cardápio"
                             onClick={() => setPFeatured(prev => !prev)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${pFeatured ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${pFeatured ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                         >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pFeatured ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
@@ -9406,7 +9405,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         </div>
                         <button
                             onClick={() => setScheduleAllDay(prev => !prev)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${scheduleAllDay ? 'bg-[var(--ok)]' : 'bg-[var(--border)]'}`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${scheduleAllDay ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                         >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${scheduleAllDay ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
@@ -10546,7 +10545,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
                             className={`shrink-0 min-h-11 px-4 rounded-full text-[15px] font-medium whitespace-nowrap flex items-center gap-1.5 u-motion ${
                                 activeTab === tab.id
-                                    ? 'bg-[var(--brand)] text-white font-semibold'
+                                    ? 'bg-[var(--brand-fill)] text-white font-semibold'
                                     : 'text-[var(--text)] bg-[var(--surface)] shadow-[var(--shadow-sm)]'
                             }`}
                         >
@@ -10730,7 +10729,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                             key={nome}
                                             type="button"
                                             onClick={() => setSelectedOperatorHistory(prev => prev === nome ? null : nome)}
-                                            className={`text-[13px] font-semibold h-8 max-sm:h-11 px-3.5 rounded-full u-motion u-press-sm ${selectedOperatorHistory === nome ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
+                                            className={`text-[13px] font-semibold h-8 max-sm:h-11 px-3.5 rounded-full u-motion u-press-sm ${selectedOperatorHistory === nome ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
                                         >
                                             {nome}
                                         </button>

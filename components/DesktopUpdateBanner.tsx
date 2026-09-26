@@ -116,7 +116,7 @@ export function DesktopUpdateBanner() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={SPRING_SHEET}
-        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--warn)] px-4 py-3 shadow-2xl border border-black/10"
+        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--warn-fill)] px-4 py-3 shadow-2xl border border-black/10"
       >
         <div className="shrink-0 w-9 h-9 rounded-full bg-black/10 flex items-center justify-center">
           <RotateCcw size={18} className="text-[var(--ink)]" />
@@ -145,7 +145,7 @@ export function DesktopUpdateBanner() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={SPRING_SHEET}
-        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--err)] px-4 py-3 shadow-2xl border border-black/10"
+        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--err-fill)] px-4 py-3 shadow-2xl border border-black/10"
       >
         <div className="shrink-0 w-9 h-9 rounded-full bg-black/15 flex items-center justify-center">
           <AlertTriangle size={18} className="text-white" />
@@ -181,7 +181,7 @@ export function DesktopUpdateBanner() {
         <button
           onClick={handleInstall}
           disabled={installing}
-          className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] bg-[var(--brand)] text-white text-[13px] font-semibold u-motion u-press disabled:opacity-60"
+          className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] bg-[var(--brand-fill)] text-white text-[13px] font-semibold u-motion u-press disabled:opacity-60"
         >
           {installing ? 'Atualizando...' : 'Atualizar agora'}
         </button>

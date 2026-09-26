@@ -108,7 +108,7 @@ function PriceRow({ product, size = 'row', variablePricing = false, className = 
                 `num` (monoespaçado/tabular) também saiu — era um mismatch
                 visível com a tipografia proporcional do iFood; alinhamento
                 tabular só importa nas telas do lojista/documentos impressos. */}
-            <span className={`font-bold ${cfg.effective}`} style={{ color: promo ? IFOOD_PURPLE : 'var(--text)' }}>
+            <span className={`font-bold ${cfg.effective}`} style={{ color: promo ? 'var(--promo)' : 'var(--text)' }}>
                 {variablePricing && (
                     <span className={`font-normal text-[var(--text-muted)] ${cfg.prefix} mr-0.5`}>A partir de</span>
                 )}
@@ -243,7 +243,7 @@ function OrderProgressView({ status, items, orderFlow = 'kds' }: { status: Order
                     return (
                         <div key={idx} className={`flex items-center gap-4 transition-all duration-500 ${isCompleted ? 'opacity-100' : 'opacity-40'}`}>
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center border-4 transition-all z-10 ${
-                                isCompleted ? (step.status === OrderStatus.READY ? 'bg-[var(--ok)] border-[var(--ok)]/30 text-white' : 'bg-[var(--brand)] border-[var(--brand)]/30 text-white') : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
+                                isCompleted ? (step.status === OrderStatus.READY ? 'bg-[var(--ok-fill)] border-[var(--ok)]/30 text-white' : 'bg-[var(--brand-fill)] border-[var(--brand)]/30 text-white') : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'
                             } ${isCurrent && !isReady ? 'animate-pulse' : ''}`}>
                                 <step.icon size={20} />
                             </div>
@@ -1612,7 +1612,7 @@ const ProductModal: React.FC<{
                                         {/* Mesma regra de preço da PriceRow (correção 2026-08-21): escuro
                                             sem promoção, roxo com promoção — nunca --brand, mesmo aqui num
                                             card compacto que não passa pelo componente PriceRow. */}
-                                        <p className="text-[11px] font-bold mt-0.5" style={{ color: hasActivePromo(rec) ? IFOOD_PURPLE : 'var(--text)' }}>R$ {formatBRL(getEffectivePrice(rec))}</p>
+                                        <p className="text-[11px] font-bold mt-0.5" style={{ color: hasActivePromo(rec) ? 'var(--promo)' : 'var(--text)' }}>R$ {formatBRL(getEffectivePrice(rec))}</p>
                                     </div>
                                 </button>
                             ))}
@@ -1655,7 +1655,7 @@ const ProductModal: React.FC<{
                             // compartilhado com o painel do lojista/Master Admin — não dá pra
                             // mudar a cor "primary" do componente em si sem afetar telas fora
                             // de escopo, então só esta instância recebe a cor por style
-                            // (sempre vence a classe bg-[var(--brand)] do variant, sem tocar
+                            // (sempre vence a classe bg-[var(--brand-fill)] do variant, sem tocar
                             // no componente). Texto/total continuam brancos (herdado do
                             // Button), contraste de branco sobre ACTION_BG (#484DB5) é alto o bastante.
                             style={{ backgroundColor: ACTION_BG }}
@@ -3569,7 +3569,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                             onClick={() => setFavoritesOnly(v => !v)}
                             aria-label={favoritesOnly ? 'Mostrar todos os produtos' : 'Mostrar só favoritos'}
                             aria-pressed={favoritesOnly}
-                            className={`relative hit-44 w-9 h-9 grid place-items-center rounded-full backdrop-blur-sm text-white u-motion ${favoritesOnly ? 'bg-[var(--brand)]' : 'bg-black/35'}`}
+                            className={`relative hit-44 w-9 h-9 grid place-items-center rounded-full backdrop-blur-sm text-white u-motion ${favoritesOnly ? 'bg-[var(--brand-fill)]' : 'bg-black/35'}`}
                         >
                             <Heart size={16} className={favoritesOnly ? 'fill-current' : ''} />
                         </button>
@@ -3728,7 +3728,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 onClick={() => setShowBill(true)}
                                 className={`flex h-8 flex-shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-semibold u-motion ${
                                     isWaitingBill
-                                        ? 'bg-[var(--warn)] text-white'
+                                        ? 'bg-[var(--warn-fill)] text-white'
                                         : 'bg-[var(--surface-2)] text-[var(--text)]'
                                 }`}
                             >
@@ -3938,7 +3938,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
             {/* Waiting Bill Banner */}
             {isWaitingBill && (
-                <div className="bg-[var(--warn)] text-white px-4 py-2 text-center text-[13px] font-medium sticky top-0 z-30 flex items-center justify-center gap-2">
+                <div className="bg-[var(--warn-fill)] text-white px-4 py-2 text-center text-[13px] font-medium sticky top-0 z-30 flex items-center justify-center gap-2">
                     <Lock size={13}/> Conta Solicitada. Novos pedidos bloqueados.
                 </div>
             )}
@@ -4006,7 +4006,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         redondo pra caber ao lado da pílula de busca. */}
                     <button
                         onClick={() => setFavoritesOnly(v => !v)}
-                        className={`flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full border u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface-2)] border-transparent text-[var(--text-muted)]'}`}
+                        className={`flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full border u-motion u-press-sm ${favoritesOnly ? 'bg-[var(--brand-fill)] text-white border-[var(--brand)]' : 'bg-[var(--surface-2)] border-transparent text-[var(--text-muted)]'}`}
                         title="Mostrar só favoritos"
                         aria-pressed={favoritesOnly}
                     >
@@ -4019,7 +4019,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         <button
                             type="button"
                             onClick={() => setSortMenuOpen(v => !v)}
-                            className={`flex items-center justify-center w-11 h-11 rounded-full border u-motion u-press-sm ${sortBy !== 'default' ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface-2)] border-transparent text-[var(--text-muted)]'}`}
+                            className={`flex items-center justify-center w-11 h-11 rounded-full border u-motion u-press-sm ${sortBy !== 'default' ? 'bg-[var(--brand-fill)] text-white border-[var(--brand)]' : 'bg-[var(--surface-2)] border-transparent text-[var(--text-muted)]'}`}
                             title="Ordenar"
                             aria-haspopup="menu"
                             aria-expanded={sortMenuOpen}
