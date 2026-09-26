@@ -9,7 +9,7 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from '@/components/ui';
@@ -1652,13 +1652,15 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
       }
   };
 
-  const getStatusColor = (status: OrderStatus) => {
+  // Status por ponto colorido + texto (redesign estilo Apple, 2026-09-26):
+  // cartão sempre branco, cor só no ponto.
+  const getStatusInfo = (status: OrderStatus): { label: string; dot: string } => {
       switch(status) {
-          case OrderStatus.PENDING: return 'bg-[var(--warn)]/8 border-[var(--warn)]/35';
-          case OrderStatus.ACCEPTED: return 'bg-[var(--warn)]/8 border-[var(--warn)]/35';
-          case OrderStatus.PREPARING: return 'bg-[var(--info)]/8 border-[var(--info)]/35';
-          case OrderStatus.READY: return 'bg-[var(--ok)]/8 border-[var(--ok)]/40';
-          default: return 'bg-[var(--surface-2)] border-[var(--border)]';
+          case OrderStatus.PENDING: return { label: 'Novo', dot: 'var(--warn)' };
+          case OrderStatus.ACCEPTED: return { label: 'Novo', dot: 'var(--warn)' };
+          case OrderStatus.PREPARING: return { label: 'Preparando', dot: 'var(--info)' };
+          case OrderStatus.READY: return { label: 'Pronto', dot: 'var(--ok)' };
+          default: return { label: '', dot: 'var(--text-muted)' };
       }
   };
 
@@ -1693,17 +1695,15 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
   return (
     <div>
         {locaisKds.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4">
-                {[{ id: 'todos', nome: 'Tudo' }, { id: 'padrao', nome: destination === 'bar' ? 'Bar' : 'Cozinha' }, ...locaisKds.map(x => ({ id: x.id, nome: x.name }))].map(l => (
-                    <button
-                        key={l.id}
-                        type="button"
-                        onClick={() => escolherLocalKds(l.id)}
-                        className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-bold border u-motion ${localAtivo === l.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'}`}
-                    >
-                        {l.nome} <span className="opacity-70">({orders.filter(it => pertenceAoLocal(it, l.id)).length})</span>
-                    </button>
-                ))}
+            <div className="overflow-x-auto no-scrollbar mb-4 -mx-1 px-1">
+                <SegmentedControl
+                    value={localAtivo}
+                    onChange={escolherLocalKds}
+                    options={[{ id: 'todos', nome: 'Tudo' }, { id: 'padrao', nome: destination === 'bar' ? 'Bar' : 'Cozinha' }, ...locaisKds.map(x => ({ id: x.id, nome: x.name }))].map(l => ({
+                        value: l.id,
+                        label: <>{l.nome} <span className="num font-medium text-[var(--text-muted)]">{orders.filter(it => pertenceAoLocal(it, l.id)).length}</span></>,
+                    }))}
+                />
             </div>
         )}
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
@@ -1723,27 +1723,43 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                         exit={{ opacity: 0, scale: 0.92 }}
                         transition={SPRING_TAP}
                     >
-                    <Card className={`${getStatusColor(item.status)} p-4 border-2 transition-all duration-300 shadow-sm hover:shadow-md ${late ? 'border-[var(--err)] ring-2 ring-[var(--err)]/30' : ''}`} style={late ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
-                        <div className="flex justify-between items-start mb-3 border-b border-[var(--border)]/50 pb-2">
-                            <span className="font-bold text-[var(--text)] flex items-center gap-2">
-                                {item.order?.order_type === 'counter' ? (
-                                    <>
-                                        <Coffee size={18} className="text-[var(--warn)]"/>
-                                        <span className="truncate max-w-[150px]">{item.order?.customer_name || 'Balcão'}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <LayoutGrid size={18} className="text-[var(--info)]"/>
-                                        Mesa {item.order?.tables?.number || '?'}
-                                    </>
-                                )}
-                                {late && (
-                                    <span className="flex items-center gap-1 text-xs font-bold text-white bg-[var(--err)] px-2 py-0.5 rounded-full">
-                                        <AlertCircle size={11}/> Atrasado
+                    <Card className={`p-4 ${late ? 'ring-2 ring-[var(--err)]/40' : ''}`} style={late ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
+                        <div className="flex justify-between items-start gap-2 mb-2">
+                            <div className="min-w-0">
+                                <p className="text-[17px] font-semibold text-[var(--text)] tracking-[-0.01em] truncate">
+                                    {item.order?.order_type === 'counter'
+                                        ? (item.order?.customer_name || 'Balcão')
+                                        : `Mesa ${item.order?.tables?.number || '?'}`}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5 text-[13px] text-[var(--text-muted)]">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getStatusInfo(item.status).dot }} />
+                                        {getStatusInfo(item.status).label}
                                     </span>
-                                )}
-                            </span>
-                            <div className="flex items-center gap-2">
+                                    {item.order?.order_type === 'counter' && <span>· Balcão</span>}
+                                    {late && (
+                                        <span className="inline-flex items-center gap-1 font-semibold text-[var(--err)]">
+                                            · <AlertCircle size={12}/> Atrasado
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <span
+                                    className={`inline-flex items-center gap-1 text-[13px] num px-2 h-8 rounded-full bg-[var(--surface-2)] ${timerColorClass}`}
+                                    title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
+                                >
+                                    <Clock size={12}/>
+                                    {formatDuration(Math.floor(elapsedMinutes))}
+                                </span>
+                                <button
+                                    onClick={() => printOrderTicket(item)}
+                                    className="w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion u-press"
+                                    title="Imprimir ticket"
+                                    aria-label="Imprimir ticket"
+                                >
+                                    <Printer size={15} />
+                                </button>
                                 <button
                                     disabled={cancellingIds.has(item.id)}
                                     onClick={async () => {
@@ -1754,56 +1770,38 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
-                                    className="p-2 max-sm:p-3 rounded-full bg-[var(--err)]/10 text-[var(--err)] hover:bg-[var(--err)]/15 border border-[var(--err)]/20 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
-                                    title="Cancelar Item"
+                                    className="w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--err)] hover:bg-[var(--err)]/12 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
+                                    title="Cancelar item"
+                                    aria-label="Cancelar item"
                                 >
-                                    <X size={18} />
+                                    <X size={16} />
                                 </button>
-                                <button
-                                    onClick={() => printOrderTicket(item)}
-                                    className="p-2 max-sm:p-3 rounded-full bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] border border-[var(--border)] u-motion u-press"
-                                    title="Imprimir Ticket"
-                                >
-                                    <Printer size={18} />
-                                </button>
-                                <div
-                                    className={`flex items-center gap-1 text-sm num bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)] ${timerColorClass}`}
-                                    title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
-                                >
-                                    <Clock size={12}/>
-                                    {formatDuration(Math.floor(elapsedMinutes))}
-                                </div>
                             </div>
                         </div>
-                        <h3 className="font-black text-[var(--text)] leading-tight mb-2 text-lg">
-                            {item.quantity}x {getOrderItemDisplayName(item)}
+                        <h3 className="font-semibold text-[var(--text)] leading-snug mt-3 mb-2 text-[17px]">
+                            <span className="num">{item.quantity}×</span> {getOrderItemDisplayName(item)}
                         </h3>
 
-                        {/* Customer Name Badge (Neutral) */}
                         {client && (
-                            <div className="mb-2">
-                                <span className="text-xs font-bold text-[var(--text-muted)] bg-[var(--surface)]/60 px-2 py-1 rounded-[var(--r-sm)] border border-[var(--border)] flex items-center gap-1 w-fit">
-                                    <User size={12}/> {client}
-                                </span>
-                            </div>
+                            <p className="mb-2 text-[13px] text-[var(--text-muted)] flex items-center gap-1.5">
+                                <User size={13}/> {client}
+                            </p>
                         )}
 
-                        {/* Actual Warning Notes */}
                         {observation && (
-                            <div className="bg-[var(--warn)]/8 text-[var(--warn)] p-2 rounded-[var(--r-md)] text-sm font-bold border border-[var(--warn)]/20 mb-4 animate-pulse">
-                                ⚠️ {observation}
+                            <div className="bg-[var(--warn)]/10 text-[var(--warn)] px-3 py-2 rounded-[var(--r-md)] text-[14px] font-semibold mb-3">
+                                {observation}
                             </div>
                         )}
 
                         <div className="mt-auto pt-2">
-                            <Button onClick={() => advanceStatus(item)} className={`w-full max-sm:h-12 shadow-sm font-bold ${
-                                item.status === 'pending' ? 'bg-[var(--warn)] hover:opacity-90 text-white' :
-                                item.status === 'accepted' ? 'bg-[var(--warn)] hover:opacity-90 text-white' :
-                                item.status === 'preparing' ? 'bg-[var(--info)] hover:opacity-90 text-white' :
-                                'bg-[var(--ok)] hover:opacity-90 text-white'
-                            }`}>
-                                {(item.status === 'pending' || item.status === 'accepted') && 'Iniciar Preparo'}
-                                {item.status === 'preparing' && 'Marcar Pronto'}
+                            <Button
+                                size="lg"
+                                onClick={() => advanceStatus(item)}
+                                className={`w-full max-sm:h-12 ${item.status === 'preparing' ? '!bg-[var(--ok)] hover:!opacity-90' : ''}`}
+                            >
+                                {(item.status === 'pending' || item.status === 'accepted') && 'Iniciar preparo'}
+                                {item.status === 'preparing' && 'Marcar pronto'}
                                 {item.status === 'ready' && 'Entregar'}
                             </Button>
                         </div>
@@ -8305,25 +8303,25 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             type="button"
                             onClick={() => toggleProductForGroup(prod.id)}
                             aria-pressed={selectedForGroup.has(prod.id)}
-                            className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-xl ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
+                            className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-[var(--r-lg)] ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
                         >
                             {selectedForGroup.has(prod.id) ? <CheckSquare size={18} /> : <Square size={18} />}
                         </button>
                     ) : dragProvided ? (
-                        <div {...dragProvided.dragHandleProps} className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center text-[var(--border)] hover:text-[var(--text-muted)] cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--surface-2)]/50 rounded-l-xl z-10">
+                        <div {...dragProvided.dragHandleProps} className="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center text-[var(--border)] hover:text-[var(--text-muted)] cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--surface-2)]/50 rounded-l-[var(--r-lg)] z-10">
                             <GripVertical size={20} />
                         </div>
                     ) : null}
-                    <div className="w-20 h-20 bg-[var(--surface-2)] rounded-lg flex-shrink-0 overflow-hidden ml-4">
+                    <div className="w-20 h-20 bg-[var(--surface-2)] rounded-[12px] flex-shrink-0 overflow-hidden ml-4">
                         {prod.image_url ? (
                             <Image src={prod.image_url} alt="" width={80} height={80} className="w-full h-full object-cover"/>
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-[var(--border)]"><ImageIcon size={24}/></div>
                         )}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2">
-                            <h5 className="font-bold text-[var(--text)] flex items-center gap-1">
+                            <h5 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-[var(--text)] flex items-center gap-1">
                                 {prod.featured && (
                                     <Star size={14} className="text-[var(--warn)] fill-[var(--warn)] flex-shrink-0" aria-label="Produto em destaque" />
                                 )}
@@ -8342,29 +8340,33 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 const hasActivePromo = effectivePrice < prod.price;
                                 return hasActivePromo ? (
                                     <span className="flex flex-col items-end leading-tight flex-shrink-0">
-                                        <span className="text-[11px] text-[var(--text-muted)] line-through">R$ {formatBRL(prod.price)}</span>
-                                        <span className="font-bold text-[var(--brand)]">R$ {formatBRL(effectivePrice)}</span>
+                                        <span className="text-[12px] text-[var(--text-muted)] line-through num">R$ {formatBRL(prod.price)}</span>
+                                        <span className="text-[15px] font-semibold text-[var(--text)] num">R$ {formatBRL(effectivePrice)}</span>
                                     </span>
                                 ) : (
-                                    <span className="font-bold text-[var(--brand)] flex-shrink-0">R$ {formatBRL(prod.price)}</span>
+                                    <span className="text-[15px] font-semibold text-[var(--text)] num flex-shrink-0">R$ {formatBRL(prod.price)}</span>
                                 );
                             })()}
                         </div>
                         {categoryLabel && (
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{categoryLabel}</span>
+                            <span className="text-[12px] font-medium text-[var(--text-muted)]">{categoryLabel}</span>
                         )}
-                        <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-1">{prod.description}</p>
-                        <div className="mt-2 flex gap-2">
-                            <button onClick={() => openProductModal(prod)} className="text-xs font-bold text-[var(--brand)] hover:underline u-motion">Editar</button>
-                            <button onClick={() => handleToggleAvailability(prod)} className={`text-xs font-bold hover:underline u-motion ${prod.available ? 'text-[var(--warn)]' : 'text-[var(--ok)]'}`}>
-                                {prod.available ? 'Pausar' : 'Ativar'}
+                        <p className="text-[13px] leading-snug text-[var(--text-muted)] line-clamp-2 mt-1">{prod.description}</p>
+                        <div className="mt-2 flex gap-1.5 relative z-10">
+                            <button type="button" onClick={() => openProductModal(prod)} aria-label={`Editar ${prod.name}`} title="Editar" className="relative hit-44 w-8 h-8 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)] u-motion u-press">
+                                <Pencil size={14} />
                             </button>
-                            <button onClick={() => handleDeleteProduct(prod.id)} className="text-xs font-bold text-[var(--err)] hover:underline u-motion">Excluir</button>
+                            <button type="button" onClick={() => handleToggleAvailability(prod)} aria-label={`${prod.available ? 'Pausar' : 'Ativar'} ${prod.name}`} title={prod.available ? 'Pausar' : 'Ativar'} className="relative hit-44 w-8 h-8 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)] u-motion u-press">
+                                {prod.available ? <Pause size={14} /> : <Play size={14} />}
+                            </button>
+                            <button type="button" onClick={() => handleDeleteProduct(prod.id)} aria-label={`Excluir ${prod.name}`} title="Excluir" className="relative hit-44 w-8 h-8 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--err)] hover:bg-[var(--err)]/12 u-motion u-press">
+                                <Trash2 size={14} />
+                            </button>
                         </div>
                     </div>
                     {!prod.available && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="bg-[var(--err)] text-white px-2 py-1 rounded text-xs font-bold transform -rotate-12 shadow-lg">INDISPONÍVEL</span>
+                            <span className="inline-flex items-center gap-1.5 bg-[var(--surface)] text-[var(--text)] px-2.5 py-1 rounded-full text-[12px] font-medium shadow-[var(--shadow-md)]"><span className="w-2 h-2 rounded-full bg-[var(--err)]" />Indisponível</span>
                         </div>
                     )}
                 </Card>
@@ -8400,17 +8402,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             {/* LOCAIS DE PREPARO — criar local (ex.: Pizzaria) e escolher o local de cada categoria, direto no Cardápio */}
             <Card className="p-5 space-y-4">
                 <div>
-                    <h3 className="font-bold text-[var(--text)]">Locais de preparo</h3>
-                    <p className="text-sm text-[var(--text-muted)]">Pra onde cada pedido vai (impressora e tela de acompanhamento). Cozinha e Bar já existem; crie outros e escolha o local de cada categoria aqui embaixo. A impressora de cada local se escolhe em Administração → Impressão.</p>
+                    <h3 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">Locais de preparo</h3>
+                    <p className="text-[13px] leading-snug text-[var(--text-muted)] mt-0.5">Pra onde cada pedido vai (impressora e tela de acompanhamento). Cozinha e Bar já existem; crie outros e escolha o local de cada categoria aqui embaixo. A impressora de cada local se escolhe em Administração → Impressão.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {[{ id: 'kitchen', nome: 'Cozinha' }, { id: 'bar', nome: 'Bar' }].map(l => (
-                        <span key={l.id} className="px-3 py-1.5 rounded-full text-sm font-semibold bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]">{l.nome}</span>
+                        <span key={l.id} className="px-3 py-1.5 rounded-full text-[13px] font-semibold bg-[var(--surface-2)] text-[var(--text)]">{l.nome}</span>
                     ))}
                     {printSectors.map(st => {
                         const qtd = categories.filter(c => c.sector_id === st.id).length;
                         return (
-                            <span key={st.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-sm font-semibold bg-[var(--brand)]/10 text-[var(--brand)] border border-[var(--brand)]/30">
+                            <span key={st.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-semibold bg-[var(--brand-soft)] text-[var(--brand)]">
                                 {st.name} <span className="font-normal opacity-70">({qtd} {qtd === 1 ? 'categoria' : 'categorias'})</span>
                                 <button
                                     type="button"
@@ -8433,16 +8435,16 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <Button onClick={criarLocalCardapio}>Criar local</Button>
                 </div>
                 {printSectors.length > 0 && categories.length > 0 && (
-                    <details className="rounded-[var(--r-md)] border border-[var(--border)] p-3">
+                    <details className="rounded-[var(--r-md)] bg-[var(--surface-2)]/60 p-3">
                         <summary className="text-sm font-semibold text-[var(--text)] cursor-pointer select-none">Escolher o local de cada categoria ({categories.length})</summary>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
                             {categories.map(cat => (
-                                <label key={cat.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-[var(--r-md)] bg-[var(--surface-2)]">
+                                <label key={cat.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-[var(--r-md)] bg-[var(--surface)]">
                                     <span className="text-sm font-medium text-[var(--text)] truncate">{cat.name}</span>
                                     <select
                                         value={cat.sector_id || ''}
                                         onChange={e => handleChangeCategorySector(cat.id, e.target.value || null)}
-                                        className={`text-xs rounded border px-1.5 py-1 max-sm:text-base shrink-0 ${cat.sector_id ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                                        className={`text-[13px] rounded-[8px] border-0 px-2 py-1 max-sm:text-base shrink-0 ${cat.sector_id ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}
                                     >
                                         <option value="">Cozinha/Bar</option>
                                         {printSectors.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
@@ -8458,14 +8460,14 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             <Collapsible
                 title="Integração com o NTB Estoque"
                 defaultOpen={false}
-                badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}
+                badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
             >
                 <div className="space-y-4">
                     <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
 
-                    <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                    <div className="flex items-center justify-between gap-3 p-4 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <div>
-                            <h4 className="font-bold text-[var(--text)]">Ordem de Produção automática</h4>
+                            <h4 className="text-[15px] font-semibold text-[var(--text)]">Ordem de produção automática</h4>
                             <p className="text-sm text-[var(--text-muted)]">
                                 {ntbEstoqueStatus.configurado
                                     ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
@@ -8499,7 +8501,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
 
                     <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque}>
-                        Salvar Integração com o NTB Estoque
+                        Salvar integração com o NTB Estoque
                     </Button>
                 </div>
             </Collapsible>
@@ -8507,9 +8509,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             {/* CARDÁPIO — navegação por abas + busca global (redesign 2026-09-04).
                 Gestão de categoria (criar/reordenar/horário/apagar) mora só no
                 modal abaixo; aqui é só navegar/ver/editar produto. */}
-            <section className="bg-[var(--surface)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
+            <section className="bg-[var(--surface)] p-6 max-sm:p-4 rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">
                 <div className="flex justify-between items-center gap-3 mb-4 flex-wrap">
-                    <h3 className="font-bold text-lg text-[var(--text)]">Cardápio</h3>
+                    <h3 className="text-[20px] font-semibold tracking-[-0.015em] text-[var(--text)]">Cardápio</h3>
                     <div className="flex items-center gap-2">
                         <div className="relative">
                             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -8518,10 +8520,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 placeholder="Buscar produto..."
                                 value={productSearchTerm}
                                 onChange={e => setProductSearchTerm(e.target.value)}
-                                className="pl-9 pr-3 py-2 w-full sm:w-64 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)] max-sm:text-base"
+                                className="pl-9 pr-3 h-[38px] w-full sm:w-64 rounded-full border-0 bg-[var(--surface-2)] text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)]/80 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 max-sm:text-base"
                             />
                         </div>
-                        <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)}>
+                        <Button variant="secondary" onClick={() => setIsCategoryModalOpen(true)}>
                             <List size={16} className="mr-1.5"/> Categorias
                         </Button>
                     </div>
@@ -8541,9 +8543,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 <button
                                     key={cat.id}
                                     onClick={() => setActiveMenuCategoryId(cat.id)}
-                                    className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap u-motion ${isActive ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+                                    className={`flex-shrink-0 px-4 h-9 max-sm:h-10 rounded-full text-[14px] font-semibold whitespace-nowrap u-motion ${isActive ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
                                 >
-                                    {cat.name} <span className="opacity-70 font-normal">({count})</span>
+                                    {cat.name} <span className="num font-medium text-[var(--text-muted)]">{count}</span>
                                 </button>
                             );
                         })}
@@ -8569,10 +8571,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                             <li key={cat.id}>
                                                 <button
                                                     onClick={() => setActiveMenuCategoryId(cat.id)}
-                                                    className={`w-full flex items-center justify-between gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${isActive ? 'border-[var(--brand)] text-[var(--text)] font-bold bg-[var(--surface-2)]/50' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]'}`}
+                                                    className={`w-full flex items-center justify-between gap-2 py-2 pl-3 pr-2.5 rounded-[10px] text-left text-[14px] u-motion ${isActive ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'text-[var(--text)] hover:bg-[var(--surface-2)]'}`}
                                                 >
                                                     <span className="truncate tracking-[-0.01em]">{cat.name}</span>
-                                                    <span className="text-xs opacity-60 shrink-0">{count}</span>
+                                                    <span className={`text-[12px] num shrink-0 ${isActive ? 'text-[var(--brand)]' : 'text-[var(--text-muted)]'}`}>{count}</span>
                                                 </button>
                                             </li>
                                         );
@@ -8594,13 +8596,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                     if (next.has(item.group.id)) next.delete(item.group.id); else next.add(item.group.id);
                                                                     return next;
                                                                 })}
-                                                                className={`w-full flex items-center gap-2 py-2.5 pl-3 pr-2 border-l-2 text-left u-motion ${ownsActive && !isOpen ? 'border-[var(--brand)] text-[var(--text)] font-bold' : 'border-transparent text-[var(--text)] font-semibold hover:border-[var(--border)]'}`}
+                                                                className={`w-full flex items-center gap-2 py-2 pl-2 pr-2.5 rounded-[10px] text-left text-[14px] font-semibold u-motion ${ownsActive && !isOpen ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[var(--text)] hover:bg-[var(--surface-2)]'}`}
                                                             >
                                                                 <motion.span animate={{ rotate: isOpen ? 90 : 0 }} transition={SPRING_TAP} className="shrink-0 text-[var(--text-muted)]">
                                                                     <ChevronRight size={14} />
                                                                 </motion.span>
                                                                 <span className="flex-1 truncate tracking-[-0.01em]">{item.group.name}</span>
-                                                                <span className="text-xs opacity-60 shrink-0">{total}</span>
+                                                                <span className="text-[12px] num font-normal text-[var(--text-muted)] shrink-0">{total}</span>
                                                             </button>
                                                             <AnimatePresence initial={false}>
                                                                 {isOpen && (
@@ -8637,7 +8639,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                             Agrupar como variações ({selectedGroupProducts.length})
                                         </Button>
                                     ) : (
-                                        <span className="text-xs text-[var(--warn)] font-medium">Selecione produtos da mesma categoria</span>
+                                        <span className="text-[13px] text-[var(--warn)] font-medium">Selecione produtos da mesma categoria</span>
                                     )
                                 )}
                                 <Button
@@ -8647,7 +8649,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                     {groupSelectMode ? 'Cancelar seleção' : 'Agrupar variações'}
                                 </Button>
                             </div>
-                            <Button onClick={() => openProductModal()}><Plus size={18} className="mr-1"/> Novo Produto</Button>
+                            <Button onClick={() => openProductModal()}><Plus size={18} className="-ml-1"/> Novo produto</Button>
                         </div>
                         {groupSelectMode && (
                             <p className="text-xs text-[var(--text-muted)] mb-4">
@@ -8711,7 +8713,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Gerenciar categorias">
                 <div className="space-y-5">
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Grupos (opcional)</p>
+                        <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Grupos (opcional)</p>
                         <div className="flex gap-2 mb-2">
                             <Input placeholder="Novo Grupo (ex.: Bebidas)" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
                             <Button onClick={handleAddCategoryGroup}><Plus size={20}/></Button>
@@ -8737,7 +8739,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
 
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Locais de preparo</p>
+                        <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-1">Locais de preparo</p>
                         <p className="text-[11px] text-[var(--text-muted)] mb-2">Pra onde os pedidos vão ser impressos. Cozinha e Bar já existem; crie outros (ex.: Pizzaria) e escolha o local de cada categoria abaixo. A impressora de cada local se escolhe em Administração → Impressão.</p>
                         <div className="flex gap-2 mb-2">
                             <Input placeholder="Novo local (ex.: Pizzaria)" value={newSectorName} onChange={e => setNewSectorName(e.target.value)} maxLength={30} />
@@ -8769,7 +8771,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     </div>
 
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Categorias</p>
+                        <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Categorias</p>
                         <div className="flex gap-2 mb-2">
                             <Input placeholder="Nova Categoria" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
                             <Button onClick={handleAddCategory}><Plus size={20}/></Button>
@@ -10590,7 +10592,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 <Collapsible
                     title="Integração direta com a Omie"
                     defaultOpen={false}
-                    badge={omieDiretoConfigurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}
+                    badge={omieDiretoConfigurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
                 >
                     <div className="space-y-3">
                         <p className="text-sm text-[var(--text-muted)]">
