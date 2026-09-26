@@ -1415,13 +1415,16 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         </div>
       </header>
       
-      {/* Troca de aba (Task 10 Step 3): entra com fade + subida de 8px em
-          220ms, sai só com fade em 120ms. Movimento reduzido = só fade. */}
+      {/* Troca de aba (Task 10 Step 3): fade de 220ms na entrada, 120ms na
+          saída. SEM transform de propósito: transform no ancestral vira o
+          "containing block" dos position:fixed de dentro, e uma janela que
+          abrisse durante a entrada da aba (ex.: Caixa → mesa) aparecia
+          deslocada até a animação acabar. */}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={currentTab}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
           exit={{ opacity: 0, transition: { duration: 0.12, ease: 'easeOut' } }}
         >
           {children}
