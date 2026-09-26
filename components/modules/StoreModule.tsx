@@ -3895,7 +3895,7 @@ NOTIFY pgrst, 'reload schema';`;
                 </div>
             )}
 
-            <div className="flex flex-wrap justify-end mb-5 gap-2">
+            <div className="flex flex-wrap justify-end max-sm:justify-start mb-5 gap-2">
                 {canManagePin && (
                     <Button
                         variant="secondary"
@@ -4233,19 +4233,19 @@ NOTIFY pgrst, 'reload schema';`;
                                      <div className="grid grid-cols-2 gap-3">
                                          <Button
                                             size="lg"
-                                            className="!h-14 !rounded-[16px] text-[16px]"
+                                            className="!h-14 !rounded-[16px] text-[16px] max-sm:text-[15px] max-sm:px-3"
                                             onClick={() => setShowMenuMode(true)}
                                          >
-                                             <Plus size={20} />
+                                             <Plus size={20} className="shrink-0 max-sm:hidden" />
                                              Adicionar Pedido
                                          </Button>
                                          <Button
                                             variant="secondary"
                                             size="lg"
-                                            className="!h-14 !rounded-[16px] text-[16px] min-w-0"
+                                            className="!h-14 !rounded-[16px] text-[16px] max-sm:text-[15px] max-sm:px-3 min-w-0"
                                             onClick={() => setShowFullBill(true)}
                                          >
-                                             <Receipt size={20} className="shrink-0" />
+                                             <Receipt size={20} className="shrink-0 max-sm:hidden" />
                                              <span className="truncate">Ver Comanda</span>
                                              <span className="font-normal text-[var(--text-muted)] num max-sm:hidden">
                                                  · R$ {selectedTable ? formatBRL(getTableSummary(selectedTable.id).total) : '0,00'}
