@@ -1745,7 +1745,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
                                     <Printer size={18} />
                                 </button>
                                 <div
-                                    className={`flex items-center gap-1 text-sm font-mono bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)] ${timerColorClass}`}
+                                    className={`flex items-center gap-1 text-sm num bg-[var(--surface)]/50 px-2 py-1 rounded-[var(--r-sm)] ${timerColorClass}`}
                                     title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
                                 >
                                     <Clock size={12}/>
@@ -2381,7 +2381,7 @@ const PaymentCaptureFields: React.FC<{
                                 </span>
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="font-mono font-bold">R$ {formatBRL(p.amount)}</span>
+                                <span className="num font-bold">R$ {formatBRL(p.amount)}</span>
                                 <button onClick={() => onRemovePayment(idx)} className="max-sm:p-2.5 text-[var(--err)]/60 hover:text-[var(--err)] u-motion u-press">
                                     <Trash2 size={16} />
                                 </button>
@@ -4025,7 +4025,7 @@ NOTIFY pgrst, 'reload schema';`;
                                         <span className="text-xl font-black text-[var(--text)]">{table.number}</span>
                                     </div>
                                     <div className="flex items-center gap-1 bg-[var(--surface-2)] px-1.5 py-0.5 rounded-md shrink-0">
-                                        <span className="font-mono font-bold text-xs text-[var(--text)]">
+                                        <span className="num font-bold text-xs text-[var(--text)]">
                                             {visiblePins.has(table.id) ? table.pin : '••••'}
                                         </span>
                                         <button
@@ -5680,7 +5680,7 @@ const CounterView: React.FC<{
                                      <div key={idx}>
                                          <div className="flex justify-between text-sm text-[var(--text-muted)]">
                                              <span className="truncate flex-1">{item.quantity}x {getOrderItemDisplayName(item)}</span>
-                                             <span className="font-mono text-xs">{(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                             <span className="num text-xs">{(item.price_at_time * item.quantity).toFixed(2)}</span>
                                          </div>
                                          {obs && <div className="text-xs font-semibold text-[var(--warn)]">Obs: {obs}</div>}
                                      </div>
@@ -6295,7 +6295,7 @@ const CaixaView: React.FC<{
                                             {Object.entries(historySummary.totals_by_method).map(([method, total]) => (
                                                 <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
-                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                    <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -6310,7 +6310,7 @@ const CaixaView: React.FC<{
                                             {Object.entries(historySummary.totals_by_brand).map(([brand, total]) => (
                                                 <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
-                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                    <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -6319,21 +6319,21 @@ const CaixaView: React.FC<{
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div className="rounded-xl border border-[var(--border)] px-3 py-2">
                                         <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
-                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(historySummary.total_sangria)}</p>
+                                        <p className="num font-bold text-[var(--text)]">R$ {formatBRL(historySummary.total_sangria)}</p>
                                     </div>
                                     <div className="rounded-xl border border-[var(--border)] px-3 py-2">
                                         <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
-                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(historySummary.total_suprimento)}</p>
+                                        <p className="num font-bold text-[var(--text)]">R$ {formatBRL(historySummary.total_suprimento)}</p>
                                     </div>
                                 </div>
                                 <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
                                     <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro</span>
-                                    <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(historySummary.expected_cash)}</span>
+                                    <span className="num font-bold text-lg text-[var(--text)]">R$ {formatBRL(historySummary.expected_cash)}</span>
                                 </div>
                                 {historySummary.closing_counted_cash !== null && (
                                     <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
                                         <span className="text-sm font-bold text-[var(--text)]">Contado na gaveta</span>
-                                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(historySummary.closing_counted_cash)}</span>
+                                        <span className="num font-bold text-lg text-[var(--text)]">R$ {formatBRL(historySummary.closing_counted_cash)}</span>
                                     </div>
                                 )}
                                 {historySummary.difference !== null && (
@@ -6347,7 +6347,7 @@ const CaixaView: React.FC<{
                                         <span className="text-sm font-bold text-[var(--text)]">
                                             {Math.abs(historySummary.difference) < 0.005 ? 'Conferiu certinho' : historySummary.difference > 0 ? 'Sobrou' : 'Faltou'}
                                         </span>
-                                        <span className="font-mono font-bold text-lg text-[var(--text)]">
+                                        <span className="num font-bold text-lg text-[var(--text)]">
                                             {historySummary.difference > 0 ? '+' : ''}R$ {formatBRL(historySummary.difference)}
                                         </span>
                                     </div>
@@ -6744,11 +6744,11 @@ const CaixaView: React.FC<{
                 <div className="space-y-4">
                     <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
                         <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
-                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closedResultDifference.expected)}</span>
+                        <span className="num font-bold text-lg text-[var(--text)]">R$ {formatBRL(closedResultDifference.expected)}</span>
                     </div>
                     <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
                         <span className="text-sm font-bold text-[var(--text)]">Total contado</span>
-                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closedResultDifference.counted)}</span>
+                        <span className="num font-bold text-lg text-[var(--text)]">R$ {formatBRL(closedResultDifference.counted)}</span>
                     </div>
                     <div className={`rounded-xl px-4 py-3 flex items-center justify-between border-2 ${
                         Math.abs(closedResultDifference.difference) < 0.005
@@ -6760,7 +6760,7 @@ const CaixaView: React.FC<{
                         <span className="text-sm font-bold text-[var(--text)]">
                             {Math.abs(closedResultDifference.difference) < 0.005 ? 'Confere certinho' : closedResultDifference.difference > 0 ? 'Sobra' : 'Falta'}
                         </span>
-                        <span className="font-mono font-bold text-lg text-[var(--text)]">
+                        <span className="num font-bold text-lg text-[var(--text)]">
                             {closedResultDifference.difference > 0 ? '+' : ''}R$ {formatBRL(closedResultDifference.difference)}
                         </span>
                     </div>
@@ -6989,7 +6989,7 @@ const CaixaView: React.FC<{
                                     >
                                         <div className="flex items-center justify-between">
                                             <span className="font-bold text-[var(--text)]">Mesa {t.number}</span>
-                                            <span className="text-[11px] font-mono">{t.minutesOccupied}min</span>
+                                            <span className="text-[11px] num">{t.minutesOccupied}min</span>
                                         </div>
                                         <p className="text-xs text-[var(--text-muted)] truncate">{t.hostName || '—'}</p>
                                         <p className="text-sm font-bold text-[var(--text)] mt-1">R$ {formatBRL(t.total)}</p>
@@ -7064,7 +7064,7 @@ const CaixaView: React.FC<{
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(item.total)}</span>
+                                    <span className="num font-bold text-[var(--text)]">R$ {formatBRL(item.total)}</span>
                                     <ArrowRight size={16} className="text-[var(--text-muted)]" />
                                 </div>
                             </motion.button>
@@ -7230,7 +7230,7 @@ const CaixaView: React.FC<{
                                             {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
                                                 <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
-                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                    <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -7251,7 +7251,7 @@ const CaixaView: React.FC<{
                                             {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
                                                 <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
-                                                    <span className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
+                                                    <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -7261,18 +7261,18 @@ const CaixaView: React.FC<{
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div className="rounded-xl border border-[var(--border)] px-3 py-2">
                                         <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingDown size={12} /> Sangrias</p>
-                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
+                                        <p className="num font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_sangria)}</p>
                                     </div>
                                     <div className="rounded-xl border border-[var(--border)] px-3 py-2">
                                         <p className="text-[var(--text-muted)] flex items-center gap-1"><TrendingUp size={12} /> Suprimentos</p>
-                                        <p className="font-mono font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
+                                        <p className="num font-bold text-[var(--text)]">R$ {formatBRL(closeSummary.total_suprimento)}</p>
                                     </div>
                                 </div>
 
                                 {canSeeExpectedBeforeClosing && (
                                     <div className="rounded-xl bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between">
                                         <span className="text-sm font-bold text-[var(--text)]">Esperado em dinheiro na gaveta</span>
-                                        <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
+                                        <span className="num font-bold text-lg text-[var(--text)]">R$ {formatBRL(closeSummary.expected_cash)}</span>
                                     </div>
                                 )}
                             </>
@@ -7303,7 +7303,7 @@ const CaixaView: React.FC<{
                             </div>
                             <div className="mt-3 flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)]">
                                 <span className="text-sm font-bold text-[var(--text)]">Total contado</span>
-                                <span className="font-mono font-bold text-lg text-[var(--text)]">R$ {formatBRL(closingCountedValue)}</span>
+                                <span className="num font-bold text-lg text-[var(--text)]">R$ {formatBRL(closingCountedValue)}</span>
                             </div>
                         </div>
 
@@ -7318,7 +7318,7 @@ const CaixaView: React.FC<{
                                 <span className="text-sm font-bold text-[var(--text)]">
                                     {Math.abs(liveDifference) < 0.005 ? 'Confere certinho' : liveDifference > 0 ? 'Sobra' : 'Falta'}
                                 </span>
-                                <span className="font-mono font-bold text-lg text-[var(--text)]">
+                                <span className="num font-bold text-lg text-[var(--text)]">
                                     {liveDifference > 0 ? '+' : ''}R$ {formatBRL(liveDifference)}
                                 </span>
                             </div>
@@ -10533,13 +10533,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NF-e (com destinatário)</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Input type="number" inputMode="numeric" label="Série — homologação" className="font-mono" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número — homologação" className="font-mono" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série — homologação" className="num" value={fiscalNfeSerie} onChange={e => setFiscalNfeSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número — homologação" className="num" value={fiscalNfeUltimoNumero} onChange={e => setFiscalNfeUltimoNumero(e.target.value)} />
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] -mt-2">↑ Homologação (testes). Deixe 0 se nunca emitiu.</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Input type="number" inputMode="numeric" label="Série — PRODUÇÃO" className="font-mono" value={fiscalNfeSerieProd} onChange={e => setFiscalNfeSerieProd(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número emitido — PRODUÇÃO" className="font-mono" value={fiscalNfeUltimoNumeroProd} onChange={e => setFiscalNfeUltimoNumeroProd(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série — PRODUÇÃO" className="num" value={fiscalNfeSerieProd} onChange={e => setFiscalNfeSerieProd(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido — PRODUÇÃO" className="num" value={fiscalNfeUltimoNumeroProd} onChange={e => setFiscalNfeUltimoNumeroProd(e.target.value)} />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — NF-e</label>
@@ -10557,13 +10557,13 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="space-y-4 p-4 bg-[var(--surface-2)]/50 rounded-xl border border-[var(--border)]">
                                 <p className="text-xs font-semibold text-[var(--brand)] uppercase tracking-wide">NFC-e (cupom fiscal)</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Input type="number" inputMode="numeric" label="Série — homologação" className="font-mono" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número — homologação" className="font-mono" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série — homologação" className="num" value={fiscalNfceSerie} onChange={e => setFiscalNfceSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número — homologação" className="num" value={fiscalNfceUltimoNumero} onChange={e => setFiscalNfceUltimoNumero(e.target.value)} />
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] -mt-2">↑ Homologação (testes). Deixe 0 se nunca emitiu.</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Input type="number" inputMode="numeric" label="Série — PRODUÇÃO" className="font-mono" placeholder="Ex: 2" value={fiscalNfceSerieProd} onChange={e => setFiscalNfceSerieProd(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número emitido — PRODUÇÃO" className="font-mono" value={fiscalNfceUltimoNumeroProd} onChange={e => setFiscalNfceUltimoNumeroProd(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série — PRODUÇÃO" className="num" placeholder="Ex: 2" value={fiscalNfceSerieProd} onChange={e => setFiscalNfceSerieProd(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido — PRODUÇÃO" className="num" value={fiscalNfceUltimoNumeroProd} onChange={e => setFiscalNfceUltimoNumeroProd(e.target.value)} />
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] -mt-2">Produção tem numeração própria. Se a loja já emitia nota por outro sistema, use uma série que ele não usava (ou informe o último número dele). Se o número já tiver sido usado, o sistema pula sozinho pro próximo.</p>
                                 <p className="text-xs text-[var(--text-muted)]">CSC (Código de Segurança do Contribuinte) — só existe pra NFC-e, cada ambiente tem o seu.</p>
@@ -10591,14 +10591,14 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">CT-e</p>
-                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série" className="num" value={fiscalCteSerie} onChange={e => setFiscalCteSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="num" value={fiscalCteUltimoNumero} onChange={e => setFiscalCteUltimoNumero(e.target.value)} />
                                     <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">MDF-e</p>
-                                    <Input type="number" inputMode="numeric" label="Série" className="font-mono" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
-                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="font-mono" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Série" className="num" value={fiscalMdfeSerie} onChange={e => setFiscalMdfeSerie(e.target.value)} />
+                                    <Input type="number" inputMode="numeric" label="Último número emitido" className="num" value={fiscalMdfeUltimoNumero} onChange={e => setFiscalMdfeUltimoNumero(e.target.value)} />
                                     <p className="text-xs text-[var(--text-muted)]">Deixe 0 se nunca emitiu.</p>
                                 </div>
                             </div>
@@ -10608,11 +10608,11 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
 
                 <Collapsible title="Dados Gerais" defaultOpen={false}>
                     <div className="space-y-4">
-                        <Input label="Inscrição municipal" className="font-mono" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
+                        <Input label="Inscrição municipal" className="num" placeholder="Opcional" value={fiscalInscricaoMunicipal} onChange={e => setFiscalInscricaoMunicipal(e.target.value)} />
                         <Input label="Telefone" inputMode="tel" placeholder="Ex: (71) 99999-9999" value={fiscalTelefone} onChange={e => setFiscalTelefone(e.target.value)} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input type="number" inputMode="numeric" label="Casas decimais" value={fiscalCasasDecimais} onChange={e => setFiscalCasasDecimais(e.target.value)} />
-                            <Input label="CNPJ Autorizado" className="font-mono" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
+                            <Input label="CNPJ Autorizado" className="num" placeholder="Opcional" value={fiscalCnpjAutorizado} onChange={e => setFiscalCnpjAutorizado(e.target.value)} />
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <label className="text-sm font-semibold text-[var(--text)]">Observação padrão — Pedido/Orçamento</label>
@@ -10645,7 +10645,7 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                                     <option value="fisica">Física</option>
                                 </select>
                             </div>
-                            <Input label="Inscrição Estadual" className="font-mono" placeholder="Opcional" value={fiscalInscricaoEstadual} onChange={e => setFiscalInscricaoEstadual(e.target.value)} />
+                            <Input label="Inscrição Estadual" className="num" placeholder="Opcional" value={fiscalInscricaoEstadual} onChange={e => setFiscalInscricaoEstadual(e.target.value)} />
                         </div>
                         <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Endereço</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

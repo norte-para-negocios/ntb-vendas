@@ -40,15 +40,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             injetar um <link> por loja num layout raiz estático; o custo de
             rede é o mesmo request a mais de sempre, só com mais famílias. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;500&family=Fredoka:wght@500;700&family=Kalam:wght@400;700&family=Quicksand:wght@500;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Kalam:wght@400;700&family=Quicksand:wght@500;700&display=swap"
           rel="stylesheet"
         />
         <style>{`
           :root {
-            /* Atkinson Hyperlegible: mesma fonte do site institucional
-               norteparanegocios.com.br (humanista, alta legibilidade). */
-            --font-sans-src: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-            --font-mono-src: 'JetBrains Mono', 'Courier New', monospace;
+            /* Fonte do sistema (redesign estilo Apple, 2026-09-26): SF no Mac,
+               Segoe UI Variable no Windows das lojas. */
+            --font-sans-src: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+            --font-mono-src: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
           }
         `}</style>
       </head>

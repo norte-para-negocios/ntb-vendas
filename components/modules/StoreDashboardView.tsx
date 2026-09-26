@@ -745,7 +745,7 @@ export const StoreDashboardView: React.FC<{
                                     <div className="grid gap-1" style={{ gridTemplateColumns: `48px repeat(${occupancyHeatmap.hours.length}, 1fr)` }}>
                                         <div />
                                         {occupancyHeatmap.hours.map(h => (
-                                            <div key={h} className="text-[10px] text-center text-[var(--text-muted)] font-mono">{h}h</div>
+                                            <div key={h} className="text-[10px] text-center text-[var(--text-muted)] num">{h}h</div>
                                         ))}
                                         {DAY_LABELS.map((label, day) => (
                                             <React.Fragment key={label}>

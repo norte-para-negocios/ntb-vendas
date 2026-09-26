@@ -46,37 +46,37 @@
 
 :root {
   /* Neutros slate frios */
-  --bg: #f7f8fa;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-2: #f1f4f8;
-  --text: #1f2733;
-  --text-muted: #64748b;
-  --border: #e6e9ef;
+  --surface-2: #f2f2f7;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --border: rgba(60, 60, 67, 0.14);
 
   /* Marca: identidade Norte Para Negócios (azul-violeta + coral) */
   --brand: #484DB5;
   --brand-strong: #3A3E91;
-  --brand-soft: #EEF0FC;
+  --brand-soft: #eceefb;
 
   /* Semânticas — escurecidas p/ contraste WCAG AA (>=4.5:1) contra fundo
      branco no tema claro (ver docs/plans/2026-07-02-varredura-correcoes-plan.md,
      achado de UX #3; valores antigos ficavam entre 2.2:1 e 3.7:1). */
-  --ok: #047857;
-  --warn: #b45309;
-  --err: #be123c;
-  --info: #2563eb;
+  --ok: #248a3d;
+  --warn: #b25000;
+  --err: #d70015;
+  --info: #0066cc;
 
   /* Tinta: superfície escura de destaque (igual ao site institucional) */
   --ink: #1E1B4B;
 
   /* Raios */
-  --r-sm: 0.375rem;
-  --r-md: 0.625rem;
-  --r-lg: 0.875rem;
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1.125rem;
 
   /* Sombras suaves difusas — tom Linear/Stripe */
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 12px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
 
   /* Linguagem de movimento. Tom: Linear/Stripe/Vercel.
      Sutil, discreto, consistente. */
@@ -107,11 +107,11 @@
   /* Skeleton shimmer */
   --shimmer: rgba(255, 255, 255, 0.55);
 
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
   /* Scrollbar */
-  --scrollbar-thumb: #c4ccd8;
-  --scrollbar-thumb-hover: #9aa6b8;
+  --scrollbar-thumb: #c7c7cc;
+  --scrollbar-thumb-hover: #aeaeb2;
 }
 
 /* Trava os tokens de tema nos valores claros, independente da classe .dark herdada
@@ -121,25 +121,25 @@
    (landing, login de lojista, login de master) - o modo escuro só existe DEPOIS
    de autenticado, dentro do próprio painel do usuário. */
 .force-light {
-  --bg: #f7f8fa;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-2: #f1f4f8;
-  --text: #1f2733;
-  --text-muted: #64748b;
-  --border: #e6e9ef;
+  --surface-2: #f2f2f7;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --border: rgba(60, 60, 67, 0.14);
   --brand: #484DB5;
   --brand-strong: #3A3E91;
-  --brand-soft: #EEF0FC;
-  --ok: #047857;
-  --warn: #b45309;
-  --err: #be123c;
-  --info: #2563eb;
+  --brand-soft: #eceefb;
+  --ok: #248a3d;
+  --warn: #b25000;
+  --err: #d70015;
+  --info: #0066cc;
   --ink: #1E1B4B;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 12px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   --shimmer: rgba(255, 255, 255, 0.55);
-  --scrollbar-thumb: #c4ccd8;
-  --scrollbar-thumb-hover: #9aa6b8;
+  --scrollbar-thumb: #c7c7cc;
+  --scrollbar-thumb-hover: #aeaeb2;
 }
 
 /* Conteúdo dentro do vidro (sheets, barras) sempre lê os tokens do tema
@@ -161,19 +161,19 @@
 
 /* Dark mode: ativado por classe .dark no <html> */
 .dark {
-  --bg: #0d0e12;
-  --surface: #15171d;
-  --surface-2: #1c1f27;
-  --text: #e6e8ec;
-  --text-muted: #8b93a1;
-  --border: rgba(255, 255, 255, 0.12);
-  --brand: #8489e0;
-  --brand-strong: #a3a7ea;
-  --brand-soft: rgba(72, 77, 181, 0.25);
-  --ok: #34d399;
-  --warn: #fbbf24;
-  --err: #f87171;
-  --info: #60a5fa;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --text: #f5f5f7;
+  --text-muted: #98989d;
+  --border: rgba(84, 84, 88, 0.45);
+  --brand: #8b90ea;
+  --brand-strong: #a6aaf0;
+  --brand-soft: rgba(139, 144, 234, 0.18);
+  --ok: #30d158;
+  --warn: #ffb340;
+  --err: #ff6961;
+  --info: #409cff;
   --ink: #0a0d13;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
@@ -210,8 +210,9 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-size: 0.9rem;
-    font-family: var(--font-sans-src, 'Atkinson Hyperlegible'), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.9375rem;
+    letter-spacing: -0.005em;
+    font-family: var(--font-sans-src), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -224,14 +225,15 @@
     border-radius: 4px;
   }
   .num {
-    font-family: var(--font-mono-src, 'JetBrains Mono'), 'Courier New', monospace;
+    font-family: inherit;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
   .eyebrow {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    text-transform: none;
+    letter-spacing: 0;
     color: var(--text-muted);
   }
 }
