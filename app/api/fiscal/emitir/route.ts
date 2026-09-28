@@ -718,9 +718,14 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         : (produto?.name ?? 'Produto');
       return {
         // omie_codigo é o SKU real (ex.: "90935"), legível no cupom impresso.
-        // Fallback pro UUID truncado só cobre produtos cadastrados manualmente
-        // sem vínculo com o Omie (omie_codigo null) — nunca deve faltar código.
-        cProd: produto?.omie_codigo || String(produto?.id ?? '').slice(0, 8),
+        // Produto com variação (pizza, caipirinha, moqueca...) não tem código
+        // próprio — o SKU do Omie fica na opção escolhida; usa a 1ª opção com
+        // código (2026-09-28: o ImportarNFCe do Omie recusa a nota inteira se
+        // algum cProd não existir lá). UUID truncado só em último caso.
+        cProd:
+          produto?.omie_codigo ||
+          ((i as any).selected_options as { omie_codigo?: string | null }[] | null | undefined)?.find((o) => o.omie_codigo)?.omie_codigo ||
+          String(produto?.id ?? '').slice(0, 8),
         xProd: nomeComVariacao,
         ncm: produto?.ncm,
         qCom: i.quantity,
