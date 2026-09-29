@@ -2926,6 +2926,12 @@ const TablesView: React.FC<{
     // direct_print, imprime dois tickets físicos + duplica o pedido na
     // cozinha.
     const isAddingItemRef = useRef(false);
+    // Pedido da mesa em montagem (2026-09-29, pedido do cliente do Sertão): tocar
+    // em "Adicionar ao pedido" só junta no carrinho; o pedido nasce de uma vez em
+    // "Confirmar pedido" — e sai numa comanda só por destino, em vez de um papel
+    // por item. Depois de confirmado o pedido está na mesa (sem desfazer).
+    const [mesaCarrinho, setMesaCarrinho] = useState<CounterSaleLine[]>([]);
+    const [enviandoPedidoMesa, setEnviandoPedidoMesa] = useState(false);
     const [tables, setTables] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
     // "Pedidos do Dia" (extensão do antigo "Pedidos Enviados", redesign
@@ -2943,6 +2949,7 @@ const TablesView: React.FC<{
     
     // Menu Mode State
     const [showMenuMode, setShowMenuMode] = useState(false);
+    useEffect(() => { if (!showMenuMode) setMesaCarrinho([]); }, [showMenuMode]);
 
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
@@ -4053,145 +4060,140 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
     
-    const handleAddItem = async (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => {
-        if (!selectedTable) return;
+    const mesaCarrinhoTotal = mesaCarrinho.reduce((a, l) => a + calculateCartItemUnitPrice({ product: l.product, selectedOptions: l.selectedOptions }) * l.qty, 0);
+    const mesaCarrinhoQtd = mesaCarrinho.reduce((a, l) => a + l.qty, 0);
+
+    const adicionarNaMesa = (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => {
+        const obs = notes.trim();
+        const key = `${product.id}|${selectedOptions.map(o => o.option_id).sort().join(',')}|${obs}`;
+        setMesaCarrinho(prev => {
+            const existente = prev.find(l => l.key === key);
+            if (existente) return prev.map(l => l.key === key ? { ...l, qty: l.qty + qty } : l);
+            return [...prev, { key, product, qty, notes: obs, selectedOptions }];
+        });
+        toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado ao pedido`);
+    };
+    const mudarQtdMesa = (key: string, delta: number) => {
+        setMesaCarrinho(prev => prev.map(l => l.key === key ? { ...l, qty: Math.max(1, l.qty + delta) } : l));
+    };
+    const removerDaMesa = (key: string) => setMesaCarrinho(prev => prev.filter(l => l.key !== key));
+
+    const fecharPedidoMesa = async () => {
+        if (isAddingItemRef.current) return;
+        if (mesaCarrinho.length > 0 && !(await confirm({ message: 'Descartar os itens que ainda não foram confirmados?', variant: 'danger', confirmLabel: 'Descartar' }))) return;
+        setMesaCarrinho([]);
+        setShowMenuMode(false);
+    };
+
+    const confirmarPedidoMesa = async () => {
+        if (!selectedTable || mesaCarrinho.length === 0) return;
         // Defesa em profundidade (achado real do Ramon, WhatsApp 2026-09-08,
-        // mesmo espírito do comentário em handleOpenPayment acima): hoje não
-        // existe caminho pra abrir este modal pra uma mesa fora da
-        // jurisdição (handleOpenPayment já barra `setSelectedTable`), mas
-        // repetir a checagem aqui garante que um bug futuro em QUALQUER
+        // mesmo espírito do comentário em handleOpenPayment acima): repetir a
+        // checagem de jurisdição aqui garante que um bug futuro em QUALQUER
         // outro lugar que chame `setSelectedTable` sem passar pelo gate não
         // reabra esse buraco silenciosamente.
         if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
-        // Fix round 1 (Task 2 review, Minor #3): mesmo padrão de guarda
-        // síncrona que handleFinishPayment já usa (isFinishingRef) — sem
-        // isso, um duplo toque rápido em "Lançar Pedido" (antes do primeiro
-        // clique re-renderizar/desabilitar o botão) dispara duas
-        // createOrder, e em direct_print cada uma imprime seu próprio
-        // ticket físico.
+        // Guarda síncrona contra duplo toque (antes do botão re-renderizar):
+        // duas createOrder imprimiriam duas comandas e duplicariam o pedido.
         if (isAddingItemRef.current) return;
         isAddingItemRef.current = true;
-
-        // createOrder já prefixa `[Nome]`; aqui só o texto do item otimista.
-        const optimisticNotes = notes ? `[${loggedUser.name}] ${notes}` : `[${loggedUser.name}]`;
+        setEnviandoPedidoMesa(true);
+        const linhas = mesaCarrinho;
+        const mesa = selectedTable;
 
         try {
-            // Reuses createOrder logic which handles adding to existing orders.
-            // `orderId` do retorno era ignorado antes (só era usado pro print
-            // imediato, removido no redesign de 2026-08-23) — a reconciliação
-            // do Caixa continua resolvendo o pedido/item sozinha via
-            // fetch_kitchen_orders_secure. Agora capturado de novo (Fix round
-            // de acompanhamento, 2026-09-09) só pra alimentar a atualização
-            // otimista abaixo, não pra print.
-            const result = await createOrder(selectedTable.id, storeId, [{
-                product, quantity: qty, notes, selectedOptions
-            }], loggedUser.name, 'garcom', loggedUser.name);
+            // Uma chamada só: o servidor grava o pedido inteiro numa transação,
+            // e a Estação de Impressão agrupa por pedido + destino.
+            const result = await createOrder(mesa.id, storeId, linhas.map(l => ({
+                product: l.product, quantity: l.qty, notes: l.notes, selectedOptions: l.selectedOptions,
+            })), loggedUser.name, 'garcom', loggedUser.name);
 
             // Sem internet: o pedido ficou só na fila local (id "local_..."), então a
             // Estação de Impressão (que lê o servidor) não vai ver nada agora. Imprime
             // a comanda direto na impressora de rede do destino e deixa uma marca pra
             // não sair em dobro quando o pedido sincronizar.
             if (result.orderId && String(result.orderId).startsWith('local_')) {
-                // Setor do item (produto ?? categoria) e o destino dele, pelo cache local.
                 const menuCache: any = await getCachedMenu(storeId).catch(() => null);
-                const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === product.category_id);
-                const setorId: string | null = product.sector_id || (product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
-                const setor = setorId ? (await fetchPrintSectors(storeId)).find((x) => x.id === setorId) : undefined;
-                const destino: 'kitchen' | 'bar' = setor ? setor.base : (product.destination === 'bar' ? 'bar' : 'kitchen');
-                const conteudo = buildKitchenTicketText({
-                    kind: destino === 'bar' ? 'BAR' : 'COZINHA',
-                    storeName: store.name,
-                    orderType: 'MESA',
-                    identifier: `MESA ${selectedTable.number}`,
-                    client: loggedUser.name,
-                    quantity: qty,
-                    productName: product.name,
-                    addons: (selectedOptions || []).map((o: any) => o.name).join(', ') || undefined,
-                    observation: notes || undefined,
-                    orderIdShort: String(result.orderId).slice(6, 14),
-                });
-                const sig = `${selectedTable.number}|${product.id}|${qty}|${optimisticNotes}`;
-                // Não espera a impressão: o garçom continua lançando enquanto imprime.
-                printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${qty}x ${product.name} — Mesa ${selectedTable.number}`, content: conteudo, sig })
-                    .catch(() => 0)
-                    .then((impressas) => {
-                        if (impressas > 0) toast.info('Sem internet: comanda impressa direto na impressora.');
-                        else toast.warning('Sem internet: o pedido foi salvo, mas a comanda não saiu na impressora. Ela sai quando a internet voltar.');
+                const setores = await fetchPrintSectors(storeId).catch(() => []);
+                let impressas = 0;
+                for (const l of linhas) {
+                    const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === l.product.category_id);
+                    const setorId: string | null = l.product.sector_id || (l.product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
+                    const setor = setorId ? setores.find((x) => x.id === setorId) : undefined;
+                    const destino: 'kitchen' | 'bar' = setor ? setor.base : (l.product.destination === 'bar' ? 'bar' : 'kitchen');
+                    const notasNoBanco = l.notes ? `[${loggedUser.name}] ${l.notes}` : `[${loggedUser.name}]`;
+                    const conteudo = buildKitchenTicketText({
+                        kind: destino === 'bar' ? 'BAR' : 'COZINHA',
+                        storeName: store.name,
+                        orderType: 'MESA',
+                        identifier: `MESA ${mesa.number}`,
+                        client: loggedUser.name,
+                        quantity: l.qty,
+                        productName: l.product.name,
+                        addons: (l.selectedOptions || []).map((o: any) => o.name).join(', ') || undefined,
+                        observation: l.notes || undefined,
+                        orderIdShort: String(result.orderId).slice(6, 14),
                     });
+                    const sig = `${mesa.number}|${l.product.id}|${l.qty}|${notasNoBanco}`;
+                    impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Mesa ${mesa.number}`, content: conteudo, sig }).catch(() => 0);
+                }
+                if (impressas > 0) toast.info('Sem internet: comanda impressa direto na impressora.');
+                else toast.warning('Sem internet: o pedido foi salvo, mas a comanda não saiu na impressora. Ela sai quando a internet voltar.');
             }
 
             // Atualização otimista da comanda — sem isso, "Ver Comanda" e o
-            // total do card da mesa (os dois vêm de getTableSummary, que só
-            // lê `activeOrders`) continuam com o valor antigo até a próxima
-            // sincronização real. `loadData`/Realtime eventualmente
-            // substituem este item sintético pelo real (setActiveOrders
-            // troca o array inteiro, nunca faz merge) — não sobra duplicata.
+            // total do card da mesa continuam com o valor antigo até a próxima
+            // sincronização real. `loadData`/Realtime substituem estes itens
+            // sintéticos pelos reais (setActiveOrders troca o array inteiro).
             if (result.orderId) {
-                const unitPrice = calculateCartItemUnitPrice({ product, selectedOptions });
-                const optimisticItem: OrderItem = {
+                const agora = new Date().toISOString();
+                const itensOtimistas: OrderItem[] = linhas.map(l => ({
                     id: `local_item_${crypto.randomUUID()}`,
-                    order_id: result.orderId,
-                    product_id: product.id,
-                    product,
-                    quantity: qty,
+                    order_id: result.orderId!,
+                    product_id: l.product.id,
+                    product: l.product,
+                    quantity: l.qty,
                     status: OrderStatus.PENDING,
-                    notes: optimisticNotes,
-                    created_at: new Date().toISOString(),
-                    price_at_time: unitPrice,
-                    selected_options: selectedOptions.map(o => ({ name: o.name, price_delta: o.price_delta })),
+                    notes: l.notes ? `[${loggedUser.name}] ${l.notes}` : `[${loggedUser.name}]`,
+                    created_at: agora,
+                    price_at_time: calculateCartItemUnitPrice({ product: l.product, selectedOptions: l.selectedOptions }),
+                    selected_options: l.selectedOptions.map(o => ({ name: o.name, price_delta: o.price_delta })),
                     added_by_role: 'garcom',
                     added_by_name: loggedUser.name,
-                };
+                }));
                 setActiveOrders(prev => {
-                    const existing = prev.find(o => o.table_id === selectedTable.id && o.status === OrderStatus.PENDING);
+                    const existing = prev.find(o => o.table_id === mesa.id && o.status === OrderStatus.PENDING);
                     if (existing) {
                         return prev.map(o => o.id === existing.id
-                            ? { ...o, order_items: [...(o.order_items || []), optimisticItem] }
+                            ? { ...o, order_items: [...(o.order_items || []), ...itensOtimistas] }
                             : o);
                     }
                     const optimisticOrder: Order = {
                         id: result.orderId!,
-                        table_id: selectedTable.id,
+                        table_id: mesa.id,
                         store_id: storeId,
                         status: OrderStatus.PENDING,
                         order_type: 'table',
                         total: 0,
-                        created_at: new Date().toISOString(),
-                        order_items: [optimisticItem],
+                        created_at: agora,
+                        order_items: itensOtimistas,
                     };
                     return [...prev, optimisticOrder];
                 });
             }
 
-            toast.success(`${getOrderItemDisplayName({ product, selected_options: selectedOptions })} adicionado com sucesso!`);
-
-            // Redesign 2026-08-23 (review crítico "waiter-launched orders
-            // print nowhere real, silently"): este componente já NÃO imprime
-            // mais no próprio aparelho de quem lançou o item. Confirmado
-            // direto com o dono: o celular do garçom não tem acesso à
-            // impressora de rede da cozinha — só o aparelho do Caixa tem.
-            // Antes deste fix, `window.print()` aqui "tinha sucesso" sempre
-            // que a chamada não lançava, mesmo sem NENHUMA impressora
-            // configurada no aparelho do garçom — o pedido nunca chegava na
-            // cozinha e nada avisava ninguém.
-            //
-            // O pedido continua sendo criado exatamente como antes
-            // (`createOrder(..., 'garcom')`, acima) — só o print imediato
-            // saiu daqui. Quem imprime agora é a reconciliação em segundo
-            // plano do Caixa (`useCaixaPrintStation`, CaixaPrintStation.tsx),
-            // rodando no ÚNICO aparelho que de fato tem a impressora — o
-            // mesmo mecanismo que já cobria autoatendimento (QR) e Balcão.
-            // Esse item continua marcado `added_by_role: 'garcom'`
-            // (migration 046), mas a reconciliação não filtra mais por esse
-            // valor (ver CaixaPrintStation.tsx) — ela agora trata QR, Balcão
-            // e garçom exatamente igual, todos sem impressora própria no
-            // momento da criação.
-            // setShowMenuMode(false);
-        } catch (e) {
-            toast.error("Erro ao adicionar item.");
+            // Quem imprime é a Estação de Impressão do Caixa (o celular do garçom
+            // não alcança a impressora da cozinha) — ver CaixaPrintStation.tsx.
+            toast.success(mesaCarrinhoQtd === 1 ? 'Pedido enviado.' : `Pedido enviado (${mesaCarrinhoQtd} itens).`);
+            setMesaCarrinho([]);
+            setShowMenuMode(false);
+        } catch (e: any) {
+            // Nada foi gravado: o carrinho continua aí pra tentar de novo.
+            toast.error(e?.message ? `O pedido não foi enviado: ${e.message}` : 'O pedido não foi enviado. Tente de novo.');
             console.error(e);
         } finally {
             isAddingItemRef.current = false;
+            setEnviandoPedidoMesa(false);
         }
     };
 
@@ -4844,7 +4846,7 @@ NOTIFY pgrst, 'reload schema';`;
                 de um celular quebraria o layout do resumo. */}
             <WaiterOrderSurface
                 isOpen={showMenuMode && !!selectedTable}
-                onClose={() => setShowMenuMode(false)}
+                onClose={fecharPedidoMesa}
                 ariaLabel={`Mesa ${selectedTable?.number ?? ''} — Adicionar pedido`}
                 title={<>Mesa {selectedTable?.number} <span className="text-[var(--text-muted)] font-normal">· Adicionar pedido</span></>}
             >
@@ -4854,13 +4856,61 @@ NOTIFY pgrst, 'reload schema';`;
                 return (
                         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                             <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                                <StoreTableMenu storeId={storeId} onAddItem={handleAddItem} />
+                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" />
                             </div>
                             {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
                                 mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
                                 getTableSummary da comanda completa — atualiza sozinho
                                 (otimista no handleAddItem + Realtime). */}
-                            <div className="md:w-[300px] lg:w-[32%] lg:max-w-[400px] max-md:max-h-[38%] flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
+                            <div className={`md:w-[300px] lg:w-[32%] lg:max-w-[400px] ${mesaCarrinho.length > 0 ? 'max-md:max-h-[62%]' : 'max-md:max-h-[38%]'} flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden`}>
+                                {mesaCarrinho.length > 0 && (
+                                    <div className="flex-shrink-0 max-h-[60%] flex flex-col min-h-0 border-b border-[var(--border)]">
+                                        <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">
+                                            <h4 className="font-semibold text-[15px] text-[var(--text)]">Novo pedido <span className="font-normal text-[var(--text-muted)]">· ainda não enviado</span></h4>
+                                            <span className="text-[13px] text-[var(--text-muted)] num">{mesaCarrinhoQtd} {mesaCarrinhoQtd === 1 ? 'item' : 'itens'}</span>
+                                        </div>
+                                        <div className="overflow-y-auto min-h-[64px] px-3 pb-2">
+                                            <div className="bg-[var(--surface)] rounded-[14px] divide-y divide-[var(--border)] overflow-hidden">
+                                                {mesaCarrinho.map(l => {
+                                                    const unit = calculateCartItemUnitPrice({ product: l.product, selectedOptions: l.selectedOptions });
+                                                    return (
+                                                        <div key={l.key} className="flex items-center gap-2 pl-4 pr-1.5 py-2.5">
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="font-semibold text-[15px] text-[var(--text)] leading-tight line-clamp-2">{getOrderItemDisplayName({ product: l.product, selected_options: l.selectedOptions })}</div>
+                                                                {l.notes && <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5 line-clamp-2">Obs: {l.notes}</div>}
+                                                                <div className="text-[13px] text-[var(--text-muted)] mt-0.5 num">R$ {formatBRL(unit * l.qty)}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                                                                <button type="button" onClick={() => mudarQtdMesa(l.key, -1)} disabled={l.qty <= 1} aria-label={`Diminuir ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] disabled:opacity-40 u-motion u-press-sm"><Minus size={15} /></button>
+                                                                <span className="font-semibold text-[15px] num w-7 text-center">{l.qty}</span>
+                                                                <button type="button" onClick={() => mudarQtdMesa(l.key, 1)} aria-label={`Aumentar ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] u-motion u-press-sm"><Plus size={15} /></button>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removerDaMesa(l.key)}
+                                                                className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)]/70 hover:text-[var(--err)] hover:bg-[var(--err)]/10 u-motion u-press flex-shrink-0"
+                                                                title="Tirar do pedido"
+                                                                aria-label={`Tirar ${l.product.name} do pedido`}
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <div className="px-4 pt-1 pb-3 flex-shrink-0">
+                                            <Button
+                                                size="lg"
+                                                className="w-full !h-[52px] !text-[17px]"
+                                                isLoading={enviandoPedidoMesa}
+                                                onClick={confirmarPedidoMesa}
+                                            >
+                                                Confirmar pedido · R$ {formatBRL(mesaCarrinhoTotal)}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">
                                     <h4 className="font-semibold text-[15px] text-[var(--text)]">Já pedido nesta mesa</h4>
                                     <span className="text-[13px] text-[var(--text-muted)]">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>

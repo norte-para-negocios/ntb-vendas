@@ -254,19 +254,45 @@ async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 
   return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
 
+export interface KitchenTicketLine {
+  quantity: number;
+  productName: string;
+  addons?: string;
+  observation?: string;
+}
+
+// Um pedido confirmado com vários itens do mesmo destino sai numa comanda só.
+// Sem `items`, o ticket é de um item só (quantity/productName), como sempre foi.
+function kitchenTicketLines(opts: {
+  items?: KitchenTicketLine[];
+  quantity?: number;
+  productName?: string;
+  addons?: string;
+  observation?: string;
+}): KitchenTicketLine[] {
+  if (opts.items && opts.items.length > 0) return opts.items;
+  return [{ quantity: opts.quantity ?? 1, productName: opts.productName ?? '', addons: opts.addons, observation: opts.observation }];
+}
+
 export function printKitchenTicket(opts: {
   kind: 'COZINHA' | 'BAR';
   storeName?: string;
   orderType: string;
   identifier: string;
   client?: string | null;
-  quantity: number;
-  productName: string;
+  quantity?: number;
+  productName?: string;
   addons?: string;
   observation?: string;
+  items?: KitchenTicketLine[];
   orderIdShort: string;
   paperWidthMm?: 48 | 58 | 80;
 }): Promise<boolean> {
+  const linhas = kitchenTicketLines(opts);
+  const itensHtml = linhas.map((l) => `
+    <div class="item-line">${l.quantity}x ${escapeHtml(l.productName)}</div>
+    ${l.addons ? `<div class="addons">Adicional: ${escapeHtml(l.addons)}</div>` : ''}
+    ${l.observation ? `<div class="obs">OBS: ${escapeHtml(l.observation)}</div>` : ''}`).join('');
   const body = `
     <div class="header">
       ${opts.storeName ? `<div class="store-name">${escapeHtml(opts.storeName)}</div>` : ''}
@@ -277,15 +303,12 @@ export function printKitchenTicket(opts: {
       <div class="big-text">${escapeHtml(opts.orderType)}: ${escapeHtml(opts.identifier)}</div>
       ${opts.client ? `<div>Cliente: ${escapeHtml(opts.client)}</div>` : ''}
     </div>
-    <div class="item-line">${opts.quantity}x ${escapeHtml(opts.productName)}</div>
-    ${opts.addons ? `<div class="addons">Adicional: ${escapeHtml(opts.addons)}</div>` : ''}
-    ${opts.observation ? `<div class="obs">OBS: ${escapeHtml(opts.observation)}</div>` : ''}
+    ${itensHtml}
     <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;
   const plainText = buildKitchenTicketText({
     kind: opts.kind, storeName: opts.storeName, orderType: opts.orderType, identifier: opts.identifier,
-    client: opts.client, quantity: opts.quantity, productName: opts.productName, addons: opts.addons,
-    observation: opts.observation, orderIdShort: opts.orderIdShort,
+    client: opts.client, items: linhas, orderIdShort: opts.orderIdShort,
   });
   return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm, plainText);
 }
@@ -373,10 +396,11 @@ export function buildKitchenTicketText(opts: {
   orderType: string;
   identifier: string;
   client?: string | null;
-  quantity: number;
-  productName: string;
+  quantity?: number;
+  productName?: string;
   addons?: string;
   observation?: string;
+  items?: KitchenTicketLine[];
   orderIdShort: string;
 }): string {
   const lines: string[] = [];
@@ -387,9 +411,12 @@ export function buildKitchenTicketText(opts: {
   lines.push(`${opts.orderType}: ${opts.identifier}`);
   if (opts.client) lines.push(`Cliente: ${opts.client}`);
   lines.push('');
-  lines.push(`${opts.quantity}x ${opts.productName}`);
-  if (opts.addons) lines.push(`Adicional: ${opts.addons}`);
-  if (opts.observation) lines.push(`OBS: ${opts.observation.toUpperCase()}`);
+  kitchenTicketLines(opts).forEach((l, i) => {
+    if (i > 0) lines.push('');
+    lines.push(`${l.quantity}x ${l.productName}`);
+    if (l.addons) lines.push(`Adicional: ${l.addons}`);
+    if (l.observation) lines.push(`OBS: ${l.observation.toUpperCase()}`);
+  });
   lines.push('--------------------------------');
   lines.push(`Pedido #${opts.orderIdShort}`);
   lines.push('\n\n\n');

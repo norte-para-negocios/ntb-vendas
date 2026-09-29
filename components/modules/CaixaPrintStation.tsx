@@ -540,6 +540,8 @@ interface FailedEntry {
   description: string;
   attempts: number;
   retry: () => Promise<boolean>;
+  // Comanda agrupada: todos os itens que saem juntos no mesmo papel.
+  itemIds?: string[];
 }
 
 // Revisão crítica 2026-08-23 (Important #I1 — "restrict the auto-print loop
@@ -668,14 +670,55 @@ async function reconcileDestination(
   };
   const toPrint = items.filter((it) => !printedIds.has(it.id) && new Date(it.created_at).getTime() >= activatedAtMs && !jaImpressoOffline(it));
 
+  // Itens do MESMO pedido confirmado (mesmo order_id e mesmo created_at, porque
+  // o servidor grava o pedido inteiro numa transação) e das MESMAS impressoras
+  // saem numa comanda só — antes saía um papel por item.
+  const grupos = new Map<string, { itens: any[]; printers: PrinterConfig[] }>();
+  // Itens de comandas que já esgotaram as tentativas automáticas ficam esperando
+  // a reimpressão manual — o grupo inteiro, não só o primeiro item dele.
+  const aguardandoManual = new Set<string>();
+  failedRef.current.forEach((entry) => {
+    if (entry.attempts < MAX_AUTO_RETRIES) return;
+    (entry.itemIds ?? [entry.key.split(':')[1]]).forEach((id) => aguardandoManual.add(id));
+  });
   for (const item of toPrint) {
-    const key = `${destination}:${item.id}`;
+    if (aguardandoManual.has(item.id)) continue;
+    // Setor (migration 087): só as impressoras do setor do item; se nenhuma
+    // impressora atende aquele setor, cai nas do destino sem setor (nunca some).
+    const doDestino = matchingNetworkPrinters(networkPrinters, destination);
+    const doSetor = doDestino.filter((p) => printerServesSector(p, (item as any).sector_id));
+    const printersForItem = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
+    const chave = `${item.order_id}|${item.created_at}|${printersForItem.map((p) => p.id).sort().join(',') || 'janela'}`;
+    const g = grupos.get(chave);
+    if (g) g.itens.push(item);
+    else grupos.set(chave, { itens: [item], printers: printersForItem });
+  }
+
+  for (const { itens, printers: printersForItem } of grupos.values()) {
+    const primeiro = itens[0];
+    const key = `${destination}:${primeiro.id}`;
     const fail = failedRef.current.get(key);
-    if (fail && fail.attempts >= MAX_AUTO_RETRIES) continue; // aguardando reimpressão manual
     const kind = destination === 'bar' ? 'BAR' : 'COZINHA';
-    const orderType = item.order?.order_type;
-    const tableNumber = item.order?.tables?.number;
-    const description = ticketDescription(item);
+    const orderType = primeiro.order?.order_type;
+    const tableNumber = primeiro.order?.tables?.number;
+    const local = orderType === 'counter' ? 'Balcão' : `Mesa ${tableNumber ?? '?'}`;
+    const description = itens.length === 1 ? ticketDescription(primeiro) : `${itens.length} itens — ${local}`;
+    const linhas = itens.map((it) => ({
+      quantity: it.quantity,
+      productName: it.product?.name || 'Produto indisponível',
+      addons: (it.selected_options || []).map((o: any) => o.name).join(', ') || undefined,
+      observation: parseItemNote(it.notes || '').observation || undefined,
+    }));
+    const client = parseItemNote(primeiro.notes || '').client;
+    const dadosTicket = {
+      kind: kind as 'COZINHA' | 'BAR',
+      storeName,
+      orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
+      identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
+      client,
+      items: linhas,
+      orderIdShort: primeiro.order_id.slice(0, 8),
+    };
 
     // Aditivo (ver matchingNetworkPrinters acima): enfileira o MESMO
     // ticket, em texto puro, pra cada impressora de rede/USB cadastrada
@@ -684,35 +727,21 @@ async function reconcileDestination(
     // (rede fora, tabela sem linha) não pode interromper nem marcar
     // falha no caminho window.print() já testado, que segue seu próprio
     // rastreamento de erro logo abaixo.
-    // Setor (migration 087): só as impressoras do setor do item; se nenhuma
-    // impressora atende aquele setor, cai nas do destino sem setor (nunca some).
-    const doDestino = matchingNetworkPrinters(networkPrinters, destination);
-    const doSetor = doDestino.filter((p) => printerServesSector(p, (item as any).sector_id));
-    const printersForItem = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
     if (printersForItem.length > 0) {
-      const { client: netClient, observation: netObservation } = parseItemNote(item.notes || '');
-      const content = buildKitchenTicketText({
-        kind,
-        storeName,
-        orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
-        identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
-        client: netClient,
-        quantity: item.quantity,
-        productName: item.product?.name || 'Produto indisponível',
-        addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
-        observation: netObservation || undefined,
-        orderIdShort: item.order_id.slice(0, 8),
-      });
+      const content = buildKitchenTicketText(dadosTicket);
+      const ids = itens.map((it) => it.id).sort();
       printersForItem.forEach((printer) => {
         // `dedupeKey` (migration 073): o dedupe desta tela é `printedIds` no
         // localStorage, ou seja, POR APARELHO — dois computadores da mesma
         // loja com o app aberto nunca enxergam o que o outro já imprimiu e
-        // cada um cria seu próprio print_job pro MESMO item, fazendo a
-        // comanda sair duas vezes na cozinha. A reserva atômica do motor de
-        // impressão não cobre isso (são jobs distintos, cada um reservado
-        // legitimamente por uma máquina): quem decide é o índice único no
-        // banco, e o segundo insert vira `duplicado: true` em silêncio.
-        enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content, dedupeKey: `item:${item.id}:${destination}:${printer.id}` })
+        // cada um cria seu próprio print_job pra MESMA comanda, fazendo-a sair
+        // duas vezes na cozinha. Quem decide é o índice único no banco. A
+        // chave do grupo usa os ids dos itens (mesmos nos dois aparelhos); um
+        // grupo de 1 item mantém a chave antiga.
+        const dedupeKey = ids.length === 1
+          ? `item:${ids[0]}:${destination}:${printer.id}`
+          : `grupo:${destination}:${printer.id}:${ids.join(',')}`;
+        enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content, dedupeKey })
           .catch((e) => console.error('enqueuePrintJob (auto) falhou:', e));
       });
     }
@@ -723,19 +752,7 @@ async function reconcileDestination(
       // interromperia o `for` no meio do lote (achado real do station
       // original, fix round 2 Group B2).
       try {
-        const { client, observation } = parseItemNote(item.notes || '');
-        return await printKitchenTicket({
-          kind,
-          storeName,
-          orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
-          identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
-          client,
-          quantity: item.quantity,
-          productName: item.product?.name || 'Produto indisponível',
-          addons: (item.selected_options || []).map((o) => o.name).join(', ') || undefined,
-          observation: observation || undefined,
-          orderIdShort: item.order_id.slice(0, 8),
-        });
+        return await printKitchenTicket(dadosTicket);
       } catch (e) {
         console.error('printKitchenTicket lançou (tratado como falha):', e);
         return false;
@@ -744,19 +761,13 @@ async function reconcileDestination(
     // Achado ao vivo (2026-08-28): quando já existe impressora USB/rede
     // cadastrada pra este destino, o `window.print()` abaixo (pensado pra
     // loja SEM impressora de rede nenhuma) não tem mais nenhuma impressora
-    // real esperando por ele -- ele falhava (ou imprimia em qualquer coisa
-    // marcada como padrão do Windows/Mac daquele aparelho, sem relação com
-    // cozinha/bar de verdade), e essa falha deixava o botão "Reimprimir"
-    // manual aparecendo pra um pedido que JÁ saiu certinho pela fila.
-    // `printersForItem.length > 0` é o mesmo sinal já usado acima pra
-    // decidir se enfileira -- reusado aqui pra decidir se `window.print()`
-    // sequer deveria rodar: a fila sendo real substitui o caminho antigo
+    // real esperando por ele — a fila sendo real substitui o caminho antigo
     // pra este destino, não some ADITIVA a ele.
     // eslint-disable-next-line no-await-in-loop -- impressão sequencial de propósito: dois print() quase simultâneos empilhariam diálogos nativos no mesmo instante.
     const ok = printersForItem.length > 0 ? true : await doPrint();
 
     if (ok) {
-      printedIds.add(item.id);
+      itens.forEach((it) => printedIds.add(it.id));
       savePrintedIds(storeId, destination, printedIds);
       if (failedRef.current.has(key)) {
         failedRef.current.delete(key);
@@ -764,7 +775,7 @@ async function reconcileDestination(
       }
     } else {
       const attempts = (fail?.attempts || 0) + 1;
-      failedRef.current.set(key, { key, description, attempts, retry: doPrint });
+      failedRef.current.set(key, { key, description, attempts, retry: doPrint, itemIds: itens.map((it) => it.id) });
       setFailedItems(new Map(failedRef.current));
     }
   }
@@ -1006,7 +1017,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     }
     if (ok) {
       const [destination, itemId] = key.split(':') as [Destination, string];
-      printedIdsRef.current[destination]?.add(itemId);
+      (entry.itemIds ?? [itemId]).forEach((id) => printedIdsRef.current[destination]?.add(id));
       if (storeRef.current) savePrintedIds(storeRef.current.id, destination, printedIdsRef.current[destination]);
       failedRef.current.delete(key);
       setFailedItemsState(new Map(failedRef.current));
