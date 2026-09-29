@@ -4233,7 +4233,7 @@ NOTIFY pgrst, 'reload schema';`;
                     destination: destino,
                     sectorId: lista[0].product?.sector_id ?? null,
                     title: `CANCELAMENTO — ${lista.length} ${lista.length === 1 ? 'item' : 'itens'} — Mesa ${mesaNumero}`,
-                    content: buildKitchenTicketText(dados),
+                    content: (printer) => buildKitchenTicketText({ ...dados, paperWidthMm: printer.paper_width_mm, titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined }),
                     dedupeKey: `cancel:${lista.map((i) => i.id).sort().join(',')}`,
                 });
             } catch (e) {

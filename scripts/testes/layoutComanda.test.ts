@@ -63,4 +63,14 @@ for (const [mm, W] of [[80, 48], [58, 32]] as const) {
   assert.ok(k.some((x) => x.trim().startsWith('+ Borda: Catupiry')) && k.some((x) => x.trim() === 'OBS: SEM CEBOLA'), 'adicional e observação em linhas próprias');
   assert.ok(cozinha.includes('Pedido #abc12345'));
 }
+// ---------- título do setor (pizzaria imprime "PIZZARIA", não "COZINHA") ----------
+{
+  const base = { kind: 'COZINHA' as const, storeName: 'Loja', orderType: 'MESA', identifier: 'MESA 2', orderIdShort: 'abc12345', paperWidthMm: 80, items: [{ quantity: 2, productName: 'Pizza Tradicional' }] };
+  const pizzaria = buildKitchenTicketText({ ...base, titulo: 'PIZZARIA' }).split('\n');
+  assert.ok(pizzaria.some((x) => x.trim() === 'PIZZARIA'), 'cabeçalho do setor');
+  assert.ok(!pizzaria.some((x) => x.trim() === 'COZINHA'), 'não diz COZINHA na pizzaria');
+  const canc = buildKitchenTicketText({ ...base, titulo: 'PIZZARIA', cancelamento: { por: 'Ramon' } });
+  assert.ok(canc.includes('CANCELAMENTO - PIZZARIA'), 'cancelamento também usa o setor');
+  assert.ok(buildKitchenTicketText(base).split('\n').some((x) => x.trim() === 'COZINHA'), 'sem título continua COZINHA');
+}
 console.log('ok');

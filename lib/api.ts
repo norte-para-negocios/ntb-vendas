@@ -2971,7 +2971,7 @@ export const enfileirarCancelamento = async (params: {
   destination: 'kitchen' | 'bar';
   sectorId?: string | null;
   title: string;
-  content: string;
+  content: string | ((printer: PrinterConfig) => string);
   dedupeKey: string;
 }): Promise<number> => {
   const todas = await fetchPrinterConfigs(params.storeId);
@@ -2985,7 +2985,7 @@ export const enfileirarCancelamento = async (params: {
       printerConfigId: printer.id,
       destination: params.destination,
       title: params.title,
-      content: params.content,
+      content: typeof params.content === 'function' ? params.content(printer) : params.content,
       dedupeKey: `${params.dedupeKey}:${printer.id}`,
     });
     if (r.success) enviadas++;

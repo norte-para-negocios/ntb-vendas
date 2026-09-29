@@ -446,15 +446,18 @@ export function buildKitchenTicketText(opts: {
   orderIdShort: string;
   cancelamento?: CancelamentoTicket;
   paperWidthMm?: number | null;
+  // Nome do setor/impressora no cabeçalho (ex.: "PIZZARIA"); sem ele, o destino (COZINHA/BAR).
+  titulo?: string;
 }): string {
   const W = colunasDoPapel(opts.paperWidthMm);
   const dupla = '='.repeat(W);
   const simples = '-'.repeat(W);
+  const nomeDoSetor = opts.titulo || opts.kind;
   const agora = new Date();
   const dataHora = `${agora.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
   const lines: string[] = [dupla];
   if (opts.storeName) wrapLine(opts.storeName.toUpperCase(), W).forEach((t) => lines.push(centralizar(t, W)));
-  lines.push(centralizar(opts.cancelamento ? `CANCELAMENTO - ${opts.kind}` : opts.kind, W));
+  lines.push(centralizar(opts.cancelamento ? `CANCELAMENTO - ${nomeDoSetor}` : nomeDoSetor, W));
   if (opts.cancelamento) lines.push(centralizar('*** PEDIDO CANCELADO ***', W));
   lines.push(dupla);
   lines.push(esqDir(opts.identifier, dataHora, W));
