@@ -27,6 +27,7 @@
 // Sem o agente rodando, o job fica 'pending' pra sempre — esta tela nunca
 // finge que "enfileirou" é o mesmo que "imprimiu".
 
+import { DOCS_IMPRESSAO, impressoraRecebe } from '@/lib/printDocs';
 import React, { useEffect, useState, useCallback } from 'react';
 import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
@@ -633,6 +634,29 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                     />
                     Margem embaixo
                   </label>
+                )}
+                {(printer.connection_type === 'usb' || printer.connection_type === 'network') && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--r-md)] bg-[var(--surface-2)] px-2.5 py-1.5" title="Marque o que esta impressora deve imprimir. Cada documento sai só nas impressoras marcadas.">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Imprime:</span>
+                    {DOCS_IMPRESSAO.map((d) => (
+                      <label key={d.id} className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text)] cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={impressoraRecebe(printer, d.id)}
+                          onChange={async (e) => {
+                            const atuais = DOCS_IMPRESSAO.map((x) => x.id).filter((id) => impressoraRecebe(printer, id));
+                            const novos = e.target.checked ? [...atuais, d.id] : atuais.filter((id) => id !== d.id);
+                            const r = await updatePrinterConfig(printer.id, { documentos: novos });
+                            if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
+                            toast.success(`"${printer.name}": ${e.target.checked ? 'passa a imprimir' : 'deixa de imprimir'} ${d.rotulo.toLowerCase()}.`);
+                            load();
+                          }}
+                          className="size-4 accent-[var(--brand)]"
+                        />
+                        {d.rotulo}
+                      </label>
+                    ))}
+                  </div>
                 )}
                 {printer.destination !== 'receipt' && (
                   <select

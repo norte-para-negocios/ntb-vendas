@@ -478,6 +478,9 @@ export interface PrinterConfig {
   machine_names?: Record<string, string>;
   // Linhas em branco no fim da impressão pra cortar o papel (migration 085).
   bottom_margin?: boolean;
+  // Documentos que esta impressora recebe (migration 132): comanda, pre_conta, comprovante, cupom_fiscal,
+  // fechamento_caixa. null/vazio = padrão pelo destino (ver lib/printDocs.ts).
+  documentos?: string[] | null;
   is_active: boolean;
   created_at: string;
 }

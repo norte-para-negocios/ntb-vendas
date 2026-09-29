@@ -101,6 +101,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
+import { impressoraRecebe } from '@/lib/printDocs';
 import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText } from '@/lib/print';
 import { PrinterConfig } from '@/types';
@@ -607,7 +608,7 @@ export function isCaixaRole(_user: Pick<StoreUser, 'role' | 'permissions'>): boo
 // lojas reais dependem hoje. `!printerConfigId` filtra 'browser_default'
 // (metadado, sem fila) e inativas.
 function matchingNetworkPrinters(printers: PrinterConfig[], destination: Destination): PrinterConfig[] {
-  return printers.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === destination || p.destination === 'all'));
+  return printers.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === destination || p.destination === 'all') && impressoraRecebe(p, 'comanda'));
 }
 
 async function reconcileDestination(

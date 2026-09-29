@@ -19,7 +19,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -752,7 +752,7 @@ const abrirCupomFiscalQuandoSair = (
         // acha a MESMA nota já autorizada nas duas vezes — sem uma chave
         // estável aqui, cada disparo enfileirava seu próprio job e o
         // cupom saía impresso 2x fisicamente (achado ao vivo, corrigido).
-        enqueueReceiptPrintJobs(storeId, `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''}`, texto, `cupom-fiscal:${nota.id}`)
+        enqueueReceiptPrintJobs(storeId, `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''}`, texto, `cupom-fiscal:${nota.id}`, 'cupom_fiscal')
             .catch((e) => console.error('enqueueReceiptPrintJobs (cupom fiscal) falhou:', e));
     };
 
@@ -788,7 +788,7 @@ const abrirCupomFiscalQuandoSair = (
                 // comprovante em papel mesmo assim. Dobra a via qualquer que
                 // seja o caminho de impressão que acabar sendo usado abaixo.
                 const emContingencia = resultado.nota.status === 'contingencia';
-                const printer = await fetchUsbPrinterForAutoprint(storeId, 'receipt');
+                const printer = await fetchUsbPrinterForAutoprint(storeId, 'receipt', 'cupom_fiscal');
                 if (printer) {
                     // NFC-e autorizada: gera o cupom na largura do papel da impressora
                     // (rota sob demanda); contingência/NF-e usam o PDF guardado.
@@ -3616,7 +3616,9 @@ NOTIFY pgrst, 'reload schema';`;
     // aviso visível pro operador — reabrindo uma fresta da mesma classe de
     // "impressão falha sem ninguém saber" que o resto deste branch fechou
     // (ver toast.error nos outros call sites de printBillReceipt).
-    const printTableBill = async (tableId: string) => {
+    // `automatica`: disparada por 'Pedir conta' — só imprime se houver impressora que receba a pré-conta (sem janela
+    // de impressão do navegador no aparelho de quem pediu) e não repete no mesmo minuto (garçom + cliente pedindo junto).
+    const printTableBill = async (tableId: string, automatica = false) => {
         const summary = getTableSummary(tableId);
         const table = tables.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
@@ -3652,7 +3654,7 @@ NOTIFY pgrst, 'reload schema';`;
             // faltava o mesmo enfileiramento pra impressora USB/rede do
             // caixa que handleFinishPayment já tem, então só o comprovante
             // PÓS-pagamento saía na impressora física; este nunca saía.
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? `pre-conta:${tableId}:${Math.floor(Date.now() / 60000)}` : undefined, 'pre_conta')
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             // Achado ao vivo na loja Sertão (2026-09-15): com uma impressora
             // USB/rede cadastrada pro destino 'receipt' (ex.: CAIXA), o
@@ -3664,8 +3666,8 @@ NOTIFY pgrst, 'reload schema';`;
             // princípio que CaixaPrintStation.tsx já usa pros tickets de
             // cozinha/bar: com impressora física cadastrada, window.print()
             // fica de fora.
-            const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
-            if (!temImpressoraFisica) {
+            const temImpressoraFisica = await hasActivePrinterForDoc(store.id, 'pre_conta');
+            if (!temImpressoraFisica && !automatica) {
                 const printed = await printBillReceipt(receiptOpts);
                 if (!printed) {
                     toast.error('A conferência da conta não imprimiu. Confira a impressora.');
@@ -3920,7 +3922,7 @@ NOTIFY pgrst, 'reload schema';`;
                 // Loja com impressora ativa pro caixa (rede/USB) imprime o comprovante
                 // em toda venda fechada, seja quem for que finalizou (dono, universal,
                 // operador) e em qualquer computador — a impressora física é quem decide.
-                const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
+                const temImpressoraFisica = await hasActivePrinterForDoc(store.id, 'comprovante');
                 if (isCaixaOperator || temImpressoraFisica) {
                     const receiptOpts = {
                         storeName: store.name,
@@ -3952,7 +3954,7 @@ NOTIFY pgrst, 'reload schema';`;
                     // Aditivo (2026-08-28, achado ao vivo — loja com
                     // impressora de rede/USB dedicada ao caixa): nunca
                     // bloqueia nem afeta o resultado do fechamento.
-                    enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
+                    enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), undefined, 'comprovante')
                         .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
                     // Achado ao vivo na loja Sertão (2026-09-15): com
                     // impressora física cadastrada pro destino 'receipt', o
@@ -4044,6 +4046,8 @@ NOTIFY pgrst, 'reload schema';`;
                 setSelectedTable(prev => prev ? { ...prev, status: TableStatus.WAITING_BILL } : null);
             }
             toast.success('Conta pedida — o caixa foi avisado.');
+            // Pré-conta sai sozinha na(s) impressora(s) configurada(s) para ela (ex.: no bar).
+            void printTableBill(tableId, true);
         } catch (e) {
             toast.error('Erro ao pedir a conta.');
         }
@@ -6210,7 +6214,7 @@ const CounterView: React.FC<{
             // fechou — não existe mais "Estação" separada pra evitar
             // duplicar (ver lib/storeModules.ts).
             const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
-            const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
+            const temImpressoraFisica = await hasActivePrinterForDoc(store.id, 'comprovante');
             if (isCaixaOperator || temImpressoraFisica) {
                 const items = paymentOrder.order_items || [];
                 const receiptOpts = {
@@ -6230,7 +6234,7 @@ const CounterView: React.FC<{
                 };
                 // Aditivo (2026-08-28, achado ao vivo) — ver mesmo padrão em
                 // TablesView.handleFinishPayment.
-                enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
+                enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), undefined, 'comprovante')
                     .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
                 // Achado ao vivo na loja Sertão (2026-09-15) — mesmo guard
                 // aplicado nos outros call sites de printBillReceipt.
@@ -6335,9 +6339,9 @@ const CounterView: React.FC<{
                 subtotal: total,
                 total,
             };
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), undefined, 'pre_conta')
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência balcão) falhou:', e));
-            const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
+            const temImpressoraFisica = await hasActivePrinterForDoc(store.id, 'pre_conta');
             if (!temImpressoraFisica) {
                 const printed = await printBillReceipt(receiptOpts);
                 if (!printed) {
@@ -10994,9 +10998,9 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                     changeDue: 0,
                 },
             };
-            enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
+            enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), undefined, 'comprovante')
                 .catch((e) => console.error('enqueueReceiptPrintJobs (reimpressão) falhou:', e));
-            const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
+            const temImpressoraFisica = await hasActivePrinterForDoc(store.id, 'comprovante');
             if (!temImpressoraFisica) {
                 const printed = await printBillReceipt(receiptOpts);
                 if (!printed) {

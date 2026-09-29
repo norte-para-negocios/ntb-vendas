@@ -1,6 +1,7 @@
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
 import { vendaTemCobranca } from '@/lib/calc';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
+import { impressoraRecebe, type DocPrint } from '@/lib/printDocs';
 import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
@@ -2693,6 +2694,18 @@ export const setImpressaoPausada = async (storeId: string, pausada: boolean): Pr
   }
 };
 
+// Existe impressora física ativa que recebe este tipo de documento? (respeita a config "documentos" da impressora)
+export const hasActivePrinterForDoc = async (storeId: string, doc: DocPrint): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('printer_configs')
+    .select('destination, documentos')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('connection_type', ['network', 'usb']);
+  if (error) { console.error('hasActivePrinterForDoc falhou:', error); return false; }
+  return (data || []).some((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc));
+};
+
 export const hasActivePrinterForDestination = async (
   storeId: string,
   destination: 'receipt' | 'kitchen' | 'bar',
@@ -2721,8 +2734,21 @@ export const hasActivePrinterForDestination = async (
 export const fetchUsbPrinterForAutoprint = async (
   storeId: string,
   destination: 'receipt' | 'kitchen' | 'bar',
+  doc?: DocPrint,
 ): Promise<{ usbSystemName: string; paperWidthMm: 58 | 80 | 210 } | null> => {
   if (await fetchImpressaoPausada(storeId)) return null;
+  if (doc) {
+    // Escolha por tipo de documento (config "documentos" da impressora).
+    const { data: lista, error: erroLista } = await supabase
+      .from('printer_configs')
+      .select('usb_system_name, paper_width_mm, destination, documentos')
+      .eq('store_id', storeId)
+      .eq('is_active', true)
+      .eq('connection_type', 'usb');
+    if (erroLista) { console.error('fetchUsbPrinterForAutoprint falhou:', erroLista); return null; }
+    const achada = (lista || []).find((p) => p.usb_system_name && impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc));
+    return achada ? { usbSystemName: achada.usb_system_name as string, paperWidthMm: achada.paper_width_mm as 58 | 80 | 210 } : null;
+  }
   const { data, error } = await supabase
     .from('printer_configs')
     .select('usb_system_name, paper_width_mm')
@@ -2790,7 +2816,7 @@ export const createPrinterConfig = async (params: {
   return { success: true };
 };
 
-export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode' | 'machine_names' | 'bottom_margin' | 'sector_id'>>): Promise<{ success: boolean; message?: string }> => {
+export const updatePrinterConfig = async (id: string, updates: Partial<Pick<PrinterConfig, 'name' | 'is_active' | 'ip_address' | 'port' | 'usb_system_name' | 'destination' | 'paper_width_mm' | 'print_mode' | 'machine_names' | 'bottom_margin' | 'sector_id' | 'documentos'>>): Promise<{ success: boolean; message?: string }> => {
   const { error } = await supabase.from('printer_configs').update(updates).eq('id', id);
   if (error) { console.error('Error updating printer config:', error); return { success: false, message: error.message }; }
   return { success: true };
@@ -2898,7 +2924,7 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
 // pra não imprimir de novo o mesmo item quando o pedido sincronizar.
 export const printOfflineOrderTicket = async (params: { storeId: string; destination: 'kitchen' | 'bar'; sectorId?: string | null; title: string; content: string; sig: string }): Promise<number> => {
   if (lerImpressaoPausadaCache(params.storeId)) return 0;
-  const doDestino = readCachedPrinters(params.storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
+  const doDestino = readCachedPrinters(params.storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all') && impressoraRecebe(p, 'comanda'));
   const doSetor = doDestino.filter((p) => (p.sector_id || null) === (params.sectorId || null));
   const printers = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
   let ok = 0;
@@ -2980,7 +3006,7 @@ export const enfileirarCancelamento = async (params: {
   dedupeKey: string;
 }): Promise<number> => {
   const todas = await fetchPrinterConfigs(params.storeId);
-  const doDestino = todas.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
+  const doDestino = todas.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all') && impressoraRecebe(p, 'comanda'));
   const doSetor = doDestino.filter((p) => printerServesSector(p, params.sectorId ?? null));
   const impressoras = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
   let enviadas = 0;
@@ -3018,18 +3044,17 @@ export const enfileirarCancelamento = async (params: {
 // `print_jobs(store_id, dedupe_key)` (migration 073) barra a segunda
 // tentativa. Combinado com o id da impressora pra nunca colidir entre
 // impressoras diferentes da mesma loja.
-export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string): Promise<void> => {
+export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string, doc: DocPrint = 'comprovante'): Promise<void> => {
   const { data: printers, error } = await supabase
     .from('printer_configs')
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .in('connection_type', ['network', 'usb'])
-    .in('destination', ['receipt', 'all']);
-  let impressoras = printers;
+    .in('connection_type', ['network', 'usb']);
+  let impressoras = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc));
   if (error) {
     if (!isNetworkError(error)) { console.error('Error fetching receipt printers:', error); return; }
-    impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && ['receipt', 'all'].includes(p.destination));
+    impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && impressoraRecebe(p, doc));
   }
   await Promise.all(
     (impressoras || []).map((printer) =>
@@ -3062,12 +3087,12 @@ export const enqueueFiscalCupomPrintJobs = async (
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .in('connection_type', ['network', 'usb'])
-    .in('destination', ['receipt', 'all']);
+    .in('connection_type', ['network', 'usb']);
   if (error) { console.error('Error fetching receipt printers:', error); return; }
+  const impressorasCupom = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, 'cupom_fiscal'));
   const origem = typeof window !== 'undefined' ? window.location.origin : '';
   await Promise.all(
-    (printers || []).map((printer) => {
+    impressorasCupom.map((printer) => {
       const content = printer.connection_type === 'usb'
         ? `@@PDF@@${new URL(pdfUrlFor(printer.paper_width_mm ?? 80), origem).href}`
         : textContent;
