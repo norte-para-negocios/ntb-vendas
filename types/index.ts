@@ -186,6 +186,8 @@ export interface Category {
   // Grupo de categoria (migration 079) — null = categoria solta (1º nível),
   // como sempre foi.
   group_id?: string | null;
+  // Só a equipe vê/lança (migration 133): o cliente do QR não enxerga a categoria (ex.: Embalagens).
+  staff_only?: boolean;
 }
 
 export interface CategoryGroup {

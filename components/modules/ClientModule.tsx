@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallba
 import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { removerCategoriasSoEquipe } from '@/lib/menu';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation, resolverUrlApi } from '@/lib/api';
 import { Category, CategoryGroup, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
@@ -2708,7 +2709,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
 
         // Pass TRUE to fetch only available products
-        const { categories, categoryGroups: groups, products, error: menuError } = await fetchMenu(store.id, true);
+        const { categories: todasCategorias, categoryGroups: groups, products: todosProdutos, error: menuError } = await fetchMenu(store.id, true);
+        // Categoria só da equipe (ex.: Embalagens) não aparece pro cliente.
+        const { categories, products } = removerCategoriasSoEquipe(todasCategorias, todosProdutos);
         setCategories(categories);
         setCategoryGroups(groups);
         setProducts(products);
