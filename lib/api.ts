@@ -1,4 +1,5 @@
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
+import { vendaTemCobranca } from '@/lib/calc';
 import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
@@ -1538,8 +1539,10 @@ export const closeTableSession = async (
     const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: tableId });
     if (finalizeErr) throw finalizeErr;
 
-    triggerOrdemProducao({ tableId });
-    triggerEmissaoFiscal({ tableId, destinatario });
+    if (vendaTemCobranca(paymentData)) {
+      triggerOrdemProducao({ tableId });
+      triggerEmissaoFiscal({ tableId, destinatario });
+    }
     return { success: true };
   } catch (e) {
     if (!isNetworkError(e)) {

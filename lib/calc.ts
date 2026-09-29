@@ -178,3 +178,13 @@ export function getOrderDisplayTotal(order: {
 // call sites, não duplicar aqui.
 export const formatBRL = (n: number): string =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+
+// Fechar uma mesa sem itens (total 0) não é uma venda: não pode disparar nota fiscal
+// nem ordem de produção — a busca automática pegaria o pedido da venda ANTERIOR da
+// mesa (janela de 5 min) e emitiria/baixaria estoque de novo. Sem paymentData
+// (fluxo antigo) o comportamento não muda.
+export const vendaTemCobranca = (paymentData?: { total: number } | null): boolean => {
+  if (!paymentData) return true;
+  return Number.isFinite(paymentData.total) && paymentData.total > 0;
+};

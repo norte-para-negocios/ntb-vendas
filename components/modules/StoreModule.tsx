@@ -40,7 +40,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
@@ -3881,7 +3881,7 @@ NOTIFY pgrst, 'reload schema';`;
                 methods: getPaymentMethodsForRecord(methods, summary.total),
                 operador_nome: loggedUser.name,
                 operador_id: loggedUser.id,
-                ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
+                ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal && vendaTemCobranca({ total: summary.total }) } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
             };
 
@@ -3975,7 +3975,7 @@ NOTIFY pgrst, 'reload schema';`;
                 // ponto, e `aguardarNotaFiscalDaVenda` tem teto de 12s. Se a
                 // SEFAZ demorar mais que isso ou rejeitar, o caixa recebe um
                 // aviso claro em vez de ficar esperando uma janela que não vem.
-                if (emissaoFiscalConfigurada && emitirNotaFiscal) {
+                if (emissaoFiscalConfigurada && emitirNotaFiscal && vendaTemCobranca({ total: summary.total })) {
                     const tableIdParaNota = selectedTable.id;
                     abrirCupomFiscalQuandoSair(store.id, store.name, { tableId: tableIdParaNota });
                 }

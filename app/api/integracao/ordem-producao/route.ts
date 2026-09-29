@@ -33,16 +33,18 @@ export async function POST(request: NextRequest) {
 
   let storeId: string | null = null;
   let orderIds: string[] = [];
+  const detalhesPorPedido = new Map<string, Record<string, unknown> | null>();
 
   if (body.orderId) {
     const { data: order } = await admin
       .from('orders')
-      .select('id, store_id')
+      .select('id, store_id, payment_details')
       .eq('id', body.orderId)
       .maybeSingle();
     if (order) {
       storeId = order.store_id;
       orderIds = [order.id];
+      detalhesPorPedido.set(order.id, order.payment_details as Record<string, unknown> | null);
     }
   } else if (body.tableId) {
     // Pedidos recém-fechados pela mesa (close_table_orders_secure marca
@@ -50,19 +52,26 @@ export async function POST(request: NextRequest) {
     // de 5 min evita pegar pedidos de uma sessão anterior da mesma mesa.
     const { data: orders } = await admin
       .from('orders')
-      .select('id, store_id')
+      .select('id, store_id, payment_details')
       .eq('table_id', body.tableId)
       .eq('status', 'delivered')
       .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
     if (orders?.length) {
       storeId = orders[0].store_id;
       orderIds = orders.map((o) => o.id);
+      orders.forEach((o) => detalhesPorPedido.set(o.id, o.payment_details as Record<string, unknown> | null));
     }
   }
 
   if (!storeId || !orderIds.length) {
     return NextResponse.json({ skipped: true, reason: 'Pedido(s) não encontrado(s)' });
   }
+
+  // Idempotência: a janela de 5 min acima também pega o pedido da venda ANTERIOR da
+  // mesa (ex.: mesa vazia finalizada logo depois de uma venda) — sem esta marca, o
+  // mesmo pedido gerava Ordem de Produção e baixa de estoque duas vezes.
+  const jaEnviados = (id: string) => !!detalhesPorPedido.get(id)?.op_enviada_em;
+  const pendentesDeOp = orderIds.filter((id) => !jaEnviados(id));
 
   // Dual-write pro Contabo (historico completo de vendas) -- roda pra
   // QUALQUER loja com pedido resolvido, independente de ter (ou nao)
@@ -104,6 +113,10 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (!pendentesDeOp.length) {
+    return NextResponse.json({ skipped: true, reason: 'Ordem de produção já enviada para este pedido' });
+  }
+
   const { data: secret } = await admin
     .from('store_ntb_estoque_secrets')
     .select('ntb_estoque_url, ntb_estoque_api_key, ativo')
@@ -120,7 +133,7 @@ export async function POST(request: NextRequest) {
   const { data: items } = await admin
     .from('order_items')
     .select('quantity, status, selected_options, product:products(omie_codigo, destination)')
-    .in('order_id', orderIds);
+    .in('order_id', pendentesDeOp);
 
   // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
   // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot
@@ -175,9 +188,16 @@ export async function POST(request: NextRequest) {
     const res = await fetch(`${secret.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/ordem-producao`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret.ntb_estoque_api_key}` },
-      body: JSON.stringify({ itens, pedidoRef: orderIds[0], ambiente: fiscalConfig?.ambiente ?? null }),
+      body: JSON.stringify({ itens, pedidoRef: pendentesDeOp[0], ambiente: fiscalConfig?.ambiente ?? null }),
     });
     const json = await res.json().catch(() => null);
+    if (res.ok) {
+      // Marca só depois do Estoque aceitar (falha/ fila do lado dele não conta como enviada).
+      const marcaEm = new Date().toISOString();
+      for (const id of pendentesDeOp) {
+        await admin.from('orders').update({ payment_details: { ...(detalhesPorPedido.get(id) ?? {}), op_enviada_em: marcaEm } }).eq('id', id);
+      }
+    }
     return NextResponse.json({ ok: res.ok, ntbEstoque: json });
   } catch (e) {
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Falha ao chamar ntb-estoque' });

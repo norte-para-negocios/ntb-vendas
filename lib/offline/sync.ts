@@ -3,6 +3,7 @@ import { checkRealConnectivity } from './network';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
 import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal } from '../api';
+import { vendaTemCobranca } from '../calc';
 
 const MAX_ATTEMPTS = 3;
 
@@ -68,8 +69,10 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       if (closeErr) throw closeErr;
       const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: payload.tableId });
       if (finalizeErr) throw finalizeErr;
-      triggerOrdemProducao({ tableId: payload.tableId });
-      triggerEmissaoFiscal({ tableId: payload.tableId, destinatario: payload.destinatario });
+      if (vendaTemCobranca(paymentData)) {
+        triggerOrdemProducao({ tableId: payload.tableId });
+        triggerEmissaoFiscal({ tableId: payload.tableId, destinatario: payload.destinatario });
+      }
       break;
     }
     case 'close_counter_order': {

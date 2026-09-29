@@ -439,20 +439,27 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // resolvendo pra `is('pessoa_identificador', null)`, idêntico ao
   // comportamento de sempre pro caminho automático (pedido inteiro).
   const pessoaNome = body.pessoaNome?.trim() || null;
+  // Emissão AUTOMÁTICA de mesa (fechamento, sem itemIds e sem orderId): a busca de
+  // pedidos pega o último 'delivered' da mesa numa janela de 5 min. Fechar uma mesa
+  // vazia logo depois de uma venda fazia o pedido VELHO voltar a ser emitido quando a
+  // nota anterior tinha sido cancelada (só 'autorizada' bloqueava). Aqui um pedido que
+  // já teve nota cancelada também bloqueia o caminho automático; reemitir depois de
+  // cancelar continua possível na mão (Notas fiscais → Reemitir, caminho por orderId).
+  const emissaoAutomaticaDeMesa = !!body.tableId && !body.orderId && !body.itemIds?.length;
   let checagemIdempotencia = admin
     .from('fiscal_notas')
     .select('id')
     .eq('store_id', storeId)
     .eq('order_id', orderIdParaChecagem)
-    .eq('status', 'autorizada');
+    .in('status', emissaoAutomaticaDeMesa ? ['autorizada', 'cancelada'] : ['autorizada']);
   checagemIdempotencia = tableIdParaChecagem
     ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
     : checagemIdempotencia.is('table_id', null);
   checagemIdempotencia = pessoaNome
     ? checagemIdempotencia.eq('pessoa_identificador', pessoaNome)
     : checagemIdempotencia.is('pessoa_identificador', null);
-  const { data: notaExistente } = await checagemIdempotencia.maybeSingle();
-  if (notaExistente) {
+  const { data: notasExistentes } = await checagemIdempotencia.limit(1);
+  if (notasExistentes && notasExistentes.length > 0) {
     return NextResponse.json({ skipped: true, reason: 'Nota já existe para esta venda' });
   }
 
