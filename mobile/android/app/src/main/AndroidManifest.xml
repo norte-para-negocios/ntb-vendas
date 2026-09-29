@@ -38,6 +38,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Atualização automática do APK (NtbUpdaterPlugin): abrir o instalador do sistema. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Bluetooth (Task 6): API 31+ exige BLUETOOTH_CONNECT/BLUETOOTH_SCAN em
          vez do antigo BLUETOOTH/BLUETOOTH_ADMIN. O minSdkVersion do template

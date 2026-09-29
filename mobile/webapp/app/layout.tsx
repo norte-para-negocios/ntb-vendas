@@ -1,5 +1,6 @@
 import RootLayout, { metadata as baseMetadata, viewport } from '@/app/layout';
 import { NtbBridgeInit } from './NtbBridgeInit';
+import { NtbUpdateBanner } from './NtbUpdateBanner';
 import mobilePackageJson from '../../package.json';
 
 // Task 9: injeta a versão real do app mobile (mobile/package.json, NÃO o
@@ -22,6 +23,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
   return (
     <RootLayout>
       <NtbBridgeInit />
+      <NtbUpdateBanner />
       {children}
     </RootLayout>
   );
