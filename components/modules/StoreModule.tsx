@@ -11898,9 +11898,13 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [exportStartDate, setExportStartDate] = useState('');
     const [exportEndDate, setExportEndDate] = useState('');
     const [isExporting, setIsExporting] = useState(false);
-    const filteredNotas = notas
+    const notasBase = notas
         .filter(n => ambienteFilter === 'todos' || n.ambiente === ambienteFilter)
-        .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter)
+        .filter(n => tipoFilter === 'todos' || n.modelo === tipoFilter);
+    const contarStatus = (f: typeof statusFilter) => notasBase.filter(n => f === 'todos'
+        || (f === 'problema' ? RETRYABLE_FISCAL_STATUSES.includes(n.status) : n.status === f)).length;
+    const totalCanceladas = notasBase.filter(n => n.status === 'cancelada').reduce((acc, n) => acc + Number(n.valor_total ?? 0), 0);
+    const filteredNotas = notasBase
         .filter(n => statusFilter === 'todos'
             || (statusFilter === 'problema' ? RETRYABLE_FISCAL_STATUSES.includes(n.status) : n.status === statusFilter));
 
@@ -12137,18 +12141,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 <option value="homologacao">Só Homologação</option>
                                 <option value="producao">Só Produção</option>
                             </select>
-                            <select
-                                className="h-8 max-sm:h-11 px-3 text-[13px] font-medium rounded-full bg-[var(--surface-2)] text-[var(--text)] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                                aria-label="Filtrar por status"
-                            >
-                                <option value="todos">Todos os status</option>
-                                <option value="autorizada">Autorizadas</option>
-                                <option value="cancelada">Canceladas</option>
-                                <option value="contingencia">Em contingência</option>
-                                <option value="problema">Com erro ou pendentes</option>
-                            </select>
+
                             <Button variant="secondary" size="sm" className="max-sm:!h-11" onClick={load} isLoading={isLoading}>
                                 <RefreshCw size={14} /> Atualizar
                             </Button>
@@ -12157,6 +12150,31 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </Badge>
                         </div>
                     </div>
+                    <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5" role="tablist" aria-label="Status das notas">
+                        {([
+                            ['todos', 'Todas'],
+                            ['autorizada', 'Autorizadas'],
+                            ['cancelada', 'Canceladas'],
+                            ['contingencia', 'Em contingência'],
+                            ['problema', 'Com erro ou pendentes'],
+                        ] as const).map(([id, label]) => (
+                            <button
+                                key={id}
+                                type="button"
+                                role="tab"
+                                aria-selected={statusFilter === id}
+                                onClick={() => setStatusFilter(id)}
+                                className={`shrink-0 h-8 max-sm:h-11 px-3.5 text-[13px] font-medium rounded-full transition-colors ${statusFilter === id ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'bg-[var(--surface-2)] text-[var(--text)]'}`}
+                            >
+                                {label} <span className="num opacity-70">{contarStatus(id)}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {statusFilter === 'cancelada' && (
+                        <p className="text-[13px] text-[var(--text-muted)]">
+                            {contarStatus('cancelada')} {contarStatus('cancelada') === 1 ? 'nota cancelada' : 'notas canceladas'} · R$ <span className="num">{formatBRL(totalCanceladas)}</span> em valor cancelado
+                        </p>
+                    )}
                     {/* Filtro de período + exportação em lote (Task 5, 2026-08-23) — a
                         rota app/api/fiscal/exportar resolve as notas server-side só por
                         storeId + este intervalo, nunca por uma lista mandada daqui. */}
