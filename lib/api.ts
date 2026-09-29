@@ -2175,7 +2175,9 @@ export const aguardarNotaFiscalDaVenda = async (
   alvo: { orderId?: string; tableId?: string },
   opts: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<{ pdfUrl: string; nota: FiscalNota } | null> => {
-  const timeoutMs = opts.timeoutMs ?? 12000;
+  // 60 s: a SEFAZ às vezes leva 20 s+ (Sertão, 29/09: nota nº 6 autorizou 22 s depois do pagamento e o teto de
+  // 12 s já tinha estourado — o cupom não saiu sozinho). Rejeição/erro continuam devolvendo na hora.
+  const timeoutMs = opts.timeoutMs ?? 60000;
   const intervalMs = opts.intervalMs ?? 1500;
   const limite = Date.now() + timeoutMs;
   // Bug real achado ao vivo (2026-09-15): quando o fechamento usa `tableId`
