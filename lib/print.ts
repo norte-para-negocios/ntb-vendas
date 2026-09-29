@@ -824,3 +824,61 @@ export function printSalesReport(opts: {
   `;
   return printHtmlDocument(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
 }
+
+// Relatório de fechamento de caixa ("POSIÇÃO DO CAIXA") — pedido do Ramon, 2026-09-29: sai sozinho ao fechar
+// o turno, com tudo que aconteceu no caixa (dinheiro, cartão, PIX...). Texto em colunas, sem valor fiscal.
+export function buildCashClosingText(opts: {
+  storeName: string;
+  operador: string;
+  abertoEm: Date;
+  fechadoEm: Date;
+  fundo: number;
+  formas: { label: string; total: number }[];
+  cartoes: { label: string; total: number }[];
+  sangria: number;
+  suprimento: number;
+  dinheiroEsperado: number;
+  dinheiroContado: number | null;
+  diferenca: number | null;
+  paperWidthMm?: number | null;
+}): string {
+  const W = colunasDoPapel(opts.paperWidthMm);
+  const dupla = '='.repeat(W);
+  const simples = '-'.repeat(W);
+  const dh = (d: Date) => `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  const linha = (rotulo: string, valor: number) => esqDir(rotulo, formatBRL(valor), W);
+  const lines: string[] = [dupla];
+  wrapLine(opts.storeName.toUpperCase(), W).forEach((t) => lines.push(centralizar(t, W)));
+  lines.push(centralizar('POSICAO DO CAIXA', W), dupla);
+  wrapLine(`Operador: ${opts.operador}`, W).forEach((t) => lines.push(t));
+  lines.push(`Aberto:  ${dh(opts.abertoEm)}`, `Fechado: ${dh(opts.fechadoEm)}`, simples);
+
+  const totalVendas = opts.formas.reduce((s, f) => s + f.total, 0);
+  lines.push('*** Resumo do Caixa ***', linha('Fundo de Caixa', opts.fundo));
+  opts.formas.forEach((f) => lines.push(linha(f.label, f.total)));
+  lines.push(linha('TOTAL', opts.fundo + totalVendas), simples);
+
+  lines.push('*** Vendas do Dia ***');
+  if (opts.formas.length === 0) lines.push('Nenhuma venda no turno.');
+  opts.formas.forEach((f) => lines.push(linha(f.label, f.total)));
+  lines.push(linha('TOTAL', totalVendas), simples);
+
+  if (opts.cartoes.length > 0) {
+    lines.push('*** Resumo dos Cartoes ***');
+    opts.cartoes.forEach((c) => lines.push(linha(c.label, c.total)));
+    lines.push(linha('TOTAL', opts.cartoes.reduce((s, c) => s + c.total, 0)), simples);
+  }
+
+  if (opts.sangria || opts.suprimento) {
+    lines.push('*** Movimentos de Caixa ***');
+    if (opts.sangria) lines.push(linha('Sangria', -Math.abs(opts.sangria)));
+    if (opts.suprimento) lines.push(linha('Suprimento', opts.suprimento));
+    lines.push(simples);
+  }
+
+  lines.push('*** Conferencia ***', linha('Dinheiro no caixa', opts.dinheiroEsperado));
+  if (opts.dinheiroContado !== null) lines.push(linha('Dinheiro contado', opts.dinheiroContado));
+  if (opts.diferenca !== null) lines.push(linha('Diferença', opts.diferenca));
+  lines.push(dupla, centralizar('SEM VALOR FISCAL', W), '\n\n\n');
+  return lines.join('\n');
+}

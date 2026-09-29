@@ -39,7 +39,7 @@ import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import { setorDoItem } from '@/lib/setores';
-import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText } from '@/lib/print';
+import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
@@ -7366,6 +7366,26 @@ const CaixaViewMeu: React.FC<{
             const result = await closeCashShift(shift.id, closingCountedValue, breakdownAsNumbers, maxTolerance, approvedByUserId);
             if (result.success) {
                 toast.success('Caixa fechado.');
+                // Posição do caixa impressa sozinha ao fechar (pedido do Ramon, 2026-09-29). Nunca impede o fechamento.
+                if (closeSummary) {
+                    const resumo = closeSummary;
+                    const dados = {
+                        storeName: store.name,
+                        operador: loggedUser.name,
+                        abertoEm: new Date(shift.opened_at),
+                        fechadoEm: new Date(),
+                        fundo: Number(shift.opening_float) || 0,
+                        formas: Object.entries(resumo.totals_by_method).map(([m, total]) => ({ label: getPaymentMethodLabel(m), total: Number(total) || 0 })),
+                        cartoes: Object.entries(resumo.totals_by_brand).map(([b, total]) => ({ label: getCardBrandLabel(b), total: Number(total) || 0 })),
+                        sangria: Number(resumo.total_sangria) || 0,
+                        suprimento: Number(resumo.total_suprimento) || 0,
+                        dinheiroEsperado: Number(resumo.expected_cash) || 0,
+                        dinheiroContado: closingCountedValue,
+                        diferenca: result.difference ?? (closingCountedValue - (Number(resumo.expected_cash) || 0)),
+                    };
+                    enqueueReceiptPrintJobs(store.id, `Fechamento de caixa - ${loggedUser.name}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${shift.id}`, 'fechamento_caixa')
+                        .catch((e) => console.error('enqueueReceiptPrintJobs (fechamento de caixa) falhou:', e));
+                }
                 // Contagem cega (Task 4): quem não viu o esperado durante a
                 // contagem vê agora, num modal de resultado — nunca escondido
                 // pra sempre, só depois de confirmar.
