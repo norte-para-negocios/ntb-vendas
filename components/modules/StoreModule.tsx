@@ -8133,7 +8133,7 @@ const CaixaView: React.FC<{
                 ]}
             />
             <div className={visao === 'meu' ? '' : 'hidden'}><CaixaViewMeu {...props} /></div>
-            {visao === 'equipe' && <CaixasAoVivo storeId={props.store.id} />}
+            {visao === 'equipe' && <CaixasAoVivo storeId={props.store.id} viewer={props.loggedUser} contagemCega={!!props.store.config?.cash_shift_blind_count} />}
         </div>
     );
 };
@@ -10217,7 +10217,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
 // --- SUB-MODULE: ADMIN (SALES HISTORY) ---
 
-const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
+const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpdate?: (store: Store) => void }> = ({ store, loggedUser, onStoreUpdate }) => {
     const storeId = store.id;
 
     // Aba "Operação" (self-service de módulos/fluxo de pedido pelo
@@ -11055,7 +11055,11 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                         <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Caixa por operador</h3>
                         <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Cada operador abre e fecha o próprio caixa. Escolha quem quer acompanhar.</p>
                     </div>
-                    <div className="p-4"><CaixasAoVivo storeId={storeId} /></div>
+                    <div className="p-4">
+                        {podeVerCaixasDaEquipe(loggedUser)
+                            ? <CaixasAoVivo storeId={storeId} viewer={loggedUser} contagemCega={!!store.config?.cash_shift_blind_count} />
+                            : <p className="text-sm text-[var(--text-muted)]">Só o gerente ou o dono acompanha o caixa da equipe.</p>}
+                    </div>
                 </div>
             )}
 
@@ -12667,7 +12671,7 @@ export const StoreModule: React.FC = () => {
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
-            {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
+            {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} loggedUser={user} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
 
             {!canAccess(tab) && (
                 <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">

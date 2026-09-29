@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/caixasAoVivo.test.ts
 import assert from 'node:assert/strict';
-import { agruparOperadores, nomeDoOperador, tempoAberto, podeVerCaixasDaEquipe } from '../../lib/caixasAoVivo';
+import { agruparOperadores, nomeDoOperador, tempoAberto, podeVerCaixasDaEquipe, deveOcultarEsperado } from '../../lib/caixasAoVivo';
 
 const aberto = (id: string, nome: string | null, opened_at: string) => ({ id, store_id: 's', operator_user_id: 'u', opened_at, closed_at: null, opening_float: 100, closing_counted_cash: null, closing_cash_breakdown: null, approved_by_user_id: null, status: 'open' as const, notes: null, operator_name: nome });
 const hist = (id: string, nome: string | null, opened_at: string) => ({ id, opened_at, closed_at: null, opening_float: 0, closing_counted_cash: null, status: 'closed' as const, notes: null, operator_name: nome, difference: 0 });
@@ -30,4 +30,13 @@ assert.equal(podeVerCaixasDaEquipe({ role: 'universal' }), true);
 assert.equal(podeVerCaixasDaEquipe({ role: 'waiter', permissions: { supervisiona_caixa: true } }), true);
 assert.equal(podeVerCaixasDaEquipe({ role: 'waiter', permissions: { caixa: true } }), false);
 assert.equal(podeVerCaixasDaEquipe({ role: 'waiter' }), false);
+
+// contagem cega: quem opera o PRÓPRIO caixa sem ser dono/universal/supervisor não vê o esperado
+const gerente = { id: 'u1', role: 'manager' };
+assert.equal(deveOcultarEsperado('u1', gerente, true), true);   // próprio turno, contagem cega ligada
+assert.equal(deveOcultarEsperado('u2', gerente, true), false);  // turno de outra pessoa continua visível
+assert.equal(deveOcultarEsperado('u1', gerente, false), false); // contagem cega desligada
+assert.equal(deveOcultarEsperado('u1', { id: 'u1', role: 'owner' }, true), false);
+assert.equal(deveOcultarEsperado('u1', { id: 'u1', role: 'universal' }, true), false);
+assert.equal(deveOcultarEsperado('u1', { id: 'u1', role: 'manager', permissions: { supervisiona_caixa: true } }, true), false);
 console.log('ok');

@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown, Radio } from 'lucide-react';
 import { fetchOpenCashShifts, fetchCashShiftsHistory, fetchCashShiftSummary, subscribeToStoreOrderChanges, CashShiftHistoryRow, CashShiftSummary } from '@/lib/api';
 import { formatBRL } from '@/lib/calc';
 import { getPaymentMethodLabel } from '@/lib/labels';
-import { agruparOperadores, tempoAberto, CaixaAberto } from '@/lib/caixasAoVivo';
+import { agruparOperadores, tempoAberto, deveOcultarEsperado, CaixaAberto } from '@/lib/caixasAoVivo';
 import { ProductThumb } from '@/components/ProductThumb';
 
 const INTERVALO_MS = 15000;
@@ -48,7 +48,7 @@ const Resumo: React.FC<{ resumo: CashShiftSummary }> = ({ resumo }) => {
   );
 };
 
-export const CaixasAoVivo: React.FC<{ storeId: string }> = ({ storeId }) => {
+export const CaixasAoVivo: React.FC<{ storeId: string; viewer: { id: string; role: string; permissions?: Record<string, any> }; contagemCega: boolean }> = ({ storeId, viewer, contagemCega }) => {
   const [abertos, setAbertos] = useState<CaixaAberto[]>([]);
   const [historico, setHistorico] = useState<CashShiftHistoryRow[]>([]);
   const [carregado, setCarregado] = useState(false);
@@ -117,6 +117,7 @@ export const CaixasAoVivo: React.FC<{ storeId: string }> = ({ storeId }) => {
   if (!carregado) return <div className="p-8 text-center text-[var(--text-muted)]">Carregando caixas…</div>;
   if (operadores.length === 0) return <div className="p-8 text-center text-[var(--text-muted)]">Nenhum caixa registrado ainda.</div>;
 
+  const ocultarAberto = !!operador?.aberto && deveOcultarEsperado(operador.aberto.operator_user_id, viewer, contagemCega);
   const tempo = operador?.aberto ? tempoAberto(operador.aberto.opened_at, agora) : null;
 
   return (
@@ -155,7 +156,9 @@ export const CaixasAoVivo: React.FC<{ storeId: string }> = ({ storeId }) => {
             </div>
             {operador.aberto && <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--ok)]/10 text-[var(--ok)] shrink-0">Aberto</span>}
           </div>
-          {operador.aberto && (resumoAberto && resumoAberto.shift.id === operador.aberto.id ? <Resumo resumo={resumoAberto} /> : <p className="text-sm text-[var(--text-muted)]">Carregando o turno…</p>)}
+          {operador.aberto && (ocultarAberto
+            ? <p className="text-sm text-[var(--text-muted)]">Contagem cega ativa: o dinheiro esperado do seu próprio caixa só aparece depois que você fecha o turno.</p>
+            : resumoAberto && resumoAberto.shift.id === operador.aberto.id ? <Resumo resumo={resumoAberto} /> : <p className="text-sm text-[var(--text-muted)]">Carregando o turno…</p>)}
         </section>
       )}
 
@@ -183,7 +186,8 @@ export const CaixasAoVivo: React.FC<{ storeId: string }> = ({ storeId }) => {
                     </button>
                     {aberto && (
                       <div className="px-3 pb-3">
-                        {r === 'carregando' || r === undefined ? <p className="text-sm text-[var(--text-muted)]">Carregando…</p>
+                        {ocultarAberto && h.id === operador.aberto?.id ? <p className="text-sm text-[var(--text-muted)]">Contagem cega ativa: disponível depois que você fechar o turno.</p>
+                          : r === 'carregando' || r === undefined ? <p className="text-sm text-[var(--text-muted)]">Carregando…</p>
                           : r === null ? <p className="text-sm text-[var(--text-muted)]">Não foi possível carregar o resumo deste turno.</p>
                           : <Resumo resumo={r} />}
                       </div>

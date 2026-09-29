@@ -34,3 +34,15 @@ export function tempoAberto(abertoEm: string, agora: number): { horas: number; e
 export function podeVerCaixasDaEquipe(user: { role: string; permissions?: Record<string, any> }): boolean {
   return user.role === 'owner' || user.role === 'manager' || user.role === 'universal' || user.permissions?.supervisiona_caixa === true;
 }
+
+// Contagem cega (config cash_shift_blind_count): quem opera o PRÓPRIO caixa e não é
+// dono/universal/supervisor não pode ver o dinheiro esperado antes de fechar — senão
+// bastaria abrir "Caixas da equipe" e digitar esse valor na contagem.
+export function deveOcultarEsperado(
+  operadorDoTurno: string | null,
+  viewer: { id: string; role: string; permissions?: Record<string, any> },
+  contagemCega: boolean,
+): boolean {
+  if (!contagemCega || !operadorDoTurno || operadorDoTurno !== viewer.id) return false;
+  return !(viewer.role === 'owner' || viewer.role === 'universal' || viewer.permissions?.supervisiona_caixa === true);
+}
