@@ -3013,7 +3013,7 @@ export const enfileirarCancelamento = async (params: {
 // `print_jobs(store_id, dedupe_key)` (migration 073) barra a segunda
 // tentativa. Combinado com o id da impressora pra nunca colidir entre
 // impressoras diferentes da mesma loja.
-export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string, dedupeKeyBase?: string): Promise<void> => {
+export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string): Promise<void> => {
   const { data: printers, error } = await supabase
     .from('printer_configs')
     .select('*')
@@ -3033,7 +3033,8 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
         printerConfigId: printer.id,
         destination: printer.destination,
         title,
-        content,
+        // Layout em colunas depende do papel DESTA impressora (80 mm = 48, 58 mm = 32).
+        content: typeof content === 'function' ? content((printer as { paper_width_mm?: number | null }).paper_width_mm ?? null) : content,
         dedupeKey: dedupeKeyBase ? `${dedupeKeyBase}:${printer.id}` : undefined,
       })
     )

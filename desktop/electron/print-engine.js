@@ -134,7 +134,8 @@ function printViaNetwork(ip, port, content, raw) {
 const PS_PRINT_SCRIPT = `
 param(
   [Parameter(Mandatory=$true)][string]$PrinterName,
-  [Parameter(Mandatory=$true)][string]$FilePath
+  [Parameter(Mandatory=$true)][string]$FilePath,
+  [int]$Columns = 48
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -150,22 +151,28 @@ $doc.DefaultPageSettings.Landscape = $false
 # aproveitar a largura real do rolo -- o driver clampa sozinho pro minimo
 # de hardware se 0 nao for suportado.
 $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
-$script:font = New-Object System.Drawing.Font('Consolas', 9)
-$font = $script:font
+$script:font = $null
 $script:lineIndex = 0
 $doc.add_PrintPage({
   param($sender, $e)
+  if ($script:font -eq $null) {
+    # Fonte calculada pra caber $Columns colunas na largura util REAL do papel (unidade da
+    # pagina = 1/100 pol.; Consolas tem 0,5498 em de largura por caractere; 4% de folga pro
+    # espacamento interno do GDI+). Antes a fonte era fixa (9 pt) e so cabiam ~40 colunas: o que
+    # passava disso saia CORTADO na direita (foto do Sertao, 2026-09-29).
+    $tam = ($e.MarginBounds.Width * 0.96 * 72) / (100 * 0.5498 * $Columns)
+    $tam = [Math]::Max(6, [Math]::Min(11, $tam))
+    $script:font = New-Object System.Drawing.Font('Consolas', [single]$tam)
+  }
   $font = $script:font
   $lineHeight = $font.GetHeight($e.Graphics)
   $y = $e.MarginBounds.Top
   while ($script:lineIndex -lt $lines.Count -and ($y + $lineHeight) -le $e.MarginBounds.Bottom) {
     $texto = $lines[$script:lineIndex]
-    # Centralizado (pedido direto, 2026-09-15) -- mesmo padrao visual de
-    # cupom termico de qualquer PDV: cada linha centrada na largura real do
-    # papel, nao alinhada a esquerda. Nunca fica negativo se a linha for
-    # mais larga que a pagina (cai pra esquerda nesse caso raro).
-    $largura = $e.Graphics.MeasureString($texto, $font).Width
-    $x = $e.MarginBounds.Left + [Math]::Max(0, ($e.MarginBounds.Width - $largura) / 2)
+    # Alinhado a esquerda: o proprio texto ja vem diagramado em colunas (centralizado,
+    # valores a direita, separadores) por lib/print.ts -- centralizar cada linha aqui
+    # bagunçava esse layout (2026-09-29, pedido do dono).
+    $x = $e.MarginBounds.Left
     $e.Graphics.DrawString($texto, $font, [System.Drawing.Brushes]::Black, [float]$x, [float]$y)
     $y += $lineHeight
     $script:lineIndex++
@@ -267,7 +274,10 @@ function printViaUsbRaw(printerName, content) {
   });
 }
 
-function printViaUsb(printerName, content) {
+// Mesma regra de lib/print.ts (colunasDoPapel): 58 mm = 32 colunas, 80 mm = 48.
+function colunasDoPapel(mm) { return mm === 58 || mm === 48 ? 32 : 48; }
+
+function printViaUsb(printerName, content, colunas = 48) {
   return new Promise((resolve, reject) => {
     const stamp = Date.now();
     const tmpFile = path.join(os.tmpdir(), `ntb-print-${stamp}.txt`);
@@ -284,7 +294,7 @@ function printViaUsb(printerName, content) {
       // dentro do texto do script — não precisa (nem arrisca) escapar aspas.
       execFile(
         'powershell.exe',
-        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', tmpFile],
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', tmpFile, '-Columns', String(colunas)],
         { timeout: 30000 },
         (err) => {
           cleanup(scriptFile);
@@ -471,7 +481,7 @@ async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
     await printViaNetwork(printer.ip_address, printer.port, content, printer.print_mode === 'raw');
   } else if (printer.connection_type === 'usb') {
-    await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content) : printViaUsb(printer.usb_system_name, content));
+    await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content) : printViaUsb(printer.usb_system_name, content, colunasDoPapel(printer.paper_width_mm)));
   } else {
     throw new Error(`Tipo de conexão não suportado aqui: ${printer.connection_type}`);
   }
@@ -731,7 +741,7 @@ async function printDirectUsb(printer, content, donos) {
     if (!dono) throw new Error('Esta máquina não tem essa impressora');
     alvo = `\\\\${dono}\\${printer.usb_system_name}`;
   }
-  return raw ? printViaUsbRaw(alvo, content) : printViaUsb(alvo, content);
+  return raw ? printViaUsbRaw(alvo, content) : printViaUsb(alvo, content, colunasDoPapel(printer.paper_width_mm));
 }
 
 async function listarImpressorasLocais() {

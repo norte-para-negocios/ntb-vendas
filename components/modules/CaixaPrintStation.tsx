@@ -728,9 +728,10 @@ async function reconcileDestination(
     // falha no caminho window.print() já testado, que segue seu próprio
     // rastreamento de erro logo abaixo.
     if (printersForItem.length > 0) {
-      const content = buildKitchenTicketText(dadosTicket);
       const ids = itens.map((it) => it.id).sort();
       printersForItem.forEach((printer) => {
+        // Largura do papel DESTA impressora (80 mm = 48 colunas, 58 mm = 32): o layout em colunas depende dela.
+        const content = buildKitchenTicketText({ ...dadosTicket, paperWidthMm: printer.paper_width_mm });
         // `dedupeKey` (migration 073): o dedupe desta tela é `printedIds` no
         // localStorage, ou seja, POR APARELHO — dois computadores da mesma
         // loja com o app aberto nunca enxergam o que o outro já imprimiu e

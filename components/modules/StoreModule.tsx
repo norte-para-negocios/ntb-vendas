@@ -3651,7 +3651,7 @@ NOTIFY pgrst, 'reload schema';`;
             // faltava o mesmo enfileiramento pra impressora USB/rede do
             // caixa que handleFinishPayment já tem, então só o comprovante
             // PÓS-pagamento saía na impressora física; este nunca saía.
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             // Achado ao vivo na loja Sertão (2026-09-15): com uma impressora
             // USB/rede cadastrada pro destino 'receipt' (ex.: CAIXA), o
@@ -3951,7 +3951,7 @@ NOTIFY pgrst, 'reload schema';`;
                     // Aditivo (2026-08-28, achado ao vivo — loja com
                     // impressora de rede/USB dedicada ao caixa): nunca
                     // bloqueia nem afeta o resultado do fechamento.
-                    enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+                    enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
                         .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
                     // Achado ao vivo na loja Sertão (2026-09-15): com
                     // impressora física cadastrada pro destino 'receipt', o
@@ -6190,7 +6190,7 @@ const CounterView: React.FC<{
                 };
                 // Aditivo (2026-08-28, achado ao vivo) — ver mesmo padrão em
                 // TablesView.handleFinishPayment.
-                enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+                enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
                     .catch((e) => console.error('enqueueReceiptPrintJobs falhou:', e));
                 // Achado ao vivo na loja Sertão (2026-09-15) — mesmo guard
                 // aplicado nos outros call sites de printBillReceipt.
@@ -6295,7 +6295,7 @@ const CounterView: React.FC<{
                 subtotal: total,
                 total,
             };
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência balcão) falhou:', e));
             const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
             if (!temImpressoraFisica) {
@@ -10954,7 +10954,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                     changeDue: 0,
                 },
             };
-            enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, buildBillReceiptText(receiptOpts))
+            enqueueReceiptPrintJobs(store.id, `Comprovante - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }))
                 .catch((e) => console.error('enqueueReceiptPrintJobs (reimpressão) falhou:', e));
             const temImpressoraFisica = await hasActivePrinterForDestination(store.id, 'receipt');
             if (!temImpressoraFisica) {

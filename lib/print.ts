@@ -414,6 +414,24 @@ export function printGenericTestTicket(paperWidthMm: 48 | 58 | 80, storeName?: s
   return openThermalPrint('Teste de Impressão', body, paperWidthMm, plainText, true);
 }
 
+// ── Layout de texto das comandas/contas (impressora térmica) ───────────────────────────
+// Colunas por largura do papel (Font A): 80 mm = 48, 58 mm = 32. Sem informar, 80 mm (padrão
+// do cadastro de impressoras). Só ASCII de desenho ('=', '-'), sem caractere que o driver
+// possa trocar por '?'.
+export const colunasDoPapel = (mm?: number | null): number => {
+  if (mm === 58 || mm === 48) return 32;
+  if (mm === 80) return 48;
+  // Sem largura configurada: a maquininha Android (papel de 58 mm) usa 32; o resto, 80 mm.
+  return typeof window !== 'undefined' && (window as any).ntbPrinter ? 32 : 48;
+};
+const centralizar = (texto: string, w: number): string => (texto.length >= w ? texto : ' '.repeat(Math.floor((w - texto.length) / 2)) + texto);
+// esquerda + direita na mesma linha, direita colada na borda; se não couber, corta a esquerda.
+const esqDir = (esq: string, dir: string, w: number): string => {
+  const espaco = w - esq.length - dir.length;
+  if (espaco >= 1) return esq + ' '.repeat(espaco) + dir;
+  return esq.slice(0, Math.max(0, w - dir.length - 1)) + ' ' + dir;
+};
+
 export function buildKitchenTicketText(opts: {
   kind: 'COZINHA' | 'BAR';
   storeName?: string;
@@ -427,26 +445,32 @@ export function buildKitchenTicketText(opts: {
   items?: KitchenTicketLine[];
   orderIdShort: string;
   cancelamento?: CancelamentoTicket;
+  paperWidthMm?: number | null;
 }): string {
-  const lines: string[] = [];
-  if (opts.storeName) lines.push(opts.storeName.toUpperCase());
-  lines.push(opts.cancelamento ? `CANCELAMENTO - ${opts.kind}` : opts.kind);
-  lines.push(new Date().toLocaleString('pt-BR'));
-  lines.push('--------------------------------');
-  if (opts.cancelamento) lines.push('*** PEDIDO CANCELADO ***');
-  lines.push(`${opts.orderType}: ${opts.identifier}`);
-  if (opts.client) lines.push(`Cliente: ${opts.client}`);
-  lines.push('');
-  kitchenTicketLines(opts).forEach((l, i) => {
-    if (i > 0) lines.push('');
-    lines.push(`${opts.cancelamento ? 'CANCELAR: ' : ''}${l.quantity}x ${l.productName}`);
-    if (l.addons) lines.push(`Adicional: ${l.addons}`);
-    if (l.observation) lines.push(`OBS: ${l.observation.toUpperCase()}`);
+  const W = colunasDoPapel(opts.paperWidthMm);
+  const dupla = '='.repeat(W);
+  const simples = '-'.repeat(W);
+  const agora = new Date();
+  const dataHora = `${agora.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  const lines: string[] = [dupla];
+  if (opts.storeName) wrapLine(opts.storeName.toUpperCase(), W).forEach((t) => lines.push(centralizar(t, W)));
+  lines.push(centralizar(opts.cancelamento ? `CANCELAMENTO - ${opts.kind}` : opts.kind, W));
+  if (opts.cancelamento) lines.push(centralizar('*** PEDIDO CANCELADO ***', W));
+  lines.push(dupla);
+  lines.push(esqDir(opts.identifier, dataHora, W));
+  if (opts.client) lines.push(...wrapLine(`Cliente: ${opts.client}`, W));
+  lines.push(simples);
+  kitchenTicketLines(opts).forEach((l) => {
+    const principal = `${opts.cancelamento ? 'CANCELAR: ' : ''}${l.quantity}x ${l.productName}`;
+    wrapLine(principal, W - 4).forEach((t, n) => lines.push(n === 0 ? t : `    ${t}`));
+    if (l.addons) wrapLine(`+ ${l.addons}`, W - 4).forEach((t) => lines.push(`    ${t}`));
+    if (l.observation) wrapLine(`OBS: ${l.observation.toUpperCase()}`, W - 4).forEach((t) => lines.push(`    ${t}`));
+    lines.push(simples);
   });
-  lines.push('--------------------------------');
-  if (opts.cancelamento?.por) lines.push(`Por: ${opts.cancelamento.por}`);
-  if (opts.cancelamento?.motivo) lines.push(`Motivo: ${opts.cancelamento.motivo}`);
+  if (opts.cancelamento?.por) lines.push(...wrapLine(`Por: ${opts.cancelamento.por}`, W));
+  if (opts.cancelamento?.motivo) lines.push(...wrapLine(`Motivo: ${opts.cancelamento.motivo}`, W));
   lines.push(`Pedido #${opts.orderIdShort}`);
+  lines.push(dupla);
   lines.push('\n\n\n');
   return lines.join('\n');
 }
@@ -614,42 +638,55 @@ export function buildBillReceiptText(opts: {
   serviceFee?: BillServiceFeeInfo;
   total: number;
   payment?: BillPaymentInfo;
-  paperWidthMm?: 48 | 58 | 80;
+  paperWidthMm?: number | null;
 }): string {
-  const maxChars = CHARS_PER_LINE[opts.paperWidthMm || 48];
-  const divider = '-'.repeat(maxChars);
-  const lines: string[] = [];
-  lines.push(...wrapLine(opts.storeName.toUpperCase(), maxChars));
-  if (opts.cnpj) lines.push(`CNPJ: ${opts.cnpj}`);
+  // Estilo "pré-nota": cabeçalho centralizado, blocos separados por linha, colunas
+  // QTD / ITEM / VALOR alinhadas, total destacado. NÃO é documento fiscal (avisa no rodapé).
+  const W = colunasDoPapel(opts.paperWidthMm);
+  const dupla = '='.repeat(W);
+  const simples = '-'.repeat(W);
+  const lines: string[] = [dupla];
+  wrapLine(opts.storeName.toUpperCase(), W).forEach((t) => lines.push(centralizar(t, W)));
+  if (opts.cnpj) lines.push(centralizar(`CNPJ: ${opts.cnpj}`, W));
+  lines.push(dupla);
+  lines.push(centralizar(opts.payment ? 'COMPROVANTE DE PAGAMENTO' : 'CONFERÊNCIA DE CONSUMO', W));
+  lines.push(...wrapLine(opts.label, W));
   lines.push(new Date().toLocaleString('pt-BR'));
-  lines.push(divider);
-  lines.push(...wrapLine(opts.label, maxChars));
-  lines.push(divider);
+  lines.push(simples);
+  lines.push(esqDir('QTD ITEM', 'VALOR', W));
+  lines.push(simples);
   opts.items.forEach((i) => {
-    lines.push(...wrapLine(`${i.quantity}x ${i.name} - R$ ${formatBRL(i.total)}`, maxChars));
-    if (i.client) lines.push(`  Cliente: ${i.client}`);
+    const valor = formatBRL(i.total);
+    const nomeW = Math.max(10, W - 4 - valor.length - 1);
+    const partes = wrapLine(i.name, nomeW);
+    partes.forEach((parte, n) => {
+      lines.push(n === 0 ? `${`${i.quantity}x`.padEnd(4)}${esqDir(parte, valor, W - 4)}` : `    ${parte}`);
+    });
+    if (i.client) lines.push(`    Cliente: ${i.client}`);
   });
-  lines.push(divider);
+  lines.push(simples);
   if (opts.serviceFee) {
-    lines.push(`Subtotal: R$ ${formatBRL(opts.subtotal)}`);
+    lines.push(esqDir('Subtotal', `R$ ${formatBRL(opts.subtotal)}`, W));
     if (opts.serviceFee.charged) {
-      lines.push(`Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)} opcional): R$ ${formatBRL(opts.serviceFee.amount)}`);
+      lines.push(esqDir(`Taxa de Serviço (${formatServiceFeeRate(opts.serviceFee.rate)})`, `R$ ${formatBRL(opts.serviceFee.amount)}`, W));
     } else {
-      lines.push(...wrapLine(opts.serviceFee.removedForTable ? 'Taxa de serviço opcional removida nesta mesa' : 'Este estabelecimento não cobra taxa de serviço', maxChars));
+      lines.push(...wrapLine(opts.serviceFee.removedForTable ? 'Taxa de serviço opcional removida nesta mesa' : 'Este estabelecimento não cobra taxa de serviço', W));
     }
   }
-  lines.push(`TOTAL: R$ ${formatBRL(opts.total)}`);
+  lines.push(dupla);
+  lines.push(esqDir('TOTAL', `R$ ${formatBRL(opts.total)}`, W));
+  lines.push(dupla);
   if (opts.payment) {
-    lines.push(divider);
     lines.push('FORMA DE PAGAMENTO');
     opts.payment.methods.forEach((m) => {
       const brandSuffix = m.brand ? ` (${getCardBrandLabel(m.brand)})` : '';
-      lines.push(`${getPaymentMethodLabel(m.method)}${brandSuffix}: R$ ${formatBRL(m.amount)}`);
+      lines.push(esqDir(`${getPaymentMethodLabel(m.method)}${brandSuffix}`, `R$ ${formatBRL(m.amount)}`, W));
     });
-    if (opts.payment.changeDue > 0) lines.push(`Troco: R$ ${formatBRL(opts.payment.changeDue)}`);
+    if (opts.payment.changeDue > 0) lines.push(esqDir('Troco', `R$ ${formatBRL(opts.payment.changeDue)}`, W));
+    lines.push(simples);
   }
-  lines.push(divider);
-  lines.push('Obrigado pela preferência!');
+  lines.push(centralizar('*** SEM VALOR FISCAL ***', W));
+  lines.push(centralizar('Obrigado pela preferência!', W));
   lines.push('\n\n\n');
   return lines.join('\n');
 }
