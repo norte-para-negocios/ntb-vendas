@@ -161,7 +161,7 @@ $doc.add_PrintPage({
     # espacamento interno do GDI+). Antes a fonte era fixa (9 pt) e so cabiam ~40 colunas: o que
     # passava disso saia CORTADO na direita (foto do Sertao, 2026-09-29).
     $tam = ($e.MarginBounds.Width * 0.96 * 72) / (100 * 0.5498 * $Columns)
-    $tam = [Math]::Max(6, [Math]::Min(11, $tam))
+    $tam = [Math]::Max(6, [Math]::Min(14, $tam))
     $script:font = New-Object System.Drawing.Font('Consolas', [single]$tam)
   }
   $font = $script:font
@@ -278,6 +278,9 @@ function printViaUsbRaw(printerName, content) {
 function colunasDoPapel(mm) { return mm === 58 || mm === 48 ? 32 : 48; }
 
 function printViaUsb(printerName, content, colunas = 48) {
+  // Colunas reais do conteúdo (a comanda é diagramada em menos colunas que a conta => fonte maior).
+  const maior = String(content).split('\n').reduce((m, l) => Math.max(m, l.replace(/\r$/, '').length), 0);
+  if (maior >= 16 && maior < colunas) colunas = maior;
   return new Promise((resolve, reject) => {
     const stamp = Date.now();
     const tmpFile = path.join(os.tmpdir(), `ntb-print-${stamp}.txt`);

@@ -1517,6 +1517,11 @@ export const requestTableBill = async (tableId: string) => {
   if (error) throw error;
 };
 
+export const cancelTableBillRequest = async (tableId: string) => {
+  const { error } = await supabase.rpc('cancel_table_bill_request_secure', { p_table_id: tableId });
+  if (error) throw error;
+};
+
 export const cancelPendingTableItems = async (tableId: string) => {
   await supabase.rpc('cancel_pending_table_items_secure', { p_table_id: tableId });
 };

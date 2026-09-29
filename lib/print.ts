@@ -432,6 +432,10 @@ const esqDir = (esq: string, dir: string, w: number): string => {
   return esq.slice(0, Math.max(0, w - dir.length - 1)) + ' ' + dir;
 };
 
+// Comanda de cozinha/bar usa MENOS colunas que a conta: o driver calcula a fonte pra caber as colunas
+// na largura do papel, então menos colunas = letra maior (pedido do Ramon, 2026-09-29: fonte pequena).
+export const colunasDaComanda = (mm?: number | null): number => (colunasDoPapel(mm) === 32 ? 22 : 32);
+
 export function buildKitchenTicketText(opts: {
   kind: 'COZINHA' | 'BAR';
   storeName?: string;
@@ -449,7 +453,7 @@ export function buildKitchenTicketText(opts: {
   // Nome do setor/impressora no cabeçalho (ex.: "PIZZARIA"); sem ele, o destino (COZINHA/BAR).
   titulo?: string;
 }): string {
-  const W = colunasDoPapel(opts.paperWidthMm);
+  const W = colunasDaComanda(opts.paperWidthMm);
   const dupla = '='.repeat(W);
   const simples = '-'.repeat(W);
   const nomeDoSetor = opts.titulo || opts.kind;

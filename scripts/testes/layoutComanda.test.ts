@@ -49,9 +49,11 @@ for (const [mm, W] of [[80, 48], [58, 32]] as const) {
       { quantity: 1, productName: 'Coxinha' },
     ],
   });
+  // Comanda usa menos colunas que a conta => o driver amplia a fonte (pedido do Ramon: fonte maior).
+  const Wk = mm === 58 ? 22 : 32;
   const k = cozinha.split('\n');
-  assert.ok(k.filter((x) => x.length > 0).every((x) => x.length <= W), `[${mm}] comanda cabe em ${W} colunas`);
-  assert.ok(k.filter((x) => x === '='.repeat(W)).length >= 2, `[${mm}] comanda com linhas duplas`);
+  assert.ok(k.filter((x) => x.length > 0).every((x) => x.length <= Wk), `[${mm}] comanda cabe em ${Wk} colunas`);
+  assert.ok(k.filter((x) => x === '='.repeat(Wk)).length >= 2, `[${mm}] comanda com linhas duplas`);
   const titulo = k.find((x) => x.trim() === 'COZINHA')!;
   assert.ok(titulo && titulo.startsWith(' '), `[${mm}] título centralizado`);
   assert.ok(k.some((x) => x.startsWith('MESA 4')), 'mesa em destaque');
@@ -59,7 +61,7 @@ for (const [mm, W] of [[80, 48], [58, 32]] as const) {
   const iPizza = k.findIndex((x) => x.startsWith('2x'));
   const iCox = k.findIndex((x) => x.startsWith('1x'));
   assert.ok(iPizza >= 0 && iCox > iPizza, `[${mm}] itens em ordem`);
-  assert.ok(k.slice(iPizza, iCox).some((x) => x === '-'.repeat(W)), `[${mm}] linha separando um item do outro`);
+  assert.ok(k.slice(iPizza, iCox).some((x) => x === '-'.repeat(Wk)), `[${mm}] linha separando um item do outro`);
   assert.ok(k.some((x) => x.trim().startsWith('+ Borda: Catupiry')) && k.some((x) => x.trim() === 'OBS: SEM CEBOLA'), 'adicional e observação em linhas próprias');
   assert.ok(cozinha.includes('Pedido #abc12345'));
 }

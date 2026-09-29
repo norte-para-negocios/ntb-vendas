@@ -19,7 +19,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -38,6 +38,7 @@ import { VendasCanceladasView } from '@/components/modules/VendasCanceladasView'
 import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
+import { setorDoItem } from '@/lib/setores';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -4048,6 +4049,19 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
+    const handleCancelBillRequest = async (tableId: string) => {
+        try {
+            await cancelTableBillRequest(tableId);
+            setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: TableStatus.OCCUPIED } : t));
+            if (selectedTable && selectedTable.id === tableId) {
+                setSelectedTable(prev => prev ? { ...prev, status: TableStatus.OCCUPIED } : null);
+            }
+            toast.success('Pedido de conta cancelado.');
+        } catch (e) {
+            toast.error('Erro ao cancelar o pedido de conta.');
+        }
+    };
+
     const handleDismissWaiter = async (tableId: string) => {
         try {
             await dismissWaiterRequest(tableId);
@@ -4205,12 +4219,19 @@ NOTIFY pgrst, 'reload schema';`;
     // Itens do mesmo destino saem numa comanda só. Sem impressora cadastrada pro
     // destino, abre a janela de imprimir do aparelho de quem cancelou.
     const imprimirCancelamento = async (itens: OrderItem[], mesaNumero: number | string, motivo?: string) => {
-        const porDestino = new Map<'kitchen' | 'bar', OrderItem[]>();
+        // Mesmo critério da Estação de Impressão: setor do produto, senão o da categoria (a pizza herda
+        // "Pizzaria" da categoria). Sem isso o cancelamento da pizza saía na impressora da cozinha.
+        const grupos = new Map<string, { destino: 'kitchen' | 'bar'; setorId: string | null; lista: OrderItem[] }>();
         itens.forEach((it) => {
-            const destino: 'kitchen' | 'bar' = it.product?.destination === 'bar' ? 'bar' : 'kitchen';
-            porDestino.set(destino, [...(porDestino.get(destino) ?? []), it]);
+            const setorId = setorDoItem(it.product, locaisInfo.catSetor);
+            const setor = setorId ? locaisInfo.setores.find((x) => x.id === setorId) : undefined;
+            const destino: 'kitchen' | 'bar' = setor ? setor.base : (it.product?.destination === 'bar' ? 'bar' : 'kitchen');
+            const chave = `${destino}|${setorId ?? ''}`;
+            const g = grupos.get(chave) ?? { destino, setorId, lista: [] };
+            g.lista.push(it);
+            grupos.set(chave, g);
         });
-        for (const [destino, lista] of porDestino) {
+        for (const { destino, setorId, lista } of grupos.values()) {
             const dados = {
                 kind: (destino === 'bar' ? 'BAR' : 'COZINHA') as 'BAR' | 'COZINHA',
                 storeName: store.name,
@@ -4231,7 +4252,7 @@ NOTIFY pgrst, 'reload schema';`;
                 enviadas = await enfileirarCancelamento({
                     storeId,
                     destination: destino,
-                    sectorId: lista[0].product?.sector_id ?? null,
+                    sectorId: setorId,
                     title: `CANCELAMENTO — ${lista.length} ${lista.length === 1 ? 'item' : 'itens'} — Mesa ${mesaNumero}`,
                     content: (printer) => buildKitchenTicketText({ ...dados, paperWidthMm: printer.paper_width_mm, titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined }),
                     dedupeKey: `cancel:${lista.map((i) => i.id).sort().join(',')}`,
@@ -4709,6 +4730,15 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <Receipt size={18}/> Pedir conta
                                              </Button>
                                          )}
+                                         {canFinalize && selectedTable?.status === 'waiting_bill' && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleCancelBillRequest(selectedTable.id)}
+                                    className="mt-2 w-full h-10 rounded-[var(--r-md)] text-[14px] text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
+                                >
+                                    Cancelar pedido de conta (foi sem querer)
+                                </button>
+                            )}
                                          {canReassignJurisdiction && (
                                              <button
                                                 type="button"
@@ -4920,6 +4950,15 @@ NOTIFY pgrst, 'reload schema';`;
                                 <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
                                     <Receipt size={18}/> Pedir conta
                                 </Button>
+                            )}
+                                         {canFinalize && selectedTable?.status === 'waiting_bill' && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleCancelBillRequest(selectedTable.id)}
+                                    className="mt-2 w-full h-10 rounded-[var(--r-md)] text-[14px] text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
+                                >
+                                    Cancelar pedido de conta (foi sem querer)
+                                </button>
                             )}
                         </div>
                     )}
