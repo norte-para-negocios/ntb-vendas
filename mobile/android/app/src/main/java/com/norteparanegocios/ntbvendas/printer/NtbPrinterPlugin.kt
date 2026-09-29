@@ -1,6 +1,11 @@
 package com.norteparanegocios.ntbvendas.printer
 
+import android.content.Context
 import android.os.Build
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -60,5 +65,38 @@ class NtbPrinterPlugin : Plugin() {
             json.put("message", resultado.exceptionOrNull()?.message ?: "Falha desconhecida no driver ${driver.nome}.")
         }
         call.resolve(json)
+    }
+
+    // Janela de impressão do próprio Android (escolher impressora, salvar em PDF,
+    // impressoras de rede/Wi-Fi Direct): usada quando NENHUM driver do app serve e a
+    // pessoa pediu pra imprimir na mão. É o equivalente, no celular, da janela normal
+    // de imprimir do Windows/Mac.
+    private var webViewDeImpressao: WebView? = null
+
+    @PluginMethod
+    fun printDialog(call: PluginCall) {
+        val html = call.getString("html")
+        if (html.isNullOrBlank()) { call.reject("Parametro 'html' ausente."); return }
+        val titulo = call.getString("title") ?: "Norte Vendas"
+        activity.runOnUiThread {
+            try {
+                val web = WebView(activity)
+                webViewDeImpressao = web
+                web.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        try {
+                            val pm = activity.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                            pm.print(titulo, view.createPrintDocumentAdapter(titulo), PrintAttributes.Builder().build())
+                            val r = JSObject(); r.put("success", true); call.resolve(r)
+                        } catch (e: Exception) {
+                            call.reject(e.message ?: "Falha ao abrir a janela de impressao.")
+                        }
+                    }
+                }
+                web.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Falha ao preparar a impressao.")
+            }
+        }
     }
 }

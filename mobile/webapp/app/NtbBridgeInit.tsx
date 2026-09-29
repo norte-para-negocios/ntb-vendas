@@ -12,6 +12,7 @@ import { registerPlugin } from '@capacitor/core';
 interface NtbPrinterPlugin {
   getStatus(): Promise<{ driver: string; manufacturer: string; available: boolean }>;
   printText(opts: { text: string }): Promise<{ success: boolean; message?: string }>;
+  printDialog(opts: { title: string; html: string }): Promise<{ success: boolean }>;
 }
 
 const NtbPrinter = registerPlugin<NtbPrinterPlugin>('NtbPrinter');

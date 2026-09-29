@@ -539,7 +539,7 @@ interface FailedEntry {
   key: string;
   description: string;
   attempts: number;
-  retry: () => Promise<boolean>;
+  retry: (manual?: boolean) => Promise<boolean>;
   // Comanda agrupada: todos os itens que saem juntos no mesmo papel.
   itemIds?: string[];
 }
@@ -746,13 +746,13 @@ async function reconcileDestination(
       });
     }
 
-    const doPrint = async () => {
+    const doPrint = async (manual = false) => {
       // try/catch: printKitchenTicket é Promise<boolean>, não um contrato
       // blindado contra throw — sem isto, uma rejeição não tratada
       // interromperia o `for` no meio do lote (achado real do station
       // original, fix round 2 Group B2).
       try {
-        return await printKitchenTicket(dadosTicket);
+        return await printKitchenTicket({ ...dadosTicket, interativo: manual });
       } catch (e) {
         console.error('printKitchenTicket lançou (tratado como falha):', e);
         return false;
@@ -1010,7 +1010,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     if (!entry) return;
     let ok = false;
     try {
-      ok = await entry.retry();
+      ok = await entry.retry(true);
     } catch (e) {
       console.error('Reimpressão manual (Caixa) lançou (tratado como falha):', e);
       ok = false;

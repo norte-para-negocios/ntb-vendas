@@ -241,15 +241,30 @@ function printHtmlDocument(title: string, styles: string, bodyHtml: string): Pro
 // driver nativo. No navegador normal e no app desktop, `window.ntbPrinter`
 // não existe, e o caminho de sempre (HTML + window.print()) continua
 // intacto — nenhuma mudança de comportamento pra quem já usa o sistema.
-async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 48 | 58 | 80, plainText?: string): Promise<boolean> {
+async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 48 | 58 | 80, plainText?: string, interativo = false): Promise<boolean> {
   const nativo = (typeof window !== 'undefined') ? (window as any).ntbPrinter : undefined;
   if (nativo && plainText) {
+    let ok = false;
     try {
       const resultado = await nativo.printText({ text: plainText });
-      return !!resultado?.success;
+      ok = !!resultado?.success;
     } catch {
-      return false;
+      ok = false;
     }
+    if (ok) return true;
+    // Sem impressora que o app conheça (nem embutida nem Bluetooth): se a pessoa
+    // pediu na mão, abre a janela de impressão do Android (escolher impressora ou
+    // salvar em PDF). Impressão automática (comanda de cozinha) nunca abre janela.
+    if (interativo && nativo.printDialog) {
+      try {
+        const html = `<html><head><title>${escapeHtml(title)}</title><style>${thermalStyles(paperWidthMm)}</style></head><body>${bodyHtml}</body></html>`;
+        const r = await nativo.printDialog({ title, html });
+        return !!r?.success;
+      } catch {
+        return false;
+      }
+    }
+    return false;
   }
   return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
@@ -287,6 +302,7 @@ export function printKitchenTicket(opts: {
   items?: KitchenTicketLine[];
   orderIdShort: string;
   paperWidthMm?: 48 | 58 | 80;
+  interativo?: boolean;
 }): Promise<boolean> {
   const linhas = kitchenTicketLines(opts);
   const itensHtml = linhas.map((l) => `
@@ -310,7 +326,7 @@ export function printKitchenTicket(opts: {
     kind: opts.kind, storeName: opts.storeName, orderType: opts.orderType, identifier: opts.identifier,
     client: opts.client, items: linhas, orderIdShort: opts.orderIdShort,
   });
-  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm, plainText);
+  return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm, plainText, opts.interativo);
 }
 
 // Aba "Impressão" (2026-08-27, migration 061): versão em TEXTO PURO do
@@ -387,7 +403,7 @@ export function printGenericTestTicket(paperWidthMm: 48 | 58 | 80, storeName?: s
     <div class="footer">Documento sem valor fiscal — só teste.</div>
   `;
   const plainText = buildGenericTestTicketText(paperWidthMm, storeName);
-  return openThermalPrint('Teste de Impressão', body, paperWidthMm, plainText);
+  return openThermalPrint('Teste de Impressão', body, paperWidthMm, plainText, true);
 }
 
 export function buildKitchenTicketText(opts: {
@@ -568,7 +584,7 @@ export function printBillReceipt(opts: {
     <div class="footer">Obrigado pela preferência!</div>
   `;
   const plainText = buildBillReceiptText(opts);
-  return openThermalPrint(`Comprovante - ${opts.label}`, body, opts.paperWidthMm, plainText);
+  return openThermalPrint(`Comprovante - ${opts.label}`, body, opts.paperWidthMm, plainText, true);
 }
 
 // Achado ao vivo (2026-08-28, loja real com 3 impressoras cabeadas —
