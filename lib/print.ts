@@ -269,6 +269,10 @@ async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 
   return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
 
+// Comanda de CANCELAMENTO: mesma comanda, mas avisa a cozinha/bar que o que estava
+// feito/na fila foi cancelado (quem cancelou e o motivo).
+export interface CancelamentoTicket { por?: string | null; motivo?: string | null }
+
 export interface KitchenTicketLine {
   quantity: number;
   productName: string;
@@ -303,28 +307,32 @@ export function printKitchenTicket(opts: {
   orderIdShort: string;
   paperWidthMm?: 48 | 58 | 80;
   interativo?: boolean;
+  cancelamento?: CancelamentoTicket;
 }): Promise<boolean> {
   const linhas = kitchenTicketLines(opts);
   const itensHtml = linhas.map((l) => `
-    <div class="item-line">${l.quantity}x ${escapeHtml(l.productName)}</div>
+    <div class="item-line">${opts.cancelamento ? 'CANCELAR: ' : ''}${l.quantity}x ${escapeHtml(l.productName)}</div>
     ${l.addons ? `<div class="addons">Adicional: ${escapeHtml(l.addons)}</div>` : ''}
     ${l.observation ? `<div class="obs">OBS: ${escapeHtml(l.observation)}</div>` : ''}`).join('');
   const body = `
     <div class="header">
       ${opts.storeName ? `<div class="store-name">${escapeHtml(opts.storeName)}</div>` : ''}
-      <div class="doc-title">${escapeHtml(opts.kind)}</div>
+      <div class="doc-title">${opts.cancelamento ? `CANCELAMENTO — ${escapeHtml(opts.kind)}` : escapeHtml(opts.kind)}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
     </div>
+    ${opts.cancelamento ? '<div class="big-text">*** PEDIDO CANCELADO ***</div>' : ''}
     <div class="info">
       <div class="big-text">${escapeHtml(opts.orderType)}: ${escapeHtml(opts.identifier)}</div>
       ${opts.client ? `<div>Cliente: ${escapeHtml(opts.client)}</div>` : ''}
     </div>
     ${itensHtml}
+    ${opts.cancelamento?.por ? `<div>Por: ${escapeHtml(opts.cancelamento.por)}</div>` : ''}
+    ${opts.cancelamento?.motivo ? `<div class="obs">Motivo: ${escapeHtml(opts.cancelamento.motivo)}</div>` : ''}
     <div class="footer">Pedido #${escapeHtml(opts.orderIdShort)}</div>
   `;
   const plainText = buildKitchenTicketText({
     kind: opts.kind, storeName: opts.storeName, orderType: opts.orderType, identifier: opts.identifier,
-    client: opts.client, items: linhas, orderIdShort: opts.orderIdShort,
+    client: opts.client, items: linhas, orderIdShort: opts.orderIdShort, cancelamento: opts.cancelamento,
   });
   return openThermalPrint(`Ticket ${opts.kind === 'COZINHA' ? 'Cozinha' : 'Bar'}`, body, opts.paperWidthMm, plainText, opts.interativo);
 }
@@ -418,22 +426,26 @@ export function buildKitchenTicketText(opts: {
   observation?: string;
   items?: KitchenTicketLine[];
   orderIdShort: string;
+  cancelamento?: CancelamentoTicket;
 }): string {
   const lines: string[] = [];
   if (opts.storeName) lines.push(opts.storeName.toUpperCase());
-  lines.push(opts.kind);
+  lines.push(opts.cancelamento ? `CANCELAMENTO - ${opts.kind}` : opts.kind);
   lines.push(new Date().toLocaleString('pt-BR'));
   lines.push('--------------------------------');
+  if (opts.cancelamento) lines.push('*** PEDIDO CANCELADO ***');
   lines.push(`${opts.orderType}: ${opts.identifier}`);
   if (opts.client) lines.push(`Cliente: ${opts.client}`);
   lines.push('');
   kitchenTicketLines(opts).forEach((l, i) => {
     if (i > 0) lines.push('');
-    lines.push(`${l.quantity}x ${l.productName}`);
+    lines.push(`${opts.cancelamento ? 'CANCELAR: ' : ''}${l.quantity}x ${l.productName}`);
     if (l.addons) lines.push(`Adicional: ${l.addons}`);
     if (l.observation) lines.push(`OBS: ${l.observation.toUpperCase()}`);
   });
   lines.push('--------------------------------');
+  if (opts.cancelamento?.por) lines.push(`Por: ${opts.cancelamento.por}`);
+  if (opts.cancelamento?.motivo) lines.push(`Motivo: ${opts.cancelamento.motivo}`);
   lines.push(`Pedido #${opts.orderIdShort}`);
   lines.push('\n\n\n');
   return lines.join('\n');

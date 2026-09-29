@@ -19,7 +19,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -4199,6 +4199,52 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
+    // Comanda de CANCELAMENTO (pedido do dono, 2026-09-29): cancelou um item que já foi
+    // confirmado/enviado → sai um papel "CANCELAMENTO" na cozinha/bar do destino dele.
+    // Itens do mesmo destino saem numa comanda só. Sem impressora cadastrada pro
+    // destino, abre a janela de imprimir do aparelho de quem cancelou.
+    const imprimirCancelamento = async (itens: OrderItem[], mesaNumero: number | string, motivo?: string) => {
+        const porDestino = new Map<'kitchen' | 'bar', OrderItem[]>();
+        itens.forEach((it) => {
+            const destino: 'kitchen' | 'bar' = it.product?.destination === 'bar' ? 'bar' : 'kitchen';
+            porDestino.set(destino, [...(porDestino.get(destino) ?? []), it]);
+        });
+        for (const [destino, lista] of porDestino) {
+            const dados = {
+                kind: (destino === 'bar' ? 'BAR' : 'COZINHA') as 'BAR' | 'COZINHA',
+                storeName: store.name,
+                orderType: 'MESA',
+                identifier: `MESA ${mesaNumero}`,
+                client: null,
+                items: lista.map((it) => ({
+                    quantity: it.quantity,
+                    productName: it.product?.name || 'Produto indisponível',
+                    addons: (it.selected_options || []).map((o) => o.name).join(', ') || undefined,
+                    observation: parseItemNote(it.notes || '').observation || undefined,
+                })),
+                orderIdShort: String(lista[0].order_id).slice(0, 8),
+                cancelamento: { por: loggedUser.name, motivo: motivo || null },
+            };
+            let enviadas = 0;
+            try {
+                enviadas = await enfileirarCancelamento({
+                    storeId,
+                    destination: destino,
+                    sectorId: lista[0].product?.sector_id ?? null,
+                    title: `CANCELAMENTO — ${lista.length} ${lista.length === 1 ? 'item' : 'itens'} — Mesa ${mesaNumero}`,
+                    content: buildKitchenTicketText(dados),
+                    dedupeKey: `cancel:${lista.map((i) => i.id).sort().join(',')}`,
+                });
+            } catch (e) {
+                console.error('enfileirarCancelamento falhou:', e);
+            }
+            if (enviadas === 0) {
+                const ok = await printKitchenTicket({ ...dados, interativo: true }).catch(() => false);
+                if (!ok) toast.warning('O item foi cancelado, mas a comanda de cancelamento não imprimiu. Avise a cozinha.');
+            }
+        }
+    };
+
     const handleDeleteItem = async (itemId: string) => {
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
@@ -4206,11 +4252,48 @@ NOTIFY pgrst, 'reload schema';`;
         const nomeItem = itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item';
         if(await confirm(`Cancelar ${nomeItem} da comanda?`)) {
             try {
-                await cancelSpecificOrderItem(itemId);
+                const ok = await cancelSpecificOrderItem(itemId, loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name);
+                if (!ok) { toast.error("Erro ao cancelar item."); return; }
+                if (itemAlvo && selectedTable) await imprimirCancelamento([itemAlvo], selectedTable.number);
                 // Realtime will update the list
             } catch(e) {
                 toast.error("Erro ao cancelar item.");
             }
+        }
+    };
+
+    // Cancelar o PEDIDO inteiro da mesa (todos os itens ainda não pagos) — só quem
+    // supervisiona (dono/gerente/universal/supervisor). Item já faturado em nota por
+    // pessoa não entra: precisa cancelar a nota antes.
+    const podeCancelarPedido = podeVerCaixasDaEquipe(loggedUser);
+    const [showCancelarPedido, setShowCancelarPedido] = useState(false);
+    const [cancelarMotivo, setCancelarMotivo] = useState('');
+    const [cancelandoPedido, setCancelandoPedido] = useState(false);
+    const handleCancelarPedidoMesa = async () => {
+        if (!selectedTable || cancelandoPedido) return;
+        if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
+        const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
+        if (itens.length === 0) { setShowCancelarPedido(false); return; }
+        if (itens.some((i) => (i as any).fiscal_nota_id)) {
+            toast.error('Este pedido tem item já faturado em nota fiscal. Cancele a nota antes (Administração → Notas fiscais).');
+            return;
+        }
+        setCancelandoPedido(true);
+        try {
+            const operador = loggedUser.role === 'universal' ? null : loggedUser.id;
+            const cancelados: OrderItem[] = [];
+            for (const it of itens) {
+                // eslint-disable-next-line no-await-in-loop -- um por vez: ordem e falha parcial ficam claras
+                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name)) cancelados.push(it);
+            }
+            if (cancelados.length > 0) await imprimirCancelamento(cancelados, selectedTable.number, cancelarMotivo.trim() || undefined);
+            if (cancelados.length === itens.length) toast.success('Pedido cancelado.');
+            else toast.warning(`Cancelei ${cancelados.length} de ${itens.length} itens. Tente de novo para os restantes.`);
+            setShowCancelarPedido(false);
+            setCancelarMotivo('');
+            loadData();
+        } finally {
+            setCancelandoPedido(false);
         }
     };
 
@@ -4817,6 +4900,11 @@ NOTIFY pgrst, 'reload schema';`;
                                     <Printer size={16}/> Imprimir
                                 </Button>
                             </div>
+                            {podeCancelarPedido && (currentTableSummary?.allItems || []).some((i) => i.status !== OrderStatus.CANCELED) && (
+                                <Button variant="danger" className="w-full max-sm:h-11 mb-3" onClick={() => { setCancelarMotivo(''); setShowCancelarPedido(true); }}>
+                                    <Trash2 size={16}/> Cancelar pedido
+                                </Button>
+                            )}
                             {canFinalize ? (
                                 <Button onClick={() => handleOpenPayment()} size="lg" className="w-full !h-12">
                                     <Wallet size={18}/> Receber pagamento
@@ -4962,6 +5050,20 @@ NOTIFY pgrst, 'reload schema';`;
                 );
                 })()}
             </WaiterOrderSurface>
+
+            {/* CANCELAR PEDIDO (mesa inteira) — pede o motivo, cancela os itens e imprime o cancelamento na cozinha/bar */}
+            <Modal isOpen={showCancelarPedido} onClose={() => !cancelandoPedido && setShowCancelarPedido(false)} title={`Cancelar pedido da Mesa ${selectedTable?.number ?? ''}`}>
+                <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe uma comanda de cancelamento. Não dá para desfazer.
+                    </p>
+                    <Input label="Motivo (opcional)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={80} />
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowCancelarPedido(false)} disabled={cancelandoPedido}>Voltar</Button>
+                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido}>Cancelar pedido</Button>
+                    </div>
+                </div>
+            </Modal>
 
             {/* MOVE TABLE MODAL */}
             <Modal isOpen={showMoveTableModal} onClose={() => setShowMoveTableModal(false)} title="Trocar de Mesa">

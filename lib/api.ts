@@ -1469,12 +1469,13 @@ export const updateOrderItemStatus = async (itemId: string, status: OrderStatus)
   }
 };
 
-export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string) => {
-  await supabase.rpc('cancel_order_item_secure', {
+export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string): Promise<boolean> => {
+  const { error } = await supabase.rpc('cancel_order_item_secure', {
     p_item_id: itemId,
     p_operator_user_id: operatorUserId ?? null,
     p_operator_name: operatorName ?? null,
   });
+  return !error;
 };
 
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
@@ -2949,6 +2950,36 @@ export const enqueuePrintJob = async (params: {
     return { success: false, message: error.message };
   }
   return { success: true, id: data?.id };
+};
+
+// Comanda de CANCELAMENTO: manda pra(s) impressora(s) de rede/USB do destino (mesma
+// regra de setor da Estação de Impressão). Devolve quantas impressoras receberam;
+// 0 = nenhuma impressora cadastrada pra esse destino (quem chama decide o plano B).
+export const enfileirarCancelamento = async (params: {
+  storeId: string;
+  destination: 'kitchen' | 'bar';
+  sectorId?: string | null;
+  title: string;
+  content: string;
+  dedupeKey: string;
+}): Promise<number> => {
+  const todas = await fetchPrinterConfigs(params.storeId);
+  const doDestino = todas.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb') && (p.destination === params.destination || p.destination === 'all'));
+  const doSetor = doDestino.filter((p) => printerServesSector(p, params.sectorId ?? null));
+  const impressoras = doSetor.length > 0 ? doSetor : doDestino.filter((p) => !p.sector_id);
+  let enviadas = 0;
+  for (const printer of impressoras) {
+    const r = await enqueuePrintJob({
+      storeId: params.storeId,
+      printerConfigId: printer.id,
+      destination: params.destination,
+      title: params.title,
+      content: params.content,
+      dedupeKey: `${params.dedupeKey}:${printer.id}`,
+    });
+    if (r.success) enviadas++;
+  }
+  return enviadas;
 };
 
 // Achado ao vivo (2026-08-28, loja real com 3 impressoras cabeadas —
