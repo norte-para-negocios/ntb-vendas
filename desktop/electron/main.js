@@ -8,6 +8,7 @@ const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const printEngine = require('./print-engine');
+const engineSession = require('./engine-session');
 
 // Achado real (2026-09-10, pedido do dono: "a atualização não está
 // funcionando"): antes disso, o único jeito de saber o que o
@@ -345,6 +346,16 @@ function createWindow() {
 
 app.whenReady().then(() => {
   if (!temInstanciaUnica) return;
+  // Motor de impressão sem depender de login: se já houve login neste PC, liga com a loja salva.
+  try {
+    const salva = engineSession.carregar(app.getPath('userData'));
+    if (engineSession.decidirInicio(salva, false) === 'iniciar') {
+      printEngine.start(salva.storeId, { baseUrl: salva.supabaseUrl, anonKey: salva.supabaseAnonKey, log: logPrint });
+      logPrint(`INFO motor de impressão iniciado no boot (loja salva ${salva.storeId})`);
+    }
+  } catch (e) {
+    logPrint(`WARN autostart do motor de impressão falhou: ${e && e.message}`);
+  }
   protocol.handle('app', (request) => {
     const url = new URL(request.url);
     let pathname = decodeURIComponent(url.pathname);
@@ -545,6 +556,8 @@ app.whenReady().then(() => {
       logPrint('WARN pedido de início sem storeId/credenciais — ignorado');
       return { ok: false, reason: 'parâmetros ausentes' };
     }
+    // Guarda a loja: se o app reabrir (atualização/reinício), o motor volta sozinho, sem esperar login.
+    engineSession.salvar(app.getPath('userData'), { storeId, supabaseUrl, supabaseAnonKey });
     return printEngine.start(storeId, {
       baseUrl: supabaseUrl,
       anonKey: supabaseAnonKey,
@@ -556,6 +569,7 @@ app.whenReady().then(() => {
   // a fila da loja antiga.
   ipcMain.handle('ntb-stop-print-engine', () => {
     logPrint('INFO motor de impressão parado (logout/troca de loja)');
+    engineSession.limpar(app.getPath('userData'));
     printEngine.stop();
     return { ok: true };
   });
