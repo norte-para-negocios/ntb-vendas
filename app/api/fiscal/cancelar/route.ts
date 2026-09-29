@@ -190,11 +190,41 @@ async function cancelarNotaFiscal(request: NextRequest): Promise<NextResponse> {
   const { error: itensErr } = await admin.from('order_items').update({ fiscal_nota_id: null }).eq('fiscal_nota_id', notaId);
   if (itensErr) console.error(`Cancelamento fiscal: nota ${notaId} cancelada mas falha ao liberar order_items:`, itensErr);
 
+  // Remove cupom + título da nota no Omie (só loja com ntb-estoque ativo e nota de
+  // produção). Falha aqui não desfaz o cancelamento: vira aviso pro lojista.
+  let avisoOmie: string | undefined;
+  if (ambiente === 'producao') {
+    try {
+      const { data: est } = await admin
+        .from('store_ntb_estoque_secrets')
+        .select('ntb_estoque_url, ntb_estoque_api_key, ativo')
+        .eq('store_id', storeId)
+        .maybeSingle();
+      if (est?.ativo) {
+        const r = await fetch(`${est.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/nota-fiscal/cancelar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${est.ntb_estoque_api_key}` },
+          body: JSON.stringify({ chNFe: chave, tpAmb: 1 }),
+          signal: AbortSignal.timeout(20000),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || j?.ok === false) {
+          avisoOmie = `Nota cancelada na SEFAZ, mas o cupom no Omie não foi removido (${j?.reason ?? j?.error ?? r.status}). Exclua no Omie.`;
+          console.error(`Cancelamento fiscal: nota ${notaId} cancelada mas ExcluirCupom falhou:`, j);
+        }
+      }
+    } catch (e) {
+      avisoOmie = 'Nota cancelada na SEFAZ, mas não foi possível avisar o Omie agora. Exclua o cupom no Omie.';
+      console.error(`Cancelamento fiscal: nota ${notaId} cancelada mas chamada ao estoque falhou:`, e);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     cStat: resposta.cStat,
     xMotivo: resposta.xMotivo,
     protocolo: resposta.protocolo,
     canceladaEm,
+    ...(avisoOmie ? { aviso: avisoOmie } : {}),
   });
 }
