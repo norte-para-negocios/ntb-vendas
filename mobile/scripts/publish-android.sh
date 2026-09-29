@@ -27,6 +27,8 @@ ssh -i ~/.ssh/notebook_contabo_key "$REMOTE" "mkdir -p '$REMOTE_PATH'"
 # APK primeiro, latest.json por último: ninguém vê versão nova antes do arquivo existir.
 scp -i ~/.ssh/notebook_contabo_key "$TMP/$NAME" "$REMOTE:$REMOTE_PATH/"
 scp -i ~/.ssh/notebook_contabo_key "$TMP/latest.json" "$REMOTE:$REMOTE_PATH/"
+# Link FIXO que sempre entrega a última versão do app.
+ssh -i ~/.ssh/notebook_contabo_key "$REMOTE" "cp -f '$REMOTE_PATH/$NAME' '$REMOTE_PATH/Norte-Vendas.apk'"
 ssh -i ~/.ssh/notebook_contabo_key "$REMOTE" "chown -R ntb:ntb '$REMOTE_PATH'"
 rm -rf "$TMP"
 echo "Publicado versionCode=$VC ($VN) em https://updates.norteparanegocios.com.br/$SUB/latest.json"

@@ -424,6 +424,23 @@ app.whenReady().then(() => {
       body: `Atualizado (${formatAppVersion(app.getVersion())})`,
     }).show();
   });
+  // Atualização automática ao ABRIR o app (2026-09-29, Sertão: o app vive na bandeja e nunca
+  // "fecha", então o "instala ao sair" do electron-updater nunca acontecia e o Caixa ficou
+  // horas na versão antiga). Se a versão nova termina de baixar logo depois de abrir o app
+  // (ninguém está no meio de uma venda), instala na hora, em silêncio, e o app reabre sozinho.
+  // Trava anti-loop: a mesma versão só é tentada 1x a cada 6h — se o instalador falhar, o app
+  // não fica reinstalando em toda abertura; cai no banner "Atualizar agora" e no horário da madrugada.
+  const arquivoTentativa = () => path.join(app.getPath('userData'), 'auto-update-tentativa.json');
+  const podeAutoInstalar = (versao) => {
+    try {
+      const t = JSON.parse(fs.readFileSync(arquivoTentativa(), 'utf8'));
+      if (t.versao === versao && Date.now() - t.ts < 6 * 3600 * 1000) return false;
+    } catch { /* sem registro: pode tentar */ }
+    return true;
+  };
+  const marcarTentativa = (versao) => {
+    try { fs.writeFileSync(arquivoTentativa(), JSON.stringify({ versao, ts: Date.now() })); } catch { /* sem trava, segue */ }
+  };
   autoUpdater.on('update-downloaded', (info) => {
     // Guardado pra quem perguntar DEPOIS (ver ipcMain 'ntb-update-status').
     // Achado real (2026-09-13, cobrando "nem aparece o botão de atualizar"):
@@ -435,10 +452,21 @@ app.whenReady().then(() => {
     estadoUpdate.versaoBaixada = info.version;
     estadoUpdate.situacao = 'baixada';
     estadoUpdate.detalhe = info.version;
-    new Notification({
-      title: 'Norte Vendas',
-      body: `Nova versão baixada (${formatAppVersion(info.version)}) — será aplicada ao reabrir o app.`,
-    }).show();
+    const recemAberto = process.uptime() < 15 * 60;
+    if (recemAberto && podeAutoInstalar(info.version)) {
+      logUpdate(`INFO app aberto há ${Math.round(process.uptime())}s: instalando v${info.version} agora (silencioso)`);
+      marcarTentativa(info.version);
+      new Notification({
+        title: 'Norte Vendas',
+        body: `Atualizando para ${formatAppVersion(info.version)}… o app reabre sozinho em instantes.`,
+      }).show();
+      setTimeout(() => { isQuitting = true; autoUpdater.quitAndInstall(true, true); }, 4000);
+    } else {
+      new Notification({
+        title: 'Norte Vendas',
+        body: `Nova versão baixada (${formatAppVersion(info.version)}) — toque em "Atualizar agora" ou ela é instalada de madrugada.`,
+      }).show();
+    }
     // Pedido direto do dono (2026-09-10): a Notification acima é
     // passageira e macOS/Windows podem suprimi-la (foco ocupado,
     // "não perturbe") — sem nenhum jeito de saber, de olho na tela, que
@@ -501,9 +529,11 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('ntb-install-update', () => {
-    logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora"');
+    logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora" (silenciosa)');
     isQuitting = true;
-    autoUpdater.quitAndInstall();
+    // Silencioso + reabre sozinho: o instalador assistido do modo comum não aparecia/era
+    // travado no Caixa do Sertão ("clica e nada acontece", 2026-09-29).
+    autoUpdater.quitAndInstall(true, true);
   });
 
   // Impressão de rede/USB embutida (ver print-engine.js). Chamado pelo

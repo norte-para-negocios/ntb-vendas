@@ -456,6 +456,24 @@ async function sendHeartbeat(storeId, printersLoaded) {
   } catch (e) {
     log(`WARN heartbeat falhou (ignorado): ${e.message}`);
   }
+  // Versão do app desta máquina (tabela app_instances): permite enxergar, de fora, quem está
+  // desatualizado. Falha aqui nunca afeta a impressão.
+  try {
+    const { app } = require('electron');
+    await rest('app_instances?on_conflict=store_id,machine', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({
+        store_id: storeId,
+        machine: os.hostname(),
+        platform: process.platform === 'win32' ? 'windows' : process.platform,
+        app_version: app.getVersion(),
+        last_seen_at: new Date().toISOString(),
+      }),
+    });
+  } catch (e) {
+    log(`WARN informe de versão falhou (ignorado): ${e.message}`);
+  }
 }
 
 const normTokens = (s) => String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Z0-9]+/).filter(Boolean);

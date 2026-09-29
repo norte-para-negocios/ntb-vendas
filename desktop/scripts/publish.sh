@@ -31,6 +31,14 @@ if [ ! -f "$DIST_DIR/$EXE_NAME" ]; then
   exit 1
 fi
 
-scp -i ~/.ssh/notebook_contabo_key "$DIST_DIR/$EXE_NAME" "$DIST_DIR/latest.yml" "$REMOTE:$REMOTE_PATH/"
+# .blockmap junto do instalador: com ele o app baixa só as partes que mudaram (o updater pede
+# o blockmap da versão instalada E da nova) em vez de 90 MB inteiros a cada versão.
+BLOCKMAP="$DIST_DIR/$EXE_NAME.blockmap"
+scp -i ~/.ssh/notebook_contabo_key "$DIST_DIR/$EXE_NAME" "$REMOTE:$REMOTE_PATH/"
+[ -f "$BLOCKMAP" ] && scp -i ~/.ssh/notebook_contabo_key "$BLOCKMAP" "$REMOTE:$REMOTE_PATH/"
+# latest.yml por ÚLTIMO: nenhum app enxerga a versão nova antes do instalador existir no servidor.
+scp -i ~/.ssh/notebook_contabo_key "$DIST_DIR/latest.yml" "$REMOTE:$REMOTE_PATH/"
+# Link FIXO que sempre entrega a última versão (pra mandar pro cliente uma vez só).
+ssh -i ~/.ssh/notebook_contabo_key "$REMOTE" "cp -f '$REMOTE_PATH/$EXE_NAME' '$REMOTE_PATH/Norte-Vendas-Setup.exe'"
 ssh -i ~/.ssh/notebook_contabo_key "$REMOTE" "chown -R ntb:ntb '$REMOTE_PATH'"
-echo "Publicado em https://updates.norteparanegocios.com.br/ntb-vendas-desktop/"
+echo "Publicado em https://updates.norteparanegocios.com.br/ntb-vendas-desktop/ (link fixo: .../ntb-vendas-desktop/Norte-Vendas-Setup.exe)"
