@@ -481,7 +481,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                     <p className="h-5 mt-3 text-sm text-white/90">{error}</p>
                     <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer select-none mt-2">
                         <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="size-4 accent-white" />
-                        Entrar sem senha neste computador
+                        Entrar sem senha neste aparelho
                     </label>
                     <button
                         type="button"
@@ -514,7 +514,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                         {isDesktop && (
                             <label className="flex items-center gap-2 text-[13px] text-[var(--text)] cursor-pointer select-none">
                                 <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="size-4 accent-[var(--brand)]" />
-                                Entrar sem senha neste computador
+                                Entrar sem senha neste aparelho
                             </label>
                         )}
 
@@ -1203,7 +1203,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 min-h-[44px] text-white/80 hover:text-white hover:bg-white/10 rounded-[10px] u-motion text-[15px]">
                         <LogOut size={18}/> Sair
                     </button>
-                    {typeof window !== 'undefined' && window.electronApp?.version && (
+                    {typeof window !== 'undefined' && window.electronApp?.version && window.electronApp?.checkForUpdate && (
                         <button
                             onClick={handleProcurarAtualizacao}
                             disabled={procurandoUpdate}
@@ -1346,7 +1346,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             dia inteiro com a barra recolhida (o padrão de quem já sabe os
             ícones de cor) simplesmente não tinha como procurar atualização.
             Recolhido vira só o ícone, com o `title` dizendo a versão. */}
-        {typeof window !== 'undefined' && window.electronApp?.version && (
+        {typeof window !== 'undefined' && window.electronApp?.version && window.electronApp?.checkForUpdate && (
           isCollapsed ? (
             <button
               onClick={handleProcurarAtualizacao}
@@ -12223,8 +12223,10 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
                                 ))
                             ) : filteredNotas.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-muted)] italic">
-                                        {notas.length === 0 ? 'Nenhuma nota fiscal emitida ainda.' : 'Nenhuma nota com esses filtros.'}
+                                    <td colSpan={7} className="px-4 py-8 text-[var(--text-muted)] italic">
+                                        <div className="sticky left-4 w-[calc(100vw-6rem)] sm:w-auto text-center">
+                                            {notas.length === 0 ? 'Nenhuma nota fiscal emitida ainda.' : 'Nenhuma nota com esses filtros.'}
+                                        </div>
                                     </td>
                                 </tr>
                             ) : (
