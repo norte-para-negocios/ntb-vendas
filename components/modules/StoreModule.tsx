@@ -12030,7 +12030,7 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
             const result = await cancelarFiscalNota({ storeId, notaId: nota.id, justificativa });
             if (result?.ok) {
                 if (result.aviso) toast.error(result.aviso);
-                else toast.success('Nota cancelada na SEFAZ.');
+                else toast.success(result.mensagem || 'Nota cancelada na SEFAZ.');
                 setCancelingNota(null);
                 await load();
             } else {

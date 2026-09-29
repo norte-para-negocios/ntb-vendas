@@ -2279,7 +2279,7 @@ export const cancelarFiscalNota = async (params: {
   storeId: string;
   notaId: string;
   justificativa: string;
-}): Promise<{ ok: boolean; reason?: string; aviso?: string; cStat?: string | null; xMotivo?: string | null; protocolo?: string | null; prazoEncerrado?: boolean }> => {
+}): Promise<{ ok: boolean; reason?: string; aviso?: string; mensagem?: string; cStat?: string | null; xMotivo?: string | null; protocolo?: string | null; prazoEncerrado?: boolean }> => {
   const res = await fetch(resolverUrlApi('/api/fiscal/cancelar'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

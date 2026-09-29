@@ -17,6 +17,7 @@ import {
   transmitirEvento,
 } from '@/lib/fiscal/cancelamento';
 import { dentroDoPrazoCancelamento, mensagemPrazoEncerrado } from '@/lib/fiscal/prazoCancelamento';
+import { estornarVendaDaNota, ResultadoEstorno } from '@/lib/fiscal/estornoDaVenda';
 
 // Até 30s de SOAP (lib/fiscal/cancelamento.ts) + download do .pfx/XML.
 export const maxDuration = 60;
@@ -67,7 +68,7 @@ async function cancelarNotaFiscal(request: NextRequest): Promise<NextResponse> {
   const admin = getSupabaseAdmin();
   const { data: nota, error: notaErr } = await admin
     .from('fiscal_notas')
-    .select('id, store_id, modelo, ambiente, status, chave_acesso, protocolo, xml_path, created_at')
+    .select('id, store_id, modelo, ambiente, status, chave_acesso, protocolo, xml_path, created_at, order_id, pessoa_identificador')
     .eq('id', notaId)
     .maybeSingle();
   if (notaErr) return falha('Falha ao ler a nota fiscal.');
@@ -190,6 +191,19 @@ async function cancelarNotaFiscal(request: NextRequest): Promise<NextResponse> {
   const { error: itensErr } = await admin.from('order_items').update({ fiscal_nota_id: null }).eq('fiscal_nota_id', notaId);
   if (itensErr) console.error(`Cancelamento fiscal: nota ${notaId} cancelada mas falha ao liberar order_items:`, itensErr);
 
+  // Nota da venda INTEIRA cancelada em produção = venda estornada: sai do histórico, o
+  // dinheiro sai do caixa e o estoque volta (Estoque/Omie). Nota por pessoa (parcial)
+  // e homologação só cancelam a nota. Falha aqui nunca desfaz o cancelamento fiscal.
+  let estorno: ResultadoEstorno | null = null;
+  if (ambiente === 'producao' && nota.order_id && !nota.pessoa_identificador) {
+    try {
+      estorno = await estornarVendaDaNota(admin, { storeId, orderId: String(nota.order_id), notaId, justificativa });
+    } catch (e) {
+      console.error(`Cancelamento fiscal: nota ${notaId} cancelada mas o estorno da venda falhou:`, e);
+      estorno = { estornada: false, motivo: 'erro inesperado ao estornar a venda' };
+    }
+  }
+
   // Remove cupom + título da nota no Omie (só loja com ntb-estoque ativo e nota de
   // produção). Falha aqui não desfaz o cancelamento: vira aviso pro lojista.
   let avisoOmie: string | undefined;
@@ -225,6 +239,16 @@ async function cancelarNotaFiscal(request: NextRequest): Promise<NextResponse> {
     xMotivo: resposta.xMotivo,
     protocolo: resposta.protocolo,
     canceladaEm,
-    ...(avisoOmie ? { aviso: avisoOmie } : {}),
+    estorno,
+    ...(estorno?.estornada && !avisoOmie && estorno.estoque?.ok !== false
+      ? { mensagem: 'Nota cancelada na SEFAZ e venda estornada (histórico, caixa e estoque).' }
+      : {}),
+    ...(avisoOmie
+      ? { aviso: avisoOmie }
+      : estorno && !estorno.estornada
+        ? { aviso: `Nota cancelada na SEFAZ, mas a venda NÃO foi estornada: ${estorno.motivo}.` }
+        : estorno?.estornada && estorno.estoque?.ok === false
+          ? { aviso: `Nota cancelada e venda estornada, mas o estoque no Omie não voltou (${estorno.estoque.erro}). Avise o suporte.` }
+          : {}),
   });
 }
