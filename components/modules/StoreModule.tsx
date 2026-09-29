@@ -39,6 +39,7 @@ import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import { setorDoItem } from '@/lib/setores';
+import { descreverHoraDoPedido } from '@/lib/tempo';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -4866,6 +4867,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                     <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>
                                                                 )}
                                                                 <span>{orderFlow !== 'direct_print' && '• '}R$ {formatBRL(item.price_at_time)} un.</span>
+                                                                <HoraDoPedido criadoEm={item.created_at} />
                                                                 {clientNote?.observation && <span>• {clientNote.observation}</span>}
                                                             </div>
                                                         </div>
@@ -5067,6 +5069,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     {orderFlow !== 'direct_print' && (
                                                         <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
                                                     )}
+                                                    <HoraDoPedido criadoEm={item.created_at} />
                                                 </div>
                                                 {parseItemNote(item.notes || '').observation && (
                                                     <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
@@ -12854,4 +12857,16 @@ export const StoreModule: React.FC = () => {
         </StoreLayout>
         </MotionConfig>
     );
+}
+
+// Hora em que o item foi pedido + quanto tempo faz (pedido dos garçons/Ramon, 2026-09-29); atualiza sozinha.
+function HoraDoPedido({ criadoEm }: { criadoEm?: string | null }) {
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => setTick((t) => t + 1), 30000);
+        return () => clearInterval(id);
+    }, []);
+    const texto = descreverHoraDoPedido(criadoEm);
+    if (!texto) return null;
+    return <span className="num text-[var(--text-muted)]" title="Hora em que o pedido foi feito"> · Pedido às {texto}</span>;
 }
