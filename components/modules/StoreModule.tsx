@@ -4263,10 +4263,12 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
-    // Cancelar o PEDIDO inteiro da mesa (todos os itens ainda não pagos) — só quem
-    // supervisiona (dono/gerente/universal/supervisor). Item já faturado em nota por
-    // pessoa não entra: precisa cancelar a nota antes.
-    const podeCancelarPedido = podeVerCaixasDaEquipe(loggedUser);
+    // Cancelar o PEDIDO inteiro da mesa (todos os itens ainda não pagos). Qualquer um que já
+    // cancela item (lixeira) pode cancelar o pedido: restringir só empurrava o garçom a
+    // cancelar item por item (feedback do Sertão, 2026-09-29). Fica no nome de quem cancelou
+    // (auditoria) e sai a comanda de cancelamento. Item já faturado em nota por pessoa não
+    // entra: precisa cancelar a nota antes.
+    const podeCancelarPedido = true;
     const [showCancelarPedido, setShowCancelarPedido] = useState(false);
     const [cancelarMotivo, setCancelarMotivo] = useState('');
     const [cancelandoPedido, setCancelandoPedido] = useState(false);
