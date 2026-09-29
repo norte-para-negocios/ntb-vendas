@@ -33,6 +33,8 @@ import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
+import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
+import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText } from '@/lib/print';
@@ -6716,7 +6718,7 @@ const CounterView: React.FC<{
 // e fechamento de turno com conferência (fetch_cash_shift_summary_secure +
 // close_cash_shift_secure) — completa o que a Task 3 tinha deixado como
 // placeholder.
-const CaixaView: React.FC<{
+const CaixaViewMeu: React.FC<{
     store: Store;
     loggedUser: StoreUser;
     onOpenTablePayment: (tableId: string) => void;
@@ -8103,6 +8105,35 @@ const CaixaView: React.FC<{
             </Modal>
             {closedResultModal}
             {historyModals}
+        </div>
+    );
+};
+
+// Gerente/dono/universal/quem supervisiona o caixa ganha a alternância "Meu
+// caixa / Caixas da equipe" no topo da aba Caixa (2026-09-29, pedido do dono:
+// o gerente escolhe qual caixa quer ver, ao vivo e com histórico). A visão
+// pessoal fica montada (só escondida) pra não perder modal/rascunho ao alternar.
+const CaixaView: React.FC<{
+    store: Store;
+    loggedUser: StoreUser;
+    onOpenTablePayment: (tableId: string) => void;
+    onOpenCounterPayment: (orderId: string) => void;
+}> = (props) => {
+    const [visao, setVisao] = useState<'meu' | 'equipe'>('meu');
+    if (!podeVerCaixasDaEquipe(props.loggedUser)) return <CaixaViewMeu {...props} />;
+    return (
+        <div className="space-y-4">
+            <SegmentedControl
+                className="flex w-full [&>button]:flex-1 max-sm:[&>button]:px-1.5"
+                value={visao}
+                onChange={(v) => setVisao(v as 'meu' | 'equipe')}
+                options={[
+                    { value: 'meu', label: 'Meu caixa' },
+                    { value: 'equipe', label: 'Caixas da equipe' },
+                ]}
+            />
+            <div className={visao === 'meu' ? '' : 'hidden'}><CaixaViewMeu {...props} /></div>
+            {visao === 'equipe' && <CaixasAoVivo storeId={props.store.id} />}
         </div>
     );
 };
@@ -10552,23 +10583,6 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
         fetchCheckinsHistory(storeId).then(data => { setCheckins(data); setIsLoadingCheckins(false); });
     }, [storeId, activeTab]);
 
-    // "Caixa por operador" (2026-09-22, pedido direto): quem tem acesso a
-    // Administração — dono/universal, é essa mesma tela — vê o caixa de
-    // TODOS os operadores, aberto agora ou histórico, sem precisar logar
-    // como cada um. Mesma sub-aba "Turnos", abaixo do ponto (são conceitos
-    // relacionados mas independentes, ver AGENTS.md/migration 062).
-    const [openCashShiftsAll, setOpenCashShiftsAll] = useState<(CashShift & { operator_name: string | null })[]>([]);
-    const [cashShiftsHistoryAll, setCashShiftsHistoryAll] = useState<CashShiftHistoryRow[]>([]);
-    const [isLoadingCashShiftsAll, setIsLoadingCashShiftsAll] = useState(false);
-    const [selectedOperatorHistory, setSelectedOperatorHistory] = useState<string | null>(null);
-    useEffect(() => {
-        if (activeTab !== 'shifts') return;
-        setIsLoadingCashShiftsAll(true);
-        Promise.all([fetchOpenCashShifts(storeId), fetchCashShiftsHistory(storeId, 100)])
-            .then(([open, hist]) => { setOpenCashShiftsAll(open); setCashShiftsHistoryAll(hist); })
-            .finally(() => setIsLoadingCashShiftsAll(false));
-    }, [storeId, activeTab]);
-
     const handleClearSales = async () => {
         const ok = await confirm({
             title: 'Zerar histórico de vendas',
@@ -11032,94 +11046,16 @@ const StoreAdminView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) =>
                 </div>
             )}
 
-            {/* "Caixa por operador" (2026-09-22, pedido direto: "o ADM tem um
-                local de ver caixas de todo mundo... ver histórico de caixa
-                de cada login"). Reaproveita fetchOpenCashShifts (já existia
-                pro dashboard, migration 062) e fetchCashShiftsHistory (já
-                existia pro histórico do próprio operador) — nenhuma RPC nova. */}
+            {/* "Caixa por operador" agora é a mesma tela ao vivo da aba Caixa do gerente
+                (CaixasAoVivo): escolhe o operador, vê o turno em tempo real e o
+                histórico com detalhe de cada turno. */}
             {activeTab === 'shifts' && (
                 <div className="bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-sm)] overflow-hidden mt-4">
                     <div className="p-4 border-b border-[var(--border)]">
                         <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Caixa por operador</h3>
-                        <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Turno de caixa é individual desde a migration 062 — cada operador abre e fecha o próprio, mesmo com vários ao mesmo tempo.</p>
+                        <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Cada operador abre e fecha o próprio caixa. Escolha quem quer acompanhar.</p>
                     </div>
-                    {isLoadingCashShiftsAll ? (
-                        <div className="p-8 text-center text-[var(--text-muted)]">Carregando...</div>
-                    ) : (
-                        <div className="p-4 space-y-4">
-                            <div>
-                                <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">
-                                    Abertos agora {openCashShiftsAll.length > 0 && `(${openCashShiftsAll.length})`}
-                                </h4>
-                                {openCashShiftsAll.length === 0 ? (
-                                    <p className="text-sm text-[var(--text-muted)]">Nenhum caixa aberto agora.</p>
-                                ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                        {openCashShiftsAll.map(s => {
-                                            const abertoEmMs = new Date(s.opened_at).getTime();
-                                            const horas = Math.floor((Date.now() - abertoEmMs) / 3600000);
-                                            const esquecido = horas >= 24;
-                                            const nomeOperador = s.operator_name || 'Conta universal';
-                                            return (
-                                                <button
-                                                    key={s.id}
-                                                    type="button"
-                                                    onClick={() => setSelectedOperatorHistory(nomeOperador)}
-                                                    className="text-left p-3 rounded-[14px] u-motion u-press-sm flex items-center gap-3 bg-[var(--surface-2)] hover:bg-[var(--border)]"
-                                                >
-                                                    <ProductThumb name={nomeOperador} size="cart" className="!w-10 !h-10 !rounded-full shrink-0" />
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-[15px] text-[var(--text)] truncate">{nomeOperador}</p>
-                                                        <p className={`text-[13px] ${esquecido ? 'text-[var(--warn)]' : 'text-[var(--text-muted)]'}`}>
-                                                            {esquecido ? `Aberto há ${Math.floor(horas / 24)}d ${horas % 24}h — esqueceu de fechar?` : `Fundo R$ ${formatBRL(s.opening_float)}`}
-                                                        </p>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div>
-                                <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Ver histórico de um operador</h4>
-                                <div className="flex gap-2 flex-wrap">
-                                    {Array.from(new Set(cashShiftsHistoryAll.map(h => h.operator_name || 'Conta universal'))).map(nome => (
-                                        <button
-                                            key={nome}
-                                            type="button"
-                                            onClick={() => setSelectedOperatorHistory(prev => prev === nome ? null : nome)}
-                                            className={`text-[13px] font-semibold h-8 max-sm:h-11 px-3.5 rounded-full u-motion u-press-sm ${selectedOperatorHistory === nome ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
-                                        >
-                                            {nome}
-                                        </button>
-                                    ))}
-                                </div>
-                                {selectedOperatorHistory && (
-                                    <div className="mt-3 max-h-72 overflow-y-auto space-y-1.5">
-                                        {cashShiftsHistoryAll
-                                            .filter(h => (h.operator_name || 'Conta universal') === selectedOperatorHistory)
-                                            .map(h => (
-                                                <div key={h.id} className="flex items-center justify-between gap-2 p-2.5 bg-[var(--surface-2)] rounded-lg text-sm">
-                                                    <div className="min-w-0">
-                                                        <p className="font-semibold text-[var(--text)]">{new Date(h.opened_at).toLocaleDateString('pt-BR')}</p>
-                                                        <p className="text-xs text-[var(--text-muted)]">
-                                                            {h.status === 'open' ? 'Em aberto' : `Diferença: R$ ${formatBRL(h.difference ?? 0)}`}
-                                                        </p>
-                                                    </div>
-                                                    <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full shrink-0 ${h.status === 'open' ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}`}>
-                                                        {h.status === 'open' ? 'Aberto' : 'Fechado'}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        {cashShiftsHistoryAll.filter(h => (h.operator_name || 'Conta universal') === selectedOperatorHistory).length === 0 && (
-                                            <p className="text-sm text-[var(--text-muted)] py-4 text-center">Nenhum turno encontrado.</p>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    <div className="p-4"><CaixasAoVivo storeId={storeId} /></div>
                 </div>
             )}
 
