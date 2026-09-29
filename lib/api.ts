@@ -1,5 +1,6 @@
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
 import { vendaTemCobranca } from '@/lib/calc';
+import type { VendasCanceladas } from '@/lib/vendasCanceladas';
 import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
@@ -1074,6 +1075,16 @@ export const fetchSalesHistory = async (
   });
   if (error) { console.error('Fetch Sales History Error', error); onError?.(error); return []; }
   return (data as any) || [];
+};
+
+export const fetchCanceledSales = async (storeId: string, startDate?: string, endDate?: string): Promise<VendasCanceladas | null> => {
+  const { data, error } = await supabase.rpc('fetch_canceled_sales_secure', {
+    p_store_id: storeId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+  });
+  if (error) { console.error('Fetch Canceled Sales Error', error); return null; }
+  return (data as VendasCanceladas) ?? { pedidos: [], itens: [] };
 };
 
 export const fetchTableSessions = async (storeId: string, sinceDate?: string): Promise<TableSession[]> => {

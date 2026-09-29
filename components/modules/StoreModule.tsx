@@ -34,6 +34,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
+import { VendasCanceladasView } from '@/components/modules/VendasCanceladasView';
 import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
@@ -10801,7 +10802,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // getOrderItemDisplayName agrupa por produto+adicional (ex.: "Pizza
     // (Catupiry)" separado de "Pizza" puro), mesmo critério do ranking de
     // mais vendidos do dashboard.
-    const [historyView, setHistoryView] = useState<'sale' | 'product' | 'operator'>('sale');
+    const [historyView, setHistoryView] = useState<'sale' | 'product' | 'operator' | 'canceled'>('sale');
     // Painel de recebimento por garçom (pedido real, reunião 2026-08-25):
     // "quantas vezes o Ramon recebeu, quantas vezes foi o giro". Reagrupa
     // por payment_details.operador_nome — vendas de antes desta mudança
@@ -11522,17 +11523,19 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                 <div className="flex items-center gap-3 flex-wrap min-w-0">
                                     <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Histórico de vendas</h3>
                                     <SegmentedControl
-                                        className="max-sm:flex max-sm:w-full max-sm:[&>button]:flex-1"
+                                        className="max-sm:flex max-sm:w-full max-sm:[&>button]:flex-1 max-sm:[&>button]:px-1.5 max-sm:[&>button]:text-[13px]"
                                         value={historyView}
                                         onChange={(v) => setHistoryView(v as typeof historyView)}
                                         options={[
-                                            { value: 'sale', label: 'Por venda' },
-                                            { value: 'product', label: 'Por produto' },
-                                            { value: 'operator', label: 'Por operador' },
+                                            { value: 'sale', label: <><span className="sm:hidden">Venda</span><span className="max-sm:hidden">Por venda</span></> },
+                                            { value: 'product', label: <><span className="sm:hidden">Produto</span><span className="max-sm:hidden">Por produto</span></> },
+                                            { value: 'operator', label: <><span className="sm:hidden">Operador</span><span className="max-sm:hidden">Por operador</span></> },
+                                            { value: 'canceled', label: 'Canceladas' },
                                         ]}
                                     />
-                                    <span className="text-[13px] text-[var(--text-muted)] num max-sm:hidden">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</span>
+                                    <span className={`text-[13px] text-[var(--text-muted)] num max-sm:hidden ${historyView === 'canceled' ? 'hidden' : ''}`}>{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</span>
                                 </div>
+                                {historyView !== 'canceled' && (
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <Button variant="secondary" size="sm" className="max-sm:!h-11 max-sm:flex-1" onClick={() => setShowFilters(!showFilters)} aria-pressed={showFilters}>
                                         <Search size={15} />
@@ -11553,9 +11556,10 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                     </Button>
                                     <span className="text-[13px] text-[var(--text-muted)] num sm:hidden w-full">{filteredAndSortedSales.length} {filteredAndSortedSales.length === 1 ? 'registro' : 'registros'}</span>
                                 </div>
+                                )}
                             </div>
                             
-                            {showFilters && (
+                            {showFilters && historyView !== 'canceled' && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
                                     <div>
                                         <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Mês</label>
@@ -11611,7 +11615,9 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                 </div>
                             )}
                         </div>
-                        {historyView === 'product' ? (
+                        {historyView === 'canceled' ? (
+                            <VendasCanceladasView storeId={storeId} />
+                        ) : historyView === 'product' ? (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-[15px] text-left">
                                     <thead className="text-[var(--text-muted)] text-[13px] border-b border-[var(--border)]">
