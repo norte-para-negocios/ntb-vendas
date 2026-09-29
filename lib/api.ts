@@ -2703,7 +2703,10 @@ export const hasActivePrinterForDoc = async (storeId: string, doc: DocPrint): Pr
     .eq('is_active', true)
     .in('connection_type', ['network', 'usb']);
   if (error) { console.error('hasActivePrinterForDoc falhou:', error); return false; }
-  return (data || []).some((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc));
+  const lista = (data || []) as { destination: string; documentos?: string[] | null }[];
+  // Se alguma impressora já teve "documentos" configurado, o operador assumiu o controle de onde sai cada coisa:
+  // um documento sem impressora marcada NÃO deve abrir a janela de impressão do navegador a cada venda.
+  return lista.some((p) => impressoraRecebe(p, doc)) || lista.some((p) => p.documentos && p.documentos.length > 0);
 };
 
 export const hasActivePrinterForDestination = async (
@@ -3044,17 +3047,17 @@ export const enfileirarCancelamento = async (params: {
 // `print_jobs(store_id, dedupe_key)` (migration 073) barra a segunda
 // tentativa. Combinado com o id da impressora pra nunca colidir entre
 // impressoras diferentes da mesma loja.
-export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string, doc: DocPrint = 'comprovante'): Promise<void> => {
+export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string, doc: DocPrint = 'comprovante', soConfigurado = false): Promise<void> => {
   const { data: printers, error } = await supabase
     .from('printer_configs')
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .in('connection_type', ['network', 'usb']);
-  let impressoras = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc));
+  let impressoras = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc, { soConfigurado }));
   if (error) {
     if (!isNetworkError(error)) { console.error('Error fetching receipt printers:', error); return; }
-    impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && impressoraRecebe(p, doc));
+    impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && impressoraRecebe(p, doc, { soConfigurado }));
   }
   await Promise.all(
     (impressoras || []).map((printer) =>

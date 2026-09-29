@@ -12,13 +12,23 @@ export const DOCS_IMPRESSAO: { id: DocPrint; rotulo: string }[] = [
 
 const TODOS: DocPrint[] = DOCS_IMPRESSAO.map((d) => d.id);
 
+// Documento NOVO (não existia antes): só sai onde alguém marcou. Não entra no padrão por destino, pra
+// nenhuma loja passar a imprimir algo que nunca imprimiu só porque atualizou o app.
+const SO_ONDE_MARCADO: DocPrint[] = ['fechamento_caixa'];
+
 export function documentosPadrao(destination: string): DocPrint[] {
   if (destination === 'kitchen' || destination === 'bar') return ['comanda'];
-  if (destination === 'receipt') return ['pre_conta', 'comprovante', 'cupom_fiscal', 'fechamento_caixa'];
-  return [...TODOS];
+  if (destination === 'receipt') return ['pre_conta', 'comprovante', 'cupom_fiscal'];
+  return TODOS.filter((d) => !SO_ONDE_MARCADO.includes(d));
 }
 
-export function impressoraRecebe(printer: { destination: string; documentos?: string[] | null }, doc: DocPrint): boolean {
-  const lista = printer.documentos && printer.documentos.length > 0 ? printer.documentos : documentosPadrao(printer.destination);
-  return lista.includes(doc);
+// `soConfigurado`: exige a marca explícita na impressora (usado na pré-conta AUTOMÁTICA ao pedir conta, que é nova).
+export function impressoraRecebe(
+  printer: { destination: string; documentos?: string[] | null },
+  doc: DocPrint,
+  opcoes?: { soConfigurado?: boolean },
+): boolean {
+  const marcados = printer.documentos && printer.documentos.length > 0 ? printer.documentos : null;
+  if (opcoes?.soConfigurado) return Boolean(marcados && marcados.includes(doc));
+  return (marcados ?? documentosPadrao(printer.destination)).includes(doc);
 }

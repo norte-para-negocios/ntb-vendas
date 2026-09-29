@@ -646,6 +646,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                           onChange={async (e) => {
                             const atuais = DOCS_IMPRESSAO.map((x) => x.id).filter((id) => impressoraRecebe(printer, id));
                             const novos = e.target.checked ? [...atuais, d.id] : atuais.filter((id) => id !== d.id);
+                            if (novos.length === 0) { toast.error('Marque ao menos um documento (ou desative a impressora).'); return; }
                             const r = await updatePrinterConfig(printer.id, { documentos: novos });
                             if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
                             toast.success(`"${printer.name}": ${e.target.checked ? 'passa a imprimir' : 'deixa de imprimir'} ${d.rotulo.toLowerCase()}.`);

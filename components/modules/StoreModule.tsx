@@ -3655,7 +3655,7 @@ NOTIFY pgrst, 'reload schema';`;
             // faltava o mesmo enfileiramento pra impressora USB/rede do
             // caixa que handleFinishPayment já tem, então só o comprovante
             // PÓS-pagamento saía na impressora física; este nunca saía.
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? `pre-conta:${tableId}:${Math.floor(Date.now() / 60000)}` : undefined, 'pre_conta')
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? `pre-conta:${tableId}:${Math.floor(Date.now() / 60000)}` : undefined, 'pre_conta', automatica)
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             // Achado ao vivo na loja Sertão (2026-09-15): com uma impressora
             // USB/rede cadastrada pro destino 'receipt' (ex.: CAIXA), o
@@ -4041,6 +4041,7 @@ NOTIFY pgrst, 'reload schema';`;
     // também").
     const handleRequestBill = async (tableId: string) => {
         try {
+            const jaPediuConta = tables.find((t) => t.id === tableId)?.status === TableStatus.WAITING_BILL;
             await requestTableBill(tableId);
             setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: TableStatus.WAITING_BILL } : t));
             if (selectedTable && selectedTable.id === tableId) {
@@ -4048,7 +4049,7 @@ NOTIFY pgrst, 'reload schema';`;
             }
             toast.success('Conta pedida — o caixa foi avisado.');
             // Pré-conta sai sozinha na(s) impressora(s) configurada(s) para ela (ex.: no bar).
-            void printTableBill(tableId, true);
+            if (!jaPediuConta) void printTableBill(tableId, true);
         } catch (e) {
             toast.error('Erro ao pedir a conta.');
         }
@@ -7370,7 +7371,7 @@ const CaixaViewMeu: React.FC<{
             if (result.success) {
                 toast.success('Caixa fechado.');
                 // Posição do caixa impressa sozinha ao fechar (pedido do Ramon, 2026-09-29). Nunca impede o fechamento.
-                if (closeSummary) {
+                if (closeSummary) try {
                     const resumo = closeSummary;
                     const dados = {
                         storeName: store.name,
@@ -7388,6 +7389,8 @@ const CaixaViewMeu: React.FC<{
                     };
                     enqueueReceiptPrintJobs(store.id, `Fechamento de caixa - ${loggedUser.name}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${shift.id}`, 'fechamento_caixa')
                         .catch((e) => console.error('enqueueReceiptPrintJobs (fechamento de caixa) falhou:', e));
+                } catch (e) {
+                    console.error('montar posição do caixa falhou (o caixa já foi fechado):', e);
                 }
                 // Contagem cega (Task 4): quem não viu o esperado durante a
                 // contagem vê agora, num modal de resultado — nunca escondido

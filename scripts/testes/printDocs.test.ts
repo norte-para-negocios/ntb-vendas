@@ -9,6 +9,12 @@ assert.equal(impressoraRecebe({ destination: 'bar', documentos: null }, 'pre_con
 assert.equal(impressoraRecebe({ destination: 'bar', documentos: ['comanda', 'pre_conta'] }, 'pre_conta'), true, 'bar configurado p/ pré-conta');
 assert.equal(impressoraRecebe({ destination: 'bar', documentos: ['comanda', 'pre_conta'] }, 'comprovante'), false, 'só o que está marcado');
 assert.equal(impressoraRecebe({ destination: 'receipt', documentos: ['cupom_fiscal'] }, 'pre_conta'), false, 'caixa sem pré-conta');
-assert.equal(impressoraRecebe({ destination: 'all', documentos: null }, 'fechamento_caixa'), true);
 assert.equal(impressoraRecebe({ destination: 'receipt', documentos: [] }, 'comprovante'), true, 'lista vazia = padrão (loja nunca fica sem imprimir)');
+// Achados da revisão: documento NOVO (fechamento de caixa) só sai onde foi marcado; o padrão antigo não muda.
+assert.equal(impressoraRecebe({ destination: 'receipt', documentos: null }, 'fechamento_caixa'), false, 'fechamento só onde configurado (receipt)');
+assert.equal(impressoraRecebe({ destination: 'all', documentos: null }, 'fechamento_caixa'), false, 'fechamento só onde configurado (all)');
+assert.equal(impressoraRecebe({ destination: 'receipt', documentos: ['fechamento_caixa'] }, 'fechamento_caixa'), true, 'fechamento marcado');
+assert.equal(impressoraRecebe({ destination: 'receipt', documentos: null }, 'pre_conta', { soConfigurado: true }), false, 'pré-conta automática exige marca explícita');
+assert.equal(impressoraRecebe({ destination: 'bar', documentos: ['comanda', 'pre_conta'] }, 'pre_conta', { soConfigurado: true }), true, 'pré-conta automática no bar configurado');
+assert.equal(impressoraRecebe({ destination: 'receipt', documentos: null }, 'pre_conta'), true, 'conferência manual segue no caixa (padrão antigo)');
 console.log('ok');
