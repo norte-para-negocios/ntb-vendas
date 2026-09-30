@@ -12841,7 +12841,14 @@ export const StoreModule: React.FC = () => {
     };
 
     const [lojaMesas, setLojaMesas] = useState<string | null>(null);
-    useEffect(() => { try { setLojaMesas(localStorage.getItem(MESAS_LOJA_STORAGE_KEY)); } catch { /* sem armazenamento */ } }, [user]);
+    useEffect(() => {
+        try {
+            // Grava a loja também quando a sessão é restaurada (ex.: app reabriu após atualizar),
+            // senão o botão "Mesas" só apareceria depois de alguém digitar o login de novo.
+            if (user && user.role !== 'open' && user.role !== 'universal') localStorage.setItem(MESAS_LOJA_STORAGE_KEY, user.store.id);
+            setLojaMesas(localStorage.getItem(MESAS_LOJA_STORAGE_KEY));
+        } catch { /* sem armazenamento */ }
+    }, [user]);
     const entrarMesas = async () => {
         if (!lojaMesas) return;
         const store = await fetchStoreById(lojaMesas).catch(() => null);
