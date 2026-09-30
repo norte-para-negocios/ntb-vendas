@@ -202,6 +202,8 @@ export const hasTabPermission = (
   store?: { config?: any } | null
 ): boolean => {
   if (user.role === 'owner') return true;
+  // Modo Aberto (30/09): o perfil que fica logado no computador só mexe em Mesas.
+  if (user.role === 'open') return tabId === 'tables';
   if (
     (tabId === 'tables' || tabId === 'counter') &&
     user.permissions?.caixa === true &&
@@ -254,6 +256,8 @@ export const canFinalizeBill = (
   store?: { config?: any } | null
 ): boolean => {
   if (user.role === 'owner' || user.role === 'universal') return true;
+  // Modo Aberto: conta, pagamento e fechamento só com login.
+  if (user.role === 'open') return false;
   if (!resolveStoreModules(store).caixa) return true;
   return user.permissions?.caixa === true;
 };
@@ -277,7 +281,7 @@ export const isTableInJurisdiction = (
   user: { role: string; assigned_table_ids?: string[] | null },
   tableId: string
 ): boolean => {
-  if (user.role === 'owner' || user.role === 'universal') return true;
+  if (user.role === 'owner' || user.role === 'universal' || user.role === 'open') return true;
   const ids = user.assigned_table_ids;
   if (!ids || ids.length === 0) return true;
   return ids.includes(tableId);

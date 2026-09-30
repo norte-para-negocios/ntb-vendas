@@ -13,6 +13,9 @@ export const ROLE_LABELS: Record<string, string> = {
     // o role aqui é só rótulo/organização, quem decide poder de finalizar é
     // sempre a permissão (ver lib/storeModules.ts, canFinalizeBill).
     cashier: 'Caixa',
+    // Modo Aberto (30/09): conta que fica logada no computador; só Mesas, e cada
+    // pedido é confirmado com a senha de quem está lançando.
+    open: 'Aberto (só mesas)',
 };
 
 export const getRoleLabel = (role: string): string => ROLE_LABELS[role] || role;

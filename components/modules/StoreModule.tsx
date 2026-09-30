@@ -7,7 +7,7 @@ import { motion, AnimatePresence, MotionConfig, useDragControls, useAnimate, use
 import { SPRING_TAP, SPRING_SHEET, SPRING_UI, LIST_ITEM_MOTION } from '@/lib/motion';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { flashSuccessCheck } from '@/components/SuccessCheck';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, TAB_MODULE_KEY, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
@@ -19,7 +19,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -1079,8 +1079,13 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const storeModules = resolveStoreModules(user.store);
   const hasPermission = (tabId: string) => hasTabPermission(user, tabId, user.store);
   const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
-  const visibleTabs = allTabs.filter(tab => accessibleTabIds.has(tab.id));
-  const bottomNavTabs = visibleTabs.filter(item => ['caixa', 'tables', 'counter', 'kitchen', 'bar'].includes(item.id));
+  // Modo Aberto (30/09): o computador do salão mostra as outras áreas da loja com
+  // cadeado ("só com login") em vez de sumir com elas.
+  const isAberto = user.role === 'open';
+  const visibleTabs = isAberto
+    ? allTabs.filter(tab => { const k = TAB_MODULE_KEY[tab.id]; return !k || storeModules[k]; }).map(tab => accessibleTabIds.has(tab.id) ? tab : { ...tab, count: 0 })
+    : allTabs.filter(tab => accessibleTabIds.has(tab.id));
+  const bottomNavTabs = visibleTabs.filter(item => accessibleTabIds.has(item.id) && ['caixa', 'tables', 'counter', 'kitchen', 'bar'].includes(item.id));
 
   return (
     <>
@@ -1155,6 +1160,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                           </div>
                           <div className="flex-1 flex items-center justify-between truncate">
                               <span className="truncate">{item.label}</span>
+                              {!accessibleTabIds.has(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
                               {!!item.count && item.count > 0 && (
                                  <span className="bg-[var(--err-fill)] text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-full num ml-2 shrink-0">
                                     {item.count}
@@ -1168,7 +1174,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     <button
                         onClick={handleToggleCheckin}
                         disabled={checkinBusy}
-                        className="flex items-center gap-3 w-full px-3 min-h-[44px] rounded-[10px] u-motion text-[15px] text-white hover:bg-white/10 disabled:opacity-50 whitespace-nowrap"
+                        className={`${isAberto ? 'hidden' : ''} flex items-center gap-3 w-full px-3 min-h-[44px] rounded-[10px] u-motion text-[15px] text-white hover:bg-white/10 disabled:opacity-50 whitespace-nowrap`}
                     >
                         {openCheckin
                           ? <span className="w-[18px] flex justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-[var(--ok-fill)]" /></span>
@@ -1260,6 +1266,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               {!isCollapsed && (
                   <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">{item.label}</span>
+                      {!accessibleTabIds.has(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
                       {!!item.count && item.count > 0 && (
                           <span className="bg-[var(--err-fill)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-2 shrink-0 num">
                               {item.count}
@@ -1282,7 +1289,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           <button
             onClick={handleToggleCheckin}
             disabled={checkinBusy}
-            className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[13px] font-medium u-motion disabled:opacity-50 whitespace-nowrap text-white/60 hover:bg-white/10 hover:text-white
+            className={`${isAberto ? 'hidden' : ''} flex items-center w-full px-3 h-10 rounded-[10px] text-[13px] font-medium u-motion disabled:opacity-50 whitespace-nowrap text-white/60 hover:bg-white/10 hover:text-white
               ${isCollapsed ? 'justify-center' : 'gap-3'}
             `}
             title={isCollapsed ? (openCheckin ? `Encerrar turno (desde ${format(parseISO(openCheckin.checkin_at), 'HH:mm')})` : 'Bater ponto') : ''}
@@ -2837,6 +2844,13 @@ const TablesView: React.FC<{
     // nenhum store_user real hoje tem essa chave, então isto não muda nada
     // nas 7 lojas reais por padrão.
     const canFinalize = canFinalizeBill(loggedUser, store);
+    // Modo Aberto (30/09): computador do salão logado no perfil role='open'. Só abre
+    // mesa e lança pedido (confirmado com a senha de quem lança); o resto é só com login.
+    const isAberto = loggedUser.role === 'open';
+    const avisarSoComLogin = () => toast.info('Só com login: saia do modo Aberto e entre com a sua conta.');
+    // Senha de quem está lançando o pedido no modo Aberto (só a senha; ver migration 135).
+    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean }>({ aberto: false, senha: '', erro: '', verificando: false });
+    const pedirSenhaDoPedido = () => setSenhaPedido({ aberto: true, senha: '', erro: '', verificando: false });
     // Subprojeto 3 (2026-08-25) — "trocar responsável" rápido: mesmo padrão
     // de acesso já usado pra decidir quem vê a aba Administração (onde a
     // edição completa de jurisdição já vivia, dentro de Gestão de
@@ -2974,6 +2988,7 @@ const TablesView: React.FC<{
     };
 
     const handlePinBlockToggle = async () => {
+        if (isAberto) { avisarSoComLogin(); return; }
         const newValue = !pinBlockEnabled;
         setPinBlockEnabled(newValue);
         try {
@@ -3028,6 +3043,7 @@ const TablesView: React.FC<{
     const [openCheckinUserIds, setOpenCheckinUserIds] = useState<Set<string>>(new Set());
 
     const handleOpenReassign = async () => {
+        if (isAberto) { avisarSoComLogin(); return; }
         setShowReassignModal(true);
         setIsLoadingReassignTeam(true);
         try {
@@ -3127,6 +3143,7 @@ const TablesView: React.FC<{
     // banco — hidratado de `service_fee_removed` a cada loadData (ver
     // abaixo) e escrito via RPC aqui, com revert se o servidor recusar.
     const handleToggleServiceFee = async (tableId: string, remove: boolean) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         setRemovedServiceFees(prev => {
             const next = new Set(prev);
             if (remove) next.add(tableId); else next.delete(tableId);
@@ -3237,6 +3254,7 @@ const TablesView: React.FC<{
     // automático da mesa (route.ts filtra fiscal_nota_id is null).
     const [emitindoNotaDe, setEmitindoNotaDe] = useState<string | null>(null);
     const handleEmitirNotaIndividual = async (userName: string, items: OrderItem[]) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         if (!selectedTable) return;
         setEmitindoNotaDe(userName);
         try {
@@ -3597,6 +3615,7 @@ NOTIFY pgrst, 'reload schema';`;
     // `automatica`: disparada por 'Pedir conta' — só imprime se houver impressora que receba a pré-conta (sem janela
     // de impressão do navegador no aparelho de quem pediu) e não repete no mesmo minuto (garçom + cliente pedindo junto).
     const printTableBill = async (tableId: string, automatica = false) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         const summary = getTableSummary(tableId);
         const table = tables.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
@@ -3658,6 +3677,7 @@ NOTIFY pgrst, 'reload schema';`;
     };
 
     const handleMoveTable = async () => {
+        if (isAberto) { avisarSoComLogin(); return; }
         if (!selectedTable || !targetTableId) return;
         
         if (await confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
@@ -3783,6 +3803,7 @@ NOTIFY pgrst, 'reload schema';`;
     // clique leria o state ANTIGO (setState é assíncrono), por isso o
     // atalho nunca passa pela lista — monta o método/valor direto aqui.
     const handleFinishPayment = async (methodsOverride?: { method: string; amount: number; brand?: string }[]) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         if (!selectedTable) return;
         if (isFinishingRef.current) return;
         isFinishingRef.current = true;
@@ -3997,6 +4018,7 @@ NOTIFY pgrst, 'reload schema';`;
     // call site algum antes de remover.
 
     const handleBlockToggle = async (e: React.MouseEvent, table: Table, inJurisdiction: boolean = true) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         e.stopPropagation();
         // Trava de jurisdicao (Task 3, mesma defesa em profundidade de
         // togglePin acima): sem isso, um garcom conseguia bloquear de
@@ -4017,6 +4039,7 @@ NOTIFY pgrst, 'reload schema';`;
     // 4: "a mesa vai aparecer 'pediu conta' como se fosse o cliente
     // também").
     const handleRequestBill = async (tableId: string) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         try {
             const jaPediuConta = tables.find((t) => t.id === tableId)?.status === TableStatus.WAITING_BILL;
             await requestTableBill(tableId);
@@ -4033,6 +4056,7 @@ NOTIFY pgrst, 'reload schema';`;
     };
 
     const handleCancelBillRequest = async (tableId: string) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         try {
             await cancelTableBillRequest(tableId);
             setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: TableStatus.OCCUPIED } : t));
@@ -4085,8 +4109,11 @@ NOTIFY pgrst, 'reload schema';`;
         setShowMenuMode(false);
     };
 
-    const confirmarPedidoMesa = async () => {
+    const confirmarPedidoMesa = async (autor?: { name: string }) => {
         if (!selectedTable || mesaCarrinho.length === 0) return;
+        // Modo Aberto: sem a senha de alguém da equipe o pedido não sai (ver pedirSenhaDoPedido).
+        if (isAberto && !autor) { pedirSenhaDoPedido(); return; }
+        const nomeAutor = autor?.name ?? loggedUser.name;
         // Defesa em profundidade (achado real do Ramon, WhatsApp 2026-09-08,
         // mesmo espírito do comentário em handleOpenPayment acima): repetir a
         // checagem de jurisdição aqui garante que um bug futuro em QUALQUER
@@ -4106,7 +4133,7 @@ NOTIFY pgrst, 'reload schema';`;
             // e a Estação de Impressão agrupa por pedido + destino.
             const result = await createOrder(mesa.id, storeId, linhas.map(l => ({
                 product: l.product, quantity: l.qty, notes: l.notes, selectedOptions: l.selectedOptions,
-            })), loggedUser.name, 'garcom', loggedUser.name);
+            })), nomeAutor, 'garcom', nomeAutor);
 
             // Sem internet: o pedido ficou só na fila local (id "local_..."), então a
             // Estação de Impressão (que lê o servidor) não vai ver nada agora. Imprime
@@ -4121,13 +4148,13 @@ NOTIFY pgrst, 'reload schema';`;
                     const setorId: string | null = l.product.sector_id || (l.product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
                     const setor = setorId ? setores.find((x) => x.id === setorId) : undefined;
                     const destino: 'kitchen' | 'bar' = setor ? setor.base : (l.product.destination === 'bar' ? 'bar' : 'kitchen');
-                    const notasNoBanco = l.notes ? `[${loggedUser.name}] ${l.notes}` : `[${loggedUser.name}]`;
+                    const notasNoBanco = l.notes ? `[${nomeAutor}] ${l.notes}` : `[${nomeAutor}]`;
                     const conteudo = buildKitchenTicketText({
                         kind: destino === 'bar' ? 'BAR' : 'COZINHA',
                         storeName: store.name,
                         orderType: 'MESA',
                         identifier: `MESA ${mesa.number}`,
-                        client: loggedUser.name,
+                        client: nomeAutor,
                         quantity: l.qty,
                         productName: l.product.name,
                         addons: (l.selectedOptions || []).map((o: any) => o.name).join(', ') || undefined,
@@ -4154,12 +4181,12 @@ NOTIFY pgrst, 'reload schema';`;
                     product: l.product,
                     quantity: l.qty,
                     status: OrderStatus.PENDING,
-                    notes: l.notes ? `[${loggedUser.name}] ${l.notes}` : `[${loggedUser.name}]`,
+                    notes: l.notes ? `[${nomeAutor}] ${l.notes}` : `[${nomeAutor}]`,
                     created_at: agora,
                     price_at_time: calculateCartItemUnitPrice({ product: l.product, selectedOptions: l.selectedOptions }),
                     selected_options: l.selectedOptions.map(o => ({ name: o.name, price_delta: o.price_delta })),
                     added_by_role: 'garcom',
-                    added_by_name: loggedUser.name,
+                    added_by_name: nomeAutor,
                 }));
                 setActiveOrders(prev => {
                     const existing = prev.find(o => o.table_id === mesa.id && o.status === OrderStatus.PENDING);
@@ -4251,6 +4278,7 @@ NOTIFY pgrst, 'reload schema';`;
     };
 
     const handleDeleteItem = async (itemId: string) => {
+        if (isAberto) { avisarSoComLogin(); return; }
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
@@ -4276,6 +4304,7 @@ NOTIFY pgrst, 'reload schema';`;
     const [cancelarMotivo, setCancelarMotivo] = useState('');
     const [cancelandoPedido, setCancelandoPedido] = useState(false);
     const handleCancelarPedidoMesa = async () => {
+        if (isAberto) { avisarSoComLogin(); return; }
         if (!selectedTable || cancelandoPedido) return;
         if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
@@ -4708,6 +4737,10 @@ NOTIFY pgrst, 'reload schema';`;
                                                  <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
                                                  Conta pedida — aguardando o caixa
                                              </div>
+                                         ) : isAberto ? (
+                                             <div className="w-full flex items-center justify-center gap-2 text-[14px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-full h-12">
+                                                 <Lock size={15} aria-hidden /> Conta e pagamento: só com login
+                                             </div>
                                          ) : (
                                              <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
                                                 <Receipt size={18}/> Pedir conta
@@ -4930,6 +4963,10 @@ NOTIFY pgrst, 'reload schema';`;
                                     <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
                                     Conta pedida — aguardando o caixa
                                 </div>
+                            ) : isAberto ? (
+                                <div className="w-full flex items-center justify-center gap-2 text-[14px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-full h-12">
+                                    <Lock size={15} aria-hidden /> Conta e pagamento: só com login
+                                </div>
                             ) : (
                                 <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
                                     <Receipt size={18}/> Pedir conta
@@ -5019,7 +5056,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 size="lg"
                                                 className="w-full !h-[52px] !text-[17px]"
                                                 isLoading={enviandoPedidoMesa}
-                                                onClick={confirmarPedidoMesa}
+                                                onClick={() => confirmarPedidoMesa()}
                                             >
                                                 Confirmar pedido · R$ {formatBRL(mesaCarrinhoTotal)}
                                             </Button>
@@ -5076,6 +5113,42 @@ NOTIFY pgrst, 'reload schema';`;
                 );
                 })()}
             </WaiterOrderSurface>
+            <Modal isOpen={senhaPedido.aberto} onClose={() => !senhaPedido.verificando && setSenhaPedido((x) => ({ ...x, aberto: false }))} title="Quem está lançando?" size="sm">
+                <form
+                    className="space-y-4"
+                    onSubmit={async (e) => {
+                        e.preventDefault();
+                        const senha = senhaPedido.senha;
+                        if (!senha) { setSenhaPedido((x) => ({ ...x, erro: 'Digite a sua senha.' })); return; }
+                        setSenhaPedido((x) => ({ ...x, verificando: true, erro: '' }));
+                        const r = await verificarSenhaEquipe(storeId, senha);
+                        if (r.success) {
+                            setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false });
+                            toast.success(`Pedido no nome de ${r.name}.`);
+                            await confirmarPedidoMesa({ name: r.name });
+                            return;
+                        }
+                        const erro =
+                            r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Troque a sua senha ou entre com o seu login.' :
+                            r.error === 'locked' ? `Muitas tentativas erradas. Espere ${r.seconds ?? 60} segundos.` :
+                            r.error === 'offline' ? 'Sem internet: não dá pra conferir a senha agora.' :
+                            'Senha não encontrada.';
+                        setSenhaPedido((x) => ({ ...x, verificando: false, erro, senha: '' }));
+                    }}
+                >
+                    <p className="text-sm text-[var(--text-muted)]">Digite a <b>sua</b> senha de login. O pedido sai no seu nome.</p>
+                    <Input
+                        label="Sua senha"
+                        type="password"
+                        autoFocus
+                        autoComplete="off"
+                        value={senhaPedido.senha}
+                        onChange={(e) => setSenhaPedido((x) => ({ ...x, senha: e.target.value, erro: '' }))}
+                    />
+                    {senhaPedido.erro && <p className="text-sm text-[var(--err)]" role="alert">{senhaPedido.erro}</p>}
+                    <Button type="submit" size="lg" className="w-full" isLoading={senhaPedido.verificando}>Confirmar pedido</Button>
+                </form>
+            </Modal>
 
             {/* CANCELAR PEDIDO (mesa inteira) — pede o motivo, cancela os itens e imprime o cancelamento na cozinha/bar */}
             <Modal isOpen={showCancelarPedido} onClose={() => !cancelandoPedido && setShowCancelarPedido(false)} title={`Cancelar pedido da Mesa ${selectedTable?.number ?? ''}`}>
@@ -10247,7 +10320,11 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <option value="cook">Cozinheiro</option>
                             <option value="attendant">Atendente</option>
                             <option value="manager">Gerente</option>
+                            <option value="open">Aberto (computador só de mesas)</option>
                         </select>
+                        {role === 'open' && (
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Conta pra deixar logada no computador do salão: só abre mesa e lança pedido. Cada pedido pede a senha de quem está lançando e sai no nome dessa pessoa. Conta, pagamento e o resto do sistema ficam bloqueados.</p>
+                        )}
                     </div>
 
                     <div className="bg-[var(--surface-2)] p-4 rounded-[14px]">
@@ -12831,7 +12908,15 @@ export const StoreModule: React.FC = () => {
             {!canAccess(tab) && (
                 <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">
                     <Lock size={48} className="mb-4 opacity-20"/>
-                    <p>Você não tem permissão para acessar esta área.</p>
+                    {user.role === 'open' ? (
+                        <>
+                            <p className="font-semibold text-[var(--text)]">Só com login</p>
+                            <p className="mt-1 text-sm text-center max-w-xs">Neste computador, sem login, só funciona a Gestão de Mesas. Para esta área, saia e entre com a sua conta.</p>
+                            <Button className="mt-4" onClick={() => setTab('tables')}>Voltar para as mesas</Button>
+                        </>
+                    ) : (
+                        <p>Você não tem permissão para acessar esta área.</p>
+                    )}
                 </div>
             )}
         </StoreLayout>

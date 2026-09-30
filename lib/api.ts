@@ -3201,3 +3201,15 @@ export const salvarLocalEstoque = async (storeId: string, destino: string, local
     return { success: false, message: e?.message };
   }
 };
+
+// Modo Aberto (30/09, migration 135): confere só a senha contra as contas da loja, sem
+// criar sessão. Bateu com uma conta = o pedido sai no nome dela.
+export type ResultadoSenhaEquipe =
+  | { success: true; user_id: string; name: string; role: string }
+  | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline'; seconds?: number };
+
+export const verificarSenhaEquipe = async (storeId: string, senha: string): Promise<ResultadoSenhaEquipe> => {
+  const { data, error } = await supabase.rpc('verify_store_staff_password_secure', { p_store_id: storeId, p_password: senha });
+  if (error || !data) return { success: false, error: isNetworkError(error) ? 'offline' : 'invalid' };
+  return data as ResultadoSenhaEquipe;
+};

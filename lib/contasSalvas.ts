@@ -40,6 +40,7 @@ export const rotuloDoPapel = (role: string, permissions?: { caixa?: boolean; adm
   if (role === 'universal') return 'Suporte Norte';
   if (role === 'owner') return 'Lojista';
   if (role === 'manager') return 'Gerente';
+  if (role === 'open') return 'Aberto (só mesas)';
   if (permissions?.caixa) return 'Caixa';
   if (role === 'waiter' || role === 'garcom') return 'Garçom';
   if (permissions?.admin) return 'Administração';
