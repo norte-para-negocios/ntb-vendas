@@ -798,9 +798,10 @@ export const fetchPrintSectors = async (storeId: string): Promise<PrintSector[]>
   try { localStorage.setItem(`ntb-sectors-cache:${storeId}`, JSON.stringify(data || [])); } catch { /* sem cache */ }
   return data || [];
 };
-export const createPrintSector = async (storeId: string, name: string, base: 'kitchen' | 'bar') => {
-  const { error } = await supabase.from('print_sectors').insert({ store_id: storeId, name, base });
+export const createPrintSector = async (storeId: string, name: string, base: 'kitchen' | 'bar'): Promise<{ id: string } | null> => {
+  const { data, error } = await supabase.from('print_sectors').insert({ store_id: storeId, name, base }).select('id').maybeSingle();
   if (error) throw error;
+  return data as { id: string } | null;
 };
 export const deletePrintSector = async (id: string) => {
   const { error } = await supabase.from('print_sectors').delete().eq('id', id);
@@ -3172,5 +3173,31 @@ export const fetchUniversalUserById = async (userId: string): Promise<UniversalU
     if (!isNetworkError(error)) return null;
     const cached = await getCachedSession(`universal_user:${userId}`);
     return (cached?.value as UniversalUser | null) ?? null;
+  }
+};
+
+// Local de estoque do Omie por destino de preparo (30/09, migration 134) — ver
+// app/api/integracao/locais-estoque/route.ts.
+export type LocaisEstoqueStatus = { configurado: boolean; locais: { codigo: number; nome: string }[]; mapa: Record<string, number>; erro?: string };
+
+export const fetchLocaisEstoque = async (storeId: string): Promise<LocaisEstoqueStatus> => {
+  try {
+    const res = await fetch(resolverUrlApi(`/api/integracao/locais-estoque?storeId=${encodeURIComponent(storeId)}`), { cache: 'no-store' });
+    return await res.json();
+  } catch (e: any) {
+    return { configurado: false, locais: [], mapa: {}, erro: e?.message };
+  }
+};
+
+export const salvarLocalEstoque = async (storeId: string, destino: string, local: { codigo: number; nome: string } | null): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const res = await fetch(resolverUrlApi('/api/integracao/locais-estoque'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, destino, codigo: local?.codigo ?? null, nome: local?.nome ?? null }),
+    });
+    return await res.json();
+  } catch (e: any) {
+    return { success: false, message: e?.message };
   }
 };

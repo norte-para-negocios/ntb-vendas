@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { setorDoItem } from '@/lib/setores';
+import { setorDoItem, localEstoqueDoItem } from '@/lib/setores';
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md e a memória
 // "integracao_ntb_vendas_estoque_omie"): dispara Ordem de Produção automática
@@ -152,10 +152,13 @@ export async function POST(request: NextRequest) {
   // Setor de produção de cada item (ex.: "Pizzaria", 2026-09-30): o Estoque usa pra
   // baixar no local certo (pizza e embalagem de pizza -> local da pizzaria). Mesma
   // regra da impressão (lib/setores.ts): setor do produto, senão o da categoria.
-  const [{ data: setores }, { data: categorias }] = await Promise.all([
+  const [{ data: setores }, { data: categorias }, { data: locaisEstoque }] = await Promise.all([
     admin.from('print_sectors').select('id, name').eq('store_id', storeId),
     admin.from('categories').select('id, sector_id').eq('store_id', storeId),
+    // Local do Omie escolhido em Impressão → Locais de preparo (migration 134).
+    admin.from('store_estoque_locais').select('destino, omie_local_codigo').eq('store_id', storeId),
   ]);
+  const mapaLocais: Record<string, number> = Object.fromEntries((locaisEstoque ?? []).map((l: { destino: string; omie_local_codigo: number }) => [l.destino, Number(l.omie_local_codigo)]));
   const nomeSetor = new Map((setores ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
   const catSetor: Record<string, string | null> = Object.fromEntries((categorias ?? []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
 
@@ -171,7 +174,7 @@ export async function POST(request: NextRequest) {
   // (ex.: borda de pizza) sempre herda o destination do PRODUTO PAI — faz a
   // pizza inteira na mesma estação, não existe "destination" próprio de
   // opcional.
-  const porCodigo = new Map<string, { codigo: string; quantidade: number; destination: 'kitchen' | 'bar' | null; setor: string | null; comNota: boolean }>();
+  const porCodigo = new Map<string, { codigo: string; quantidade: number; destination: 'kitchen' | 'bar' | null; setor: string | null; localEstoque: number | null; comNota: boolean }>();
   for (const item of items ?? []) {
     if (item.status === 'canceled') continue;
 
@@ -179,12 +182,13 @@ export async function POST(request: NextRequest) {
     const destination = produto?.destination ?? null;
     const setorId = setorDoItem(produto, catSetor);
     const setor = setorId ? nomeSetor.get(setorId) ?? null : null;
+    const localEstoque = localEstoqueDoItem(mapaLocais, setorId, destination);
     const comNota = comNotaDoPedido((item as { order_id: string }).order_id);
     const codigoProduto = produto?.omie_codigo;
     if (codigoProduto) {
       const chave = `${codigoProduto}|${comNota}`;
       const atual = porCodigo.get(chave);
-      porCodigo.set(chave, { codigo: codigoProduto, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, comNota });
+      porCodigo.set(chave, { codigo: codigoProduto, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, localEstoque: atual?.localEstoque ?? localEstoque, comNota });
     }
 
     const opcoes = (item.selected_options ?? []) as { omie_codigo?: string | null }[];
@@ -192,7 +196,7 @@ export async function POST(request: NextRequest) {
       if (!opcao.omie_codigo) continue;
       const chave = `${opcao.omie_codigo}|${comNota}`;
       const atual = porCodigo.get(chave);
-      porCodigo.set(chave, { codigo: opcao.omie_codigo, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, comNota });
+      porCodigo.set(chave, { codigo: opcao.omie_codigo, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, localEstoque: atual?.localEstoque ?? localEstoque, comNota });
     }
   }
 
@@ -200,7 +204,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Nenhum item com omie_codigo vinculado' });
   }
 
-  const itens = Array.from(porCodigo.values(), (v) => ({ codigo: v.codigo, quantidade: v.quantidade, destination: v.destination, setor: v.setor, comNota: v.comNota }));
+  const itens = Array.from(porCodigo.values(), (v) => ({ codigo: v.codigo, quantidade: v.quantidade, destination: v.destination, setor: v.setor, localEstoque: v.localEstoque, comNota: v.comNota }));
 
   // Ambiente fiscal da loja (2026-08-16, pedido explícito do usuário) — repassado
   // junto pro ntb-estoque conseguir mostrar/filtrar "essa OP veio de uma venda de
