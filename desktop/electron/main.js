@@ -681,7 +681,8 @@ app.whenReady().then(() => {
   // app estiver aberto; `autoInstallOnAppQuit` continua garantindo que a
   // instalação em si só acontece quando o app fechar, nunca no meio do
   // expediente.
-  setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
+  // 30 min (antes 4 h): versão nova aparece na tela ainda no mesmo turno (pedido do dono, 2026-09-29).
+  setInterval(() => autoUpdater.checkForUpdates(), 30 * 60 * 1000);
 
   // App na bandeja nunca "fecha", então a instalação de "ao sair" nunca
   // aconteceria. Pedido do dono (2026-09-18): pode instalar de madrugada.

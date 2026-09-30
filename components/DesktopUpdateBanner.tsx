@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, Download, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, Download, RotateCcw } from 'lucide-react';
 import { SPRING_SHEET } from '@/lib/motion';
 import { formatAppVersion } from '@/lib/appVersion';
 
@@ -25,7 +25,6 @@ const ERRO_SILENCIO_MS = 30 * 60 * 1000;
 
 export function DesktopUpdateBanner() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [recuperou, setRecuperou] = useState(false);
   // Achado da revisão independente: `situacao`/`detalhe` já eram gravados
@@ -87,7 +86,7 @@ export function DesktopUpdateBanner() {
     return () => clearInterval(t);
   }, []);
 
-  const mostrarUpdate = !!updateVersion && !dismissed;
+  const mostrarUpdate = !!updateVersion;
   // Atualização já baixada ganha a faixa de sucesso — um erro velho de uma
   // tentativa anterior não faz mais diferença nenhuma pra quem está na tela.
   const silenciado = !!erroDispensado
@@ -100,6 +99,32 @@ export function DesktopUpdateBanner() {
     setInstalling(true);
     window.electronApp?.installUpdate?.();
   };
+
+  // Pedido do dono (2026-09-29): versão nova pronta = PARA TUDO e pede pra atualizar, na frente de tudo,
+  // sem "Depois". Atualizar leva segundos e o app reabre sozinho, com a mesma loja.
+  if (mostrarUpdate) {
+    return (
+      <div role="alertdialog" aria-modal="true" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
+        <div className="w-full max-w-[440px] rounded-[var(--r-lg)] bg-[var(--surface)] p-8 text-center shadow-2xl">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--brand-soft)]">
+            <Download size={30} className="text-[var(--brand)]" />
+          </div>
+          <h2 className="text-[22px] font-bold text-[var(--text)]">Atualização obrigatória</h2>
+          <p className="mt-2 text-[15px] text-[var(--text-muted)]">
+            Nova versão do Norte Vendas ({formatAppVersion(updateVersion)}). Leva poucos segundos — o app fecha e abre sozinho.
+          </p>
+          <button
+            onClick={handleInstall}
+            disabled={installing}
+            autoFocus
+            className="mt-6 h-14 w-full rounded-full bg-[var(--brand-fill)] text-[17px] font-bold text-white u-motion u-press disabled:opacity-60"
+          >
+            {installing ? 'Atualizando…' : 'Atualizar agora'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2" style={{ maxWidth: 420 }}>
@@ -160,41 +185,6 @@ export function DesktopUpdateBanner() {
         >
           Entendi
         </button>
-      </motion.div>
-      )}
-      {mostrarUpdate && (
-      <motion.div
-        key="update"
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 40, opacity: 0 }}
-        transition={SPRING_SHEET}
-        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--ink)] px-4 py-3 shadow-2xl border border-white/10"
-      >
-        <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--brand)]/20 flex items-center justify-center">
-          <Download size={18} className="text-[var(--brand)]" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white">Nova versão pronta ({formatAppVersion(updateVersion)})</p>
-          <p className="text-[12px] text-white/50">Atualiza em segundos — o app fecha e reabre sozinho.</p>
-        </div>
-        <button
-          onClick={handleInstall}
-          disabled={installing}
-          className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] bg-[var(--brand-fill)] text-white text-[13px] font-semibold u-motion u-press disabled:opacity-60"
-        >
-          {installing ? 'Atualizando...' : 'Atualizar agora'}
-        </button>
-        {!installing && (
-          <button
-            onClick={() => setDismissed(true)}
-            className="shrink-0 text-white/40 hover:text-white/80 u-motion"
-            aria-label="Depois"
-            title="Depois"
-          >
-            <X size={16} />
-          </button>
-        )}
       </motion.div>
       )}
     </AnimatePresence>

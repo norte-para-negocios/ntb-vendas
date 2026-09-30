@@ -15,11 +15,10 @@ interface NtbUpdaterPlugin {
 const NtbUpdater = registerPlugin<NtbUpdaterPlugin>('NtbUpdater');
 
 const MANIFEST_URL = process.env.NEXT_PUBLIC_NTB_UPDATE_URL || 'https://updates.norteparanegocios.com.br/ntb-vendas-android/latest.json';
-const CHECAR_A_CADA_MS = 30 * 60 * 1000;
+const CHECAR_A_CADA_MS = 10 * 60 * 1000;
 
 export function NtbUpdateBanner() {
   const [nova, setNova] = useState<{ versionName: string; url: string } | null>(null);
-  const [dispensada, setDispensada] = useState(false);
   const [baixando, setBaixando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const ultimaChecagem = useRef(0);
@@ -57,31 +56,23 @@ export function NtbUpdateBanner() {
     }
   };
 
-  if (!nova || dispensada) return null;
+  if (!nova) return null;
 
+  // Pedido do dono (2026-09-29): versão nova = tela na frente de tudo, sem "Depois".
   return (
-    <div
-      role="status"
-      style={{ position: 'fixed', left: 12, right: 12, top: 'calc(env(safe-area-inset-top) + 12px)', zIndex: 60 }}
-      className="rounded-[18px] bg-[var(--surface)] border border-[var(--border)] shadow-[0_8px_30px_rgba(0,0,0,0.18)] p-4"
-    >
-      <p className="font-semibold text-[15px] text-[var(--text)]">Nova versão disponível{nova.versionName ? ` · ${formatAppVersion(nova.versionName)}` : ''}</p>
-      <p className="text-[13px] text-[var(--text-muted)] mt-0.5">{aviso || 'Toque em Atualizar; o Android vai pedir para confirmar a instalação.'}</p>
-      <div className="flex gap-2 mt-3">
+    <div role="alertdialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 10000 }} className="flex items-center justify-center bg-black/70 p-6">
+      <div className="w-full max-w-[420px] rounded-[22px] bg-[var(--surface)] p-7 text-center shadow-2xl">
+        <p className="text-[22px] font-bold text-[var(--text)]">Atualização obrigatória</p>
+        <p className="text-[15px] text-[var(--text-muted)] mt-2">
+          {aviso || `Nova versão do Norte Vendas${nova.versionName ? ` (${formatAppVersion(nova.versionName)})` : ''}. Toque em Atualizar e confirme a instalação.`}
+        </p>
         <button
           type="button"
           onClick={atualizar}
           disabled={baixando}
-          className="flex-1 h-11 rounded-full bg-[var(--brand-fill,var(--brand))] text-white font-semibold text-[15px] disabled:opacity-60"
+          className="mt-6 h-14 w-full rounded-full bg-[var(--brand-fill,var(--brand))] text-white font-bold text-[17px] disabled:opacity-60"
         >
           {baixando ? 'Baixando…' : 'Atualizar'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setDispensada(true)}
-          className="h-11 px-4 rounded-full bg-[var(--surface-2)] text-[var(--text)] font-medium text-[15px]"
-        >
-          Depois
         </button>
       </div>
     </div>
