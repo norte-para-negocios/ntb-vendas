@@ -508,7 +508,18 @@ async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
     await printViaNetwork(printer.ip_address, printer.port, content, printer.print_mode === 'raw', printer.paper_width_mm);
   } else if (printer.connection_type === 'usb') {
-    await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content, printer.paper_width_mm) : printViaUsb(printer.usb_system_name, content, colunasDoPapel(printer.paper_width_mm)));
+    if (printer.print_mode === 'raw') {
+      // Modo Direto com rede de segurança: se o envio direto (ESC/POS) falhar, imprime pelo driver do Windows
+      // na mesma hora — a cozinha nunca fica sem comanda por causa do modo (pedido do dono, 2026-09-29).
+      try {
+        await printViaUsbRaw(printer.usb_system_name, content, printer.paper_width_mm);
+      } catch (e) {
+        log(`WARN modo Direto falhou em ${printer.usb_system_name} (${e && e.message}) — imprimindo pelo driver`);
+        await printViaUsb(printer.usb_system_name, content, colunasDoPapel(printer.paper_width_mm));
+      }
+    } else {
+      await printViaUsb(printer.usb_system_name, content, colunasDoPapel(printer.paper_width_mm));
+    }
   } else {
     throw new Error(`Tipo de conexão não suportado aqui: ${printer.connection_type}`);
   }
