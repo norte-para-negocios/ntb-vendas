@@ -556,8 +556,8 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
       ) : (
         <div className="space-y-2">
           {printers.map((printer) => (
-            <Card key={printer.id} className={`p-4 flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch ${!printer.is_active ? 'opacity-50' : ''}`}>
-              <div className="flex items-center gap-3 min-w-0">
+            <Card key={printer.id} className={`p-4 flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch ${!printer.is_active ? 'opacity-50' : ''}`}>
+              <div className="flex items-center gap-3 min-w-[220px] flex-1">
                 <div className="text-[var(--text-muted)]">{CONNECTION_ICON[printer.connection_type]}</div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--text)] truncate">{printer.name}</p>
@@ -602,7 +602,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                   })()}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0 max-sm:flex-wrap">
+              <div className="flex flex-wrap items-center justify-end gap-2 max-sm:justify-start">
                 {(printer.connection_type === 'usb' || printer.connection_type === 'network') && (
                   <select
                     value={printer.print_mode ?? 'driver'}
@@ -636,7 +636,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                   </label>
                 )}
                 {(printer.connection_type === 'usb' || printer.connection_type === 'network') && (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--r-md)] bg-[var(--surface-2)] px-2.5 py-1.5" title="Marque o que esta impressora deve imprimir. Cada documento sai só nas impressoras marcadas.">
+                  <div className="order-last basis-full flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--r-md)] bg-[var(--surface-2)] px-3 py-2" title="Marque o que esta impressora deve imprimir. Cada documento sai só nas impressoras marcadas.">
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Imprime:</span>
                     {DOCS_IMPRESSAO.map((d) => (
                       <label key={d.id} className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text)] cursor-pointer select-none">
