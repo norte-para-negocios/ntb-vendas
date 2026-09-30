@@ -38,6 +38,7 @@ import { VendasCanceladasView } from '@/components/modules/VendasCanceladasView'
 import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
+import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
 import { setorDoItem } from '@/lib/setores';
 import { chavePreConta } from '@/lib/preConta';
 import { descreverHoraDoPedido } from '@/lib/tempo';
@@ -1203,6 +1204,8 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
         <div className={`px-4 pt-5 pb-3 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isCollapsed && (
             <div className="overflow-hidden">
+              {/* Logo do Norte Vendas no topo, como no Norte Estoque (pedido do dono, 2026-09-29). */}
+              <img src={logoNorteVendas.src} alt="Norte Vendas" className="h-8 w-auto mb-3" />
               <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-white truncate">{storeName}</h1>
               <p className="text-[13px] text-white/60 mt-0.5 truncate">Painel Lojista</p>
             </div>
