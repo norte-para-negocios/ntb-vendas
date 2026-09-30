@@ -434,7 +434,11 @@ const esqDir = (esq: string, dir: string, w: number): string => {
 
 // Comanda de cozinha/bar usa MENOS colunas que a conta: o driver calcula a fonte pra caber as colunas
 // na largura do papel, então menos colunas = letra maior (pedido do Ramon, 2026-09-29: fonte pequena).
-export const colunasDaComanda = (mm?: number | null): number => (colunasDoPapel(mm) === 32 ? 22 : 32);
+export const colunasDaComanda = (mm?: number | null, modoDireto = false): number => {
+  // Modo direto (ESC/POS): a própria térmica imprime em LETRA DUPLA (metade das colunas: 24 no 80 mm, 16 no 58 mm).
+  if (modoDireto) return colunasDoPapel(mm) / 2;
+  return colunasDoPapel(mm) === 32 ? 22 : 32;
+};
 
 export function buildKitchenTicketText(opts: {
   kind: 'COZINHA' | 'BAR';
@@ -452,8 +456,10 @@ export function buildKitchenTicketText(opts: {
   paperWidthMm?: number | null;
   // Nome do setor/impressora no cabeçalho (ex.: "PIZZARIA"); sem ele, o destino (COZINHA/BAR).
   titulo?: string;
+  // Impressora em modo direto (ESC/POS): diagrama pra letra dupla.
+  modoDireto?: boolean;
 }): string {
-  const W = colunasDaComanda(opts.paperWidthMm);
+  const W = colunasDaComanda(opts.paperWidthMm, opts.modoDireto);
   const dupla = '='.repeat(W);
   const simples = '-'.repeat(W);
   const nomeDoSetor = opts.titulo || opts.kind;

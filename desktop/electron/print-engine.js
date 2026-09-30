@@ -79,7 +79,7 @@ async function rest(pathAndQuery, init = {}) {
   return res;
 }
 
-function printViaNetwork(ip, port, content, raw) {
+function printViaNetwork(ip, port, content, raw, paperWidthMm) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
     // Depois que os bytes saíram, o papel JÁ ESTÁ SAINDO — um erro de socket
@@ -95,7 +95,7 @@ function printViaNetwork(ip, port, content, raw) {
       reject(e);
     }, 5000);
     socket.connect(port, ip, () => {
-      socket.write(raw ? toEscPos(content) : Buffer.from(content, 'utf8'), (err) => {
+      socket.write(raw ? toEscPos(content, paperWidthMm) : Buffer.from(content, 'utf8'), (err) => {
         if (err) {
           clearTimeout(timeout);
           socket.destroy();
@@ -245,9 +245,15 @@ $bytes = [System.IO.File]::ReadAllBytes($FilePath)
 const CP850 = { 'á':0xA0,'é':0x82,'í':0xA1,'ó':0xA2,'ú':0xA3,'à':0x85,'è':0x8A,'ã':0xC6,'õ':0xE4,'â':0x83,'ê':0x88,'ô':0x93,'ç':0x87,'ü':0x81,
   'Á':0xB5,'É':0x90,'Í':0xD6,'Ó':0xE0,'Ú':0xE9,'À':0xB7,'Ã':0xC7,'Õ':0xE5,'Â':0xB6,'Ê':0xD2,'Ô':0xE2,'Ç':0x80,'º':0xA7,'ª':0xA6,'°':0xF8 };
 
-function toEscPos(content) {
-  const out = [0x1B, 0x40, 0x1B, 0x74, 0x02, 0x1B, 0x61, 0x01]; // init, CP850, centralizado
+// init, CP850, alinhado à esquerda (o texto já vem diagramado em colunas por lib/print.ts — centralizar cada
+// linha aqui bagunçava a comanda) e negrito. Comanda estreita (linhas com até metade das colunas do papel, ver
+// colunasDaComanda) sai em LETRA DUPLA — pedido da cozinha do Sertão (29/09: "fonte pequena").
+function toEscPos(content, paperWidthMm) {
   const texto = String(content).replace(/[\u2013\u2014]/g, '-').replace(/\u2026/g, '...').replace(/\r/g, '');
+  const maior = texto.split('\n').reduce((m, l) => Math.max(m, l.length), 0);
+  const letraDupla = maior > 0 && maior <= colunasDoPapel(paperWidthMm) / 2;
+  const out = [0x1B, 0x40, 0x1B, 0x74, 0x02, 0x1B, 0x61, 0x00, 0x1B, 0x45, 0x01];
+  if (letraDupla) out.push(0x1D, 0x21, 0x11);
   for (const ch of texto) {
     const c = ch.codePointAt(0);
     if (c === 10) out.push(0x0A);
@@ -258,13 +264,13 @@ function toEscPos(content) {
   return Buffer.from(out);
 }
 
-function printViaUsbRaw(printerName, content) {
+function printViaUsbRaw(printerName, content, paperWidthMm) {
   return new Promise((resolve, reject) => {
     if (process.platform !== 'win32') { reject(new Error('Modo direto (ESC/POS) só existe no Windows.')); return; }
     const stamp = Date.now();
     const binFile = path.join(os.tmpdir(), `ntb-raw-${stamp}.bin`);
     const scriptFile = path.join(os.tmpdir(), `ntb-raw-${stamp}.ps1`);
-    fs.writeFileSync(binFile, toEscPos(content));
+    fs.writeFileSync(binFile, toEscPos(content, paperWidthMm));
     fs.writeFileSync(scriptFile, PS_RAW_SCRIPT, 'utf8');
     execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, '-PrinterName', printerName, '-FilePath', binFile], { timeout: 30000 }, (err) => {
       try { fs.unlinkSync(binFile); } catch { /* ignore */ }
@@ -500,9 +506,9 @@ function resolverNomeLocal(printer, locais) {
 
 async function printOnce(printer, content) {
   if (printer.connection_type === 'network') {
-    await printViaNetwork(printer.ip_address, printer.port, content, printer.print_mode === 'raw');
+    await printViaNetwork(printer.ip_address, printer.port, content, printer.print_mode === 'raw', printer.paper_width_mm);
   } else if (printer.connection_type === 'usb') {
-    await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content) : printViaUsb(printer.usb_system_name, content, colunasDoPapel(printer.paper_width_mm)));
+    await (printer.print_mode === 'raw' ? printViaUsbRaw(printer.usb_system_name, content, printer.paper_width_mm) : printViaUsb(printer.usb_system_name, content, colunasDoPapel(printer.paper_width_mm)));
   } else {
     throw new Error(`Tipo de conexão não suportado aqui: ${printer.connection_type}`);
   }
@@ -762,7 +768,7 @@ async function printDirectUsb(printer, content, donos) {
     if (!dono) throw new Error('Esta máquina não tem essa impressora');
     alvo = `\\\\${dono}\\${printer.usb_system_name}`;
   }
-  return raw ? printViaUsbRaw(alvo, content) : printViaUsb(alvo, content, colunasDoPapel(printer.paper_width_mm));
+  return raw ? printViaUsbRaw(alvo, content, printer.paper_width_mm) : printViaUsb(alvo, content, colunasDoPapel(printer.paper_width_mm));
 }
 
 async function listarImpressorasLocais() {

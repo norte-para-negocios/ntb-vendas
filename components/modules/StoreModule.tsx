@@ -4233,7 +4233,7 @@ NOTIFY pgrst, 'reload schema';`;
                     destination: destino,
                     sectorId: setorId,
                     title: `CANCELAMENTO — ${lista.length} ${lista.length === 1 ? 'item' : 'itens'} — Mesa ${mesaNumero}`,
-                    content: (printer) => buildKitchenTicketText({ ...dados, paperWidthMm: printer.paper_width_mm, titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined }),
+                    content: (printer) => buildKitchenTicketText({ ...dados, paperWidthMm: printer.paper_width_mm, modoDireto: printer.print_mode === 'raw', titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined }),
                     dedupeKey: `cancel:${lista.map((i) => i.id).sort().join(',')}`,
                 });
             } catch (e) {
