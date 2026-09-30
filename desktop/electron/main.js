@@ -463,7 +463,9 @@ app.whenReady().then(() => {
     estadoUpdate.versaoBaixada = info.version;
     estadoUpdate.situacao = 'baixada';
     estadoUpdate.detalhe = info.version;
-    const recemAberto = process.uptime() < 15 * 60;
+    // 30/09 (pedido do dono): NÃO instala mais sozinho logo após abrir — fechava o app no meio
+    // do atendimento. Só pelo botão "Atualizar", ao fechar o app, ou de madrugada.
+    const recemAberto = false;
     if (recemAberto && podeAutoInstalar(info.version)) {
       logUpdate(`INFO app aberto há ${Math.round(process.uptime())}s: instalando v${info.version} agora (silencioso)`);
       marcarTentativa(info.version);

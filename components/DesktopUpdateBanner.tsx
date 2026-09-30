@@ -26,6 +26,10 @@ const ERRO_SILENCIO_MS = 30 * 60 * 1000;
 export function DesktopUpdateBanner() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
+  // "Depois" (30/09, pedido do dono: atualização NÃO pode ser obrigatória — travou o caixa
+  // quando a instalação não concluiu). Some até aparecer outra versão ou o app reabrir.
+  const [adiada, setAdiada] = useState<string | null>(null);
+  const [installFalhou, setInstallFalhou] = useState(false);
   const [recuperou, setRecuperou] = useState(false);
   // Achado da revisão independente: `situacao`/`detalhe` já eram gravados
   // pelo processo principal (ver desktop/electron/main.js) e expostos pelo
@@ -86,7 +90,7 @@ export function DesktopUpdateBanner() {
     return () => clearInterval(t);
   }, []);
 
-  const mostrarUpdate = !!updateVersion;
+  const mostrarUpdate = !!updateVersion && adiada !== updateVersion;
   // Atualização já baixada ganha a faixa de sucesso — um erro velho de uma
   // tentativa anterior não faz mais diferença nenhuma pra quem está na tela.
   const silenciado = !!erroDispensado
@@ -97,38 +101,50 @@ export function DesktopUpdateBanner() {
 
   const handleInstall = () => {
     setInstalling(true);
+    setInstallFalhou(false);
     window.electronApp?.installUpdate?.();
+    // Se em 45s o app ainda está aberto, a instalação não aconteceu: libera o botão e explica.
+    setTimeout(() => { setInstalling(false); setInstallFalhou(true); }, 45000);
   };
-
-  // Pedido do dono (2026-09-29): versão nova pronta = PARA TUDO e pede pra atualizar, na frente de tudo,
-  // sem "Depois". Atualizar leva segundos e o app reabre sozinho, com a mesma loja.
-  if (mostrarUpdate) {
-    return (
-      <div role="alertdialog" aria-modal="true" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
-        <div className="w-full max-w-[440px] rounded-[var(--r-lg)] bg-[var(--surface)] p-8 text-center shadow-2xl">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--brand-soft)]">
-            <Download size={30} className="text-[var(--brand)]" />
-          </div>
-          <h2 className="text-[22px] font-bold text-[var(--text)]">Atualização obrigatória</h2>
-          <p className="mt-2 text-[15px] text-[var(--text-muted)]">
-            Nova versão do Norte Vendas ({formatAppVersion(updateVersion)}). Leva poucos segundos — o app fecha e abre sozinho.
-          </p>
-          <button
-            onClick={handleInstall}
-            disabled={installing}
-            autoFocus
-            className="mt-6 h-14 w-full rounded-full bg-[var(--brand-fill)] text-[17px] font-bold text-white u-motion u-press disabled:opacity-60"
-          >
-            {installing ? 'Atualizando…' : 'Atualizar agora'}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2" style={{ maxWidth: 420 }}>
     <AnimatePresence>
+      {mostrarUpdate && (
+      <motion.div
+        key="update"
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={SPRING_SHEET}
+        className="flex items-center gap-3 rounded-[var(--r-lg)] bg-[var(--surface)] px-4 py-3 shadow-2xl border border-[var(--border)]"
+      >
+        <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--brand-soft)] flex items-center justify-center">
+          <Download size={18} className="text-[var(--brand)]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-bold text-[var(--text)]">Nova versão pronta ({formatAppVersion(updateVersion)})</p>
+          <p className="text-[12px] text-[var(--text-muted)]">
+            {installFalhou
+              ? 'Não atualizou sozinho. Pode seguir usando; ela instala quando o app for fechado.'
+              : 'Atualize quando o movimento deixar — o app fecha e abre sozinho.'}
+          </p>
+        </div>
+        <button
+          onClick={() => setAdiada(updateVersion)}
+          className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] text-[13px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
+        >
+          Depois
+        </button>
+        <button
+          onClick={handleInstall}
+          disabled={installing}
+          className="shrink-0 px-3 py-1.5 rounded-[var(--r-md)] bg-[var(--brand-fill)] text-white text-[13px] font-semibold u-motion u-press disabled:opacity-60"
+        >
+          {installing ? 'Atualizando…' : 'Atualizar'}
+        </button>
+      </motion.div>
+      )}
       {recuperou && (
       // Deliberadamente DIFERENTE do aviso de lacuna de impressão da estação
       // do caixa (CaixaPrintStation.tsx), que fala de pedido que pode não ter

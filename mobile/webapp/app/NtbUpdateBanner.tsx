@@ -21,6 +21,8 @@ export function NtbUpdateBanner() {
   const [nova, setNova] = useState<{ versionName: string; url: string } | null>(null);
   const [baixando, setBaixando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  // "Depois" (30/09, pedido do dono): atualização não pode travar o uso do app.
+  const [adiada, setAdiada] = useState<string | null>(null);
   const ultimaChecagem = useRef(0);
 
   const checar = useCallback(async () => {
@@ -56,22 +58,16 @@ export function NtbUpdateBanner() {
     }
   };
 
-  if (!nova) return null;
+  if (!nova || adiada === nova.versionName) return null;
 
-  // Pedido do dono (2026-09-29): versão nova = tela na frente de tudo, sem "Depois".
+  // 30/09: não é mais obrigatória (travava o uso) — aviso no rodapé com "Depois".
   return (
-    <div role="alertdialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 10000 }} className="flex items-center justify-center bg-black/70 p-6">
-      <div className="w-full max-w-[420px] rounded-[22px] bg-[var(--surface)] p-7 text-center shadow-2xl">
-        <p className="text-[22px] font-bold text-[var(--text)]">Atualização obrigatória</p>
-        <p className="text-[15px] text-[var(--text-muted)] mt-2">
-          {aviso || `Nova versão do Norte Vendas${nova.versionName ? ` (${formatAppVersion(nova.versionName)})` : ''}. Toque em Atualizar e confirme a instalação.`}
-        </p>
-        <button
-          type="button"
-          onClick={atualizar}
-          disabled={baixando}
-          className="mt-6 h-14 w-full rounded-full bg-[var(--brand-fill,var(--brand))] text-white font-bold text-[17px] disabled:opacity-60"
-        >
+    <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(env(safe-area-inset-bottom) + 88px)', zIndex: 10000 }} className="rounded-[18px] bg-[var(--surface)] p-4 shadow-2xl border border-[var(--border)]">
+      <p className="text-[15px] font-bold text-[var(--text)]">Nova versão do Norte Vendas{nova.versionName ? ` (${formatAppVersion(nova.versionName)})` : ''}</p>
+      <p className="text-[13px] text-[var(--text-muted)] mt-1">{aviso || 'Atualize quando puder: toque em Atualizar e confirme a instalação.'}</p>
+      <div className="mt-3 flex gap-2">
+        <button type="button" onClick={() => setAdiada(nova.versionName)} className="h-11 flex-1 rounded-full bg-[var(--surface-2)] text-[var(--text)] font-semibold text-[15px]">Depois</button>
+        <button type="button" onClick={atualizar} disabled={baixando} className="h-11 flex-1 rounded-full bg-[var(--brand-fill,var(--brand))] text-white font-bold text-[15px] disabled:opacity-60">
           {baixando ? 'Baixando…' : 'Atualizar'}
         </button>
       </div>
