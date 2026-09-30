@@ -133,8 +133,21 @@ export async function POST(request: NextRequest) {
 
   const { data: items } = await admin
     .from('order_items')
-    .select('quantity, status, selected_options, product:products(omie_codigo, destination, sector_id, category_id, ignore_category_sector)')
+    .select('order_id, quantity, status, selected_options, product:products(omie_codigo, destination, sector_id, category_id, ignore_category_sector)')
     .in('order_id', pendentesDeOp);
+
+  // Regra do dono (30/09): a saída só vai como movimento de PDV no Omie quando a venda
+  // gera nota fiscal; sem nota é baixa comum. Vem da escolha feita ao receber
+  // (payment_details.emitir_nota); se o pedido não tiver essa marca, olha se existe nota.
+  const { data: notasDosPedidos } = await admin
+    .from('fiscal_notas')
+    .select('order_id, status')
+    .in('order_id', pendentesDeOp);
+  const temNota = new Set((notasDosPedidos ?? []).filter((n: { status: string }) => n.status !== 'erro' && n.status !== 'cancelada').map((n: { order_id: string }) => n.order_id));
+  const comNotaDoPedido = (orderId: string) => {
+    const marca = detalhesPorPedido.get(orderId)?.emitir_nota;
+    return typeof marca === 'boolean' ? marca : temNota.has(orderId);
+  };
 
   // Setor de produção de cada item (ex.: "Pizzaria", 2026-09-30): o Estoque usa pra
   // baixar no local certo (pizza e embalagem de pizza -> local da pizzaria). Mesma
@@ -158,7 +171,7 @@ export async function POST(request: NextRequest) {
   // (ex.: borda de pizza) sempre herda o destination do PRODUTO PAI — faz a
   // pizza inteira na mesma estação, não existe "destination" próprio de
   // opcional.
-  const porCodigo = new Map<string, { quantidade: number; destination: 'kitchen' | 'bar' | null; setor: string | null }>();
+  const porCodigo = new Map<string, { codigo: string; quantidade: number; destination: 'kitchen' | 'bar' | null; setor: string | null; comNota: boolean }>();
   for (const item of items ?? []) {
     if (item.status === 'canceled') continue;
 
@@ -166,17 +179,20 @@ export async function POST(request: NextRequest) {
     const destination = produto?.destination ?? null;
     const setorId = setorDoItem(produto, catSetor);
     const setor = setorId ? nomeSetor.get(setorId) ?? null : null;
+    const comNota = comNotaDoPedido((item as { order_id: string }).order_id);
     const codigoProduto = produto?.omie_codigo;
     if (codigoProduto) {
-      const atual = porCodigo.get(codigoProduto);
-      porCodigo.set(codigoProduto, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor });
+      const chave = `${codigoProduto}|${comNota}`;
+      const atual = porCodigo.get(chave);
+      porCodigo.set(chave, { codigo: codigoProduto, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, comNota });
     }
 
     const opcoes = (item.selected_options ?? []) as { omie_codigo?: string | null }[];
     for (const opcao of opcoes) {
       if (!opcao.omie_codigo) continue;
-      const atual = porCodigo.get(opcao.omie_codigo);
-      porCodigo.set(opcao.omie_codigo, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor });
+      const chave = `${opcao.omie_codigo}|${comNota}`;
+      const atual = porCodigo.get(chave);
+      porCodigo.set(chave, { codigo: opcao.omie_codigo, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, comNota });
     }
   }
 
@@ -184,7 +200,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Nenhum item com omie_codigo vinculado' });
   }
 
-  const itens = Array.from(porCodigo, ([codigo, v]) => ({ codigo, quantidade: v.quantidade, destination: v.destination, setor: v.setor }));
+  const itens = Array.from(porCodigo.values(), (v) => ({ codigo: v.codigo, quantidade: v.quantidade, destination: v.destination, setor: v.setor, comNota: v.comNota }));
 
   // Ambiente fiscal da loja (2026-08-16, pedido explícito do usuário) — repassado
   // junto pro ntb-estoque conseguir mostrar/filtrar "essa OP veio de uma venda de
