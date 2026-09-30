@@ -97,7 +97,7 @@ const universalPermissionsFor = (store: Store): StoreUserPermissions => {
     };
 };
 
-const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => void }> = ({ onLogin }) => {
+const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => void; onEntrarMesas?: () => void }> = ({ onLogin, onEntrarMesas }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -372,6 +372,26 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                         </div>
                     )}
                     <div className="flex flex-wrap justify-center gap-x-8 gap-y-7">
+                        {/* Modo Aberto (30/09, pedido do dono): qualquer um entra só nas mesas; a senha é pedida ao lançar o pedido. */}
+                        {onEntrarMesas && !editandoContas && (
+                            <motion.button
+                                type="button"
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ type: 'spring', bounce: 0, duration: 0.45 }}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={onEntrarMesas}
+                                className="w-32 flex flex-col items-center gap-3 text-white"
+                            >
+                                <div className="w-24 h-24 rounded-full flex items-center justify-center ring-1 ring-white/35 shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]" style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.32), rgba(255,255,255,0.08))' }}>
+                                    <LayoutDashboard size={36} strokeWidth={1.75} />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-[15px] font-semibold leading-tight">Mesas</p>
+                                    <p className="text-xs text-white/60 mt-0.5">Sem login</p>
+                                </div>
+                            </motion.button>
+                        )}
                         {contas.map((conta, i) => (
                             <motion.div
                                 key={conta.email}
@@ -537,6 +557,11 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                         </Button>
                     </form>
                 </Card>
+                {onEntrarMesas && (
+                    <button onClick={onEntrarMesas} className="flex items-center justify-center gap-2 mx-auto mt-6 px-5 min-h-11 rounded-full text-sm font-semibold text-white bg-white/12 hover:bg-white/20 u-motion">
+                        <LayoutDashboard size={16} /> Entrar só nas mesas (sem login)
+                    </button>
+                )}
                 {isDesktop && contas.length > 0 && (
                     <button onClick={() => { setMostrarFormulario(false); setContaEscolhida(null); setError(''); }} className="block mx-auto mt-6 px-4 min-h-11 rounded-full text-sm font-medium text-white/75 hover:text-white hover:bg-white/10 u-motion">
                         Voltar para os usuários
@@ -1129,13 +1154,13 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                 </div>
                 <button
                     type="button"
-                    onClick={() => { setShowProfileModal(true); setIsMobileMenuOpen(false); }}
+                    onClick={() => { if (user.role === 'open') return; setShowProfileModal(true); setIsMobileMenuOpen(false); }}
                     className="flex items-center gap-3 mx-3 px-2 py-2 rounded-[var(--r-md)] hover:bg-white/10 u-motion text-left"
                 >
                     <SidebarAvatar photoUrl={user.photo_url} name={user.name} className="w-11 h-11 text-[16px]" />
                     <div className="min-w-0 flex-1">
                         <p className="text-[15px] font-semibold text-white truncate">{user.name}</p>
-                        <p className="text-[13px] text-white/60">Meu Perfil</p>
+                        <p className="text-[13px] text-white/60">{user.role === 'open' ? 'Sem login' : 'Meu Perfil'}</p>
                     </div>
                 </button>
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
@@ -1227,7 +1252,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
 
         <button
             type="button"
-            onClick={() => setShowProfileModal(true)}
+            onClick={() => { if (user.role !== 'open') setShowProfileModal(true); }}
             className={`flex items-center mx-3 px-2 py-2 rounded-[var(--r-md)] hover:bg-white/10 u-motion text-left ${isCollapsed ? 'justify-center' : 'gap-3'}`}
             title={isCollapsed ? 'Meu Perfil' : undefined}
         >
@@ -1235,7 +1260,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
             {!isCollapsed && (
                 <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-white truncate">{user.name}</p>
-                    <p className="text-[12px] text-white/60">Meu Perfil</p>
+                    <p className="text-[12px] text-white/60">{user.role === 'open' ? 'Sem login' : 'Meu Perfil'}</p>
                 </div>
             )}
         </button>
@@ -12642,6 +12667,20 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
 // só o suficiente pra rebuscar o store_user via fetchStoreUserById depois de
 // um F5 (achado de bug #6). Nunca guarda senha nem dado sensível.
 const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
+// Modo Aberto (30/09): loja deste computador, gravada a cada login real, pra tela de
+// entrada oferecer "Mesas · Sem login". Usuário sintético role='open' (id nulo fixo).
+const MESAS_LOJA_STORAGE_KEY = 'ntb_mesas_loja';
+const ABERTO_USER_ID = '00000000-0000-0000-0000-000000000000';
+const usuarioAberto = (store: Store): StoreUser & { store: Store } => ({
+    id: ABERTO_USER_ID,
+    store_id: store.id,
+    name: 'Mesas',
+    email: '',
+    role: 'open',
+    must_change_password: false,
+    permissions: {},
+    store,
+} as StoreUser & { store: Store });
 
 // Achado ao vivo (2026-08-29): a sessão de login já sobrevivia a um F5
 // (bug #6, ver acima), mas a ABA em que a pessoa estava sempre voltava pro
@@ -12708,10 +12747,13 @@ export const StoreModule: React.FC = () => {
 
         (async () => {
             try {
-                const saved = JSON.parse(raw) as { userId?: string; storeId?: string; isUniversal?: boolean };
+                const saved = JSON.parse(raw) as { userId?: string; storeId?: string; isUniversal?: boolean; aberto?: boolean };
                 let restoredUser: (StoreUser & { store: Store }) | null = null;
 
-                if (saved?.isUniversal && saved.userId && saved.storeId) {
+                if (saved?.aberto && saved.storeId) {
+                    const store = await fetchStoreById(saved.storeId);
+                    if (store && store.is_active) restoredUser = usuarioAberto(store);
+                } else if (saved?.isUniversal && saved.userId && saved.storeId) {
                     // Conta universal: reconstrói o usuário sintético a partir
                     // de universal_users + stores, em vez de store_users (o id
                     // salvo não existe nessa tabela).
@@ -12795,6 +12837,19 @@ export const StoreModule: React.FC = () => {
         setUser(u);
         setTab(pickInitialStoreTab(u));
         localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id, isUniversal: u.role === 'universal' }));
+        try { localStorage.setItem(MESAS_LOJA_STORAGE_KEY, u.store.id); } catch { /* sem armazenamento */ }
+    };
+
+    const [lojaMesas, setLojaMesas] = useState<string | null>(null);
+    useEffect(() => { try { setLojaMesas(localStorage.getItem(MESAS_LOJA_STORAGE_KEY)); } catch { /* sem armazenamento */ } }, [user]);
+    const entrarMesas = async () => {
+        if (!lojaMesas) return;
+        const store = await fetchStoreById(lojaMesas).catch(() => null);
+        if (!store || !store.is_active) { toast.error('Não consegui abrir as mesas desta loja. Entre com o seu login.'); return; }
+        const u = usuarioAberto(store);
+        setUser(u);
+        setTab('tables');
+        localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ aberto: true, storeId: store.id }));
     };
 
     const handleLogout = () => {
@@ -12835,7 +12890,7 @@ export const StoreModule: React.FC = () => {
     if (!user) {
         return (
             <MotionConfig reducedMotion="user">
-                <StoreLogin onLogin={handleLogin} />
+                <StoreLogin onLogin={handleLogin} onEntrarMesas={lojaMesas ? entrarMesas : undefined} />
             </MotionConfig>
         );
     }
