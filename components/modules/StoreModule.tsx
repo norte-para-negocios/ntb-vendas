@@ -39,6 +39,7 @@ import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import { setorDoItem } from '@/lib/setores';
+import { chavePreConta } from '@/lib/preConta';
 import { descreverHoraDoPedido } from '@/lib/tempo';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
@@ -3628,7 +3629,7 @@ NOTIFY pgrst, 'reload schema';`;
             // faltava o mesmo enfileiramento pra impressora USB/rede do
             // caixa que handleFinishPayment já tem, então só o comprovante
             // PÓS-pagamento saía na impressora física; este nunca saía.
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? `pre-conta:${tableId}:${Math.floor(Date.now() / 60000)}` : undefined, 'pre_conta', automatica)
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? chavePreConta(tableId, activeOrders) : undefined, 'pre_conta', automatica)
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             // Achado ao vivo na loja Sertão (2026-09-15): com uma impressora
             // USB/rede cadastrada pro destino 'receipt' (ex.: CAIXA), o

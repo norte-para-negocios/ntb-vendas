@@ -102,13 +102,14 @@ import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2, AlertTriangle, X } fro
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { impressoraRecebe } from '@/lib/printDocs';
-import { fetchKitchenOrders, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada } from '@/lib/api';
-import { printKitchenTicket, buildKitchenTicketText } from '@/lib/print';
+import { montarPreConta, chavePreConta } from '@/lib/preConta';
+import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada } from '@/lib/api';
+import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from '@/lib/print';
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
 import { parseItemNote } from '@/lib/labels';
-import { Store, OrderItem, StoreUser } from '@/types';
+import { Store, OrderItem, StoreUser, TableStatus } from '@/types';
 
 type Destination = 'kitchen' | 'bar';
 
@@ -976,6 +977,48 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       window.removeEventListener('online', onOnline);
     };
   }, [active, store, reconcile]);
+
+  // Pré-conta automática pelo PC do caixa (Ramon, 29/09 21:54: o garçom pediu a conta pelo celular e a pré-conta
+  // não saiu em lugar nenhum — a impressão automática dependia do app de QUEM pediu). Agora este PC vigia as
+  // mesas: quando uma vira "pediu conta", manda a pré-conta pras impressoras marcadas pra ela (no Sertão, o bar).
+  // A chave (mesa + itens) é a mesma do "Pedir conta" do garçom: se ele já imprimiu, aqui não sai de novo.
+  useEffect(() => {
+    // Só nos computadores (app do Windows): celular de garçom não precisa vigiar (e não pesa a rede).
+    if (!active || !store || typeof window === 'undefined' || !(window as any).electronApp?.isElectron) return;
+    const loja = store;
+    let pedindoConta: Set<string> | null = null;
+    let parado = false;
+    const verificar = async () => {
+      try {
+        const mesas = await fetchTables(loja.id);
+        if (parado) return;
+        const agora = new Set(mesas.filter((t) => t.status === TableStatus.WAITING_BILL).map((t) => t.id));
+        const novas = pedindoConta ? [...agora].filter((id) => !pedindoConta!.has(id)) : [];
+        pedindoConta = agora;
+        if (novas.length === 0) return;
+        const pedidos = await fetchActiveOrdersForTables(loja.id);
+        for (const id of novas) {
+          const mesa = mesas.find((t) => t.id === id);
+          if (!mesa) continue;
+          const preConta = montarPreConta(loja, mesa, pedidos);
+          if (!preConta) continue;
+          await enqueueReceiptPrintJobs(
+            loja.id,
+            `Conferência - ${preConta.label}`,
+            (mm) => buildBillReceiptText({ ...preConta, paperWidthMm: mm ?? preConta.paperWidthMm }),
+            chavePreConta(id, pedidos),
+            'pre_conta',
+            true,
+          ).catch((e) => console.error('pré-conta automática falhou:', e));
+        }
+      } catch (e) {
+        console.error('vigia de pedido de conta falhou:', e);
+      }
+    };
+    verificar();
+    const t = setInterval(verificar, 8000);
+    return () => { parado = true; clearInterval(t); };
+  }, [active, store?.id]);
 
   useEffect(() => {
     if (!isBrowser()) return;
