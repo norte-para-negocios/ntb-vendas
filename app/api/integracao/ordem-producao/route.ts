@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
+import { setorDoItem } from '@/lib/setores';
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md e a memória
 // "integracao_ntb_vendas_estoque_omie"): dispara Ordem de Produção automática
@@ -132,8 +133,18 @@ export async function POST(request: NextRequest) {
 
   const { data: items } = await admin
     .from('order_items')
-    .select('quantity, status, selected_options, product:products(omie_codigo, destination)')
+    .select('quantity, status, selected_options, product:products(omie_codigo, destination, sector_id, category_id, ignore_category_sector)')
     .in('order_id', pendentesDeOp);
+
+  // Setor de produção de cada item (ex.: "Pizzaria", 2026-09-30): o Estoque usa pra
+  // baixar no local certo (pizza e embalagem de pizza -> local da pizzaria). Mesma
+  // regra da impressão (lib/setores.ts): setor do produto, senão o da categoria.
+  const [{ data: setores }, { data: categorias }] = await Promise.all([
+    admin.from('print_sectors').select('id, name').eq('store_id', storeId),
+    admin.from('categories').select('id, sector_id').eq('store_id', storeId),
+  ]);
+  const nomeSetor = new Map((setores ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
+  const catSetor: Record<string, string | null> = Object.fromEntries((categorias ?? []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
 
   // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
   // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot
@@ -147,23 +158,25 @@ export async function POST(request: NextRequest) {
   // (ex.: borda de pizza) sempre herda o destination do PRODUTO PAI — faz a
   // pizza inteira na mesma estação, não existe "destination" próprio de
   // opcional.
-  const porCodigo = new Map<string, { quantidade: number; destination: 'kitchen' | 'bar' | null }>();
+  const porCodigo = new Map<string, { quantidade: number; destination: 'kitchen' | 'bar' | null; setor: string | null }>();
   for (const item of items ?? []) {
     if (item.status === 'canceled') continue;
 
-    const produto = (item as any).product as { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null } | null;
+    const produto = (item as any).product as { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null; sector_id?: string | null; category_id?: string | null; ignore_category_sector?: boolean } | null;
     const destination = produto?.destination ?? null;
+    const setorId = setorDoItem(produto, catSetor);
+    const setor = setorId ? nomeSetor.get(setorId) ?? null : null;
     const codigoProduto = produto?.omie_codigo;
     if (codigoProduto) {
       const atual = porCodigo.get(codigoProduto);
-      porCodigo.set(codigoProduto, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination });
+      porCodigo.set(codigoProduto, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor });
     }
 
     const opcoes = (item.selected_options ?? []) as { omie_codigo?: string | null }[];
     for (const opcao of opcoes) {
       if (!opcao.omie_codigo) continue;
       const atual = porCodigo.get(opcao.omie_codigo);
-      porCodigo.set(opcao.omie_codigo, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination });
+      porCodigo.set(opcao.omie_codigo, { quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor });
     }
   }
 
@@ -171,7 +184,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Nenhum item com omie_codigo vinculado' });
   }
 
-  const itens = Array.from(porCodigo, ([codigo, v]) => ({ codigo, quantidade: v.quantidade, destination: v.destination }));
+  const itens = Array.from(porCodigo, ([codigo, v]) => ({ codigo, quantidade: v.quantidade, destination: v.destination, setor: v.setor }));
 
   // Ambiente fiscal da loja (2026-08-16, pedido explícito do usuário) — repassado
   // junto pro ntb-estoque conseguir mostrar/filtrar "essa OP veio de uma venda de
