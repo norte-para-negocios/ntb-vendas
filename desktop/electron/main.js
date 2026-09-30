@@ -551,13 +551,14 @@ app.whenReady().then(() => {
   // renderer logo depois do login, com a loja e as credenciais do próprio
   // bundle — nada fica hardcoded aqui, nem em arquivo de config.
   ipcMain.handle('ntb-start-print-engine', (_event, params) => {
-    const { storeId, supabaseUrl, supabaseAnonKey } = params || {};
+    const { storeId, supabaseUrl, supabaseAnonKey, lembrar } = params || {};
     if (!storeId || !supabaseUrl || !supabaseAnonKey) {
       logPrint('WARN pedido de início sem storeId/credenciais — ignorado');
       return { ok: false, reason: 'parâmetros ausentes' };
     }
     // Guarda a loja: se o app reabrir (atualização/reinício), o motor volta sozinho, sem esperar login.
-    engineSession.salvar(app.getPath('userData'), { storeId, supabaseUrl, supabaseAnonKey });
+    // Conta universal (equipe Norte trocando de loja) não fica gravada; app antigo (sem o campo) segue gravando.
+    if (lembrar !== false) engineSession.salvar(app.getPath('userData'), { storeId, supabaseUrl, supabaseAnonKey });
     return printEngine.start(storeId, {
       baseUrl: supabaseUrl,
       anonKey: supabaseAnonKey,

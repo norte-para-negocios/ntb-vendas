@@ -12710,7 +12710,7 @@ export const StoreModule: React.FC = () => {
     // navegador, os dois são no-op.
     useEffect(() => {
         if (!user?.store?.id) return;
-        iniciarMotorImpressaoDesktop(user.store.id);
+        iniciarMotorImpressaoDesktop(user.store.id, user.role !== 'universal');
         return () => pararMotorImpressaoDesktop();
     }, [user?.store?.id]);
 

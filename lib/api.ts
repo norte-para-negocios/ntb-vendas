@@ -28,7 +28,7 @@ declare global {
       onRecuperouDeFalha?: (callback: () => void) => void;
       getUpdateStatus?: () => Promise<{ versaoAtual: string; versaoBaixada: string | null; situacao: string; detalhe: string | null; empacotado: boolean }>;
       checkForUpdate?: () => Promise<{ ok: boolean; empacotado: boolean; versaoDisponivel?: string | null; erro?: string }>;
-      startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string }) => Promise<{ ok: boolean; reason?: string }>;
+      startPrintEngine?: (params: { storeId: string; supabaseUrl: string; supabaseAnonKey: string; lembrar?: boolean }) => Promise<{ ok: boolean; reason?: string }>;
       stopPrintEngine?: () => Promise<{ ok: boolean }>;
       printPdfSilent?: (params: { pdfUrl: string; printerName: string }) => Promise<{ ok: boolean; reason?: string }>;
       printDirectUsb?: (params: { printer: PrinterConfig; content: string; owners: string[] }) => Promise<{ ok: boolean; reason?: string }>;
@@ -50,13 +50,16 @@ declare global {
 // processo principal use exatamente o mesmo banco que o resto do app (em
 // vez de repetir esses valores num segundo lugar, que sairia de sincronia
 // no primeiro deploy que trocasse de servidor).
-export const iniciarMotorImpressaoDesktop = async (storeId: string) => {
+// `lembrar=false` (conta universal da equipe Norte, que troca de loja): o PC não guarda essa loja pra religar
+// sozinho no próximo boot — senão o PC do cliente poderia voltar imprimindo a fila de outra loja.
+export const iniciarMotorImpressaoDesktop = async (storeId: string, lembrar = true) => {
   if (typeof window === 'undefined' || !window.electronApp?.startPrintEngine) return;
   try {
     await window.electronApp.startPrintEngine({
       storeId,
       supabaseUrl: supabaseUrlForConnectivityCheck,
       supabaseAnonKey: supabaseKeyForConnectivityCheck,
+      lembrar,
     });
     // Guarda a lista de impressoras pra poder imprimir direto na rede se a internet cair.
     fetchPrinterConfigs(storeId).catch(() => {});

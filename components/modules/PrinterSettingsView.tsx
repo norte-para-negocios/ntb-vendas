@@ -86,6 +86,7 @@ const resolverNomeLocal = (printer: PrinterConfig, host: string, locais: string[
 
 const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
+  const [salvandoDocs, setSalvandoDocs] = useState<string | null>(null);
   const [jobs, setJobs] = useState<PrintJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -643,14 +644,18 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                         <input
                           type="checkbox"
                           checked={impressoraRecebe(printer, d.id)}
+                          disabled={salvandoDocs === printer.id}
                           onChange={async (e) => {
+                            // Trava a linha até salvar e recarregar: dois cliques rápidos não se sobrescrevem mais.
+                            setSalvandoDocs(printer.id);
                             const atuais = DOCS_IMPRESSAO.map((x) => x.id).filter((id) => impressoraRecebe(printer, id));
                             const novos = e.target.checked ? [...atuais, d.id] : atuais.filter((id) => id !== d.id);
-                            if (novos.length === 0) { toast.error('Marque ao menos um documento (ou desative a impressora).'); return; }
+                            if (novos.length === 0) { setSalvandoDocs(null); toast.error('Marque ao menos um documento (ou desative a impressora).'); return; }
                             const r = await updatePrinterConfig(printer.id, { documentos: novos });
-                            if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
+                            if (!r.success) { setSalvandoDocs(null); toast.error(r.message || 'Erro ao salvar.'); return; }
                             toast.success(`"${printer.name}": ${e.target.checked ? 'passa a imprimir' : 'deixa de imprimir'} ${d.rotulo.toLowerCase()}.`);
-                            load();
+                            await load();
+                            setSalvandoDocs(null);
                           }}
                           className="size-4 accent-[var(--brand)]"
                         />
