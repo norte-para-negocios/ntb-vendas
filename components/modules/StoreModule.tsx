@@ -776,47 +776,20 @@ const abrirCupomFiscalQuandoSair = (
     };
 
     if (isElectron) {
+        // Cupom sempre pela FILA (print_jobs): o computador que tem a impressora do caixa imprime, seja qual for o
+        // computador que fechou a venda — deixa rastro na fila e tem retentativa. Antes cada PC tentava imprimir
+        // direto (PrintTo silencioso) e, quando falhava ou o PC não era o do caixa, não ficava registro nenhum
+        // (Ramon, 29/09: "fecho no caixa e a nota não imprime").
         aguardarNotaFiscalDaVenda(storeId, alvo)
-            .then(async (resultado) => {
+            .then((resultado) => {
                 if (!resultado) {
                     avisarFalhaNotaFiscal(storeId, alvo, desde);
                     return;
                 }
-                if (resultado?.nota.status === 'autorizada') toast.success(`Nota fiscal autorizada${resultado.nota.numero ? ` (nº ${resultado.nota.numero})` : ''}.`);
-                // Contingência: 2 vias físicas (cliente + estabelecimento) —
-                // pedido explícito do dono (2026-09-15), já que o documento
-                // não tem protocolo/QR ainda e o cliente precisa sair com o
-                // comprovante em papel mesmo assim. Dobra a via qualquer que
-                // seja o caminho de impressão que acabar sendo usado abaixo.
-                const emContingencia = resultado.nota.status === 'contingencia';
-                const printer = await fetchUsbPrinterForAutoprint(storeId, 'receipt', 'cupom_fiscal');
-                if (printer) {
-                    // NFC-e autorizada: gera o cupom na largura do papel da impressora
-                    // (rota sob demanda); contingência/NF-e usam o PDF guardado.
-                    const pdfParaImprimir = resultado.nota.modelo === '65' && resultado.nota.status === 'autorizada'
-                        ? resolverUrlApi(`/api/fiscal/cupom-pdf?noteId=${resultado.nota.id}&larguraMm=${printer.paperWidthMm}`)
-                        : resultado.pdfUrl;
-                    const resultadoPrint = await window.electronApp?.printPdfSilent?.({ pdfUrl: pdfParaImprimir, printerName: printer.usbSystemName });
-                    if (resultadoPrint?.ok) {
-                        toast.success('Cupom fiscal impresso no caixa.');
-                        if (emContingencia) {
-                            await window.electronApp?.printPdfSilent?.({ pdfUrl: pdfParaImprimir, printerName: printer.usbSystemName });
-                            toast.warning('Nota emitida em contingência — 2 vias impressas. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
-                        }
-                        return;
-                    }
-                    console.error('printPdfSilent (PrintTo) falhou, caindo pro resumo em texto:', resultadoPrint?.reason);
-                    imprimirResumoTextoNoCaixa(resultado.nota);
-                    toast.error('O cupom fiscal real não imprimiu — saiu um resumo em texto no caixa. O PDF completo está abrindo aqui.');
-                } else {
-                    // Este computador não tem a impressora do caixa: manda o cupom completo pela fila
-                    // pro computador que tem (o PDF também abre aqui pra conferência).
-                    enfileirarCupomCompleto(resultado);
-                }
-                window.open(resultado.pdfUrl, '_blank');
-                if (emContingencia) {
-                    window.open(resultado.pdfUrl, '_blank');
-                    toast.warning('Nota emitida em contingência — 2 vias impressas. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
+                if (resultado.nota.status === 'autorizada') toast.success(`Nota fiscal autorizada${resultado.nota.numero ? ` (nº ${resultado.nota.numero})` : ''}.`);
+                enfileirarCupomCompleto(resultado);
+                if (resultado.nota.status === 'contingencia') {
+                    toast.warning('Nota emitida em contingência — 2 vias enviadas à impressora. Será enviada à SEFAZ automaticamente quando a conexão voltar.');
                 }
             })
             .catch((e) => {

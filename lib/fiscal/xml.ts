@@ -263,8 +263,15 @@ export function montarXmlNota(params: MontarXmlParams): {
   // real em homologação no Sertão (2026-09-22). Doc vazio continua sem
   // <dest> nenhum (cupom anônimo).
   const destDocNFCe = modelo === '65' ? (destinatario?.cpfCnpj ?? '').replace(/\D/g, '') : '';
+  // xNome: com CPF/CNPJ informado o cupom não pode dizer "CONSUMIDOR NAO IDENTIFICADO" (Ramon, 29/09: "botei o CPF
+  // e saiu não identificado"). Sem nome digitado (padrão "Consumidor") vai "CONSUMIDOR". Campo opcional do schema,
+  // vem entre o documento e o indIEDest.
+  const nomeDestNFCe = (() => {
+    const n = (destinatario?.nome ?? '').trim();
+    return escapeXml((n && n.toLowerCase() !== 'consumidor' ? n : 'CONSUMIDOR').slice(0, 60));
+  })();
   const destXmlNFCe = destDocNFCe
-    ? `<dest><${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}>${destDocNFCe}</${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}><indIEDest>9</indIEDest></dest>`
+    ? `<dest><${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}>${destDocNFCe}</${destDocNFCe.length === 14 ? 'CNPJ' : 'CPF'}><xNome>${nomeDestNFCe}</xNome><indIEDest>9</indIEDest></dest>`
     : '';
 
   const destXml = modelo === '55' && destinatario
