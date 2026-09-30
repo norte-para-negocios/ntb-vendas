@@ -57,6 +57,10 @@ let geracao = 0;
 let publicadasPorEstaMaquina = new Set();
 // Impressoras instaladas NESTE computador (última varredura, mesmo sem internet).
 let nomesLocais = [];
+// Hora em que o motor ligou (30/09): nos primeiros segundos a lista de impressoras do
+// Windows ainda não carregou, e um job USB ia direto pelo nome cadastrado — falhou com
+// "Impressora invalida: IMPBAR" no PC que acabava de reabrir após atualizar.
+let inicioMotor = Date.now();
 
 async function rest(pathAndQuery, init = {}) {
   const res = await fetch(`${cfg.baseUrl}/rest/v1/${pathAndQuery}`, {
@@ -640,6 +644,7 @@ async function reservarJob(jobId) {
 // preload.js/StoreModule.tsx). Não existe config.json nem slug digitado à
 // mão como no agente separado: a loja é simplesmente a que está no app.
 function start(storeId, options) {
+  inicioMotor = Date.now();
   if (!storeId) return { ok: false, reason: 'storeId ausente' };
   if (currentStoreId === storeId) return { ok: true, already: true };
   stop();
@@ -701,6 +706,9 @@ function start(storeId, options) {
         let viaCompartilhamento = false;
         const nomeLocal = printer.connection_type === 'usb' ? resolverNomeLocal(printer) : null;
         if (nomeLocal) impressoraDoJob = { ...printer, usb_system_name: nomeLocal };
+        // Lista de impressoras ainda não carregou logo após ligar: espera (até 60s) em vez de
+        // tentar pelo nome cadastrado e marcar erro. Depois disso segue o comportamento antigo.
+        if (printer.connection_type === 'usb' && !nomeLocal && nomesLocais.length === 0 && Date.now() - inicioMotor < 60000) continue;
         if (printer.connection_type === 'usb' && !nomeLocal && nomesLocais.length > 0) {
           // Plano B (pedido do dono: qualquer computador da loja imprime): se o
           // computador dono da impressora não pegou o job em ~15s, este

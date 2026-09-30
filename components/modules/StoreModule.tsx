@@ -201,8 +201,9 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
             toast.success('Senha atualizada com sucesso! Faça login novamente.');
             setNeedsChange(false);
             setPassword('');
-        } catch (e) {
-            setError('Erro ao atualizar senha.');
+        } catch (e: any) {
+            // Senha repetida na loja (migration 136) chega com a mensagem pronta.
+            setError(String(e?.message || '').includes('já é usada') ? e.message : 'Erro ao atualizar senha.');
         } finally {
             setIsLoading(false);
         }
