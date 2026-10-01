@@ -19,7 +19,7 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
+import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -46,6 +46,7 @@ import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceip
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta } from '@/lib/calc';
+import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
@@ -2081,7 +2082,8 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
             }
             setCategories(categories);
             setCategoryGroups(categoryGroups);
-            setProducts(products);
+            // Taxa (migration 138) só entra pelo caixa, no fechamento da conta.
+            setProducts(semTaxas(products));
             setLoaded(true);
         });
     }, [storeId]);
@@ -3231,15 +3233,18 @@ const TablesView: React.FC<{
             }
         });
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id));
+        // Taxa de serviço lançada como item pelo caixa (migration 138): o item
+        // É a taxa, então o cálculo automático não soma de novo.
+        const hasFeeItem = contaTemTaxaPercentual(items);
+        const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(selectedTable.id)) && !hasFeeItem;
         // Task 3: distingue "loja nunca cobra" de "loja cobra, mas foi
         // removida desta mesa" (mesmo botão "Remover Taxa" da comanda) —
         // os dois zeram isServiceFeeEnabled, mas o texto explicativo pro
         // garçom precisa dizer qual dos dois é, não só "sem taxa".
-        const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(selectedTable.id));
+        const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(selectedTable.id)) && !hasFeeItem;
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
-        return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled, isServiceFeeRemovedForTable };
+        return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled, isServiceFeeRemovedForTable, hasFeeItem };
     }, [selectedTable, activeOrders, store, removedServiceFees]);
 
     const usersBreakdown = useMemo(() => {
@@ -3605,8 +3610,9 @@ NOTIFY pgrst, 'reload schema';`;
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
         const table = tables.find(t => t.id === tableId);
-        const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(tableId));
-        const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(tableId));
+        const hasFeeItem = contaTemTaxaPercentual(items);
+        const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(tableId)) && !hasFeeItem;
+        const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(tableId)) && !hasFeeItem;
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
 
@@ -3773,6 +3779,56 @@ NOTIFY pgrst, 'reload schema';`;
         if (paymentMethods.length > 0) return;
         setCurrentPaymentAmount(currentTableSummary.total.toFixed(2));
     }, [currentTableSummary?.total, showPaymentModal, paymentMethods.length]);
+
+    // Taxas como produto (migration 138, pedido do Ramon 2026-10-01): taxa de
+    // serviço, rolha, troca etc. são produtos ligados ao código do Omie, e SÓ o
+    // caixa lança, aqui no pagamento da mesa. Viram item da conta (nota fiscal e
+    // Estoque/Omie pelo fluxo de sempre); a percentual substitui a taxa automática.
+    const canLaunchFee = podeLancarTaxa(loggedUser);
+    const [feeProducts, setFeeProducts] = useState<Product[]>([]);
+    const [launchingFeeId, setLaunchingFeeId] = useState<string | null>(null);
+    useEffect(() => {
+        if (!canLaunchFee) return;
+        fetchFeeProducts(storeId).then(setFeeProducts).catch(() => setFeeProducts([]));
+    }, [storeId, canLaunchFee]);
+    const handleLaunchFee = async (product: Product) => {
+        if (!selectedTable || !canLaunchFee) return;
+        setLaunchingFeeId(product.id);
+        try {
+            const r = await addFeeItem({
+                storeId,
+                tableId: selectedTable.id,
+                productId: product.id,
+                operatorUserId: loggedUser.id,
+                operatorName: loggedUser.name,
+            });
+            if (!r.success) { toast.error(r.message || 'Não foi possível lançar a taxa.'); return; }
+            if (ehTaxaPercentual(product)) setRemovedServiceFees(prev => new Set(prev).add(selectedTable.id));
+            toast.success(`${product.name} ${r.updated ? 'recalculada' : 'lançada'}: R$ ${formatBRL(r.price ?? 0)}`);
+            await loadData();
+        } catch (e: any) {
+            toast.error('Não foi possível lançar a taxa: ' + (e?.message || 'tente de novo.'));
+        } finally {
+            setLaunchingFeeId(null);
+        }
+    };
+    // Taxa percentual lançada e depois entrou item novo na mesa: recalcula sozinha
+    // ao abrir o pagamento (uma tentativa por valor), antes de qualquer forma de
+    // pagamento lançada — o total não muda no meio do recebimento.
+    const feeRecalcKeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!showPaymentModal || !selectedTable || !currentTableSummary || !canLaunchFee) return;
+        if (paymentMethods.length > 0 || launchingFeeId) return;
+        const item = currentTableSummary.allItems.find(i => ehTaxaPercentual(i.product));
+        if (!item?.product?.fee_percent) return;
+        const esperado = valorTaxaPercentual(currentTableSummary.allItems, Number(item.product.fee_percent));
+        if (Math.abs(item.price_at_time - esperado) < 0.01) return;
+        const chave = `${selectedTable.id}:${esperado.toFixed(2)}`;
+        if (feeRecalcKeyRef.current === chave) return;
+        feeRecalcKeyRef.current = chave;
+        handleLaunchFee(item.product);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showPaymentModal, currentTableSummary, paymentMethods.length, launchingFeeId]);
 
     // Task 3 (frente-de-caixa): consome autoOpenTableId — assim que a lista
     // de mesas estiver carregada (tables.length > 0), acha a mesa pedida
@@ -5269,16 +5325,55 @@ NOTIFY pgrst, 'reload schema';`;
                                 showEmitirNotaToggle={emissaoFiscalConfigurada}
                                 emitirNota={emitirNotaFiscal}
                                 onEmitirNotaChange={setEmitirNotaFiscal}
-                                serviceFeeToggle={selectedTable && !!store.config?.charge_service_fee ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleToggleServiceFee(selectedTable.id, !currentTableSummary?.isServiceFeeRemovedForTable)}
-                                        className="mt-2 inline-flex items-center justify-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion u-press-sm"
-                                    >
-                                        {currentTableSummary?.isServiceFeeRemovedForTable
-                                            ? <><Plus size={14} /> Cobrar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>
-                                            : <><Trash2 size={14} /> Tirar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>}
-                                    </button>
+                                serviceFeeToggle={selectedTable ? (
+                                    <>
+                                        {!!store.config?.charge_service_fee && !currentTableSummary?.hasFeeItem && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleToggleServiceFee(selectedTable.id, !currentTableSummary?.isServiceFeeRemovedForTable)}
+                                                className="mt-2 inline-flex items-center justify-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion u-press-sm"
+                                            >
+                                                {currentTableSummary?.isServiceFeeRemovedForTable
+                                                    ? <><Plus size={14} /> Cobrar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>
+                                                    : <><Trash2 size={14} /> Tirar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>}
+                                            </button>
+                                        )}
+                                        {/* Taxas como produto (migration 138): só quem tem caixa vê e
+                                            lança. Cada uma vira item da conta com o código do Omie
+                                            (nota fiscal + Estoque); a percentual troca o cálculo
+                                            automático pelo item. */}
+                                        {canLaunchFee && feeProducts.length > 0 && currentTableSummary && (
+                                            <div className="mt-3 flex flex-wrap justify-center gap-2">
+                                                {feeProducts.map(fp => {
+                                                    const isPct = ehTaxaPercentual(fp);
+                                                    const lancada = currentTableSummary.allItems.find(i => i.product_id === fp.id);
+                                                    const valor = isPct
+                                                        ? valorTaxaPercentual(currentTableSummary.allItems, Number(fp.fee_percent))
+                                                        : getEffectivePrice(fp);
+                                                    const desatualizada = isPct && !!lancada && Math.abs(lancada.price_at_time - valor) >= 0.01;
+                                                    const travada = (isPct && !!lancada && !desatualizada) || paymentMethods.length > 0;
+                                                    const rotulo = isPct
+                                                        ? (lancada
+                                                            ? (desatualizada ? `Recalcular ${fp.name}: R$ ${formatBRL(valor)}` : `${fp.name} na conta · R$ ${formatBRL(lancada.price_at_time)}`)
+                                                            : `Lançar ${fp.name} (${formatServiceFeeRate(Number(fp.fee_percent) / 100)}) · R$ ${formatBRL(valor)}`)
+                                                        : `Lançar ${fp.name} · R$ ${formatBRL(valor)}`;
+                                                    return (
+                                                        <button
+                                                            key={fp.id}
+                                                            type="button"
+                                                            title={paymentMethods.length > 0 ? 'Pra lançar taxa, remova os pagamentos já lançados.' : undefined}
+                                                            disabled={travada || launchingFeeId !== null || (isPct && valor <= 0)}
+                                                            onClick={() => handleLaunchFee(fp)}
+                                                            className="inline-flex items-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--brand-soft)] text-[13px] font-semibold text-[var(--brand)] hover:brightness-95 disabled:bg-[var(--surface-2)] disabled:text-[var(--text-muted)] disabled:cursor-default u-motion u-press-sm"
+                                                        >
+                                                            {launchingFeeId === fp.id ? <RefreshCw size={14} className="animate-spin" /> : (isPct && lancada && !desatualizada ? <CheckCircle size={14} className="text-[var(--ok)]" /> : <Plus size={14} />)}
+                                                            {rotulo}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
                                 ) : undefined}
                             >
                                 {/* Destinatário (Task 17; 2026-09-21: NFC-e também, ver
@@ -7461,6 +7556,9 @@ const CaixaViewMeu: React.FC<{
                         dinheiroContado: closingCountedValue,
                         diferenca: result.difference ?? (closingCountedValue - (Number(resumo.expected_cash) || 0)),
                         taxaServico: resumo.service_fee_total != null ? { quantidade: Number(resumo.service_fee_count) || 0, total: Number(resumo.service_fee_total) || 0 } : null,
+                        outrasTaxas: Object.entries(resumo.fees_by_product ?? {})
+                            .filter(([, t]) => t.tipo === 'fixed')
+                            .map(([label, t]) => ({ label, quantidade: Number(t.quantidade) || 0, total: Number(t.total) || 0 })),
                     };
                     enqueueReceiptPrintJobs(store.id, `Fechamento de caixa - ${loggedUser.name}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${shift.id}`, 'fechamento_caixa')
                         .catch((e) => console.error('enqueueReceiptPrintJobs (fechamento de caixa) falhou:', e));
@@ -7536,7 +7634,7 @@ const CaixaViewMeu: React.FC<{
                 const tableOrders = activeOrders.filter(o => o.table_id === t.id);
                 const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
                 const subtotal = items.reduce((s, i) => s + i.price_at_time * i.quantity, 0);
-                const total = calculateOrderTotal(subtotal, !!store.config?.charge_service_fee, serviceFeeRate, t.service_fee_removed);
+                const total = calculateOrderTotal(subtotal, !!store.config?.charge_service_fee, serviceFeeRate, t.service_fee_removed || contaTemTaxaPercentual(items));
                 // Sem coluna dedicada de "pediu a conta às..." (fora de
                 // escopo desta task — ver relatório): usa o pedido mais
                 // recente lançado na mesa como proxy de última atividade,
@@ -7619,7 +7717,7 @@ const CaixaViewMeu: React.FC<{
                 const tableOrders = activeOrders.filter(o => o.table_id === t.id);
                 const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
                 const subtotal = items.reduce((s, i) => s + i.price_at_time * i.quantity, 0);
-                const total = calculateOrderTotal(subtotal, !!store.config?.charge_service_fee, serviceFeeRate, t.service_fee_removed);
+                const total = calculateOrderTotal(subtotal, !!store.config?.charge_service_fee, serviceFeeRate, t.service_fee_removed || contaTemTaxaPercentual(items));
                 const occupiedSince = tableOrders.reduce((earliest, o) => {
                     const ts = new Date(o.created_at).getTime();
                     return earliest === 0 || ts < earliest ? ts : earliest;
@@ -7635,7 +7733,7 @@ const CaixaViewMeu: React.FC<{
                 // segundo plano (ou um reimprimir manual) marca o item.
                 const pendingPrintItems = orderFlow === 'direct_print'
                     ? items
-                        .filter(i => (i.product?.destination === 'kitchen' || i.product?.destination === 'bar'))
+                        .filter(i => !ehTaxa(i.product) && (i.product?.destination === 'kitchen' || i.product?.destination === 'bar'))
                         .filter(i => !wasKitchenTicketPrinted(storeId, i.product!.destination === 'bar' ? 'bar' : 'kitchen', i.id))
                         .map(i => {
                             const { client, observation } = parseItemNote(i.notes || '');
@@ -8495,6 +8593,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     // campos de texto opcionais deste form (nao ha catalogo fechado, ao
     // contrario de PRODUCT_TAGS).
     const [pNcm, setPNcm] = useState('');
+    // Taxa (migration 138): '' = produto normal; 'fixed'/'percent' = só o caixa lança.
+    const [pFeeType, setPFeeType] = useState<'' | 'fixed' | 'percent'>('');
+    const [pFeePercent, setPFeePercent] = useState('');
     // Vínculo com Omie (2026-09-17) — 3 casos: 'none' (produto só existe
     // aqui, sem omie_codigo), 'link' (já existe um SKU no Omie — ex. veio do
     // backfill do cardápio antigo — só grava o código, não cria nada novo em
@@ -8855,6 +8956,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTags(product.tags ?? []);
             setPRecommendedIds((product.recommended_products || []).map(rp => rp.id));
             setPNcm(product.ncm ?? '');
+            setPFeeType(product.fee_type ?? '');
+            setPFeePercent(product.fee_percent != null ? String(product.fee_percent) : '');
             if (product.omie_codigo) {
                 setPOmieMode('link');
                 setPOmieCodeInput(product.omie_codigo);
@@ -8880,6 +8983,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPTags([]);
             setPRecommendedIds([]);
             setPNcm('');
+            setPFeeType('');
+            setPFeePercent('');
             setPOmieMode('none');
             setPOmieCodeInput('');
             setPOmieSearchTerm('');
@@ -8919,6 +9024,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             }
         }
 
+        // Taxa percentual: o preço do produto não é usado (o valor sai da conta).
+        let feePercentNum: number | null = null;
+        if (pFeeType === 'percent') {
+            feePercentNum = parseFloat(pFeePercent.replace(',', '.'));
+            if (isNaN(feePercentNum) || feePercentNum <= 0 || feePercentNum > 100) return toast.error('Percentual da taxa precisa ser entre 0 e 100.');
+        }
+
         setIsLoading(true);
 
         try {
@@ -8948,6 +9060,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 productId = editingProduct.id;
             } else {
                 productId = await createProduct(storeId, pCat, productData);
+            }
+
+            if ((pFeeType || null) !== (editingProduct?.fee_type ?? null) || (pFeeType === 'percent' && feePercentNum !== Number(editingProduct?.fee_percent))) {
+                try { await setProductFee(productId, storeId, pFeeType || null, feePercentNum); }
+                catch (e: any) { toast.error('Produto salvo, mas a configuração de taxa não foi salva: ' + (e.message || '')); }
             }
 
             if ((pSector || '') !== (editingProduct?.sector_id || '') || pIgnoreCat !== Boolean(editingProduct?.ignore_category_sector)) {
@@ -9189,6 +9306,14 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 )}
                             </h5>
                             {(() => {
+                                // Taxa (migration 138): mostra que só o caixa lança e, se percentual, o %.
+                                if (ehTaxa(prod)) {
+                                    return (
+                                        <span className="text-[13px] font-semibold text-[var(--brand)]">
+                                            {ehTaxaPercentual(prod) ? `Taxa · ${formatServiceFeeRate(Number(prod.fee_percent) / 100)} da conta` : `Taxa · R$ ${formatBRL(getEffectivePrice(prod))}`}
+                                        </span>
+                                    );
+                                }
                                 const effectivePrice = getEffectivePrice(prod);
                                 const hasActivePromo = effectivePrice < prod.price;
                                 return hasActivePromo ? (
@@ -9790,6 +9915,27 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                              value={pNcm}
                              onChange={e => setPNcm(e.target.value)}
                          />
+                    </div>
+
+                    {/* Taxa (migration 138): taxa de serviço, rolha, troca... Só o
+                        caixa lança, no pagamento da mesa; some do cardápio do
+                        cliente e do lançamento do garçom. */}
+                    <div className="flex flex-col gap-2 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                        <span className="text-sm font-semibold text-[var(--text)]">É uma taxa?</span>
+                        <select className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--brand)]/30 max-sm:text-base" value={pFeeType} onChange={e => setPFeeType(e.target.value as '' | 'fixed' | 'percent')}>
+                            <option value="">Não, é um produto normal</option>
+                            <option value="fixed">Sim, taxa de valor fixo (usa o preço acima)</option>
+                            <option value="percent">Sim, percentual sobre a conta (ex.: taxa de serviço)</option>
+                        </select>
+                        {pFeeType === 'percent' && (
+                            <Input label="Percentual (%)" type="number" inputMode="decimal" step="0.1" min="0" max="100" placeholder="10" value={pFeePercent} onChange={e => setPFeePercent(e.target.value)} />
+                        )}
+                        {pFeeType !== '' && (
+                            <p className="text-xs text-[var(--text-muted)]">
+                                Só quem tem permissão de caixa lança, no pagamento da mesa. Vincule ao código do Omie abaixo pra ir na nota fiscal e no estoque.
+                                {pFeeType === 'percent' ? ' O valor é calculado sobre os itens da conta e substitui a taxa de serviço automática.' : ''}
+                            </p>
+                        )}
                     </div>
 
                     {/* Vínculo com Omie (2026-09-17) — 3 casos, ver comentário

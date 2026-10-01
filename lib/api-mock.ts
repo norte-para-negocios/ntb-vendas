@@ -261,6 +261,12 @@ export const updateProductOrder = async (updates: { id: string; order: number }[
   updates.forEach(u => { const p = products.find(p => p.id === u.id); if (p) p.order = u.order; });
 };
 
+// Taxas como produto (migration 138) — mock sem taxas cadastradas.
+export const setProductFee = async (_id: string, _storeId: string, _feeType: 'fixed' | 'percent' | null, _feePercent: number | null) => {};
+export const fetchFeeProducts = async (_storeId: string) => [] as any[];
+export const addFeeItem = async (_params: { storeId: string; tableId: string; productId: string; quantity?: number; operatorUserId: string | null; operatorName: string | null }) =>
+  ({ success: false, message: 'Taxas não disponíveis no modo mock.' }) as { success: boolean; message?: string; price?: number; updated?: boolean };
+
 export const deleteProduct = async (id: string, _storeId: string) => {
   await delay();
   products = products.filter(p => p.id !== id);

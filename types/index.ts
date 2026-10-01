@@ -276,6 +276,10 @@ export interface Product {
   // produto pode nao ter NCM configurado ainda (emissao fiscal automatica
   // e' feature futura, cadastro do campo vem antes).
   ncm: string | null;
+  // Taxa (migration 138): produto que só o caixa lança na conta (lib/taxas.ts).
+  // 'fixed' = preço do produto; 'percent' = fee_percent % sobre os itens da conta.
+  fee_type?: 'fixed' | 'percent' | null;
+  fee_percent?: number | null;
 }
 
 export interface Order {

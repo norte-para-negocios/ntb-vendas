@@ -848,6 +848,8 @@ export function buildCashClosingText(opts: {
   diferenca: number | null;
   /** Taxa de serviço das contas do turno (30/09, pedido do Ramon) — ausente em app/RPC antigos. */
   taxaServico?: { quantidade: number; total: number } | null;
+  /** Taxas de valor fixo lançadas como item (rolha, troca...) — migration 139. */
+  outrasTaxas?: { label: string; quantidade: number; total: number }[];
   paperWidthMm?: number | null;
 }): string {
   const W = colunasDoPapel(opts.paperWidthMm);
@@ -882,6 +884,18 @@ export function buildCashClosingText(opts: {
     const qtd = String(opts.taxaServico.quantidade);
     const valor = formatBRL(opts.taxaServico.total);
     lines.push('*** Taxa de Servico ***', esqDir('Taxa de Servico', `${qtd}   ${valor}`, W), simples);
+  }
+
+  // Outras taxas lançadas como item pelo caixa (rolha, troca, frete — migration 139).
+  if (opts.outrasTaxas && opts.outrasTaxas.length > 0) {
+    lines.push('*** Outras Taxas ***');
+    opts.outrasTaxas.forEach((t) => {
+      wrapLine(t.label, W).forEach((l, i, arr) => {
+        if (i < arr.length - 1) lines.push(l);
+        else lines.push(esqDir(l, `${t.quantidade}   ${formatBRL(t.total)}`, W));
+      });
+    });
+    lines.push(simples);
   }
 
   if (opts.sangria || opts.suprimento) {
