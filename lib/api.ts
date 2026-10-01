@@ -872,6 +872,54 @@ export const setProductOmieCodigo = async (id: string, storeId: string, omieCodi
   if (error) throw error;
 };
 
+// Taxa como produto (migration 138, ver lib/taxas.ts). null = produto normal.
+export const setProductFee = async (id: string, storeId: string, feeType: 'fixed' | 'percent' | null, feePercent: number | null) => {
+  const { error } = await supabase.rpc('set_product_fee_secure', {
+    p_product_id: id,
+    p_store_id: storeId,
+    p_fee_type: feeType,
+    p_fee_percent: feeType === 'percent' ? feePercent : null,
+  });
+  if (error) throw error;
+};
+
+// Produtos-taxa da loja (botões "Taxas" no pagamento da mesa). products tem
+// select público (mesmo nível do cardápio).
+export const fetchFeeProducts = async (storeId: string): Promise<Product[]> => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('available', true)
+    .not('fee_type', 'is', null)
+    .order('order', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return (data || []) as Product[];
+};
+
+// Caixa lança uma taxa na conta da mesa. Preço calculado no servidor; taxa
+// percentual já lançada é recalculada (nunca duplica). Permissão de caixa
+// conferida na function pelo operador.
+export const addFeeItem = async (params: {
+  storeId: string;
+  tableId: string;
+  productId: string;
+  quantity?: number;
+  operatorUserId: string | null;
+  operatorName: string | null;
+}): Promise<{ success: boolean; message?: string; price?: number; updated?: boolean }> => {
+  const { data, error } = await supabase.rpc('add_fee_item_secure', {
+    p_store_id: params.storeId,
+    p_table_id: params.tableId,
+    p_product_id: params.productId,
+    p_quantity: params.quantity ?? 1,
+    p_operator_user_id: params.operatorUserId,
+    p_operator_name: params.operatorName,
+  });
+  if (error) return { success: false, message: error.message };
+  return data as { success: boolean; message?: string; price?: number; updated?: boolean };
+};
+
 export const deleteProduct = async (id: string, storeId: string) => {
   const { error } = await supabase.rpc('delete_product_secure', { p_product_id: id, p_store_id: storeId });
   if (error) throw error;
@@ -1775,6 +1823,8 @@ export interface CashShiftSummary {
   /** Taxa de serviço das contas do turno (migration 137). Ausente antes dela. */
   service_fee_total?: number;
   service_fee_count?: number;
+  /** Cada produto-taxa lançado no turno (migration 139). Ausente antes dela. */
+  fees_by_product?: Record<string, { tipo: 'fixed' | 'percent'; quantidade: number; total: number }>;
 }
 
 // Task 13 (fix offline): mesmo padrão de `fetchOpenCashShift` acima — só

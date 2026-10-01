@@ -1,0 +1,110 @@
+-- 139: fechamento do turno com taxas como item (depende da 138).
+-- Fechamento do turno (137) + taxas como item.
+-- Mudanças: (1) agrupa por PAGAMENTO (close_table_orders_secure copia o mesmo
+-- payment_details em todos os pedidos da mesa; com o pedido de taxas a mesa
+-- passa a ter 2+ pedidos e "total pago - total do pedido" por pedido contaria
+-- a taxa várias vezes); (2) subtotal vem dos itens não cancelados (orders.total
+-- não desconta item cancelado); (3) taxa = automática (pago - itens) + itens de
+-- taxa percentual; (4) fees_by_product: cada produto-taxa do turno (qtd/total).
+CREATE OR REPLACE FUNCTION public.fetch_cash_shift_summary_secure(p_shift_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_shift cash_shifts%rowtype;
+  v_totals_by_method jsonb;
+  v_totals_by_brand jsonb;
+  v_sangria numeric;
+  v_suprimento numeric;
+  v_expected numeric;
+  v_taxa_total numeric;
+  v_taxa_qtd int;
+  v_taxas_produto jsonb;
+begin
+  select * into v_shift from cash_shifts where id = p_shift_id;
+  if not found then
+    return null;
+  end if;
+
+  select coalesce(jsonb_object_agg(method, total), '{}'::jsonb) into v_totals_by_method
+  from (
+    select m->>'method' as method, sum((m->>'amount')::numeric) as total
+    from orders o, jsonb_array_elements(o.payment_details->'methods') m
+    where o.store_id = v_shift.store_id
+      and o.payment_details->>'cash_shift_id' = p_shift_id::text
+    group by m->>'method'
+  ) t;
+
+  select coalesce(jsonb_object_agg(brand, total), '{}'::jsonb) into v_totals_by_brand
+  from (
+    select m->>'brand' as brand, sum((m->>'amount')::numeric) as total
+    from orders o, jsonb_array_elements(o.payment_details->'methods') m
+    where o.store_id = v_shift.store_id
+      and o.payment_details->>'cash_shift_id' = p_shift_id::text
+      and m->>'method' in ('CREDIT', 'DEBIT')
+      and m->>'brand' is not null
+    group by m->>'brand'
+  ) t;
+
+  select coalesce(sum(amount), 0) into v_sangria from cash_movements where shift_id = p_shift_id and type = 'sangria';
+  select coalesce(sum(amount), 0) into v_suprimento from cash_movements where shift_id = p_shift_id and type = 'suprimento';
+  v_expected := public._cash_shift_expected_cash(p_shift_id);
+
+  with ped as (
+    select o.id, o.table_id, o.payment_details as pd
+    from orders o
+    where o.store_id = v_shift.store_id
+      and o.payment_details->>'cash_shift_id' = p_shift_id::text
+      and o.table_id is not null
+      and (o.payment_details->>'total') is not null
+  ), itens as (
+    select ped.id as order_id,
+      coalesce(sum(oi.price_at_time * oi.quantity) filter (where oi.id is not null and p.fee_type is null), 0) as itens,
+      coalesce(sum(oi.price_at_time * oi.quantity) filter (where p.fee_type = 'percent'), 0) as taxa_item,
+      coalesce(sum(oi.price_at_time * oi.quantity) filter (where p.fee_type = 'fixed'), 0) as outras
+    from ped
+    left join order_items oi on oi.order_id = ped.id and oi.status <> 'canceled'
+    left join products p on p.id = oi.product_id
+    group by ped.id
+  ), pagamentos as (
+    select (ped.pd->>'total')::numeric as pago, sum(i.itens) as itens, sum(i.taxa_item) as taxa_item, sum(i.outras) as outras
+    from ped join itens i on i.order_id = ped.id
+    group by ped.table_id, ped.pd->>'total', ped.pd->'methods', ped.pd->>'operador_id'
+  )
+  select coalesce(sum(taxa), 0), count(*) filter (where taxa > 0) into v_taxa_total, v_taxa_qtd
+  from (
+    select greatest(round(pago - itens - taxa_item - outras, 2), 0) + taxa_item as taxa
+    from pagamentos
+  ) t;
+
+  select coalesce(jsonb_object_agg(nome, jsonb_build_object('tipo', tipo, 'quantidade', qtd, 'total', total)), '{}'::jsonb)
+    into v_taxas_produto
+  from (
+    select p.name as nome, min(p.fee_type) as tipo, sum(oi.quantity) as qtd, round(sum(oi.price_at_time * oi.quantity), 2) as total
+    from orders o
+    join order_items oi on oi.order_id = o.id and oi.status <> 'canceled'
+    join products p on p.id = oi.product_id and p.fee_type is not null
+    where o.store_id = v_shift.store_id
+      and o.payment_details->>'cash_shift_id' = p_shift_id::text
+    group by p.name
+  ) t;
+
+  return jsonb_build_object(
+    'shift', to_jsonb(v_shift),
+    'totals_by_method', v_totals_by_method,
+    'totals_by_brand', v_totals_by_brand,
+    'total_sangria', v_sangria,
+    'total_suprimento', v_suprimento,
+    'expected_cash', v_expected,
+    'service_fee_total', v_taxa_total,
+    'service_fee_count', v_taxa_qtd,
+    'fees_by_product', v_taxas_produto,
+    'closing_counted_cash', v_shift.closing_counted_cash,
+    'difference', case when v_shift.status = 'closed' then v_shift.closing_counted_cash - v_expected else null end
+  );
+end;
+$function$;
+
+NOTIFY pgrst, 'reload schema';

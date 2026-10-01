@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { removerCategoriasSoEquipe } from '@/lib/menu';
+import { semTaxas, contaTemTaxaPercentual } from '@/lib/taxas';
 import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation, resolverUrlApi } from '@/lib/api';
 import { Category, CategoryGroup, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
@@ -2069,7 +2070,8 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
             setServiceFee(calculatedServiceFee);
             setTotal(calculateOrderTotal(calculatedSubtotal, isFeeEnabled, feeRate));
             setIsServiceFeeEnabled(isFeeEnabled);
-            setIsServiceFeeRemovedForTable(!!(storeConfig?.charge_service_fee && tableData?.service_fee_removed));
+            // Taxa de serviço lançada como item pelo caixa (migration 138): não é "removida", ela está na lista.
+            setIsServiceFeeRemovedForTable(!!(storeConfig?.charge_service_fee && tableData?.service_fee_removed) && !contaTemTaxaPercentual(data.items || []));
             setServiceFeeRate(feeRate);
 
             setItems(data.items);
@@ -2711,7 +2713,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         // Pass TRUE to fetch only available products
         const { categories: todasCategorias, categoryGroups: groups, products: todosProdutos, error: menuError } = await fetchMenu(store.id, true);
         // Categoria só da equipe (ex.: Embalagens) não aparece pro cliente.
-        const { categories, products } = removerCategoriasSoEquipe(todasCategorias, todosProdutos);
+        // Taxa (migration 138) também não: só o caixa lança.
+        const { categories, products } = removerCategoriasSoEquipe(todasCategorias, semTaxas(todosProdutos));
         setCategories(categories);
         setCategoryGroups(groups);
         setProducts(products);

@@ -3,6 +3,7 @@
 // imprime sozinho quando qualquer mesa pede a conta (Ramon, 29/09: pediu pelo celular e não saiu).
 import { calculateOrderTotal, calculateServiceFee, SERVICE_FEE_RATE } from './calc';
 import { getOrderItemDisplayName, parseItemNote } from './labels';
+import { contaTemTaxaPercentual } from './taxas';
 
 type ItemLike = { id: string; quantity: number; price_at_time: number; status?: string; created_at?: string; notes?: string | null; product?: any; selected_options?: any };
 type OrderLike = { id: string; table_id?: string | null; order_items?: ItemLike[] | null };
@@ -34,8 +35,10 @@ export function montarPreConta(
   const subtotal = itens.reduce((s, i) => s + i.price_at_time * i.quantity, 0);
   const rate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
   const cobra = !!store.config?.charge_service_fee;
-  const removida = cobra && !!table.service_fee_removed;
-  const charged = cobra && !removida;
+  // Taxa de serviço já lançada como item pelo caixa (migration 138): sai na lista, o automático não soma.
+  const temTaxaItem = contaTemTaxaPercentual(itens);
+  const removida = cobra && !!table.service_fee_removed && !temTaxaItem;
+  const charged = cobra && !removida && !temTaxaItem;
   return {
     storeName: store.name,
     cnpj: store.cnpj ?? undefined,

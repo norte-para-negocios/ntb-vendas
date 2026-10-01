@@ -2228,6 +2228,45 @@ Agora a equipe registra a venda de balcão no próprio painel. Tudo em
   com `DISABLE_FISCAL_RETRANSMISSAO=1` pra não virar um segundo processo
   retransmitindo nota pra SEFAZ.
 
+## Taxas como produto (migrations 138/139, 2026-10-01)
+
+Pedido do dono/Ramon: as taxas do Omie (família "TAXAS / DELIVERY" do Sertão:
+Taxa de Serviço 90875, Taxa de Rolha 90383, Taxa de Troca 90809, Couvert 90656,
+Taxa Frete 7..55 = 90345..90353) viram produto do cardápio ligado ao
+`omie_codigo`, e SÓ o caixa lança na conta. No sistema antigo a taxa de 10% já
+saía na NFC-e como item ("Taxa de Servico", qtd 1, ~10% do resto da conta,
+CFOP 5.102, NCM 0000.00.00 — conferido em `fat_cupom_itens`, 15.848 cupons).
+
+- `products.fee_type` (`'fixed'` = preço do produto; `'percent'` = `fee_percent`
+  % sobre os itens não-taxa da conta) + `fee_percent`. Configura no formulário
+  de produto ("É uma taxa?") via `set_product_fee_secure`.
+- `create_order_secure` recusa produto-taxa (cliente e garçom). Taxa só entra
+  por `add_fee_item_secure(store, mesa, produto, qtd, operador, nome)`: confere
+  permissão de caixa do operador (dono, `permissions.caixa`, ou conta
+  universal), calcula o preço no servidor, e grava o item num pedido PRÓPRIO
+  da mesa com status `accepted` (nunca `pending`: create_order_secure
+  reaproveitaria e `send_order_to_kitchen_secure` mandaria pra impressão) e
+  item `delivered` (fora do KDS/impressão). Taxa percentual já lançada é
+  RECALCULADA, nunca duplica; o modal de pagamento recalcula sozinho ao abrir
+  se entrou item depois.
+- Anti-cobrança dupla: lançar a percentual marca `tables.service_fee_removed`
+  e `lib/taxas.ts` (`contaTemTaxaPercentual`) faz todo cálculo automático de
+  10% (comanda, Caixa, pré-conta, conta do cliente) ignorar o automático
+  quando a conta tem o item.
+- Some do cardápio do cliente e do lançamento do garçom (`semTaxas`). UI do
+  caixa: botões "Lançar <taxa>" sob o total no modal "Receber pagamento" da
+  mesa (só `podeLancarTaxa`). Só MESA por enquanto (balcão não).
+- Nota fiscal e Estoque/Omie: item comum com `omie_codigo` — vai no
+  ImportarNFCe e na OP/baixa PDV pelo fluxo de sempre (sem código novo).
+  Produto-taxa precisa de NCM (usar `00000000`, igual ao sistema antigo) senão
+  a emissão recusa ("sem NCM").
+- 139 (fechamento do turno): agrupa por PAGAMENTO (close_table_orders_secure
+  copia o mesmo payment_details em todos os pedidos da mesa — com o pedido de
+  taxas, o cálculo antigo por pedido contava a conta inteira como taxa) e usa
+  a soma dos itens NÃO cancelados (orders.total não desconta cancelado, e a
+  137 perdia a taxa de toda conta com item cancelado). Devolve também
+  `fees_by_product`; a impressão do fechamento ganhou "Outras Taxas".
+
 ## Caixa por operador (`cash_shifts`, migration 062)
 
 Pedido direto do dono (2026-08-28, ao vivo): "frente de caixa"
