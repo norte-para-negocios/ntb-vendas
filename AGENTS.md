@@ -1111,6 +1111,37 @@ permitido DENTRO da mesma camada de preço (Tradicional só combina com
 Tradicional, etc.) — combinar sabores de camadas diferentes exigiria uma
 regra de precificação (ex.: cobrar o valor do sabor mais caro) que
 ninguém confirmou com o cliente ainda; ficou de fora de propósito.
+**SUPERADO em 2026-10-01 (pedido do Ramon, ver abaixo).**
+
+**Pizza com sabores de camadas diferentes (2026-10-01, migration 140).**
+Dois recursos genéricos novos de grupo/opção, aditivos (default = soma de
+sempre):
+- `product_option_groups.price_rule` (`'sum'`|`'max'`): opções escolhidas
+  em grupos `'max'` do MESMO item formam um pote e só a de maior acréscimo
+  é cobrada (empate: a 1ª na ordem grupo→opção). "Vale o sabor mais caro".
+- `product_options.variants` (jsonb): acréscimo e/ou `omie_codigo` que
+  mudam conforme OUTRA escolha do item, chaveado pelo NOME da opção
+  escolhida no outro grupo (ex. `{"Grande": {"price_delta": 20,
+  "omie_codigo": "90207"}, "Média": {"omie_codigo": "90209"}}`). Renomear
+  "Pequena/Média/Grande" quebra a ligação (o editor avisa).
+- Cálculo idêntico em `create_order_secure` (servidor) e
+  `resolveSelectedOptions` (`lib/calc.ts`, usado pelo `ProductModal` do
+  cliente e pelo `StoreProductModal` do garçom/balcão). O snapshot grava o
+  acréscimo e o código JÁ resolvidos, então impressão, OP do Estoque e
+  relatórios não mudaram. Paridade testada: 400 combinações aleatórias,
+  0 divergência de total, acréscimo por opção e código Omie.
+- Editor de produto: checkbox "Cobrar só o maior valor" por grupo;
+  `variants` não é editável na tela, mas é carregado e devolvido no Salvar.
+- Produto pronto: "Pizza Meio a Meio (qualquer sabor)" (Tamanho +0/+10/+30,
+  Sabor 1/Sabor 2 com os 52 sabores, acréscimo da camada Arretada +10,
+  Danada +30/+30/+20, Violeira +40/+40/+30; Omie por tamanho: G = "1/2 X G",
+  M = "1/2 X M", P = "X Pequena"). Criado na ZZ Laboratorio; pro Sertão o
+  script está em `scripts/sertao/2026-10-01-pizza-meio-a-meio.sql`
+  (aguarda OK do dono).
+- **Achado:** os produtos-camada de hoje mandam SEMPRE o código "1/2 X G"
+  pro Omie, em qualquer tamanho (Média e Pequena baixam como meia grande),
+  e pizza de 1 sabor só (Média/Grande) baixa UMA meia — metade do consumo.
+  A pizza nova corrige o tamanho; o "1 sabor = 2 meias" continua aberto.
 
 **Bug real achado e corrigido testando a baixa de estoque de verdade
 (2026-08-27, mesmo dia).** O script de consolidação só trocava o `name`

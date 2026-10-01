@@ -21,7 +21,7 @@ import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
-import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
+import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
 import { startOfflineSync, getSyncStatus, onSyncStatusChange, listarAcoesFalhas, reenviarAcaoFalha, descartarAcaoFalha, descreverAcaoFila, explicarDescarteAcao } from '@/lib/offline/sync';
@@ -45,7 +45,7 @@ import { descreverHoraDoPedido } from '@/lib/tempo';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
-import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
@@ -1927,12 +1927,10 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
         });
     };
 
-    const selectedOptions: SelectedOption[] = groups.flatMap(g =>
-        (selections[g.id] || []).flatMap(optId => {
-            const opt = g.options.find(o => o.id === optId);
-            return opt ? [{ group_id: g.id, option_id: opt.id, name: opt.name, price_delta: opt.price_delta }] : [];
-        })
-    );
+    // Acréscimo efetivo (variação por tamanho + "vale o sabor mais caro",
+    // migration 140) — mesma regra que create_order_secure cobra.
+    const selectedOptions: SelectedOption[] = resolveSelectedOptions(groups, selections)
+        .map(({ group_id, option_id, name, price_delta }) => ({ group_id, option_id, name, price_delta }));
     const unitPrice = getEffectivePrice(product) + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
     const missingRequired = groups.some(g => g.required && (selections[g.id] || []).length === 0);
 
@@ -1981,7 +1979,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                             <h4 className="font-semibold text-[15px] text-[var(--text)]">{group.name}</h4>
                             {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
                         </div>
-                        {group.options.map(opt => (
+                        {group.options.map(opt => { const optDelta = displayOptionDelta(groups, selections, group.id, opt); return (
                             <label key={opt.id} className="flex items-center justify-between py-2 cursor-pointer min-h-11 border-t border-[var(--border)] first-of-type:border-t-0">
                                 <span className="flex items-center gap-3 text-[15px] text-[var(--text)]">
                                     <input
@@ -1993,9 +1991,9 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                                     />
                                     {opt.name}
                                 </span>
-                                {opt.price_delta > 0 && <span className="text-[var(--text-muted)] text-[13px] font-medium num">+R$ {formatBRL(opt.price_delta)}</span>}
+                                {optDelta > 0 && <span className="text-[var(--text-muted)] text-[13px] font-medium num">+R$ {formatBRL(optDelta)}</span>}
                             </label>
-                        ))}
+                        ); })}
                     </div>
                 ))}
 
@@ -8406,9 +8404,13 @@ const groupIdOf = (p: Product) => p.category_id ?? UNCATEGORIZED_ID;
 // ainda porque nenhum produto com sabor (Pizza Arretada etc.) tinha sido
 // resalvo pela tela desde que os códigos foram gravados via SQL em
 // 2026-08-27. Corrigido carregando e devolvendo o campo.
-interface DraftOption { tempId: string; name: string; price_delta: string; available: boolean; omie_codigo: string }
+// `variants` (migration 140, preço/código por tamanho) não é editável nesta tela —
+// só é carregado e devolvido intacto, senão um "Salvar" apagaria a configuração
+// (mesma classe de bug do omie_codigo descrita acima).
+interface DraftOption { tempId: string; name: string; price_delta: string; available: boolean; omie_codigo: string; variants: ProductOption['variants'] }
 interface DraftOptionGroup {
     tempId: string; name: string; type: 'single' | 'multiple'; required: boolean;
+    price_rule: 'sum' | 'max'; // migration 140
     // min_select/max_select ficam como string no rascunho (mesmo padrão de
     // price_delta) — vazio = sem limite/null, só relevantes quando type === 'multiple'.
     min_select: string; max_select: string;
@@ -8418,9 +8420,10 @@ interface DraftOptionGroup {
 const toDraftGroups = (groups?: Product['option_groups']): DraftOptionGroup[] =>
     (groups || []).map(g => ({
         tempId: g.id, name: g.name, type: g.type, required: g.required,
+        price_rule: g.price_rule === 'max' ? 'max' : 'sum',
         min_select: g.min_select != null ? g.min_select.toString() : '',
         max_select: g.max_select != null ? g.max_select.toString() : '',
-        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString(), available: o.available, omie_codigo: o.omie_codigo ?? '' })),
+        options: g.options.map(o => ({ tempId: o.id, name: o.name, price_delta: o.price_delta.toString(), available: o.available, omie_codigo: o.omie_codigo ?? '', variants: o.variants ?? null })),
     }));
 
 // Soft-cap client-side (achado de robustez 2026-07-05): evita centenas de
@@ -8601,7 +8604,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             toast.error(`Limite de ${MAX_OPTION_GROUPS} grupos de opção por produto atingido.`);
             return;
         }
-        setPOptionGroups(prev => [...prev, { tempId: crypto.randomUUID(), name: '', type: 'single', required: false, min_select: '', max_select: '', options: [] }]);
+        setPOptionGroups(prev => [...prev, { tempId: crypto.randomUUID(), name: '', type: 'single', required: false, price_rule: 'sum', min_select: '', max_select: '', options: [] }]);
     };
     const updateOptionGroup = (tempId: string, patch: Partial<DraftOptionGroup>) => setPOptionGroups(prev => prev.map(g => g.tempId === tempId ? { ...g, ...patch } : g));
     const removeOptionGroup = (tempId: string) => setPOptionGroups(prev => prev.filter(g => g.tempId !== tempId));
@@ -8611,7 +8614,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             toast.error(`Limite de ${MAX_OPTIONS_PER_GROUP} opções por grupo atingido.`);
             return;
         }
-        setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0', available: true, omie_codigo: '' }] } : g));
+        setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: [...g.options, { tempId: crypto.randomUUID(), name: '', price_delta: '0', available: true, omie_codigo: '', variants: null }] } : g));
     };
     const updateOption = (groupTempId: string, optTempId: string, patch: Partial<DraftOption>) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.map(o => o.tempId === optTempId ? { ...o, ...patch } : o) } : g));
     const removeOption = (groupTempId: string, optTempId: string) => setPOptionGroups(prev => prev.map(g => g.tempId === groupTempId ? { ...g, options: g.options.filter(o => o.tempId !== optTempId) } : g));
@@ -8978,10 +8981,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             const groupsToSave: ProductOptionGroupInput[] = pOptionGroups
                 .filter(g => g.name.trim())
                 .map(g => ({
-                    name: g.name.trim(), type: g.type, required: g.required,
+                    name: g.name.trim(), type: g.type, required: g.required, price_rule: g.price_rule,
                     min_select: g.type === 'multiple' ? parseOptionalInt(g.min_select) : null,
                     max_select: g.type === 'multiple' ? parseOptionalInt(g.max_select) : null,
-                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0, available: o.available, omie_codigo: o.omie_codigo.trim() || null })),
+                    options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0, available: o.available, omie_codigo: o.omie_codigo.trim() || null, variants: o.variants ?? null })),
                 }));
             await syncProductOptionGroups(productId, groupsToSave);
 
@@ -9973,6 +9976,18 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         <input type="checkbox" checked={group.required} onChange={e => updateOptionGroup(group.tempId, { required: e.target.checked })}/> Obrigatório
                                     </label>
                                 </div>
+                                {/* migration 140: grupos marcados assim no mesmo produto (ex.: "Sabor 1"
+                                    e "Sabor 2") cobram só o maior acréscimo entre as escolhas. */}
+                                <label className="flex items-center gap-1 text-xs">
+                                    <input type="checkbox" checked={group.price_rule === 'max'} onChange={e => updateOptionGroup(group.tempId, { price_rule: e.target.checked ? 'max' : 'sum' })}/>
+                                    Cobrar só o maior valor (ex.: sabores de pizza meio a meio — marque em todos os grupos de sabor)
+                                </label>
+                                {group.options.some(o => o.variants && Object.keys(o.variants).length > 0) && (
+                                    <p className="text-xs text-[var(--text-muted)]">
+                                        Algumas opções têm preço/código Omie por {Array.from(new Set(group.options.flatMap(o => Object.keys(o.variants || {})))).join(' / ')} —
+                                        configurado pela equipe Norte e mantido ao salvar. Não renomeie essas escolhas.
+                                    </p>
+                                )}
                                 <p className="text-xs text-[var(--text-muted)]">
                                     "Escolha 1" mostra um seletor único (rádio) para o cliente; "Escolha vários" mostra
                                     caixas de seleção (checkbox), permitindo marcar mais de uma opção. Marcar

@@ -136,6 +136,80 @@ export function calculateCartItemUnitPrice(item: { product: { price: number; pro
   return getEffectivePrice(item.product) + addonsTotal;
 }
 
+// ---------------------------------------------------------------------------
+// Preço das opções escolhidas (migration 140) — ESPELHO EXATO do bloco de
+// opções de create_order_secure. Mudou um, muda o outro.
+//   a) variação: opt.variants[nome de uma opção escolhida em OUTRO grupo]
+//      sobrescreve price_delta/omie_codigo (1ª chave que bate na ordem
+//      grupo→opção vence);
+//   b) pote 'max': opções escolhidas em grupos price_rule='max' — só a de
+//      maior acréscimo é cobrada (empate: a 1ª na ordem), as outras viram 0;
+//   c) o chamador soma tudo (calculateCartItemUnitPrice).
+// Devolve as opções JÁ com o acréscimo efetivo, na ordem (grupo, opção) —
+// o mesmo que o servidor grava em order_items.selected_options.
+type PricingOption = { id: string; name: string; price_delta: number; omie_codigo?: string | null; variants?: Record<string, { price_delta?: number; omie_codigo?: string | null }> | null };
+type PricingGroup = { id: string; price_rule?: 'sum' | 'max'; options: PricingOption[] };
+
+type ChosenOption = { group: PricingGroup; option: PricingOption };
+
+function chosenInOrder(groups: PricingGroup[], selections: Record<string, string[]>): ChosenOption[] {
+  // `groups` já vem ordenado (fetchMenu ordena por "order"); dentro do grupo,
+  // a ordem é a das opções (não a ordem do clique) — igual ao servidor.
+  return groups.flatMap(group => {
+    const ids = selections[group.id] || [];
+    return group.options.filter(o => ids.includes(o.id)).map(option => ({ group, option }));
+  });
+}
+
+function resolveVariant(option: PricingOption, groupId: string, chosen: ChosenOption[]): { price_delta: number; omie_codigo: string | null } {
+  let price_delta = option.price_delta;
+  let omie_codigo = option.omie_codigo ?? null;
+  const variants = option.variants;
+  if (variants && typeof variants === 'object') {
+    const match = chosen.find(c => c.group.id !== groupId && Object.prototype.hasOwnProperty.call(variants, c.option.name));
+    const v = match ? variants[match.option.name] : undefined;
+    if (v && typeof v === 'object') {
+      if (typeof v.price_delta === 'number') price_delta = v.price_delta;
+      if (v.omie_codigo !== undefined) omie_codigo = v.omie_codigo ? String(v.omie_codigo).trim() || null : null;
+    }
+  }
+  return { price_delta, omie_codigo };
+}
+
+export function resolveSelectedOptions(
+  groups: PricingGroup[],
+  selections: Record<string, string[]>,
+): { group_id: string; option_id: string; name: string; price_delta: number; omie_codigo: string | null }[] {
+  const chosen = chosenInOrder(groups, selections);
+  const resolved = chosen.map(c => ({ ...c, ...resolveVariant(c.option, c.group.id, chosen) }));
+
+  let maxIdx = -1;
+  resolved.forEach((r, i) => {
+    if (r.group.price_rule === 'max' && (maxIdx < 0 || r.price_delta > resolved[maxIdx].price_delta)) maxIdx = i;
+  });
+
+  return resolved.map((r, i) => ({
+    group_id: r.group.id,
+    option_id: r.option.id,
+    name: r.option.name,
+    price_delta: r.group.price_rule === 'max' && i !== maxIdx ? 0 : r.price_delta,
+    omie_codigo: r.omie_codigo,
+  }));
+}
+
+// Acréscimo a MOSTRAR ao lado de uma opção ("+R$ 10"), com a variação já
+// resolvida pelas outras escolhas atuais (ex.: sabor Danada mostra +30 na
+// Média e +20 na Grande). Não aplica o pote 'max' — é o acréscimo daquele
+// sabor, não o que sobra depois de comparar com o outro sabor.
+export function displayOptionDelta(
+  groups: PricingGroup[],
+  selections: Record<string, string[]>,
+  groupId: string,
+  option: PricingOption,
+): number {
+  return resolveVariant(option, groupId, chosenInOrder(groups, selections)).price_delta;
+}
+
 export function calculateCartTotal(cart: { product: { price: number; promo_price?: number | null }; quantity: number; selectedOptions?: { price_delta: number }[] }[]): number {
   return cart.reduce((acc, item) => acc + calculateCartItemUnitPrice(item) * item.quantity, 0);
 }

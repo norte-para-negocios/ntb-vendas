@@ -2,7 +2,7 @@ import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCh
 import { vendaTemCobranca } from '@/lib/calc';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
 import { impressoraRecebe, type DocPrint } from '@/lib/printDocs';
-import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
+import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, OptionVariant, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
@@ -416,8 +416,10 @@ async function fetchOptionGroupsByProduct(storeId: string, includeUnavailable = 
     list.push({
       id: g.id, product_id: g.product_id, name: g.name, type: g.type, required: g.required,
       min_select: g.min_select ?? null, max_select: g.max_select ?? null, order: g.order,
+      price_rule: g.price_rule === 'max' ? 'max' : 'sum',
       options: (g.product_options || []).map((o: any) => ({
         id: o.id, group_id: o.group_id, name: o.name, price_delta: Number(o.price_delta), available: o.available, order: o.order, omie_codigo: o.omie_codigo ?? null,
+        variants: o.variants ?? null,
       })),
     });
     groupsByProduct.set(g.product_id, list);
@@ -599,7 +601,8 @@ export interface ProductOptionGroupInput {
   required: boolean;
   min_select?: number | null;
   max_select?: number | null;
-  options: { name: string; price_delta: number; available?: boolean; omie_codigo?: string | null }[];
+  price_rule?: 'sum' | 'max'; // migration 140
+  options: { name: string; price_delta: number; available?: boolean; omie_codigo?: string | null; variants?: Record<string, OptionVariant> | null }[];
 }
 
 // Sync atomico via function Postgres security definer (migration 017) — antes
@@ -618,7 +621,8 @@ export const syncProductOptionGroups = async (productId: string, groups: Product
       required: g.required,
       min_select: g.min_select ?? null,
       max_select: g.max_select ?? null,
-      options: g.options.map(o => ({ name: o.name, price_delta: o.price_delta, available: o.available ?? true, omie_codigo: o.omie_codigo ?? null })),
+      price_rule: g.price_rule === 'max' ? 'max' : 'sum',
+      options: g.options.map(o => ({ name: o.name, price_delta: o.price_delta, available: o.available ?? true, omie_codigo: o.omie_codigo ?? null, variants: o.variants ?? null })),
     })),
   });
   if (error) throw error;

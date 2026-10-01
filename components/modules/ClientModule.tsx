@@ -16,7 +16,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE, resolveSelectedOptions, displayOptionDelta } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { isCategoryAvailableNow } from '@/lib/schedule';
@@ -1356,12 +1356,10 @@ const ProductModal: React.FC<{
         });
     };
 
-    const selectedOptions: SelectedOption[] = groups.flatMap(g =>
-        (selections[g.id] || []).flatMap(optId => {
-            const opt = g.options.find(o => o.id === optId);
-            return opt ? [{ group_id: g.id, option_id: opt.id, name: opt.name, price_delta: opt.price_delta }] : [];
-        })
-    );
+    // Acréscimo efetivo (variação por tamanho + "vale o sabor mais caro",
+    // migration 140) — mesma regra que create_order_secure cobra.
+    const selectedOptions: SelectedOption[] = resolveSelectedOptions(groups, selections)
+        .map(({ group_id, option_id, name, price_delta }) => ({ group_id, option_id, name, price_delta }));
     const unitPrice = getEffectivePrice(product) + selectedOptions.reduce((a, o) => a + o.price_delta, 0);
     // Mínimo efetivo: grupo obrigatório sempre exige pelo menos 1 (ou
     // min_select, se maior); grupo opcional só exige algo se min_select
@@ -1484,6 +1482,7 @@ const ProductModal: React.FC<{
                             {visibleOptions.map(opt => {
                                 const isChecked = groupSelections.includes(opt.id);
                                 const isDisabled = atMaxLimit && !isChecked;
+                                const optDelta = displayOptionDelta(groups, selections, group.id, opt);
                                 return (
                                     <label
                                         key={opt.id}
@@ -1497,9 +1496,9 @@ const ProductModal: React.FC<{
                                     >
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[14px] text-[var(--text)]">{opt.name}</span>
-                                            {opt.price_delta > 0 && (
+                                            {optDelta > 0 && (
                                                 <span className="block text-[13px] text-[var(--text-muted)] mt-0.5">
-                                                    + R$ {formatBRL(opt.price_delta)}
+                                                    + R$ {formatBRL(optDelta)}
                                                 </span>
                                             )}
                                         </span>

@@ -210,6 +210,16 @@ export interface ProductOption {
   // sido lida de volta por `fetchMenu` nem exposta no editor (achado real
   // 2026-09-22: "cadê o código do omie em cada variação").
   omie_codigo?: string | null;
+  // migration 140: valor/código que muda conforme OUTRA escolha do mesmo item,
+  // chaveado pelo nome da opção escolhida no outro grupo (ex. sabor de pizza
+  // por tamanho: {"Grande": {"price_delta": 20, "omie_codigo": "90207"}}).
+  // Resolvido por resolveSelectedOptions (lib/calc.ts) e por create_order_secure.
+  variants?: Record<string, OptionVariant> | null;
+}
+
+export interface OptionVariant {
+  price_delta?: number;
+  omie_codigo?: string | null;
 }
 
 export interface ProductOptionGroup {
@@ -221,6 +231,10 @@ export interface ProductOptionGroup {
   min_select?: number | null; // migration 017 — so' se aplica a type='multiple', null = sem limite
   max_select?: number | null;
   order: number;
+  // migration 140: 'sum' (padrão) soma os acréscimos; 'max' = todas as opções
+  // escolhidas em grupos 'max' do item formam um pote e só a maior é cobrada
+  // (pizza meio a meio: vale o sabor mais caro).
+  price_rule?: 'sum' | 'max';
   options: ProductOption[]; // anexado em runtime por fetchMenu, nao e coluna de banco
 }
 
