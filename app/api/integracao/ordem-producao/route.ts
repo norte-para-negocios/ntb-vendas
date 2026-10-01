@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
   const { data: items } = await admin
     .from('order_items')
-    .select('order_id, quantity, status, selected_options, product:products(omie_codigo, destination, sector_id, category_id, ignore_category_sector)')
+    .select('order_id, quantity, status, selected_options, product:products(omie_codigo, destination, sector_id, category_id, ignore_category_sector, fee_type)')
     .in('order_id', pendentesDeOp);
 
   // Regra do dono (30/09): a saída só vai como movimento de PDV no Omie quando a venda
@@ -178,9 +178,11 @@ export async function POST(request: NextRequest) {
   for (const item of items ?? []) {
     if (item.status === 'canceled') continue;
 
-    const produto = (item as any).product as { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null; sector_id?: string | null; category_id?: string | null; ignore_category_sector?: boolean } | null;
-    const destination = produto?.destination ?? null;
-    const setorId = setorDoItem(produto, catSetor);
+    const produto = (item as any).product as { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null; sector_id?: string | null; category_id?: string | null; ignore_category_sector?: boolean; fee_type?: string | null } | null;
+    // Taxa (rolha, frete, serviço...) baixa no estoque padrão da loja, não em Cozinha/Bar/Pizzaria (pedido do Ramon, 01/10).
+    const ehTaxaItem = !!produto?.fee_type;
+    const destination = ehTaxaItem ? null : (produto?.destination ?? null);
+    const setorId = ehTaxaItem ? null : setorDoItem(produto, catSetor);
     const setor = setorId ? nomeSetor.get(setorId) ?? null : null;
     const localEstoque = localEstoqueDoItem(mapaLocais, setorId, destination);
     const comNota = comNotaDoPedido((item as { order_id: string }).order_id);
