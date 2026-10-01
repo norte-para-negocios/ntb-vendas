@@ -1772,6 +1772,9 @@ export interface CashShiftSummary {
   expected_cash: number;
   closing_counted_cash: number | null;
   difference: number | null;
+  /** Taxa de serviço das contas do turno (migration 137). Ausente antes dela. */
+  service_fee_total?: number;
+  service_fee_count?: number;
 }
 
 // Task 13 (fix offline): mesmo padrão de `fetchOpenCashShift` acima — só

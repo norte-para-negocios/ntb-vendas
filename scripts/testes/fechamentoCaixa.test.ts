@@ -26,6 +26,7 @@ for (const [mm, W] of [[80, 48], [58, 32]] as const) {
     dinheiroEsperado: 322.86,
     dinheiroContado: 322.86,
     diferenca: 0,
+    taxaServico: { quantidade: 12, total: 177.81 },
     paperWidthMm: mm,
   });
   const l = txt.split('\n');
@@ -33,6 +34,9 @@ for (const [mm, W] of [[80, 48], [58, 32]] as const) {
   assert.ok(cheias.every((x) => x.length <= W), `[${mm}] nenhuma linha passa de ${W} colunas: ${cheias.find((x) => x.length > W)}`);
   assert.ok(l.some((x) => x.trim() === 'POSICAO DO CAIXA'), `[${mm}] título`);
   assert.ok(txt.includes('Gicelio Buery') && txt.includes('28/09/2026'), 'operador e data');
+  // Taxa de serviço (pedido do Ramon, 30/09): igual ao fechamento antigo, "Taxa de Servico 12 / 177,81".
+  const taxa = l.find((x) => x.startsWith('Taxa de Servico'));
+  assert.ok(taxa && taxa.includes('12') && taxa.endsWith('177,81') && taxa.length === W, `[${mm}] linha da taxa: ${taxa}`);
   const total = l.filter((x) => x.startsWith('TOTAL'));
   assert.equal(total.length, 3, `[${mm}] total do resumo, das vendas e dos cartões`);
   assert.ok(total.every((x) => x.length === W), `[${mm}] TOTAL alinhado à direita`);

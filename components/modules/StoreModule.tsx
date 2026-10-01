@@ -7462,6 +7462,7 @@ const CaixaViewMeu: React.FC<{
                         dinheiroEsperado: Number(resumo.expected_cash) || 0,
                         dinheiroContado: closingCountedValue,
                         diferenca: result.difference ?? (closingCountedValue - (Number(resumo.expected_cash) || 0)),
+                        taxaServico: resumo.service_fee_total != null ? { quantidade: Number(resumo.service_fee_count) || 0, total: Number(resumo.service_fee_total) || 0 } : null,
                     };
                     enqueueReceiptPrintJobs(store.id, `Fechamento de caixa - ${loggedUser.name}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${shift.id}`, 'fechamento_caixa')
                         .catch((e) => console.error('enqueueReceiptPrintJobs (fechamento de caixa) falhou:', e));

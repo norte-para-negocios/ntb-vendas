@@ -846,6 +846,8 @@ export function buildCashClosingText(opts: {
   dinheiroEsperado: number;
   dinheiroContado: number | null;
   diferenca: number | null;
+  /** Taxa de serviço das contas do turno (30/09, pedido do Ramon) — ausente em app/RPC antigos. */
+  taxaServico?: { quantidade: number; total: number } | null;
   paperWidthMm?: number | null;
 }): string {
   const W = colunasDoPapel(opts.paperWidthMm);
@@ -873,6 +875,13 @@ export function buildCashClosingText(opts: {
     lines.push('*** Resumo dos Cartoes ***');
     opts.cartoes.forEach((c) => lines.push(linha(c.label, c.total)));
     lines.push(linha('TOTAL', opts.cartoes.reduce((s, c) => s + c.total, 0)), simples);
+  }
+
+  if (opts.taxaServico) {
+    // Igual ao fechamento do sistema antigo: quantidade de contas com taxa e o total (repasse, não receita).
+    const qtd = String(opts.taxaServico.quantidade);
+    const valor = formatBRL(opts.taxaServico.total);
+    lines.push('*** Taxa de Servico ***', esqDir('Taxa de Servico', `${qtd}   ${valor}`, W), simples);
   }
 
   if (opts.sangria || opts.suprimento) {
