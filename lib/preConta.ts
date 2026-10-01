@@ -15,9 +15,9 @@ function itensAtivos(tableId: string, orders: OrderLike[]): { order: OrderLike; 
 }
 
 // Mesma mesa + mesmos itens = mesma chave: garçom e caixa (ou dois PCs) nunca imprimem a mesma pré-conta 2x;
-// entrou item novo, a chave muda e a nova pré-conta sai.
+// entrou item novo (ou o caixa editou o valor da taxa), a chave muda e a nova pré-conta sai.
 export function chavePreConta(tableId: string, orders: OrderLike[]): string {
-  const ids = itensAtivos(tableId, orders).map(({ item }) => `${item.id.slice(0, 8)}x${item.quantity}`).sort().join(',');
+  const ids = itensAtivos(tableId, orders).map(({ item }) => `${item.id.slice(0, 8)}x${item.quantity}@${item.price_at_time}`).sort().join(',');
   let h = 0;
   for (let i = 0; i < ids.length; i++) h = (Math.imul(31, h) + ids.charCodeAt(i)) | 0;
   return `pre-conta:${tableId}:${(h >>> 0).toString(36)}`;

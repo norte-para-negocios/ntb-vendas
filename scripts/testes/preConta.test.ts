@@ -28,4 +28,11 @@ assert.equal(k1, chavePreConta('t1', [...orders].reverse()), 'ordem não importa
 const mais = [...orders, { id: 'dddddddd-4', table_id: 't1', order_items: [{ id: 'i4', quantity: 1, price_at_time: 5, status: 'pending', created_at: '', product: { name: 'Água' } }] }];
 assert.notEqual(k1, chavePreConta('t1', mais), 'item novo pede pré-conta nova');
 assert.ok(k1.startsWith('pre-conta:t1:'));
+// taxa editada pelo caixa (mesmo item, valor novo) pede pré-conta nova
+const comTaxa = (v: number) => [...orders, { id: 'eeeeeeee-5', table_id: 't1', order_items: [{ id: 'i5', quantity: 1, price_at_time: v, status: 'delivered', created_at: '', product: { name: 'Taxa de Serviço (10%)', fee_type: 'percent', fee_percent: 10 } }] }];
+assert.notEqual(chavePreConta('t1', comTaxa(8.57)), chavePreConta('t1', comTaxa(6)), 'taxa editada pede pré-conta nova');
+const pc = montarPreConta(store, table, comTaxa(6))!;
+assert.equal(pc.items.length, 3, 'item de taxa aparece na pré-conta');
+assert.equal(pc.serviceFee.charged, false, 'com item de taxa o automático não soma');
+assert.equal(pc.total, 56, 'total usa o valor editado da taxa (50 + 6)');
 console.log('ok');

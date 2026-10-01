@@ -46,7 +46,7 @@ import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceip
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta } from '@/lib/calc';
-import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, podeLancarTaxa } from '@/lib/taxas';
+import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
@@ -3791,7 +3791,43 @@ NOTIFY pgrst, 'reload schema';`;
         if (!canLaunchFee) return;
         fetchFeeProducts(storeId).then(setFeeProducts).catch(() => setFeeProducts([]));
     }, [storeId, canLaunchFee]);
-    const handleLaunchFee = async (product: Product) => {
+    // Taxa editável (migration 141, pedido do Ramon): o caixa digita o valor em R$ ou o percentual
+    // (menor ou maior que 10) e o item grava exatamente isso. Editar de novo atualiza o MESMO item.
+    const [editandoTaxaId, setEditandoTaxaId] = useState<string | null>(null);
+    const [taxaValorInput, setTaxaValorInput] = useState('');
+    const [taxaPercentInput, setTaxaPercentInput] = useState('');
+    const paraNumero = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')));
+    const abrirEdicaoTaxa = (fp: Product) => {
+        if (!currentTableSummary) return;
+        const lancada = currentTableSummary.allItems.find(i => i.product_id === fp.id);
+        if (ehTaxaPercentual(fp)) {
+            const base = baseDaTaxaPercentual(currentTableSummary.allItems);
+            const valor = lancada ? lancada.price_at_time : valorTaxaPercentual(currentTableSummary.allItems, Number(fp.fee_percent));
+            setTaxaValorInput(valor.toFixed(2).replace('.', ','));
+            const pct = lancada?.fee_manual && lancada.fee_manual_percent != null ? Number(lancada.fee_manual_percent) : (base > 0 ? Math.round((valor / base) * 10000) / 100 : Number(fp.fee_percent));
+            setTaxaPercentInput(String(pct).replace('.', ','));
+        } else {
+            setTaxaValorInput(getEffectivePrice(fp).toFixed(2).replace('.', ','));
+            setTaxaPercentInput('');
+        }
+        setEditandoTaxaId(fp.id);
+    };
+    // Digitou num campo: o outro acompanha (valor <-> % sobre a conta), pra ver a conta antes de aplicar.
+    const aoDigitarTaxaValor = (v: string) => {
+        setTaxaValorInput(v);
+        if (!currentTableSummary) return;
+        const base = baseDaTaxaPercentual(currentTableSummary.allItems);
+        const n = paraNumero(v);
+        setTaxaPercentInput(n != null && !Number.isNaN(n) && base > 0 ? String(Math.round((n / base) * 10000) / 100).replace('.', ',') : '');
+    };
+    const aoDigitarTaxaPercent = (v: string) => {
+        setTaxaPercentInput(v);
+        if (!currentTableSummary) return;
+        const base = baseDaTaxaPercentual(currentTableSummary.allItems);
+        const n = paraNumero(v);
+        setTaxaValorInput(n != null && !Number.isNaN(n) ? (Math.round(base * n) / 100).toFixed(2).replace('.', ',') : '');
+    };
+    const handleLaunchFee = async (product: Product, edicao?: { amount?: number | null; percent?: number | null }) => {
         if (!selectedTable || !canLaunchFee) return;
         setLaunchingFeeId(product.id);
         try {
@@ -3801,10 +3837,14 @@ NOTIFY pgrst, 'reload schema';`;
                 productId: product.id,
                 operatorUserId: loggedUser.id,
                 operatorName: loggedUser.name,
+                amount: edicao?.amount,
+                percent: edicao?.percent,
             });
             if (!r.success) { toast.error(r.message || 'Não foi possível lançar a taxa.'); return; }
             if (ehTaxaPercentual(product)) setRemovedServiceFees(prev => new Set(prev).add(selectedTable.id));
-            toast.success(`${product.name} ${r.updated ? 'recalculada' : 'lançada'}: R$ ${formatBRL(r.price ?? 0)}`);
+            setEditandoTaxaId(null);
+            if (r.removed) toast.success(`${product.name} removida da conta.`);
+            else toast.success(`${product.name} ${r.updated ? 'ajustada' : 'lançada'}: R$ ${formatBRL(r.price ?? 0)}`);
             await loadData();
         } catch (e: any) {
             toast.error('Não foi possível lançar a taxa: ' + (e?.message || 'tente de novo.'));
@@ -3812,21 +3852,35 @@ NOTIFY pgrst, 'reload schema';`;
             setLaunchingFeeId(null);
         }
     };
+    const handleAplicarEdicaoTaxa = (fp: Product) => {
+        if (!currentTableSummary) return;
+        const valor = paraNumero(taxaValorInput);
+        const percent = paraNumero(taxaPercentInput);
+        if (ehTaxaPercentual(fp)) {
+            // Os dois campos andam juntos; o valor em R$ é o que o cliente pagou, então ele manda.
+            const r = resolverTaxaEditada(baseDaTaxaPercentual(currentTableSummary.allItems), valor != null ? { valor } : { percent });
+            if (!r.ok) { toast.error(r.message); return; }
+            handleLaunchFee(fp, valor != null ? { amount: r.valor } : { percent: r.percent });
+        } else {
+            const r = resolverValorTaxaFixa(valor ?? NaN);
+            if (!r.ok) { toast.error(r.message); return; }
+            handleLaunchFee(fp, Math.abs(r.valor - getEffectivePrice(fp)) < 0.005 ? undefined : { amount: r.valor });
+        }
+    };
     // Taxa percentual lançada e depois entrou item novo na mesa: recalcula sozinha
     // ao abrir o pagamento (uma tentativa por valor), antes de qualquer forma de
-    // pagamento lançada — o total não muda no meio do recebimento.
+    // pagamento lançada — o total não muda no meio do recebimento. Taxa editada em R$
+    // nunca recalcula; editada em % recalcula com o % digitado (taxaPercentualDesatualizada).
     const feeRecalcKeyRef = useRef<string | null>(null);
     useEffect(() => {
         if (!showPaymentModal || !selectedTable || !currentTableSummary || !canLaunchFee) return;
         if (paymentMethods.length > 0 || launchingFeeId) return;
-        const item = currentTableSummary.allItems.find(i => ehTaxaPercentual(i.product));
-        if (!item?.product?.fee_percent) return;
-        const esperado = valorTaxaPercentual(currentTableSummary.allItems, Number(item.product.fee_percent));
-        if (Math.abs(item.price_at_time - esperado) < 0.01) return;
-        const chave = `${selectedTable.id}:${esperado.toFixed(2)}`;
+        const velha = taxaPercentualDesatualizada(currentTableSummary.allItems);
+        if (!velha?.item.product) return;
+        const chave = `${selectedTable.id}:${velha.esperado.toFixed(2)}`;
         if (feeRecalcKeyRef.current === chave) return;
         feeRecalcKeyRef.current = chave;
-        handleLaunchFee(item.product);
+        handleLaunchFee(velha.item.product as Product);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showPaymentModal, currentTableSummary, paymentMethods.length, launchingFeeId]);
 
@@ -5350,25 +5404,83 @@ NOTIFY pgrst, 'reload schema';`;
                                                     const valor = isPct
                                                         ? valorTaxaPercentual(currentTableSummary.allItems, Number(fp.fee_percent))
                                                         : getEffectivePrice(fp);
-                                                    const desatualizada = isPct && !!lancada && Math.abs(lancada.price_at_time - valor) >= 0.01;
+                                                    const velha = isPct ? taxaPercentualDesatualizada(currentTableSummary.allItems) : null;
+                                                    const desatualizada = !!velha && velha.item.product_id === fp.id;
+                                                    const valorRecalc = desatualizada ? velha!.esperado : valor;
                                                     const travada = (isPct && !!lancada && !desatualizada) || paymentMethods.length > 0;
                                                     const rotulo = isPct
                                                         ? (lancada
-                                                            ? (desatualizada ? `Recalcular ${fp.name}: R$ ${formatBRL(valor)}` : `${fp.name} na conta · R$ ${formatBRL(lancada.price_at_time)}`)
+                                                            ? (desatualizada ? `Recalcular ${fp.name}: R$ ${formatBRL(valorRecalc)}` : `${fp.name} na conta · R$ ${formatBRL(lancada.price_at_time)}`)
                                                             : `Lançar ${fp.name} (${formatServiceFeeRate(Number(fp.fee_percent) / 100)}) · R$ ${formatBRL(valor)}`)
                                                         : `Lançar ${fp.name} · R$ ${formatBRL(valor)}`;
+                                                    const editando = editandoTaxaId === fp.id;
+                                                    const podeEditar = paymentMethods.length === 0 && launchingFeeId === null && (!isPct || baseDaTaxaPercentual(currentTableSummary.allItems) > 0);
                                                     return (
-                                                        <button
-                                                            key={fp.id}
-                                                            type="button"
-                                                            title={paymentMethods.length > 0 ? 'Pra lançar taxa, remova os pagamentos já lançados.' : undefined}
-                                                            disabled={travada || launchingFeeId !== null || (isPct && valor <= 0)}
-                                                            onClick={() => handleLaunchFee(fp)}
-                                                            className="inline-flex items-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--brand-soft)] text-[13px] font-semibold text-[var(--brand)] hover:brightness-95 disabled:bg-[var(--surface-2)] disabled:text-[var(--text-muted)] disabled:cursor-default u-motion u-press-sm"
-                                                        >
-                                                            {launchingFeeId === fp.id ? <RefreshCw size={14} className="animate-spin" /> : (isPct && lancada && !desatualizada ? <CheckCircle size={14} className="text-[var(--ok)]" /> : <Plus size={14} />)}
-                                                            {rotulo}
-                                                        </button>
+                                                        <div key={fp.id} className="flex flex-col items-center gap-2">
+                                                            <div className="inline-flex items-center gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    title={paymentMethods.length > 0 ? 'Pra lançar taxa, remova os pagamentos já lançados.' : undefined}
+                                                                    disabled={travada || launchingFeeId !== null || (isPct && valor <= 0)}
+                                                                    onClick={() => handleLaunchFee(fp)}
+                                                                    className="inline-flex items-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--brand-soft)] text-[13px] font-semibold text-[var(--brand)] hover:brightness-95 disabled:bg-[var(--surface-2)] disabled:text-[var(--text-muted)] disabled:cursor-default u-motion u-press-sm"
+                                                                >
+                                                                    {launchingFeeId === fp.id ? <RefreshCw size={14} className="animate-spin" /> : (isPct && lancada && !desatualizada ? <CheckCircle size={14} className="text-[var(--ok)]" /> : <Plus size={14} />)}
+                                                                    {rotulo}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={`Editar ${fp.name}`}
+                                                                    title={isPct ? 'Editar o valor ou o percentual da taxa' : 'Cobrar um valor diferente'}
+                                                                    disabled={!podeEditar}
+                                                                    onClick={() => (editando ? setEditandoTaxaId(null) : abrirEdicaoTaxa(fp))}
+                                                                    className="inline-flex items-center justify-center h-8 w-8 max-sm:h-11 max-sm:w-11 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] disabled:opacity-50 disabled:cursor-default u-motion u-press-sm"
+                                                                >
+                                                                    <Pencil size={14} />
+                                                                </button>
+                                                            </div>
+                                                            {editando && (
+                                                                <div className="w-full max-w-sm bg-[var(--surface-2)] p-3 rounded-[14px] space-y-2 text-left">
+                                                                    <p className="text-[13px] font-semibold text-[var(--text-muted)]">
+                                                                        {isPct
+                                                                            ? `${fp.name}: valor cobrado ou percentual da conta (R$ ${formatBRL(baseDaTaxaPercentual(currentTableSummary.allItems))}). Zero tira a taxa.`
+                                                                            : `${fp.name}: valor cobrado (cadastrado R$ ${formatBRL(getEffectivePrice(fp))})`}
+                                                                    </p>
+                                                                    <div className="flex gap-2">
+                                                                        <label className="flex-1 text-[12px] text-[var(--text-muted)]">
+                                                                            Valor (R$)
+                                                                            <input
+                                                                                type="text"
+                                                                                inputMode="decimal"
+                                                                                autoComplete="off"
+                                                                                value={taxaValorInput}
+                                                                                onChange={(e) => aoDigitarTaxaValor(e.target.value)}
+                                                                                className="mt-1 w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px] num"
+                                                                            />
+                                                                        </label>
+                                                                        {isPct && (
+                                                                            <label className="flex-1 text-[12px] text-[var(--text-muted)]">
+                                                                                Percentual (%)
+                                                                                <input
+                                                                                    type="text"
+                                                                                    inputMode="decimal"
+                                                                                    autoComplete="off"
+                                                                                    value={taxaPercentInput}
+                                                                                    onChange={(e) => aoDigitarTaxaPercent(e.target.value)}
+                                                                                    className="mt-1 w-full h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px] num"
+                                                                                />
+                                                                            </label>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex gap-2 justify-end">
+                                                                        <button type="button" onClick={() => setEditandoTaxaId(null)} className="h-9 max-sm:h-11 px-3.5 rounded-full bg-[var(--surface)] text-[13px] font-semibold text-[var(--text-muted)] u-motion u-press-sm">Cancelar</button>
+                                                                        <button type="button" disabled={launchingFeeId !== null} onClick={() => handleAplicarEdicaoTaxa(fp)} className="h-9 max-sm:h-11 px-3.5 rounded-full bg-[var(--brand)] text-[13px] font-semibold text-white disabled:opacity-50 u-motion u-press-sm">
+                                                                            {lancada && isPct ? 'Aplicar' : 'Lançar'}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     );
                                                 })}
                                             </div>

@@ -314,6 +314,8 @@ export interface OrderItem {
   added_by_role?: 'cliente' | 'garcom'; // migration 046 — quem lançou o item (default 'cliente')
   added_by_name?: string | null; // migration 053 — nome de quem lançou (só populado quando added_by_role === 'garcom')
   fiscal_nota_id?: string | null; // migration 055 — nota fiscal individual que já cobriu este item (null = ainda não faturado)
+  fee_manual?: boolean | null; // migration 141 — taxa com valor digitado pelo caixa (não recalcula sozinha por R$)
+  fee_manual_percent?: number | null; // migration 141 — percentual digitado (null = digitou o valor em R$)
   order?: Order;
 }
 

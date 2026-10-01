@@ -2298,6 +2298,24 @@ CFOP 5.102, NCM 0000.00.00 — conferido em `fat_cupom_itens`, 15.848 cupons).
   137 perdia a taxa de toda conta com item cancelado). Devolve também
   `fees_by_product`; a impressão do fechamento ganhou "Outras Taxas".
 
+### Taxa editável (migration 141, pedido do Ramon 2026-10-01)
+
+"Cliente muitas vezes não paga os 10% total (deu 25, paga 20): a taxa tem que ser editável, em valor ou %."
+
+- `add_fee_item_secure` ganhou `p_amount` (R$) e `p_percent` opcionais (sem eles = comportamento da 138,
+  apps antigos seguem funcionando). Taxa percentual: valor 0..total da conta (sem taxas) OU % 0..100; o item
+  grava EXATAMENTE o valor resultante; editar de novo atualiza o MESMO item (a mesa é travada `for update`,
+  duplo toque não duplica); valor 0 = sem taxa (apaga o item e marca `service_fee_removed`, como "Tirar a
+  taxa"). Taxa fixa: `p_amount` > 0 e <= 5000 muda o preço unitário (rolha cobrada diferente); % recusado.
+- `order_items.fee_manual` / `fee_manual_percent`: item editado não é sobrescrito pelo recálculo automático
+  (entrou item na mesa). Editado em R$ = fica; editado em % = recalcula com o % digitado
+  (`taxaPercentualDesatualizada` em `lib/taxas.ts`). Regras espelhadas no client em `resolverTaxaEditada` /
+  `resolverValorTaxaFixa` (teste: `scripts/testes/taxaEditavel.test.ts`).
+- UI: lápis ao lado de cada botão "Lançar <taxa>" no modal "Receber pagamento" abre valor + % (um acompanha o
+  outro). Fechamento (139) já somava `price_at_time` do item, então conta o valor real. `chavePreConta`
+  agora inclui o preço (pré-conta automática reimprime quando a taxa muda).
+- Anti-cobrança dupla inalterada: item de taxa percentual na conta = automático de 10% não soma.
+
 ## Caixa por operador (`cash_shifts`, migration 062)
 
 Pedido direto do dono (2026-08-28, ao vivo): "frente de caixa"

@@ -911,7 +911,11 @@ export const addFeeItem = async (params: {
   quantity?: number;
   operatorUserId: string | null;
   operatorName: string | null;
-}): Promise<{ success: boolean; message?: string; price?: number; updated?: boolean }> => {
+  /** Taxa editável (migration 141): valor em R$ digitado pelo caixa. Taxa de serviço: 0 = sem taxa. */
+  amount?: number | null;
+  /** Taxa de serviço editável: percentual digitado (0 a 100). Não combina com `amount`. */
+  percent?: number | null;
+}): Promise<{ success: boolean; message?: string; price?: number; updated?: boolean; removed?: boolean }> => {
   const { data, error } = await supabase.rpc('add_fee_item_secure', {
     p_store_id: params.storeId,
     p_table_id: params.tableId,
@@ -919,9 +923,13 @@ export const addFeeItem = async (params: {
     p_quantity: params.quantity ?? 1,
     p_operator_user_id: params.operatorUserId,
     p_operator_name: params.operatorName,
+    // Só manda quando o caixa editou: app novo + servidor sem a 141 ainda dá erro de assinatura,
+    // então o caminho padrão (sem edição) continua com os 6 argumentos de sempre.
+    ...(params.amount != null ? { p_amount: params.amount } : {}),
+    ...(params.percent != null ? { p_percent: params.percent } : {}),
   });
   if (error) return { success: false, message: error.message };
-  return data as { success: boolean; message?: string; price?: number; updated?: boolean };
+  return data as { success: boolean; message?: string; price?: number; updated?: boolean; removed?: boolean };
 };
 
 export const deleteProduct = async (id: string, storeId: string) => {
