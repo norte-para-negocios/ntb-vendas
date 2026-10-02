@@ -493,7 +493,7 @@ export const Modal: React.FC<{
               if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.3) onClose();
             }}
             className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)] overflow-hidden flex flex-col u-modal-h`}
-            style={{ boxShadow: '0 20px 60px -12px rgba(0,0,0,0.28), 0 0 0 1px var(--border)' }}
+            style={{ boxShadow: 'var(--shadow-modal)' }}
           >
             <div
               className="flex-shrink-0 max-sm:touch-none"

@@ -46,7 +46,7 @@ import { THEME_PRESETS, resolveThemePreset } from '@/lib/theme';
 // (#8489e0) pra texto/ícone/sublinhado continuarem legíveis sobre fundo
 // escuro. Promoção continua com roxo próprio (IFOOD_PURPLE) — ação e
 // promoção seguem distintas; preço sem promoção nunca é colorido.
-const ACTION_BG = '#484DB5';
+const ACTION_BG = 'var(--brand-fill)';
 const ACTION_FG = 'var(--brand)';
 const IFOOD_PURPLE = '#8E1CA8';
 

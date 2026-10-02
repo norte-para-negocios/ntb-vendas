@@ -91,6 +91,8 @@
   /* Sombras suaves difusas — tom Linear/Stripe */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 12px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-modal: 0 20px 60px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--border);
+  --shadow-hero: 0 30px 60px -18px rgba(30, 27, 75, 0.45);
 
   /* Linguagem de movimento. Tom: Linear/Stripe/Vercel.
      Sutil, discreto, consistente. */
@@ -219,6 +221,8 @@
   --sidebar-bg-2: #16174a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+--shadow-modal: 0 20px 60px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+--shadow-hero: 0 30px 60px -18px rgba(0, 0, 0, 0.65);
   --shimmer: rgba(255, 255, 255, 0.06);
   --scrollbar-thumb: rgba(255, 255, 255, 0.18);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
