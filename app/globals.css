@@ -193,7 +193,7 @@
 
 /* Dark mode: ativado por classe .dark no <html> */
 .dark {
-  --bg: #000000;
+  --bg: #0a0a0c;
   --surface: #1c1c1e;
   --surface-2: #2c2c2e;
   --text: #f5f5f7;
