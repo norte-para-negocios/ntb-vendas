@@ -4728,7 +4728,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="mt-3 pt-2.5 border-t border-[var(--border)] flex flex-col gap-1.5">
                                     {summary.items.length > 0 ? (
                                         summary.items.map((item, idx) => (
-                                            <div key={idx} className="flex justify-between items-center gap-1.5 text-[13px] text-[var(--text)]">
+                                            <div key={idx} className="flex justify-between items-center gap-1.5 text-[13px] text-[var(--text)] transition-colors duration-300">
                                                 <span className="truncate min-w-0 flex-1">
                                                     <span className="text-[var(--text-muted)] num">{item.quantity}×</span> {getOrderItemDisplayName(item)}
                                                 </span>
