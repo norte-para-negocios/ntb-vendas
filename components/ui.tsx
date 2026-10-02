@@ -528,20 +528,29 @@ export const Badge: React.FC<{
   color?: string;
   dot?: boolean;
   pulse?: boolean;
-}> = ({ children, color, dot, pulse }) => (
-  <span
-    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium normal-case tracking-normal ${
-      color || 'bg-[var(--surface-2)] text-[var(--text-muted)]'
-    }`}
-  >
-    {dot && (
-      <span
-        className={`w-1.5 h-1.5 rounded-full bg-current flex-shrink-0 ${pulse ? 'u-pulse-dot' : ''}`}
-      />
-    )}
-    {children}
-  </span>
-);
+  variant?: 'default' | 'success' | 'warning' | 'critical';
+}> = ({ children, color, dot, pulse, variant = 'default' }) => {
+  const variantClasses = {
+    default: 'bg-[var(--surface-2)] text-[var(--text-muted)]',
+    success: 'bg-[var(--ok)]/10 text-[var(--ok)]',
+    warning: 'bg-[var(--warn)]/10 text-[var(--warn)]',
+    critical: 'bg-[var(--err-fill)] text-white',
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium normal-case tracking-normal ${
+        color || variantClasses[variant]
+      }`}
+    >
+      {dot && (
+        <span
+          className={`w-1.5 h-1.5 rounded-full bg-current flex-shrink-0 ${pulse ? 'u-pulse-dot' : ''}`}
+        />
+      )}
+      {children}
+    </span>
+  );
+};
 
 // Controle segmentado estilo iOS/macOS (redesign 2026-09-26): grupo de
 // visões mutuamente exclusivas, pílula branca desliza até a opção ativa.
