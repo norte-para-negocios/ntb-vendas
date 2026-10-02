@@ -66,7 +66,7 @@ export default function HomePage() {
         {/* Cartão branco raio 22 sobre o azul (mesma linguagem do login do
             lojista, redesign estilo Apple 2026-09-26). Copy e links intactos. */}
         <div
-          className="u-stagger w-full rounded-[22px] bg-white px-7 pt-8 pb-7 text-center"
+          className="u-stagger w-full rounded-[var(--r-xl)] bg-white px-7 pt-8 pb-7 text-center"
           style={{ ...stagger(60), boxShadow: '0 30px 60px -18px rgba(30,27,75,0.45)' }}
         >
           <div className="w-16 h-16 rounded-[18px] flex items-center justify-center mx-auto mb-5" style={{ background: '#eceefb' }}>

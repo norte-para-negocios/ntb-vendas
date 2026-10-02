@@ -394,7 +394,7 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${resolvedWidth} ${surface === 'opaque' ? 'rounded-t-[22px] sm:rounded-[22px]' : 'rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)]'} relative overflow-hidden u-sheet-h flex flex-col ${
+              className={`w-full ${resolvedWidth} ${surface === 'opaque' ? 'rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)]' : 'rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)]'} relative overflow-hidden u-sheet-h flex flex-col ${
                 surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
               }`}
               style={
@@ -492,7 +492,7 @@ export const Modal: React.FC<{
               setTimeout(() => { justDraggedRef.current = false; }, 150);
               if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.3) onClose();
             }}
-            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[22px] sm:rounded-[22px] overflow-hidden flex flex-col u-modal-h`}
+            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)] overflow-hidden flex flex-col u-modal-h`}
             style={{ boxShadow: '0 20px 60px -12px rgba(0,0,0,0.28), 0 0 0 1px var(--border)' }}
           >
             <div
