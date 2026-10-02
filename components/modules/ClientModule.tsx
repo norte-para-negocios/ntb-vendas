@@ -3532,9 +3532,24 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // deveria, só garante que uma mesa em `waiting_bill` nunca a oferece.
     const hasOpenTableOrders = mesaOrders.length > 0 || tableOrdersUnknown || isWaitingBill;
 
+    // Banner offline: avisa o cliente quando a conexão cai (Task 8, plano design/animação/ux 2026-10-02)
+    const [isOnline, setIsOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    React.useEffect(() => {
+        const goOnline = () => setIsOnline(true);
+        const goOffline = () => setIsOnline(false);
+        window.addEventListener('online', goOnline);
+        window.addEventListener('offline', goOffline);
+        return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+    }, []);
+
     return (
         <MotionConfig reducedMotion="user">
             <div className="bg-[var(--bg)] min-h-screen pb-32">
+            {!isOnline && (
+                <div className="fixed top-0 left-0 right-0 z-[200] bg-[var(--warn)] text-white text-center text-[13px] font-medium py-1.5 px-4">
+                    Sem conexão — pedidos podem não chegar até a cozinha
+                </div>
+            )}
             {/* Hero da loja (Task 2, redesign inspirado no iFood): capa full-bleed
                 + logo circular + cartão de identificação sobreposto, no lugar
                 da antiga banda sólida --ink com só o nome em texto branco.
