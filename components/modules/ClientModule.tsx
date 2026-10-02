@@ -951,7 +951,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     <button
                         onClick={onClose}
                         aria-label="Fechar e continuar vendo o cardápio"
-                        className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
+                        className="absolute top-4 right-4 w-11 h-11 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
                     >
                         <X size={18} />
                     </button>
@@ -986,7 +986,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                             <div>
                                 <label className="text-[13px] font-medium text-[var(--text-muted)] mb-1 block">Onde você está?</label>
                                 <select
-                                    className="w-full px-3 py-2 border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-sm focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] outline-none u-motion max-sm:text-base"
+                                    className="w-full px-3 py-3 min-h-[44px] border border-[var(--border)] rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] text-sm focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] outline-none u-motion max-sm:text-base"
                                     value={tableId}
                                     onChange={e => setTableId(e.target.value)}
                                 >
@@ -1568,7 +1568,7 @@ const ProductModal: React.FC<{
                                     key={idx}
                                     type="button"
                                     onClick={() => setNotes(prev => (prev.trim() ? `${prev.trim()}, ${suggestion}` : suggestion).slice(0, 140))}
-                                    className="inline-flex items-center h-9 text-[13px] font-medium px-3.5 rounded-full bg-[var(--surface-2)] text-[var(--text)] u-motion u-press-sm"
+                                    className="inline-flex items-center h-11 text-[13px] font-medium px-3.5 rounded-full bg-[var(--surface-2)] text-[var(--text)] u-motion u-press-sm"
                                 >
                                     {suggestion}
                                 </button>
