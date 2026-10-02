@@ -1165,7 +1165,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                     <motion.button
                         type="button"
                         aria-label={`Adicionar ${product.name}`}
-                        onClick={(e) => { e.stopPropagation(); if (!disabled) onQuickAdd(product); }}
+                        onClick={(e) => { e.stopPropagation(); if (!disabled) { navigator.vibrate?.(20); onQuickAdd(product); } }}
                         whileTap={{ scale: 0.88 }}
                         transition={SPRING_TAP}
                         className="absolute hit-44 -bottom-1.5 -right-1.5 w-8 h-8 rounded-full grid place-items-center text-white ring-[3px] ring-[var(--surface)]"
