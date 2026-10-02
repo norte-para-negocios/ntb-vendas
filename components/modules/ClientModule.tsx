@@ -4346,8 +4346,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                         )}
                                         <div className="mt-2 rounded-[18px] bg-[var(--surface)] px-4 md:grid md:grid-cols-2 md:gap-x-8">
                                             {catProducts.map((product, i) => (
-                                                <ProductCard
+                                                <div
                                                     key={product.id}
+                                                    className={i < 12 ? 'u-stagger' : ''}
+                                                    style={i < 12 ? { '--stagger': `${i * 30}ms` } as React.CSSProperties : undefined}
+                                                >
+                                                <ProductCard
                                                     product={product}
                                                     onSelect={setSelectedProduct}
                                                     onQuickAdd={!clientOrdering ? undefined : (p) => {
@@ -4368,6 +4372,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                                     onToggleFavorite={toggleFavorite}
                                                     showPrepTime={product.destination !== 'bar' && !!product.prep_time_minutes && product.prep_time_minutes > typicalPrepTime}
                                                 />
+                                                </div>
                                             ))}
                                             {catProducts.length === 0 && (
                                                 <p className="text-[13px] text-[var(--text-muted)] py-4 text-center md:col-span-2">Nenhum produto nesta categoria.</p>
