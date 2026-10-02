@@ -1,6 +1,6 @@
 {
   "name": "ntb-vendas-desktop",
-  "version": "1.2.80",
+  "version": "1.2.81",
   "private": true,
   "description": "Norte Vendas — app desktop (Windows)",
   "main": "electron/main.js",
