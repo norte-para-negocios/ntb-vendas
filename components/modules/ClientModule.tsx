@@ -854,6 +854,7 @@ const ReservationModal: React.FC<{ isOpen: boolean; onClose: () => void; storeId
 const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, isHost?: boolean, table?: Table | null) => void, storeSlug: string, store: Store | null, onClose?: () => void }> = ({ onLogin, storeSlug, store, onClose }) => {
     const [name, setName] = useState('');
     const [pin, setPin] = useState('');
+    const [pinError, setPinError] = useState('');
     const [tableId, setTableId] = useState('');
     const [tables, setTables] = useState<Table[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -895,6 +896,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
 
             if (!result.success) {
                 toast.error(result.message || 'Não foi possível acessar a mesa.');
+                setPinError(result.message || 'PIN incorreto. Tente novamente.');
                 const freshTables = await fetchTablesPublic(store!.id);
                 setTables(freshTables); // Atualiza os dados na tela caso algo mude
                 setIsLoading(false);
@@ -1035,7 +1037,8 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                                             type="tel"
                                             className="text-center tracking-widest text-lg font-bold"
                                             value={pin}
-                                            onChange={(e: any) => setPin(e.target.value)}
+                                            error={pinError || undefined}
+                                            onChange={(e: any) => { setPin(e.target.value); setPinError(''); }}
                                         />
                                     </div>
                                 );
