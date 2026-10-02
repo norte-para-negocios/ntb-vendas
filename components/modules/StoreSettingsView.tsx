@@ -9,7 +9,7 @@
 // chaves, mesmo comportamento otimista com revert em erro.
 
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Upload, Image as ImageIcon, Plus, X } from 'lucide-react';
+import { AlertCircle, Upload, Image as ImageIcon, Plus, X, Download, Monitor, Smartphone } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { Store } from '@/types';
@@ -696,6 +696,34 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                     </Button>
                 </div>
             </div>
+            {/* Download do app — só aparece na web (não no Electron/Capacitor).
+            Links diretos pros feeds de atualização: sempre a versão mais recente. */}
+            {typeof window !== 'undefined' && !window.navigator.userAgent.includes('Electron') && !(window as any).Capacitor && (
+            <div className="mt-6 pt-6 border-t border-[var(--border)]">
+                <h4 className="font-semibold text-[15px] text-[var(--text)] mb-1">Baixar o aplicativo</h4>
+                <p className="text-[13px] text-[var(--text-muted)] mb-4">
+                    Instale ou atualize o Norte Vendas no computador ou no celular. Sempre a versão mais recente.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                    <a
+                        href="https://updates.norteparanegocios.com.br/ntb-vendas-desktop/Norte-Vendas-Setup.exe"
+                        download
+                        className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-[var(--brand-fill)] text-white text-[15px] font-semibold hover:bg-[var(--brand-strong)] u-motion u-press-sm"
+                    >
+                        <Monitor size={18} />
+                        Baixar para Windows
+                    </a>
+                    <a
+                        href="https://updates.norteparanegocios.com.br/ntb-vendas-android/Norte-Vendas-latest.apk"
+                        download
+                        className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-[var(--surface-2)] text-[var(--text)] text-[15px] font-semibold hover:bg-[var(--border)] u-motion u-press-sm"
+                    >
+                        <Smartphone size={18} />
+                        Baixar para Android
+                    </a>
+                </div>
+            </div>
+            )}
         </section>
     );
 };
