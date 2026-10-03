@@ -15,6 +15,6 @@ assert.equal(localEstoqueDoItem({}, 'pz', 'kitchen'), null);
 assert.equal(localEstoqueDoItem(mapa, null, null), null);
 
 assert.equal(chaveDestinoEstoque('kitchen'), 'kitchen');
-assert.equal(chaveDestinoEstoque({ setorId: 'pz' }), 'setor:pz');
+assert.equal(chaveDestinoEstoque('pz'), 'setor:pz');
 
 console.log('localEstoqueDoItem: ok');

@@ -11,8 +11,13 @@ export function setorDoItem(
 // Impressão → Locais de preparo, um por destino. Chave: 'kitchen' | 'bar' | 'setor:<id>'.
 export type MapaLocaisEstoque = Record<string, number>;
 
-export function chaveDestinoEstoque(destino: 'kitchen' | 'bar' | { setorId: string }): string {
-  return typeof destino === 'string' ? destino : `setor:${destino.setorId}`;
+// Recebe o id do setor DIRETO (string) em vez de um objeto { setorId } — o
+// Turbopack minifica a variável local `setorId` do caller mas mantém o nome
+// no shorthand de objeto `{ setorId }`, gerando ReferenceError em produção
+// (achado real 2026-10-03: "setorId is not defined" nos logs do Vendas).
+export function chaveDestinoEstoque(destino: 'kitchen' | 'bar' | string): string {
+  if (destino === 'kitchen' || destino === 'bar') return destino;
+  return `setor:${destino}`;
 }
 
 // Setor próprio do item (ex.: Pizzaria) > destino base (Cozinha/Bar) > null.
@@ -21,7 +26,7 @@ export function localEstoqueDoItem(
   setorId: string | null,
   destination: 'kitchen' | 'bar' | null,
 ): number | null {
-  if (setorId && mapa[chaveDestinoEstoque({ setorId })]) return mapa[chaveDestinoEstoque({ setorId })];
+  if (setorId && mapa[chaveDestinoEstoque(setorId)]) return mapa[chaveDestinoEstoque(setorId)];
   if (destination && mapa[destination]) return mapa[destination];
   return null;
 }
