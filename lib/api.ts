@@ -590,6 +590,8 @@ export const createProduct = async (storeId: string, categoryId: string, product
     p_featured: product.featured ?? false,
     p_tags: product.tags ?? [],
     p_ncm: product.ncm ?? null,
+    p_cost_price: product.cost_price ?? null,
+    p_stock_alert_threshold: product.stock_alert_threshold ?? null,
   });
   if (error) throw error;
   return data as string;
@@ -729,11 +731,14 @@ export const fetchBestsellerProductIds = async (storeId: string, days = 30, limi
 // o produto pertence a loja — precisou atualizar os 3 call sites em
 // StoreModule.tsx.
 export const updateProduct = async (id: string, storeId: string, updates: Partial<Product>) => {
-  // promo_price: `null` explicito no objeto significa "o lojista limpou o
-  // campo", diferente de "a chave nem veio" (nao mexer). update_product_secure
-  // usa coalesce (null = nao mexer) pra todo o resto, entao precisa desse
-  // flag separado especificamente pra permitir zerar a promocao.
+  // promo_price/cost_price/stock_alert_threshold: `null` explicito no objeto
+  // significa "o lojista limpou o campo", diferente de "a chave nem veio"
+  // (nao mexer). update_product_secure usa coalesce (null = nao mexer) pra
+  // todo o resto, entao precisa desses flags separados especificamente pra
+  // permitir zerar cada um.
   const clearingPromoPrice = 'promo_price' in updates && updates.promo_price == null;
+  const clearingCostPrice = 'cost_price' in updates && updates.cost_price == null;
+  const clearingStockThreshold = 'stock_alert_threshold' in updates && updates.stock_alert_threshold == null;
   const { error } = await supabase.rpc('update_product_secure', {
     p_product_id: id,
     p_store_id: storeId,
@@ -750,6 +755,10 @@ export const updateProduct = async (id: string, storeId: string, updates: Partia
     p_featured: updates.featured,
     p_tags: updates.tags,
     p_ncm: updates.ncm,
+    p_cost_price: clearingCostPrice ? null : updates.cost_price,
+    p_clear_cost_price: clearingCostPrice,
+    p_stock_alert_threshold: clearingStockThreshold ? null : updates.stock_alert_threshold,
+    p_clear_stock_alert_threshold: clearingStockThreshold,
   });
   if (error) throw error;
 };
@@ -3277,4 +3286,95 @@ export const verificarSenhaEquipe = async (storeId: string, senha: string): Prom
   const { data, error } = await supabase.rpc('verify_store_staff_password_secure', { p_store_id: storeId, p_password: senha });
   if (error || !data) return { success: false, error: isNetworkError(error) ? 'offline' : 'invalid' };
   return data as ResultadoSenhaEquipe;
+};
+
+// --- Cupons de desconto (migration 142/143/144) ---
+import { calculateCouponDiscount, type CouponInfo } from './coupons';
+
+export interface DiscountCoupon {
+  id: string;
+  store_id: string;
+  code: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  max_uses: number | null;
+  uses_count: number;
+  min_order_value: number | null;
+  expires_at: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export const fetchCoupons = async (storeId: string): Promise<DiscountCoupon[]> => {
+  const { data } = await supabase
+    .from('discount_coupons')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false });
+  return (data || []) as DiscountCoupon[];
+};
+
+export const createCoupon = async (storeId: string, coupon: {
+  code: string; type: 'percent' | 'fixed'; value: number;
+  max_uses?: number | null; min_order_value?: number | null; expires_at?: string | null;
+}): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('discount_coupons').insert({
+    store_id: storeId,
+    code: coupon.code.toUpperCase().trim(),
+    type: coupon.type,
+    value: coupon.value,
+    max_uses: coupon.max_uses ?? null,
+    min_order_value: coupon.min_order_value ?? null,
+    expires_at: coupon.expires_at ?? null,
+  });
+  if (error) return { success: false, message: error.message.includes('unique') ? 'Já existe um cupom com este código.' : error.message };
+  return { success: true };
+};
+
+export const updateCoupon = async (id: string, updates: Partial<{
+  code: string; type: string; value: number; max_uses: number | null;
+  min_order_value: number | null; expires_at: string | null; active: boolean;
+}>): Promise<{ success: boolean; message?: string }> => {
+  const { error } = await supabase.from('discount_coupons').update(updates).eq('id', id);
+  if (error) return { success: false, message: error.message };
+  return { success: true };
+};
+
+export const deleteCoupon = async (id: string): Promise<{ success: boolean }> => {
+  const { error } = await supabase.from('discount_coupons').delete().eq('id', id);
+  return { success: !error };
+};
+
+export const validateAndApplyCoupon = async (
+  storeId: string, code: string, orderTotal: number
+): Promise<{ success: boolean; discount?: number; couponId?: string; message?: string }> => {
+  const normalizedCode = code.toUpperCase().trim();
+  const { data: coupon } = await supabase
+    .from('discount_coupons')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('code', normalizedCode)
+    .eq('active', true)
+    .maybeSingle();
+  if (!coupon) return { success: false, message: 'Cupom não encontrado ou inativo.' };
+  if (coupon.expires_at && new Date(coupon.expires_at) < new Date())
+    return { success: false, message: 'Cupom expirado.' };
+  if (coupon.max_uses != null && coupon.uses_count >= coupon.max_uses)
+    return { success: false, message: 'Cupom já atingiu o limite de usos.' };
+  if (coupon.min_order_value != null && orderTotal < coupon.min_order_value)
+    return { success: false, message: `Pedido mínimo de R$ ${coupon.min_order_value.toFixed(2)} pra usar este cupom.` };
+  const discount = calculateCouponDiscount(
+    { type: coupon.type, value: Number(coupon.value) },
+    orderTotal,
+  );
+  return { success: true, discount, couponId: coupon.id };
+};
+
+export const recordCouponUsage = async (
+  couponId: string, orderId: string, discountAmount: number
+): Promise<void> => {
+  await supabase.from('coupon_usages').insert({
+    coupon_id: couponId, order_id: orderId, discount_amount: discountAmount,
+  });
+  try { await supabase.rpc('increment_coupon_uses', { p_coupon_id: couponId }); } catch { /* silencioso */ }
 };

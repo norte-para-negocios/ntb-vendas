@@ -262,3 +262,47 @@ export const vendaTemCobranca = (paymentData?: { total: number } | null): boolea
   if (!paymentData) return true;
   return Number.isFinite(paymentData.total) && paymentData.total > 0;
 };
+
+// CMV (Custo de Mercadoria Vendida) — margem bruta por produto ou agregado.
+// cost null/undefined = produto sem custo cadastrado → retorna null (não calculável).
+// Arredonda marginPct pra 2 casas pra evitar floats sujos no display.
+export function calculateMargin(
+  revenue: number,
+  cost: number | null | undefined,
+): { profit: number; marginPct: number } | null {
+  if (cost == null) return null;
+  const profit = revenue - cost;
+  const marginPct = revenue === 0 ? 0 : Math.round((profit / revenue) * 10000) / 100;
+  return { profit, marginPct };
+}
+
+// Alerta de estoque baixo (migration 142): filtra produtos cujo estoque
+// atual está abaixo do threshold configurado. Produtos sem threshold são ignorados.
+export function filterLowStockProducts<T extends {
+  name: string;
+  stock_alert_threshold?: number | null;
+  current_stock?: number | null;
+}>(products: T[]): T[] {
+  return products.filter(p =>
+    p.stock_alert_threshold != null &&
+    p.current_stock != null &&
+    p.current_stock < p.stock_alert_threshold
+  );
+}
+
+// Prioridade KDS (migration 142): itens prioritários vão pro topo,
+// ordenados por created_at DESC (mais recente primeiro).
+// Itens normais ficam abaixo, ordenados por created_at ASC (mais antigo primeiro = FIFO).
+export function sortKitchenItems<T extends { priority?: boolean; created_at: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aP = a.priority ? 1 : 0;
+    const bP = b.priority ? 1 : 0;
+    if (aP !== bP) return bP - aP; // prioritários primeiro
+    if (aP === 1) {
+      // Entre prioritários: mais recente primeiro
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+    // Entre normais: mais antigo primeiro (FIFO)
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+}

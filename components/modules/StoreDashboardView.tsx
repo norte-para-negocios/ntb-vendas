@@ -10,7 +10,7 @@ import {
 import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
-import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts } from '@/lib/calc';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { formatDuration } from '@/lib/formatDuration';
 import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
@@ -720,6 +720,42 @@ export const StoreDashboardView: React.FC<{
                             </Card>
                         </div>
                     </div>
+
+                    {/* CMV / Margem (migration 142) — só aparece se pelo menos 1 produto tem cost_price */}
+                    {(() => {
+                        const itemsWithCost = sales.flatMap(o =>
+                            (o.order_items || []).filter(oi => oi.product?.cost_price != null && oi.status !== 'canceled')
+                        );
+                        if (itemsWithCost.length === 0) return null;
+                        const totalRevenue = itemsWithCost.reduce((s, oi) => s + oi.price_at_time * oi.quantity, 0);
+                        const totalCost = itemsWithCost.reduce((s, oi) => s + (oi.product!.cost_price!) * oi.quantity, 0);
+                        const margin = calculateMargin(totalRevenue, totalCost);
+                        if (!margin) return null;
+                        return (
+                            <Card className={`${cardCls} mt-4`}>
+                                <h4 className={h4Cls}>Margem de Lucro (CMV)</h4>
+                                <p className="text-[13px] text-[var(--text-muted)] mb-3">
+                                    Baseado nos {itemsWithCost.length} itens com custo cadastrado neste período.
+                                </p>
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <p className="text-[13px] text-[var(--text-muted)]">Receita</p>
+                                        <p className="text-xl font-black num text-[var(--text)]">R$ {formatBRL(totalRevenue)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[13px] text-[var(--text-muted)]">Custo</p>
+                                        <p className="text-xl font-black num text-[var(--warn)]">R$ {formatBRL(totalCost)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[13px] text-[var(--text-muted)]">Margem</p>
+                                        <p className={`text-xl font-black num ${margin.marginPct >= 0 ? 'text-[var(--ok)]' : 'text-[var(--err)]'}`}>
+                                            {margin.marginPct}%
+                                        </p>
+                                    </div>
+                                </div>
+                            </Card>
+                        );
+                    })()}
 
                     {/* Mesas */}
                     <div>

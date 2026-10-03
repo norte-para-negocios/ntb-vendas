@@ -8695,6 +8695,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pName, setPName] = useState('');
     const [pDesc, setPDesc] = useState('');
     const [pPrice, setPPrice] = useState('');
+    const [pCostPrice, setPCostPrice] = useState('');
+    const [pStockThreshold, setPStockThreshold] = useState('');
     const [pCat, setPCat] = useState('');
     const [pTime, setPTime] = useState('15');
     const [pDestination, setPDestination] = useState<'kitchen' | 'bar'>('kitchen');
@@ -9070,6 +9072,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPNcm(product.ncm ?? '');
             setPFeeType(product.fee_type ?? '');
             setPFeePercent(product.fee_percent != null ? String(product.fee_percent) : '');
+            setPCostPrice(product.cost_price != null ? String(product.cost_price) : '');
+            setPStockThreshold(product.stock_alert_threshold != null ? String(product.stock_alert_threshold) : '');
             if (product.omie_codigo) {
                 setPOmieMode('link');
                 setPOmieCodeInput(product.omie_codigo);
@@ -9083,6 +9087,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPName('');
             setPDesc('');
             setPPrice('');
+            setPCostPrice('');
+            setPStockThreshold('');
             setPCat(categories[0]?.id || '');
             setPTime('15');
             setPPreview(null);
@@ -9163,6 +9169,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 featured: pFeatured,
                 tags: pTags,
                 ncm: pNcm.trim() || null,
+                cost_price: pCostPrice ? Number(pCostPrice) : null,
+                stock_alert_threshold: pStockThreshold ? Number(pStockThreshold) : null,
             };
 
             let productId: string;
@@ -9988,6 +9996,16 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             value={pPromoPrice}
                             onChange={e => setPPromoPrice(e.target.value)}
                         />
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-1">
+                            <Input label="Custo (opcional — pra calcular margem)" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Ex: 12.50" value={pCostPrice} onChange={e => setPCostPrice(e.target.value)} />
+                            <p className="text-[11px] text-[var(--text-muted)]">Se preenchido, o dashboard mostra a margem de lucro deste produto.</p>
+                        </div>
+                        <div className="space-y-1">
+                            <Input label="Alerta de estoque baixo (opcional)" type="number" inputMode="numeric" min="1" placeholder="Ex: 10" value={pStockThreshold} onChange={e => setPStockThreshold(e.target.value)} />
+                            <p className="text-[11px] text-[var(--text-muted)]">Se o estoque cair abaixo deste número, aparece um alerta no dashboard.</p>
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1.5">

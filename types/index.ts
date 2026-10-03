@@ -280,6 +280,11 @@ export interface Product {
   // 'fixed' = preço do produto; 'percent' = fee_percent % sobre os itens da conta.
   fee_type?: 'fixed' | 'percent' | null;
   fee_percent?: number | null;
+  // CMV opcional (migration 142) — custo do produto pra calcular margem no dashboard.
+  // NULL = sem custo cadastrado (produto aparece no dashboard mas sem margem).
+  cost_price?: number | null;
+  // Alerta de estoque baixo (migration 142) — threshold pra banner no dashboard.
+  stock_alert_threshold?: number | null;
 }
 
 export interface Order {
