@@ -162,6 +162,33 @@ export async function POST(request: NextRequest) {
   const nomeSetor = new Map((setores ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
   const catSetor: Record<string, string | null> = Object.fromEntries((categorias ?? []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
 
+  // Taxa de serviço automática pro Omie (2026-10-03, pedido do usuário):
+  // quando charge_service_fee=true e o produto de taxa percentual tem omie_codigo,
+  // mas o pedido NÃO tem o item de taxa lançado manualmente, calcula 10% do
+  // subtotal dos itens não-taxa e inclui na OP. Sem isso, os últimos 10 pedidos
+  // do Sertão tinham tem_taxa=0 e a taxa nunca chegava ao Omie.
+  const [{ data: storeRow }, { data: feeProduct }] = await Promise.all([
+    admin.from('stores').select('config').eq('id', storeId).maybeSingle(),
+    admin.from('products').select('id, omie_codigo, fee_percent').eq('store_id', storeId).eq('fee_type', 'percent').maybeSingle(),
+  ]);
+  const chargeServiceFee = !!(storeRow?.config as any)?.charge_service_fee;
+  const feePercent = feeProduct?.fee_percent != null ? Number(feeProduct.fee_percent) : 10;
+  const feeOmieCodigo = feeProduct?.omie_codigo ?? null;
+  // Calcular subtotal por pedido (itens não-taxa, não-cancelados) pra saber
+  // se a taxa já foi lançada ou precisa ser adicionada automaticamente.
+  const subtotalPorPedido = new Map<string, number>();
+  const temTaxaLancada = new Set<string>();
+  for (const item of items ?? []) {
+    if (item.status === 'canceled') continue;
+    const prod = (item as any).product as { fee_type?: string | null } | null;
+    const orderId = (item as { order_id: string }).order_id;
+    if (prod?.fee_type) {
+      temTaxaLancada.add(orderId);
+    } else {
+      subtotalPorPedido.set(orderId, (subtotalPorPedido.get(orderId) ?? 0) + item.quantity * (item as any).price_at_time);
+    }
+  }
+
   // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
   // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot
   // gravado em selected_options pela create_order_secure (migration 028), não
@@ -199,6 +226,21 @@ export async function POST(request: NextRequest) {
       const chave = `${opcao.omie_codigo}|${comNota}`;
       const atual = porCodigo.get(chave);
       porCodigo.set(chave, { codigo: opcao.omie_codigo, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, localEstoque: atual?.localEstoque ?? localEstoque, comNota });
+    }
+  }
+  // Taxa de serviço automática: se chargeServiceFee=true, o produto de taxa tem
+  // omie_codigo, e o pedido NÃO tem a taxa lançada manualmente, calcula o valor
+  // e inclui na OP. destination=null (baixa no estoque padrão, não Cozinha/Bar).
+  if (chargeServiceFee && feeOmieCodigo) {
+    for (const [orderId, subtotal] of subtotalPorPedido) {
+      if (temTaxaLancada.has(orderId)) continue;
+      if (subtotal <= 0) continue;
+      const valorTaxa = Math.round(subtotal * feePercent / 100 * 100) / 100;
+      if (valorTaxa <= 0) continue;
+      const comNota = comNotaDoPedido(orderId);
+      const chave = `${feeOmieCodigo}|${comNota}`;
+      const atual = porCodigo.get(chave);
+      porCodigo.set(chave, { codigo: feeOmieCodigo, quantidade: (atual?.quantidade ?? 0) + 1, destination: null, setor: null, localEstoque: null, comNota });
     }
   }
 
