@@ -6,7 +6,7 @@ import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, La
 import { useApp } from '@/context/AppContext';
 import { removerCategoriasSoEquipe } from '@/lib/menu';
 import { semTaxas, contaTemTaxaPercentual } from '@/lib/taxas';
-import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation, resolverUrlApi } from '@/lib/api';
+import { fetchMenu, fetchStoreBySlug, createOrder, fetchTablesPublic, openTableSession, fetchTableOrderSummary, callWaiter, requestTableBill, fetchOrderById, fetchOrderItemsById, createOrderRating, fetchBestsellerProductIds, fetchStoreFiscalConfig, createReservation, resolverUrlApi, validateAndApplyCoupon } from '@/lib/api';
 import { Category, CategoryGroup, Product, Table, TableStatus, Store, CartItem, OrderStatus, Order, OrderItem, ProductOptionGroup, SelectedOption, StoreFiscalConfig } from '@/types';
 import { Button, Card, Input, Modal, Badge } from '@/components/ui';
 import { ProductThumb } from '@/components/ProductThumb';
@@ -1884,8 +1884,33 @@ const CartModal: React.FC<{
     total: number,
     onUpdateQty: (item: CartItem, delta: number) => void,
     onRemove: (item: CartItem) => void,
-    accentColor: string
-}> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove, accentColor }) => {
+    accentColor: string,
+    storeId?: string,
+}> = ({ isOpen, onClose, cart, onConfirm, isLoading, total, onUpdateQty, onRemove, accentColor, storeId }) => {
+    // Cupom de desconto (migration 142/143) — estado local do modal
+    const [couponCode, setCouponCode] = useState('');
+    const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
+    const [couponError, setCouponError] = useState('');
+    const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim() || !storeId) return;
+        setIsApplyingCoupon(true);
+        setCouponError('');
+        const result = await validateAndApplyCoupon(storeId, couponCode, total);
+        if (result.success) {
+            setCouponDiscount(result.discount ?? 0);
+        } else {
+            setCouponError(result.message || 'Erro ao validar cupom.');
+            setCouponDiscount(null);
+        }
+        setIsApplyingCoupon(false);
+    };
+    const handleRemoveCoupon = () => {
+        setCouponCode('');
+        setCouponDiscount(null);
+        setCouponError('');
+    };
+    const finalTotal = couponDiscount != null ? Math.max(0, total - couponDiscount) : total;
     return (
         <BottomSheet isOpen={isOpen} onClose={onClose} title="Seu Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
@@ -1950,9 +1975,47 @@ const CartModal: React.FC<{
                 </div>
 
                 <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-2)] space-y-3">
+                    {/* Cupom de desconto (migration 142/143) */}
+                    {storeId && (
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Cupom de desconto"
+                                    value={couponCode}
+                                    onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponError(''); }}
+                                    className="flex-1 h-10 px-3 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] text-[14px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30"
+                                    disabled={couponDiscount != null}
+                                />
+                                {couponDiscount == null ? (
+                                    <button
+                                        onClick={handleApplyCoupon}
+                                        disabled={isApplyingCoupon || !couponCode.trim()}
+                                        className="h-10 px-4 rounded-[var(--r-md)] bg-[var(--brand)] text-white text-[13px] font-semibold disabled:opacity-40 u-motion u-press-sm"
+                                    >
+                                        {isApplyingCoupon ? '...' : 'Aplicar'}
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleRemoveCoupon}
+                                        className="h-10 px-3 rounded-[var(--r-md)] bg-[var(--err)]/10 text-[var(--err)] text-[13px] font-semibold u-motion u-press-sm"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                            {couponError && <p className="text-[12px] text-[var(--err)]">{couponError}</p>}
+                            {couponDiscount != null && couponDiscount > 0 && (
+                                <div className="flex justify-between items-center text-[13px]">
+                                    <span className="text-[var(--ok)] font-medium">Cupom aplicado</span>
+                                    <span className="text-[var(--ok)] font-semibold num">- R$ {formatBRL(couponDiscount)}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="flex justify-between items-center font-semibold text-[var(--text)]">
                         <span>Total</span>
-                        <span className="num">R$ {formatBRL(total)}</span>
+                        <span className="num">R$ {formatBRL(finalTotal)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" onClick={onClose} className="w-full">
@@ -4521,6 +4584,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
                 onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
                 accentColor={currentStore?.config?.accent_color || 'var(--text)'}
+                storeId={currentStore?.id}
             />
 
             <OrderStatusModal
