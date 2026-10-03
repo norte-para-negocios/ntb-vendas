@@ -10,7 +10,7 @@ import {
 import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
-import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts } from '@/lib/calc';
+import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts, compareProductQuantities } from '@/lib/calc';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { formatDuration } from '@/lib/formatDuration';
 import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
@@ -351,6 +351,22 @@ export const StoreDashboardView: React.FC<{
         const bottom = arr.slice().reverse().filter(p => !topKeys.has(p.key)).slice(0, 5);
         return { top, bottom };
     }, [periodSales]);
+
+    // Comparativo de produtos vs. período anterior (relatórios comparativos).
+    const productMovers = useMemo(() => {
+        const quantities = (list: typeof periodSales) => {
+            const map = new Map<string, { key: string; name: string; qty: number }>();
+            list.forEach(o => o.order_items?.forEach(i => {
+                if (!i.product) return;
+                const key = `${i.product_id}::${optionsSignature(i.selected_options)}`;
+                const existing = map.get(key) || { key, name: getOrderItemDisplayName(i), qty: 0 };
+                existing.qty += i.quantity;
+                map.set(key, existing);
+            }));
+            return Array.from(map.values());
+        };
+        return compareProductQuantities(quantities(periodSales), quantities(previousPeriodSales));
+    }, [periodSales, previousPeriodSales]);
 
     const tableSales = periodSales.filter(s => s.order_type === 'table');
     const tableOccupations = tableSales.length;
@@ -716,6 +732,32 @@ export const StoreDashboardView: React.FC<{
                                         </div>
                                     ))}
                                     {productStats.bottom.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
+                                </div>
+                            </Card>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card className={cardCls}>
+                                <h4 className={h4Cls}>Mais cresceram vs. período anterior</h4>
+                                <div className="space-y-3">
+                                    {productMovers.up.map((m) => (
+                                        <div key={m.key} className="flex justify-between items-center gap-3">
+                                            <span className="text-[15px] text-[var(--text)] min-w-0">{m.name}</span>
+                                            <span className="text-[15px] font-semibold num text-[var(--ok)] whitespace-nowrap">+{m.delta} un <span className="text-[var(--text-muted)] font-normal">({m.previous} → {m.current})</span></span>
+                                        </div>
+                                    ))}
+                                    {productMovers.up.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
+                                </div>
+                            </Card>
+                            <Card className={cardCls}>
+                                <h4 className={h4Cls}>Mais caíram vs. período anterior</h4>
+                                <div className="space-y-3">
+                                    {productMovers.down.map((m) => (
+                                        <div key={m.key} className="flex justify-between items-center gap-3">
+                                            <span className="text-[15px] text-[var(--text)] min-w-0">{m.name}</span>
+                                            <span className="text-[15px] font-semibold num text-[var(--err)] whitespace-nowrap">{m.delta} un <span className="text-[var(--text-muted)] font-normal">({m.previous} → {m.current})</span></span>
+                                        </div>
+                                    ))}
+                                    {productMovers.down.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
                                 </div>
                             </Card>
                         </div>

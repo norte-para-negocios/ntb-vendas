@@ -306,3 +306,23 @@ export function sortKitchenItems<T extends { priority?: boolean; created_at: str
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
   });
 }
+
+// Comparativo de produtos entre dois períodos (relatórios comparativos, 2026-10-03):
+// devolve quem mais cresceu e quem mais caiu em quantidade vendida. Produto sem
+// nenhuma venda no período anterior entra como "novo" (sem % de variação).
+export interface ProductQty { key: string; name: string; qty: number }
+export interface ProductMover { key: string; name: string; current: number; previous: number; delta: number }
+export function compareProductQuantities(current: ProductQty[], previous: ProductQty[], limit = 5): { up: ProductMover[]; down: ProductMover[] } {
+  const prev = new Map(previous.map(p => [p.key, p]));
+  const cur = new Map(current.map(p => [p.key, p]));
+  const keys = new Set([...cur.keys(), ...prev.keys()]);
+  const all: ProductMover[] = [];
+  keys.forEach(key => {
+    const c = cur.get(key)?.qty ?? 0;
+    const p = prev.get(key)?.qty ?? 0;
+    all.push({ key, name: (cur.get(key) ?? prev.get(key))!.name, current: c, previous: p, delta: c - p });
+  });
+  const up = all.filter(m => m.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, limit);
+  const down = all.filter(m => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, limit);
+  return { up, down };
+}
