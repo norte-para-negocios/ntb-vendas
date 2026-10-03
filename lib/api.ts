@@ -968,6 +968,17 @@ export const updateTablePosition = async (storeId: string, tableId: string, x: n
   return data === true;
 };
 
+// Alerta de estoque baixo (2026-10-03): produtos com saldo abaixo do limite que o lojista definiu.
+export interface LowStockAlert { name: string; stock: number | null; threshold: number }
+export const fetchLowStockAlerts = async (storeId: string): Promise<LowStockAlert[]> => {
+  try {
+    const res = await fetch(`${resolverUrlApi('/api/estoque/alertas')}?storeId=${encodeURIComponent(storeId)}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.alerts) ? json.alerts : [];
+  } catch { return []; }
+};
+
 export const fetchTablesPublic = async (storeId: string): Promise<Table[]> => {
   const { data, error } = await supabase.rpc('get_tables_public_secure', { p_store_id: storeId });
   if (error) { console.error(error); return []; }

@@ -13,7 +13,7 @@ import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts, compareProductQuantities } from '@/lib/calc';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { formatDuration } from '@/lib/formatDuration';
-import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, CashShift } from '@/lib/api';
+import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, fetchLowStockAlerts, LowStockAlert, CashShift } from '@/lib/api';
 
 // 4 cores por token semântico (--ok/--warn/--info/--brand) + 2 literais extras,
 // pois "Formas de Pagamento" pode ter até 6 fatias distintas (CREDIT/DEBIT/PIX/
@@ -100,6 +100,14 @@ export const StoreDashboardView: React.FC<{
     // qualquer timestamp de atualização de status da mesa em si.
     const STALE_TABLE_MINUTES = 40;
     const [staleTables, setStaleTables] = useState<{ number: number; minutesSinceLastItem: number }[]>([]);
+    // Alerta de estoque baixo (2026-10-03): vem do ntb-estoque, vazio sem integração/limites.
+    const [lowStock, setLowStock] = useState<LowStockAlert[]>([]);
+    useEffect(() => {
+        if (!storeId) return;
+        let ativo = true;
+        fetchLowStockAlerts(storeId).then((a) => { if (ativo) setLowStock(a); });
+        return () => { ativo = false; };
+    }, [storeId]);
 
     useEffect(() => {
         if (!storeId) return;
@@ -546,7 +554,7 @@ export const StoreDashboardView: React.FC<{
             {/* Fase 4, Task 12: alertas que avisam antes — só renderiza a
                 seção quando existe pelo menos um alerta, pra não ocupar
                 espaço em dia normal. */}
-            {(staleTables.length > 0 || cancellationRateAlert) && (
+            {(staleTables.length > 0 || cancellationRateAlert || lowStock.length > 0) && (
                 <section>
                     <Card className="u-grow-in u-card overflow-hidden">
                         <div className="px-5 pt-4 pb-2 flex items-baseline justify-between gap-3">
@@ -569,6 +577,22 @@ export const StoreDashboardView: React.FC<{
                             </p>
                         </li>
                     ))}
+                    {lowStock.length > 0 && (
+                        <li className="flex items-start gap-3 px-5 py-3 text-[15px]">
+                            <AlertTriangle size={17} className="text-[var(--warn)] shrink-0 mt-0.5" />
+                            <div className="text-[var(--text)] flex-1 min-w-0">
+                                <p className="font-semibold">Estoque baixo ({lowStock.length})</p>
+                                <ul className="mt-1 space-y-0.5">
+                                    {lowStock.slice(0, 8).map((p) => (
+                                        <li key={p.name} className="text-[14px] text-[var(--text-muted)]">
+                                            {p.name}: <span className="num text-[var(--text)]">{p.stock}</span> (limite {p.threshold})
+                                        </li>
+                                    ))}
+                                    {lowStock.length > 8 && <li className="text-[14px] text-[var(--text-muted)]">e mais {lowStock.length - 8}…</li>}
+                                </ul>
+                            </div>
+                        </li>
+                    )}
                     {cancellationRateAlert && (
                         <li className="flex items-center gap-3 px-5 py-3 text-[15px]">
                             <AlertTriangle size={17} className="text-[var(--err)] shrink-0" />
