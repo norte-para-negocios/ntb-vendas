@@ -90,6 +90,13 @@ export interface MontarXmlParams {
   // igual ao total de produtos) — nunca quebra uma emissão que já
   // funcionava.
   pagamentos?: PagamentoNota[];
+  // Taxa de serviço como ITEM PRÓPRIO do cupom (pedido do Ramon, 03/10/2026): a Omie
+  // contabiliza a taxa pelo produto 90875 ("Taxa de Serviço (10%)", família TAXAS/DELIVERY);
+  // rateada em vOutro nos itens ela vira "Valor Acréscimos" e infla o faturamento de produto.
+  // Quando informado E há taxa cobrada (pago > produtos), entra UM item extra no fim com o valor
+  // exato da taxa e o vOutro dos itens/total fica 0 — vNF e pagamentos não mudam. Sem este
+  // parâmetro (loja sem produto de taxa percentual configurado) vale o rateio antigo.
+  taxaServico?: { cProd: string; xProd: string; ncm?: string | null };
   // Contingência offline (2026-09-15): 1 = emissão normal (default), 9 =
   // contingência (SEFAZ/rede inacessível no momento da venda). Repassado
   // pra montarChaveAcesso E pro grupo <ide> do XML — os dois precisam
@@ -391,6 +398,10 @@ export function montarXmlNota(params: MontarXmlParams): {
   }
   const vNF = (vProdTotal + vOutro).toFixed(2);
 
+  // Taxa como item próprio: tira o valor do vOutro (rateio) e vira um <det> no fim.
+  const taxaComoItem = params.taxaServico && vOutro > 0 ? vOutro : 0;
+  if (taxaComoItem > 0) vOutro = 0;
+
   // cStat=604 "Total do vOutro difere do somatorio dos itens" (achado real em
   // produção, loja "O Sertão Vai Virar Mar", 2026-08-25): a SEFAZ exige que a
   // soma do `vOutro` de cada `det/prod` bata com o `vOutro` do total
@@ -421,6 +432,24 @@ export function montarXmlNota(params: MontarXmlParams): {
     })
     .join('');
 
+  const detTaxaXml = taxaComoItem > 0 && params.taxaServico
+    ? (() => {
+        const t = params.taxaServico!;
+        const vTaxa = taxaComoItem.toFixed(2);
+        return (
+          `<det nItem="${itens.length + 1}"><prod><cProd>${escapeXml(t.cProd)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(t.xProd)}</xProd>` +
+          `<NCM>${(t.ncm || '00000000').replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}</NCM><CFOP>5102</CFOP><uCom>UN</uCom>` +
+          `<qCom>1.0000</qCom><vUnCom>${Number(vTaxa).toFixed(10)}</vUnCom>` +
+          `<vProd>${vTaxa}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>UN</uTrib>` +
+          `<qTrib>1.0000</qTrib><vUnTrib>${Number(vTaxa).toFixed(10)}</vUnTrib>` +
+          `<indTot>1</indTot></prod>` +
+          `<imposto><ICMS><ICMSSN102><orig>0</orig><CSOSN>${emitente.cstCsosnPadrao}</CSOSN></ICMSSN102></ICMS>` +
+          `<PIS><PISNT><CST>${emitente.cstPisPadrao}</CST></PISNT></PIS>` +
+          `<COFINS><COFINSNT><CST>${emitente.cstCofinsPadrao}</CST></COFINSNT></COFINS></imposto></det>`
+        );
+      })()
+    : '';
+
   const nfeXml =
     `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="${infNFeId}" versao="4.00">` +
     `<ide><cUF>${emitente.cUF}</cUF><cNF>${cNF}</cNF><natOp>VENDA AO CONSUMIDOR</natOp><mod>${modelo}</mod>` +
@@ -438,8 +467,9 @@ export function montarXmlNota(params: MontarXmlParams): {
     destXml +
     autXmlXml +
     detXml +
+    detTaxaXml +
     `<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP>` +
-    `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${vProdTotal.toFixed(2)}</vProd>` +
+    `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${(vProdTotal + taxaComoItem).toFixed(2)}</vProd>` +
     `<vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI>` +
     `<vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>${vOutro.toFixed(2)}</vOutro>` +
     `<vNF>${vNF}</vNF></ICMSTot></total><transp><modFrete>9</modFrete></transp>` +

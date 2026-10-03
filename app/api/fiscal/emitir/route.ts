@@ -745,8 +745,22 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     // aqui em vez de baixar/extrair de novo.
     const { certPem, keyPem, certComCadeia } = certificadoValidado;
 
+    // Taxa de serviço como item próprio do cupom (pedido do Ramon, 03/10/2026): usa o produto de
+    // taxa percentual da loja (ex.: 90875 "Taxa de Serviço (10%)"). Sem ele, segue o rateio antigo.
+    const { data: produtoTaxa } = await admin
+      .from('products')
+      .select('name, omie_codigo, ncm')
+      .eq('store_id', storeId)
+      .eq('fee_type', 'percent')
+      .not('omie_codigo', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
     // 8. Monta e assina o XML.
     const paramsXml: MontarXmlParams = {
+      taxaServico: produtoTaxa?.omie_codigo
+        ? { cProd: String(produtoTaxa.omie_codigo), xProd: produtoTaxa.name, ncm: produtoTaxa.ncm }
+        : undefined,
       modelo,
       ambiente: config.ambiente,
       serie,
