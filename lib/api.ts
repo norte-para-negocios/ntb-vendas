@@ -1836,6 +1836,8 @@ export interface CashShiftSummary {
   // reunião): só crédito/débito têm bandeira; pagamento sem bandeira
   // escolhida (campo opcional) não entra aqui.
   totals_by_brand: Record<string, number>;
+  /** Crédito e débito separados por bandeira, chave "CREDIT|visa" (migration 147). Ausente antes dela. */
+  totals_by_card?: Record<string, number>;
   total_sangria: number;
   total_suprimento: number;
   expected_cash: number;

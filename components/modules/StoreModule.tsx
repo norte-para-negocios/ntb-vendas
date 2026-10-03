@@ -38,7 +38,7 @@ import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
 import { VendasCanceladasView } from '@/components/modules/VendasCanceladasView';
 import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
 import { setorDoItem } from '@/lib/setores';
 import { chavePreConta } from '@/lib/preConta';
@@ -7492,15 +7492,15 @@ const CaixaViewMeu: React.FC<{
                                         </div>
                                     )}
                                 </div>
-                                {Object.keys(historySummary.totals_by_brand).length > 0 && (
+                                {Object.keys(historySummary.totals_by_card ?? historySummary.totals_by_brand).length > 0 && (
                                     <div className="space-y-1.5">
                                         <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
-                                            Total por bandeira
+                                            Cartões: crédito e débito por bandeira
                                         </h4>
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {Object.entries(historySummary.totals_by_brand).map(([brand, total]) => (
+                                            {Object.entries(historySummary.totals_by_card ?? historySummary.totals_by_brand).sort(([a], [b]) => a.localeCompare(b)).map(([brand, total]) => (
                                                 <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
-                                                    <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
+                                                    <span className="text-[var(--text)]">{brand.includes('|') ? getCardTotalLabel(brand) : getCardBrandLabel(brand)}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}
@@ -7680,7 +7680,9 @@ const CaixaViewMeu: React.FC<{
                         fechadoEm: new Date(),
                         fundo: Number(shift.opening_float) || 0,
                         formas: Object.entries(resumo.totals_by_method).map(([m, total]) => ({ label: getPaymentMethodLabel(m), total: Number(total) || 0 })),
-                        cartoes: Object.entries(resumo.totals_by_brand).map(([b, total]) => ({ label: getCardBrandLabel(b), total: Number(total) || 0 })),
+                        cartoes: resumo.totals_by_card
+                            ? Object.entries(resumo.totals_by_card).sort(([a], [b]) => a.localeCompare(b)).map(([k, total]) => ({ label: getCardTotalLabel(k), total: Number(total) || 0 }))
+                            : Object.entries(resumo.totals_by_brand).map(([b, total]) => ({ label: getCardBrandLabel(b), total: Number(total) || 0 })),
                         sangria: Number(resumo.total_sangria) || 0,
                         suprimento: Number(resumo.total_suprimento) || 0,
                         dinheiroEsperado: Number(resumo.expected_cash) || 0,
@@ -8457,15 +8459,15 @@ const CaixaViewMeu: React.FC<{
                                     (Mastercard, Alelo etc.) contra a maquineta física,
                                     não só por método. Pagamento sem bandeira escolhida
                                     (campo opcional) não aparece aqui de propósito. */}
-                                {Object.keys(closeSummary.totals_by_brand).length > 0 && (
+                                {Object.keys(closeSummary.totals_by_card ?? closeSummary.totals_by_brand).length > 0 && (
                                     <div className="space-y-1.5">
                                         <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
-                                            Total por bandeira
+                                            Cartões: crédito e débito por bandeira
                                         </h4>
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {Object.entries(closeSummary.totals_by_brand).map(([brand, total]) => (
+                                            {Object.entries(closeSummary.totals_by_card ?? closeSummary.totals_by_brand).sort(([a], [b]) => a.localeCompare(b)).map(([brand, total]) => (
                                                 <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
-                                                    <span className="text-[var(--text)]">{getCardBrandLabel(brand)}</span>
+                                                    <span className="text-[var(--text)]">{brand.includes('|') ? getCardTotalLabel(brand) : getCardBrandLabel(brand)}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}

@@ -76,6 +76,14 @@ export const CARD_BRAND_LABELS: Record<string, string> = {
 export const getCardBrandLabel = (brand?: string | null): string =>
     brand ? (CARD_BRAND_LABELS[brand] || brand) : '';
 
+// Chave "CREDIT|visa" (ou "DEBIT|" sem bandeira) de totals_by_card (migration 147)
+// -> "Crédito Visa" / "Débito (sem bandeira)".
+export const getCardTotalLabel = (key: string): string => {
+    const [method, brand] = key.split('|');
+    const tipo = method === 'DEBIT' ? 'Débito' : 'Crédito';
+    return `${tipo} ${brand ? getCardBrandLabel(brand) : '(sem bandeira)'}`;
+};
+
 // Catalogo fixo de etiquetas/badges de produto (migration 019). Armazenado
 // como products.tags (text[]) com essas chaves; a UI (lojista e cliente) so'
 // oferece este catalogo, nunca texto livre — consistencia visual. Ver
