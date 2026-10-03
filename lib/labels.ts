@@ -76,12 +76,19 @@ export const CARD_BRAND_LABELS: Record<string, string> = {
 export const getCardBrandLabel = (brand?: string | null): string =>
     brand ? (CARD_BRAND_LABELS[brand] || brand) : '';
 
-// Chave "CREDIT|visa" (ou "DEBIT|" sem bandeira) de totals_by_card (migration 147)
-// -> "Crédito Visa" / "Débito (sem bandeira)".
+// Chave "CREDIT|visa" (ou "DEBIT|" sem bandeira) de totals_by_card (migration 147).
+// Segue a folha de caixa em papel do Sertão: Visa crédito / Electron (Visa débito),
+// Mastercard crédito / Maestro (Master débito), Elo crédito / Elo débito e os
+// tickets (Alelo, Sodexo, Ticket, VR) sozinhos, sem "crédito/débito".
+const VALE_BRANDS = ['alelo', 'sodexo', 'ticket', 'vr'];
 export const getCardTotalLabel = (key: string): string => {
     const [method, brand] = key.split('|');
-    const tipo = method === 'DEBIT' ? 'Débito' : 'Crédito';
-    return `${tipo} ${brand ? getCardBrandLabel(brand) : '(sem bandeira)'}`;
+    const debito = method === 'DEBIT';
+    if (!brand) return `${debito ? 'Débito' : 'Crédito'} (sem bandeira)`;
+    if (VALE_BRANDS.includes(brand)) return getCardBrandLabel(brand);
+    if (debito && brand === 'visa') return 'Electron (Visa débito)';
+    if (debito && brand === 'mastercard') return 'Maestro (Master débito)';
+    return `${getCardBrandLabel(brand)} ${debito ? 'débito' : 'crédito'}`;
 };
 
 // Catalogo fixo de etiquetas/badges de produto (migration 019). Armazenado
