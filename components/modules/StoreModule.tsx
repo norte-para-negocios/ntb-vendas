@@ -11,6 +11,7 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
+import CouponManagementView from '@/components/modules/CouponManagementView';
 import { dentroDoPrazoCancelamento, limiteCancelamento, mensagemPrazoEncerrado, PRAZO_CANCELAMENTO_TEXTO } from '@/lib/fiscal/prazoCancelamento';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
@@ -11042,7 +11043,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'settings'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'settings' | 'cupons'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -11448,6 +11449,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         { label: 'Loja', icon: <StoreIcon size={14} />, tabs: [
             { id: 'link', label: 'Meu link / QR code' },
             { id: 'settings', label: 'Configurações' },
+            { id: 'cupons', label: 'Cupons de desconto' },
             { id: 'fiscal', label: 'Notas fiscais', sensitive: true },
         ]},
     ];
@@ -11918,6 +11920,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
 
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
+            {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">
