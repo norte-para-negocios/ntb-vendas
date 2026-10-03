@@ -961,6 +961,13 @@ export const fetchTables = async (storeId: string): Promise<Table[]> => {
 
 // Igual a fetchTables, mas sem a coluna `pin` — usada pelo cardápio do cliente
 // (ClientModule), que não deve receber o PIN de mesas que não são as dele.
+// Planta de mesas (migration 149): grava a posição (% do mapa) de uma mesa; null/null tira do mapa.
+export const updateTablePosition = async (storeId: string, tableId: string, x: number | null, y: number | null): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('update_table_position_secure', { p_store_id: storeId, p_table_id: tableId, p_x: x, p_y: y });
+  if (error) { console.error('updateTablePosition falhou:', error); return false; }
+  return data === true;
+};
+
 export const fetchTablesPublic = async (storeId: string): Promise<Table[]> => {
   const { data, error } = await supabase.rpc('get_tables_public_secure', { p_store_id: storeId });
   if (error) { console.error(error); return []; }

@@ -174,6 +174,9 @@ export interface Table {
   guest_count: number;
   waiter_requested?: boolean;
   service_fee_removed?: boolean;
+  // Posição na planta, em % do mapa (migration 142/149). null = ainda não posicionada.
+  floor_x?: number | null;
+  floor_y?: number | null;
 }
 
 export interface Category {

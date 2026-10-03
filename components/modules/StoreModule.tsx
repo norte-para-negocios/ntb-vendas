@@ -20,7 +20,8 @@ import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from
 import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
-import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { FloorPlanView } from './FloorPlanView';
+import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -2995,6 +2996,14 @@ const TablesView: React.FC<{
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
     const [showMoveTableModal, setShowMoveTableModal] = useState(false);
+    // Planta de mesas (floor plan): alterna Lista/Mapa; a escolha fica no aparelho.
+    const [tablesViewMode, setTablesViewMode] = useState<'lista' | 'mapa'>(() => {
+        try { return localStorage.getItem('tables_view_mode') === 'mapa' ? 'mapa' : 'lista'; } catch { return 'lista'; }
+    });
+    const mudarTablesViewMode = (m: 'lista' | 'mapa') => {
+        setTablesViewMode(m);
+        try { localStorage.setItem('tables_view_mode', m); } catch { /* sem storage: só não lembra */ }
+    };
     const [targetTableId, setTargetTableId] = useState('');
     const [visiblePins, setVisiblePins] = useState<Set<string>>(new Set());
     const [areCardsCollapsed, setAreCardsCollapsed] = useState(false);
@@ -4785,8 +4794,52 @@ NOTIFY pgrst, 'reload schema';`;
                     );
                 };
 
+                const infoDaMesa = (table: Table) => {
+                    const blocked = table.status === 'blocked';
+                    const occ = table.status === 'occupied' || table.status === 'waiting_bill';
+                    const dotColor =
+                        blocked ? 'var(--text-muted)' :
+                        table.waiter_requested ? 'var(--err)' :
+                        table.status === 'waiting_bill' ? 'var(--warn)' :
+                        occ ? 'var(--brand)' : 'var(--ok)';
+                    return {
+                        dotColor,
+                        statusLabel: getTableStatusLabel(blocked ? 'blocked' : occ ? table.status : 'available'),
+                        inJurisdiction: isTableInJurisdiction(loggedUser, table.id),
+                        blocked,
+                    };
+                };
+                const podeEditarPlanta = loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal';
+                const moverNaPlanta = async (tableId: string, x: number | null, y: number | null) => {
+                    setTables(prev => prev.map(t => t.id === tableId ? { ...t, floor_x: x, floor_y: y } : t)); // otimista
+                    const ok = await updateTablePosition(storeId, tableId, x, y);
+                    if (!ok) { toast.error('Não consegui salvar a posição da mesa.'); loadData(); }
+                };
+
                 return (
                     <>
+                        <div className="flex items-center gap-1 mb-4 p-1 rounded-full bg-[var(--surface-2)] w-fit" role="tablist" aria-label="Modo de exibição das mesas">
+                            {(['lista', 'mapa'] as const).map((m) => (
+                                <button
+                                    key={m}
+                                    role="tab"
+                                    aria-selected={tablesViewMode === m}
+                                    onClick={() => mudarTablesViewMode(m)}
+                                    className={`h-8 px-4 rounded-full text-[13px] font-semibold u-press ${tablesViewMode === m ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
+                                >
+                                    {m === 'lista' ? 'Lista' : 'Mapa'}
+                                </button>
+                            ))}
+                        </div>
+                        {tablesViewMode === 'mapa' ? (
+                            <FloorPlanView
+                                tables={tables}
+                                info={infoDaMesa}
+                                onOpen={(t) => { setSelectedTable(t); setShowFullBill(false); setShowMenuMode(false); }}
+                                canEdit={podeEditarPlanta}
+                                onMove={moverNaPlanta}
+                            />
+                        ) : (<>
                         {fullTables.length > 0 && (
                             <>
                                 <h3 className="eyebrow mb-2.5">Ocupadas ({fullTables.length})</h3>
@@ -4809,6 +4862,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </div>
                             </>
                         )}
+                        </>)}
                     </>
                 );
             })()}
