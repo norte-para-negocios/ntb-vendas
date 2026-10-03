@@ -7,7 +7,7 @@ import { motion, AnimatePresence, MotionConfig, useDragControls, useAnimate, use
 import { SPRING_TAP, SPRING_SHEET, SPRING_UI, LIST_ITEM_MOTION } from '@/lib/motion';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { flashSuccessCheck } from '@/components/SuccessCheck';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, TAB_MODULE_KEY, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, TAB_MODULE_KEY, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid, podeTrocarOuExcluir } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
@@ -3727,6 +3727,7 @@ NOTIFY pgrst, 'reload schema';`;
 
     const handleMoveTable = async () => {
         if (isAberto) { avisarSoComLogin(); return; }
+        if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para trocar de mesa.'); return; }
         if (!selectedTable || !targetTableId) return;
         
         if (await confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
@@ -4432,6 +4433,7 @@ NOTIFY pgrst, 'reload schema';`;
 
     const handleDeleteItem = async (itemId: string) => {
         if (isAberto) { avisarSoComLogin(); return; }
+        if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para excluir item.'); return; }
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
@@ -5037,6 +5039,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                         </div>
                                                         <div className="flex items-center gap-3 shrink-0">
                                                             <span className="num text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
+                                                            {podeTrocarOuExcluir(loggedUser) && (
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press"
@@ -5044,6 +5047,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                             >
                                                                 <Trash2 size={16} />
                                                             </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     );
@@ -5095,9 +5099,11 @@ NOTIFY pgrst, 'reload schema';`;
 
                             <div className="grid grid-cols-3 gap-2 mb-3">
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowFullBill(false)}>Voltar</Button>
+                                {podeTrocarOuExcluir(loggedUser) ? (
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowMoveTableModal(true)}>
                                     <ArrowRightLeft size={16}/> Trocar
                                 </Button>
+                                ) : <span />}
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => selectedTable && printTableBill(selectedTable.id)}>
                                     <Printer size={16}/> Imprimir
                                 </Button>
@@ -5243,6 +5249,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
                                                 )}
                                             </div>
+                                            {podeTrocarOuExcluir(loggedUser) && (
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteItem(item.id)}
@@ -5252,6 +5259,7 @@ NOTIFY pgrst, 'reload schema';`;
                                             >
                                                 <Trash2 size={16} />
                                             </button>
+                                            )}
                                         </div>
                                     ))}
                                     </div>
@@ -10464,6 +10472,7 @@ const DEFAULT_TEAM_PERMISSIONS = {
     admin: false,
     caixa: false,
     supervisiona_caixa: false,
+    trocas: false,
 };
 
 // Presets de permissão por função real (Fase 1, Task 2 — plano "Fora do
@@ -10474,7 +10483,7 @@ const DEFAULT_TEAM_PERMISSIONS = {
 const TEAM_PERMISSION_PRESETS: Record<string, { label: string; permissions: typeof DEFAULT_TEAM_PERMISSIONS }> = {
     garcom_so_serve: { label: 'Garçom que só serve', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, caixa: false } },
     garcom_recebe: { label: 'Garçom que também recebe', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, caixa: true } },
-    caixa_fixo: { label: 'Caixa fixo', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, counter: true, caixa: true } },
+    caixa_fixo: { label: 'Caixa fixo', permissions: { ...DEFAULT_TEAM_PERMISSIONS, tables: true, counter: true, caixa: true, trocas: true } },
 };
 
 const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
@@ -10547,6 +10556,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                 admin: user.permissions?.admin !== false,
                 caixa: user.permissions?.caixa === true,
                 supervisiona_caixa: user.permissions?.supervisiona_caixa === true,
+                trocas: user.permissions?.trocas === true,
             });
             setPassword(''); // Don't show password
             const assignedIds = user.assigned_table_ids;
@@ -10721,6 +10731,13 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             </label>
                             <p className="text-[11px] text-[var(--text-muted)] pl-6 -mt-1">
                                 Vê o valor esperado ao fechar o próprio caixa mesmo com contagem cega ligada, e pode aprovar o fechamento de qualquer operador quando a diferença passa do limite configurado.
+                            </p>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input type="checkbox" checked={!!permissions.trocas} onChange={() => togglePermission('trocas')} className="rounded text-[var(--brand)] focus:ring-[var(--brand)]" />
+                                Troca de mesa e exclusão de item
+                            </label>
+                            <p className="text-[11px] text-[var(--text-muted)] pl-6 -mt-1">
+                                Sem esta permissão, o usuário não vê o botão de trocar de mesa nem de cancelar item da comanda. Gerente e dono sempre podem.
                             </p>
                         </div>
                     </div>

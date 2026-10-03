@@ -309,3 +309,10 @@ export const STORE_PROFILE_PRESETS: Record<string, { label: string; modules: Sto
   bar_sem_cozinha: { label: 'Bar sem cozinha', modules: { ...ALL_ON, kitchen_kds: false }, orderFlow: 'kds' },
   mesa_sem_bar: { label: 'Mesa sem bar', modules: { ...ALL_ON, bar_kds: false }, orderFlow: 'kds' },
 };
+
+// Trocar de mesa / excluir item da comanda (2026-10-03, pedido do Ramon).
+export const podeTrocarOuExcluir = (user: { role: string; permissions?: { trocas?: boolean } }): boolean => {
+  if (user.role === 'owner' || user.role === 'universal' || user.role === 'manager') return true;
+  if (user.role === 'open') return false;
+  return user.permissions?.trocas === true;
+};

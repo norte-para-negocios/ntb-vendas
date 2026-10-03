@@ -136,6 +136,10 @@ export interface StoreUserPermissions {
   // diferença acima da tolerância máxima. Ausência = false (mesmo padrão
   // estrito de `caixa`, nunca o fallback permissivo das 6 chaves antigas).
   supervisiona_caixa?: boolean;
+  // Trocar de mesa e excluir/cancelar item da comanda (pedido do Ramon, 2026-10-03:
+  // "garçom só acessa Mesas, sem trocar mesa nem excluir item"). Ausência = false
+  // (comparação estrita, como `caixa`); owner/manager/universal sempre podem.
+  trocas?: boolean;
 }
 
 export interface StoreUser {
