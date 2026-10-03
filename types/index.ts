@@ -58,6 +58,8 @@ export interface Store {
     // "Adicionar", Conta). Editável pelo lojista (StoreSettingsView) e pelo
     // Master Admin (Editar Loja).
     client_ordering?: boolean;
+    /** Pede a senha de quem lança a cada pedido de mesa (pedido do Ramon, 2026-10-03). */
+    pedido_pede_senha?: boolean;
     // Perfil de módulos por loja (Task 1, plano 2026-08-22). undefined =
     // todos os módulos ligados e fluxo 'kds' — comportamento atual de todas
     // as 6 lojas reais, nenhuma delas tem essa chave. Ver

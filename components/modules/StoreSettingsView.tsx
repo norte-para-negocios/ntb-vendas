@@ -51,6 +51,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
     const [showBestsellersEnabled, setShowBestsellersEnabled] = useState(store.config?.show_bestsellers ?? false);
     // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): ausente = true.
     const [clientOrderingEnabled, setClientOrderingEnabled] = useState(store.config?.client_ordering !== false);
+    const [pedidoPedeSenha, setPedidoPedeSenha] = useState(store.config?.pedido_pede_senha === true);
 
     // Melhorias no fluxo de Caixa (2026-08-28), Task 4 — contagem cega no
     // fechamento de turno: mesmo padrão jsonb de sempre (stores.config).
@@ -139,6 +140,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
         setNoteSuggestions(store.config?.note_suggestions ?? []);
         setShowBestsellersEnabled(store.config?.show_bestsellers ?? false);
         setClientOrderingEnabled(store.config?.client_ordering !== false);
+        setPedidoPedeSenha(store.config?.pedido_pede_senha === true);
         setBlindCountEnabled(store.config?.cash_shift_blind_count ?? false);
         setPaperWidthMm(store.config?.printer_paper_width_mm ?? 48);
         setTableAlertOccupiedMin(store.config?.table_alert_occupied_minutes ?? 0);
@@ -225,6 +227,21 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
             console.error('Error updating client_ordering config', e);
             setClientOrderingEnabled(!newValue);
             toast.error('Erro ao atualizar o cardápio do cliente.');
+        }
+    };
+
+    const handleTogglePedidoPedeSenha = async () => {
+        const newValue = !pedidoPedeSenha;
+        setPedidoPedeSenha(newValue);
+        try {
+            const newConfig = { ...currentStoreConfig, pedido_pede_senha: newValue };
+            await updateStoreConfig(store.id, newConfig);
+            setCurrentStoreConfig(newConfig);
+            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig });
+        } catch (e) {
+            console.error('Error updating pedido_pede_senha config', e);
+            setPedidoPedeSenha(!newValue);
+            toast.error('Erro ao atualizar a configuração.');
         }
     };
 
@@ -430,6 +447,29 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${clientOrderingEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                 </div>
+            </div>
+
+            {/* Pedido no nome de quem lançou (pedido do Ramon, 2026-10-03):
+                stores.config.pedido_pede_senha — pede a senha de quem está lançando
+                a cada pedido de mesa, mesmo com outra pessoa logada no aparelho. */}
+            <div className="mb-4 flex items-center justify-between gap-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
+                <div>
+                    <h4 className="font-semibold text-[15px] text-[var(--text)]">Pedir a senha de quem lança o pedido</h4>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+                        {pedidoPedeSenha
+                            ? 'Ligado: a cada pedido de mesa, o garçom digita a própria senha e o pedido sai no nome dele, mesmo se o aparelho estiver logado com outra pessoa.'
+                            : 'Desligado: o pedido sai no nome de quem está logado no aparelho.'}
+                    </p>
+                </div>
+                <button
+                    onClick={handleTogglePedidoPedeSenha}
+                    role="switch"
+                    aria-checked={pedidoPedeSenha}
+                    aria-label="Pedir a senha de quem lança o pedido"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${pedidoPedeSenha ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pedidoPedeSenha ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">

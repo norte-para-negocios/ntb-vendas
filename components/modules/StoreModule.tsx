@@ -4266,7 +4266,7 @@ NOTIFY pgrst, 'reload schema';`;
     const confirmarPedidoMesa = async (autor?: { name: string }) => {
         if (!selectedTable || mesaCarrinho.length === 0) return;
         // Modo Aberto: sem a senha de alguém da equipe o pedido não sai (ver pedirSenhaDoPedido).
-        if (isAberto && !autor) { pedirSenhaDoPedido(); return; }
+        if ((isAberto || store.config?.pedido_pede_senha === true) && !autor) { pedirSenhaDoPedido(); return; }
         const nomeAutor = autor?.name ?? loggedUser.name;
         // Defesa em profundidade (achado real do Ramon, WhatsApp 2026-09-08,
         // mesmo espírito do comentário em handleOpenPayment acima): repetir a
