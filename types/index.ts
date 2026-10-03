@@ -321,6 +321,8 @@ export interface OrderItem {
   fiscal_nota_id?: string | null; // migration 055 — nota fiscal individual que já cobriu este item (null = ainda não faturado)
   fee_manual?: boolean | null; // migration 141 — taxa com valor digitado pelo caixa (não recalcula sozinha por R$)
   fee_manual_percent?: number | null; // migration 141 — percentual digitado (null = digitou o valor em R$)
+  // Prioridade KDS (migration 142) — item prioritário vai pro topo da cozinha com animação pulse.
+  priority?: boolean;
   order?: Order;
 }
 

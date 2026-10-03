@@ -3378,3 +3378,9 @@ export const recordCouponUsage = async (
   });
   try { await supabase.rpc('increment_coupon_uses', { p_coupon_id: couponId }); } catch { /* silencioso */ }
 };
+// Prioridade KDS (migration 142/145) — toggle de prioridade de item na cozinha.
+export const toggleItemPriority = async (itemId: string): Promise<{ success: boolean }> => {
+  const { data, error } = await supabase.rpc('toggle_order_item_priority', { p_item_id: itemId });
+  if (error || data === false) return { success: false };
+  return { success: true };
+};
