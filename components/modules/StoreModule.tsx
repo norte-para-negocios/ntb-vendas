@@ -1795,7 +1795,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                         {/* 4) Ações secundárias, discretas: impressão e controles do item */}
                         <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-[var(--border)]">
                             <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                {imprimeAuto && <span title="O ticket sai sozinho na impressora deste local"><Badge variant="success">Impresso</Badge></span>}
+                                {imprimeAuto && <span title="O ticket sai sozinho na impressora deste local (o sistema não confirma o papel impresso)"><Badge variant="success">Impressão automática</Badge></span>}
                                 <Button size="sm" variant="ghost" className="max-sm:!h-11" onClick={() => printOrderTicket(item)} title={imprimeAuto ? 'Imprimir o ticket de novo' : 'Imprimir ticket'}>
                                     <Printer size={14} /> {imprimeAuto ? 'Reimprimir' : 'Imprimir'}
                                 </Button>
