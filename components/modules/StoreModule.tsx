@@ -22,6 +22,7 @@ import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { FloorPlanView } from './FloorPlanView';
+import { PedidosDoDiaView } from './PedidosDoDiaView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { PriceSchedulesView } from './PriceSchedulesView';
 import { ReportsView } from './ReportsView';
@@ -3121,19 +3122,11 @@ const TablesView: React.FC<{
     const [showSentHistory, setShowSentHistory] = useState(false);
     // Locais de preparo pra filtrar "Pedidos do Dia" por local (ex.: só Pizzaria).
     const [locaisInfo, setLocaisInfo] = useState<{ setores: PrintSector[]; catSetor: Record<string, string | null> }>({ setores: [], catSetor: {} });
-    const [filtroLocal, setFiltroLocal] = useState<string>('todos');
     useEffect(() => {
         Promise.all([fetchPrintSectors(storeId), fetchCategorySectors(storeId)])
             .then(([setores, catSetor]) => setLocaisInfo({ setores, catSetor }))
             .catch(() => {});
     }, [showSentHistory, storeId]);
-    // Subprojeto 3 (2026-08-25) — "Meus pedidos do dia": um garçom numa loja
-    // com vários lançando na mesma "Pedidos do Dia" tinha que caçar os
-    // próprios itens numa lista misturada de todo mundo. Default ligado só
-    // pra quem é `waiter` de verdade (não `owner`/`universal`/`cashier`,
-    // que fazem sentido ver tudo por padrão) — reaproveita `added_by_name`
-    // (migration 053) já gravado por item, sem query nova.
-    const [showOnlyMine, setShowOnlyMine] = useState(loggedUser.role === 'waiter');
 
     // Subprojeto 3 (2026-08-25) — reatribuir a mesa selecionada pra outro
     // garçom sem precisar abrir Gestão de Usuários. Só afeta quem JÁ tem
@@ -6021,109 +6014,19 @@ NOTIFY pgrst, 'reload schema';`;
                 </div>
             </Modal>
 
-            {/* "Pedidos do Dia" (redesign 2026-08-23, sucede "Histórico de
-                Pedidos Enviados" da Task 2): lista plana (hora, mesa, item,
-                se imprimiu), sem status/coluna de fluxo nem controle de
-                confirmação de entrega — só visualização, pedido explícito do
-                dono. Cobre o dia inteiro, mesas fechadas incluídas — ver
-                sentHistoryItems acima pro porquê de combinar duas fontes. */}
-            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos do Dia" variant="sheet">
-                <div className="space-y-3">
-                    <p className="text-xs text-[var(--text-muted)]">
-                        Tudo que foi lançado hoje, mesas fechadas incluídas — do mais recente pro mais antigo. Só visualização, sem nenhuma ação aqui.
-                    </p>
-                    <div className="flex p-1 bg-[var(--surface-2)] rounded-[var(--r-md)]">
-                        <button
-                            type="button"
-                            onClick={() => setShowOnlyMine(true)}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm ${showOnlyMine ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}
-                        >
-                            Meus pedidos
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setShowOnlyMine(false)}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-[var(--r-sm)] u-motion u-press-sm ${!showOnlyMine ? 'bg-[var(--surface)] text-[var(--brand)] shadow-sm' : 'text-[var(--text-muted)]'}`}
-                        >
-                            Todos
-                        </button>
-                    </div>
-                    {(() => {
-                        const locais = [{ id: 'todos', nome: 'Todos os locais' }, { id: 'kitchen', nome: 'Cozinha' }, { id: 'bar', nome: 'Bar' }, ...locaisInfo.setores.map(x => ({ id: x.id, nome: x.name }))];
-                        return (
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
-                                {locais.map(l => {
-                                    const qtd = l.id === 'todos' ? sentHistoryItems.length : sentHistoryItems.filter(r => r.localId === l.id).length;
-                                    return (
-                                        <button
-                                            key={l.id}
-                                            type="button"
-                                            onClick={() => setFiltroLocal(l.id)}
-                                            className={`shrink-0 min-h-9 max-sm:min-h-11 px-3 rounded-full text-xs font-bold border u-motion ${filtroLocal === l.id ? 'bg-[var(--brand-fill)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]'}`}
-                                        >
-                                            {l.nome} <span className="opacity-70">({qtd})</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        );
-                    })()}
-                    {(() => {
-                        const doLocal = filtroLocal === 'todos' ? sentHistoryItems : sentHistoryItems.filter(row => row.localId === filtroLocal);
-                        const filteredHistory = showOnlyMine
-                            ? doLocal.filter(row => row.addedByName === loggedUser.name)
-                            : doLocal;
-                        if (filteredHistory.length === 0) {
-                            return (
-                                <p className="text-sm text-[var(--text-muted)] text-center py-8">
-                                    {showOnlyMine ? 'Você ainda não lançou nenhum pedido hoje.' : 'Nenhum pedido lançado ainda hoje.'}
-                                </p>
-                            );
-                        }
-                        return (
-                        <div className="space-y-2 max-h-[65vh] overflow-y-auto">
-                            {filteredHistory.map(row => (
-                                <div key={row.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] flex-wrap">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-bold text-[var(--text)] truncate">
-                                            {row.quantity}x {row.productName}{row.addons ? ` (${row.addons})` : ''}
-                                        </p>
-                                        <p className="text-xs text-[var(--text-muted)]">
-                                            Mesa {row.tableNumber} · {new Date(row.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                            {row.closed ? ' · mesa fechada' : ''}
-                                        </p>
-                                        {row.observation && <p className="text-xs font-semibold text-[var(--warn)]">Obs: {row.observation}</p>}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                        <Badge color={row.printed ? 'bg-[var(--ok)]/10 text-[var(--ok)]' : 'bg-[var(--surface)] text-[var(--text-muted)]'}>
-                                            {row.printed ? 'Impresso' : 'Sem registro'}
-                                        </Badge>
-                                        <Badge color={row.localId === 'bar' ? 'bg-[var(--info)]/10 text-[var(--info)]' : row.localId === 'kitchen' ? 'bg-[var(--warn)]/10 text-[var(--warn)]' : 'bg-[var(--brand)]/10 text-[var(--brand)]'}>
-                                            {row.localId === 'bar' ? 'Bar' : row.localId === 'kitchen' ? 'Cozinha' : (locaisInfo.setores.find(x => x.id === row.localId)?.name || 'Cozinha')}
-                                        </Badge>
-                                        {/* Critical #2: só oferece a ação em quem passa por `canReprint`
-                                            (aparelho de caixa de verdade, ver comentário acima) E cuja mesa/
-                                            comanda ainda está aberta — reimprimir ticket de cozinha pra uma
-                                            mesa já fechada (pagou e foi embora) produz comida que ninguém
-                                            pediu mais. Quem não bate os dois continua vendo o badge de status
-                                            normalmente (view-only), só não vê o botão. */}
-                                        {!row.printed && !row.closed && canReprint && (
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                disabled={reprintingIds.has(row.id)}
-                                                onClick={() => handleManualReprint(row)}
-                                            >
-                                                <RotateCcw size={14} className="mr-1" /> Reimprimir
-                                            </Button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        );
-                    })()}
-                </div>
+            {/* "Pedidos do Dia" (redesign 04/10/2026): janela larga; lógica em lib/pedidosDoDia.ts, tela em
+                PedidosDoDiaView. Só visualização, exceto Reimprimir (item sem registro, mesa aberta, aparelho de
+                caixa — `canReprint`). Cobre o dia inteiro, mesas fechadas incluídas — ver sentHistoryItems. */}
+            <Modal isOpen={showSentHistory} onClose={() => setShowSentHistory(false)} title="Pedidos do Dia" variant="sheet" size="lg">
+                <PedidosDoDiaView
+                    linhas={sentHistoryItems}
+                    locais={[{ id: 'kitchen', nome: 'Cozinha' }, { id: 'bar', nome: 'Bar' }, ...locaisInfo.setores.map(x => ({ id: x.id, nome: x.name }))]}
+                    meuNome={loggedUser.name}
+                    soMeusInicial={loggedUser.role === 'waiter'}
+                    podeReimprimir={canReprint}
+                    reimprimindo={reprintingIds}
+                    onReimprimir={handleManualReprint}
+                />
             </Modal>
 
             {/* Subprojeto 3 (2026-08-25): trocar responsável pela mesa selecionada
