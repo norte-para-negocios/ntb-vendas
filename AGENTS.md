@@ -2573,7 +2573,9 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
   **Limite honesto**: não há sessão no servidor; o operador chega como uuid. O servidor barra chamada sem operador, garçom com o próprio id,
   usuário de outra loja e `permissions {}`, mas NÃO barra quem forja o uuid de um gerente (a equipe é listável por `fetch_store_team_members_secure`).
   Fechar de vez exige token de sessão/Supabase Auth. As funções antigas (`*_secure`) seguem abertas para apps antigos: depois do deploy,
-  revogar o `execute` delas (SQL no fim da 159).
+  revogar o `execute` delas: **SQL pronto em `supabase/migrations/160_revoga_funcoes_antigas.pendente.sql` (extensão `.pendente.sql`, NÃO é aplicado por nada).
+  Aplicar só quando o app novo (site, desktop e APK) estiver em TODAS as lojas, com a loja fechada, e depois rodar o portão** (o passo das RPCs antigas deixa de ser ESPERADO).
+  `cancelPendingTableItems` (lib/api.ts) chama a antiga `cancel_pending_table_items_secure` mas nenhuma tela usa (código morto).
 - **R2 (cadeado, nunca escondido)**: `StoreLayout` mostra todas as áreas que a loja tem ligadas; sem permissão = cadeado + aviso curto, sem abrir a
   tela nem carregar dado (menu lateral, gaveta/barra do celular e abas da Administração via `abasBloqueadas`). Garçom/caixa: chave ausente em
   `permissions` NÃO libera aba (`hasTabPermission`); `computeAccessibleTabIds` só cai na Administração para quem tem `admin`.
