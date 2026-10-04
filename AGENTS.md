@@ -1360,6 +1360,14 @@ navegador escura também, antes mesmo de logar. Aplicada nas 4 telas de login
 obrigatória"). Regra geral: **telas de pré-autenticação sempre claras**; o
 modo escuro só existe depois do login, dentro do próprio painel.
 
+**Tema (04/10/2026): só a preferência da pessoa decide.** Janelas (`Modal`, `BottomSheet` do cardápio),
+barras flutuantes, pílulas, faixas e a tela de identificação por PIN usam `--surface`/`--text`/`--border`
+e acompanham `.dark` no `<html>`; o desfoque fica só no fundo (scrim). O vidro escuro fixo (`.on-glass`,
+`.u-glass-cart`) e as faixas `--ink` do cardápio do cliente foram removidos, e
+`scripts/testes/temaCoerente.test.ts` falha se voltarem. Branco fixo só sobre fundo de marca (botão
+`--brand-fill`, badges `-fill`, ícones sobre foto). Hooks do React nunca ficam depois de `return`
+antecipado (o banner offline do cardápio já derrubou a página pública por isso, corrigido em f642569).
+
 **`components/AuthBackdrop.tsx`** — substituiu o antigo padrão
 `.auth-shell`/`.auth-mesh`/`.auth-orb`/`.auth-grain` (2026-07-04). Fundo azul
 sólido `#484DB5` fixo (sempre `.force-light`, independente do tema), forma
