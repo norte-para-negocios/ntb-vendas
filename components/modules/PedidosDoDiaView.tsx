@@ -5,7 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { RotateCcw, Search, TriangleAlert } from 'lucide-react';
 import { Badge, Button, SegmentedControl } from '@/components/ui';
 import {
-  FILTROS_PADRAO, agruparPorHora, agruparPorMesa, contarPorLocal, filtrarLinhas, horaCurta, resumir,
+  FILTROS_PADRAO, dataSeNaoHoje, agruparPorHora, agruparPorMesa, contarPorLocal, filtrarLinhas, horaCurta, resumir,
   type EstadoFiltro, type Filtros, type LinhaPedido,
 } from '@/lib/pedidosDoDia';
 
@@ -40,13 +40,16 @@ const Linha: React.FC<{ l: LinhaPedido; localNome: string; mostrarMesa: boolean;
   const quem = l.addedByName ?? 'Cliente / QR';
   return (
     <div className={`grid items-start gap-x-4 gap-y-1 px-3 py-3 border-b border-[var(--border)] last:border-b-0 grid-cols-[48px_minmax(0,1fr)] ${COLUNAS}`}>
-      <span className="num text-[13px] text-[var(--text-muted)] pt-0.5">{horaCurta(l.time)}</span>
+      <span className="num text-[13px] text-[var(--text-muted)] pt-0.5 leading-tight">
+        {dataSeNaoHoje(l.time) && <span className="block text-[11px] font-semibold text-[var(--warn)]">{dataSeNaoHoje(l.time)}</span>}
+        {horaCurta(l.time)}
+      </span>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold text-[var(--text)] break-words"><span className="num">{l.quantity}×</span> {l.productName}</p>
         {l.addons && <p className="text-[13px] text-[var(--text-muted)] break-words">{l.addons}</p>}
         {l.observation && <p className="text-[13px] font-semibold text-[var(--warn)] break-words whitespace-pre-line">Obs: {l.observation}</p>}
         {l.client && <p className="text-[12px] text-[var(--text-muted)] break-words">Cliente: {l.client}</p>}
-        {mostrarMesa && <p className="text-[12px] text-[var(--text-muted)]">Mesa {l.tableNumber}{l.closed ? ' · fechada' : ''}</p>}
+        {mostrarMesa && <p className="text-[12px] text-[var(--text-muted)]">{l.balcao ? 'Balcão' : `Mesa ${l.tableNumber}`}{l.closed ? ' · fechada' : ''}</p>}
       </div>
       <span className="max-sm:hidden text-[13px] text-[var(--text-muted)] break-words pt-0.5">{quem}</span>
       <span className="max-sm:hidden"><Badge color={corDoLocal(l.localId)}>{localNome}</Badge></span>
@@ -82,12 +85,12 @@ export const PedidosDoDiaView: React.FC<Props> = ({ linhas, locais, meuNome, soM
       <div className="sm:sticky sm:top-0 z-10 -mx-5 -mt-5 px-5 pt-4 pb-3 bg-[var(--surface)] space-y-3 border-b border-[var(--border)]">
         <div className="grid grid-cols-4 gap-2">
           <Tile rotulo="Itens lançados" valor={resumo.unidades} />
-          <Tile rotulo="Impressos" valor={resumo.impressos} />
+          <Tile rotulo="Impressos" valor={resumo.unidadesImpressas} />
           <Tile
             rotulo="Sem registro"
-            valor={resumo.semRegistroAbertas}
-            destaque={resumo.semRegistroAbertas > 0}
-            onClick={resumo.semRegistroAbertas > 0 ? () => set({ estado: 'sem_registro' }) : undefined}
+            valor={resumo.unidadesSemRegistroAbertas}
+            destaque={resumo.unidadesSemRegistroAbertas > 0}
+            onClick={resumo.unidadesSemRegistroAbertas > 0 ? () => set({ estado: 'sem_registro' }) : undefined}
           />
           <Tile rotulo="Mesas" valor={resumo.mesas} />
         </div>
@@ -155,7 +158,7 @@ export const PedidosDoDiaView: React.FC<Props> = ({ linhas, locais, meuNome, soM
             <section key={g.chave} className="rounded-[var(--r-md)] border border-[var(--border)] overflow-hidden">
               <header className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 bg-[var(--surface-2)] border-b border-[var(--border)]">
                 <h4 className="text-[15px] font-semibold text-[var(--text)]">{g.titulo}</h4>
-                <span className="text-[13px] text-[var(--text-muted)] num">{g.unidades} {g.unidades === 1 ? 'item' : 'itens'} · último às {horaCurta(g.ultimaHora)}</span>
+                <span className="text-[13px] text-[var(--text-muted)] num">{g.unidades} {g.unidades === 1 ? 'item' : 'itens'} · último {dataSeNaoHoje(g.ultimaHora) ? `em ${dataSeNaoHoje(g.ultimaHora)} às` : 'às'} {horaCurta(g.ultimaHora)}</span>
                 {g.fechada && agrupar === 'mesa' && <Badge>Mesa fechada</Badge>}
                 {g.semRegistroAbertas > 0 && <Badge variant="warning">{g.semRegistroAbertas} sem registro</Badge>}
               </header>

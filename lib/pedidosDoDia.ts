@@ -6,6 +6,8 @@ export interface LinhaPedido {
   productName: string; quantity: number; destination: 'kitchen' | 'bar'; localId: string;
   addons?: string; observation?: string; client?: string | null;
   closed: boolean; printed: boolean; addedByName?: string | null;
+  /** Venda de balcão (não é mesa): entra na lista, mas não conta como mesa. */
+  balcao?: boolean;
 }
 export type EstadoFiltro = 'todos' | 'impresso' | 'sem_registro';
 export interface Filtros { local: string; estado: EstadoFiltro; busca: string; soMeus: boolean; meuNome: string }
@@ -17,10 +19,18 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 export const horaCurta = (iso: string): string =>
   new Date(iso).toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
 
+const diaBahia = (d: Date): string => d.toLocaleDateString('sv-SE', { timeZone: TZ });
+/** Data curta ("30/09") só quando o lançamento NÃO é de hoje; senão null. Evita ler item de ontem como se fosse de agora. */
+export function dataSeNaoHoje(iso: string, agora: Date = new Date()): string | null {
+  const d = new Date(iso);
+  if (diaBahia(d) === diaBahia(agora)) return null;
+  return d.toLocaleDateString('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit' });
+}
+
 export function buscaCombina(l: LinhaPedido, busca: string): boolean {
   const q = norm(busca);
   if (!q) return true;
-  const alvo = [`mesa ${l.tableNumber}`, l.productName, l.addons, l.observation, l.client, l.addedByName]
+  const alvo = [l.balcao ? 'balcao balcão' : `mesa ${l.tableNumber}`, l.productName, l.addons, l.observation, l.client, l.addedByName]
     .filter(Boolean).map((x) => norm(String(x))).join(' | ');
   return q.split(/\s+/).every((p) => alvo.includes(p));
 }
@@ -48,7 +58,10 @@ export function resumir(rows: LinhaPedido[]) {
     impressos: rows.length - semRegistro.length,
     semRegistro: semRegistro.length,
     semRegistroAbertas: semRegistro.filter((l) => !l.closed).length, // só estas podem ser reimpressas / exigem atenção
-    mesas: new Set(rows.map((l) => String(l.tableNumber))).size,
+    mesas: new Set(rows.filter((l) => !l.balcao).map((l) => String(l.tableNumber))).size,
+    // Mesma conta em unidades (um item pode ser 3x), para os cartões do topo baterem com "Itens lançados".
+    unidadesImpressas: rows.filter((l) => l.printed).reduce((s, l) => s + l.quantity, 0),
+    unidadesSemRegistroAbertas: semRegistro.filter((l) => !l.closed).reduce((s, l) => s + l.quantity, 0),
   };
 }
 
@@ -75,7 +88,7 @@ const agrupar = (rows: LinhaPedido[], chaveDe: (l: LinhaPedido) => string): Map<
 /** Um grupo por mesa; grupo mais recente primeiro; dentro dele, na ordem em que foi lançado (como uma comanda). */
 export function agruparPorMesa(rows: LinhaPedido[]): GrupoPedidos[] {
   return Array.from(agrupar(rows, (l) => String(l.tableNumber)).entries())
-    .map(([chave, ls]) => montarGrupo(chave, `Mesa ${chave}`, [...ls].sort((a, b) => a.time.localeCompare(b.time))))
+    .map(([chave, ls]) => montarGrupo(chave, ls.every((l) => l.balcao) ? 'Balcão' : `Mesa ${chave}`, [...ls].sort((a, b) => a.time.localeCompare(b.time))))
     .sort(porUltimaHoraDesc);
 }
 

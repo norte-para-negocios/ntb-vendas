@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/pedidosDoDia.test.ts
 import assert from 'node:assert/strict';
-import { filtrarLinhas, buscaCombina, contarPorLocal, resumir, agruparPorMesa, agruparPorHora, horaCurta, FILTROS_PADRAO, type LinhaPedido } from '../../lib/pedidosDoDia';
+import { dataSeNaoHoje, filtrarLinhas, buscaCombina, contarPorLocal, resumir, agruparPorMesa, agruparPorHora, horaCurta, FILTROS_PADRAO, type LinhaPedido } from '../../lib/pedidosDoDia';
 
 const L = (id: string, extra: Partial<LinhaPedido> = {}): LinhaPedido => ({
   id, orderId: `o-${id}`, time: '2026-10-04T22:10:00Z', tableNumber: 26, productName: 'Amstel 600ml', quantity: 1,
@@ -40,8 +40,20 @@ assert.deepEqual(filtrarLinhas(rows, f({ soMeus: true, meuNome: 'NINGUEM' })), [
 assert.deepEqual(contarPorLocal(rows, f({ local: 'pizzaria' })), { todos: 5, bar: 3, pizzaria: 2 });
 
 // resumo: falhas em destaque = sem registro de mesa ainda aberta
-assert.deepEqual(resumir(rows), { linhas: 5, unidades: 6, impressos: 2, semRegistro: 3, semRegistroAbertas: 2, mesas: 4 });
-assert.deepEqual(resumir([]), { linhas: 0, unidades: 0, impressos: 0, semRegistro: 0, semRegistroAbertas: 0, mesas: 0 });
+assert.deepEqual(resumir(rows), { linhas: 5, unidades: 6, impressos: 2, semRegistro: 3, semRegistroAbertas: 2, mesas: 4, unidadesImpressas: 2, unidadesSemRegistroAbertas: 2 });
+assert.deepEqual(resumir([]), { linhas: 0, unidades: 0, impressos: 0, semRegistro: 0, semRegistroAbertas: 0, mesas: 0, unidadesImpressas: 0, unidadesSemRegistroAbertas: 0 });
+
+// itens que não são de hoje levam a data; os de hoje não
+const agoraT = new Date('2026-10-04T15:00:00Z'); // 12h em Bahia, 04/10
+assert.equal(dataSeNaoHoje('2026-10-04T22:10:00Z', agoraT), null, 'hoje: só a hora');
+assert.equal(dataSeNaoHoje('2026-10-01T01:49:00Z', agoraT), '30/09', 'mesa aberta desde ontem: data no fuso Bahia (01:49Z = 22:49 do dia 30)');
+
+// balcão entra na lista, mas não conta como mesa e tem grupo próprio
+const comBalcao = [...rows, L('b1', { tableNumber: 'Balcão', balcao: true, productName: 'Heineken', addedByName: null }), L('b2', { tableNumber: 'Balcão', balcao: true, productName: 'Heineken', quantity: 2 })];
+assert.equal(resumir(comBalcao).mesas, 4, 'balcão não é mesa');
+assert.equal(resumir(comBalcao).unidades, 6 + 3);
+assert.ok(agruparPorMesa(comBalcao).some((g) => g.titulo === 'Balcão'));
+assert.equal(buscaCombina(comBalcao[5], 'balcao'), true);
 
 // agrupar por mesa: grupo mais recente primeiro; dentro do grupo, na ordem em que foi lançado
 const porMesa = agruparPorMesa(rows);

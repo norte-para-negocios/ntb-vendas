@@ -3135,7 +3135,7 @@ const TablesView: React.FC<{
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
             const closed = await fetchSalesHistory(storeId, startOfDay.toISOString());
-            if (!cancelled) setClosedTodayOrders(closed.filter(ord => ord.order_type === 'table'));
+            if (!cancelled) setClosedTodayOrders(closed); // mesas e balcão (balcão aparece como "Balcão")
         })();
         return () => { cancelled = true; };
     }, [showSentHistory, orderFlow, storeId]);
@@ -3357,6 +3357,7 @@ const TablesView: React.FC<{
             closed: boolean;
             printed: boolean;
             addedByName?: string | null;
+            balcao?: boolean;
         }[] = [];
         const pushOrder = (order: Order, closed: boolean) => {
             (order.order_items || []).forEach(item => {
@@ -3373,16 +3374,17 @@ const TablesView: React.FC<{
                     id: item.id,
                     orderId: item.order_id,
                     time: item.created_at,
-                    tableNumber: (order.table_id && tableNumberById.get(order.table_id)) ?? order.tables?.number ?? '?',
+                    tableNumber: order.order_type === 'counter' ? 'Balcão' : ((order.table_id && tableNumberById.get(order.table_id)) ?? order.tables?.number ?? '?'),
+                    balcao: order.order_type === 'counter',
                     productName: item.product?.name || 'Produto indisponível',
                     quantity: item.quantity,
                     destination,
                     addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
                     observation: observation || undefined,
-                    client,
+                    client: client || (order.order_type === 'counter' ? order.customer_name : null),
                     closed,
                     printed: wasKitchenTicketPrinted(storeId, destination, item.id),
-                    addedByName: item.added_by_role === 'garcom' ? item.added_by_name : null,
+                    addedByName: item.added_by_role === 'garcom' ? item.added_by_name : ((order.payment_details as { operador_nome?: string } | null)?.operador_nome && order.order_type === 'counter' ? (order.payment_details as { operador_nome?: string }).operador_nome : null),
                 });
             });
         };
