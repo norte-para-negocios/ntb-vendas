@@ -105,6 +105,7 @@ import { impressoraRecebe } from '@/lib/printDocs';
 import { montarPreConta, chavePreConta } from '@/lib/preConta';
 import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from '@/lib/print';
+import { particionarPorIdade, MAX_IDADE_AUTOIMPRESSAO_MIN } from '@/lib/impressaoIdade';
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
@@ -621,6 +622,7 @@ async function reconcileDestination(
   failedRef: React.MutableRefObject<Map<string, FailedEntry>>,
   setFailedItems: (m: Map<string, FailedEntry>) => void,
   networkPrinters: PrinterConfig[],
+  puladosPorIdadeRef: React.MutableRefObject<Record<Destination, Set<string>>>,
 ): Promise<boolean> {
   let fetchFailed = false;
   const items = await fetchKitchenOrders(storeId, destination, () => { fetchFailed = true; });
@@ -670,7 +672,28 @@ async function reconcileDestination(
     savePrintedIds(storeId, destination, printedIds);
     return true;
   };
-  const toPrint = items.filter((it) => !printedIds.has(it.id) && new Date(it.created_at).getTime() >= activatedAtMs && !jaImpressoOffline(it));
+  // TETO ABSOLUTO de idade (incidente 04/10/2026, ver lib/impressaoIdade.ts): o
+  // corte e o dedupe acima são proteções por APARELHO e podem ficar velhos
+  // (corte retomado do localStorage, dedupe perdido). Item mais velho que
+  // MAX_IDADE_AUTOIMPRESSAO_MIN nunca sai sozinho, mesmo depois do corte e fora
+  // do dedupe — fica "Sem registro" em Pedidos do Dia com Reimprimir manual.
+  // O filtro vem ANTES de `jaImpressoOffline` pra item velho não consumir marca.
+  const candidatos = items.filter((it) => !printedIds.has(it.id) && new Date(it.created_at).getTime() >= activatedAtMs);
+  const { recentes, antigos, invalidos } = particionarPorIdade(candidatos, Date.now());
+  const pulados = [...antigos, ...invalidos];
+  const jaAvisados = puladosPorIdadeRef.current[destination];
+  const idsPulados = new Set(pulados.map((it) => it.id));
+  const novosPulados = pulados.filter((it) => !jaAvisados.has(it.id));
+  if (novosPulados.length > 0) {
+    // Só console: sem toast barulhento. Uma linha por item novo (não a cada 10s).
+    console.warn(
+      `[impressão automática] ${novosPulados.length} item(ns) de ${destination} NÃO impresso(s) sozinho(s) (mais de ${MAX_IDADE_AUTOIMPRESSAO_MIN} min ou data inválida): ` +
+      novosPulados.map((it) => `${it.id} (${antigos.includes(it) ? 'antigo' : 'created_at inválido'}: ${String(it.created_at)})`).join('; ') +
+      '. Use Reimprimir em Pedidos do Dia.',
+    );
+  }
+  puladosPorIdadeRef.current[destination] = idsPulados;
+  const toPrint = recentes.filter((it) => !jaImpressoOffline(it));
 
   // Itens do MESMO pedido confirmado (mesmo order_id e mesmo created_at, porque
   // o servidor grava o pedido inteiro numa transação) e das MESMAS impressoras
@@ -799,6 +822,10 @@ export interface CaixaPrintStationState {
   // operador dispensa.
   backlogGapSince: string | null;
   dismissBacklogGap: () => void;
+  // Itens que ficaram sem impressão automática por passarem do teto de idade
+  // (MAX_IDADE_AUTOIMPRESSAO_MIN) ou terem created_at inválido. Não é falha:
+  // seguem em Pedidos do Dia como "Sem registro", com Reimprimir manual.
+  itensAntigosPulados: number;
   failedItems: FailedEntry[];
   retryItem: (key: string) => Promise<void>;
 }
@@ -824,6 +851,8 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
 
   const printedIdsRef = useRef<Record<Destination, Set<string>>>({ kitchen: new Set(), bar: new Set() });
   const failedRef = useRef<Map<string, FailedEntry>>(new Map());
+  const puladosPorIdadeRef = useRef<Record<Destination, Set<string>>>({ kitchen: new Set(), bar: new Set() });
+  const [itensAntigosPulados, setItensAntigosPulados] = useState(0);
   const reconcileLockRef = useRef(false);
   const reconcileFailStreakRef = useRef(0);
   const storeRef = useRef<Store | null>(null);
@@ -884,6 +913,8 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     setBacklogGapSince(descartado ?? (aberturaFria ? null : loadLacunaCorte(store.id)));
     failedRef.current = new Map();
     setFailedItemsState(new Map());
+    puladosPorIdadeRef.current = { kitchen: new Set(), bar: new Set() };
+    setItensAntigosPulados(0);
     // O alarme de falha persistente também é retomado aqui (mesma razão:
     // a loja só é conhecida neste ponto). Sem isto, o reload automático
     // apagava o aviso de impressão quebrada mesmo com o problema de pé.
@@ -919,9 +950,10 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       const networkPrinters = await fetchPrinterConfigs(s.id).catch(() => [] as PrinterConfig[]);
       for (const destination of ['kitchen', 'bar'] as const) {
         // eslint-disable-next-line no-await-in-loop -- sequencial de propósito, mesmo motivo do print sequencial dentro de reconcileDestination.
-        const failed = await reconcileDestination(s.id, destination, s.name, activatedAtRef.current, printedIdsRef, failedRef, setFailedItemsState, networkPrinters);
+        const failed = await reconcileDestination(s.id, destination, s.name, activatedAtRef.current, printedIdsRef, failedRef, setFailedItemsState, networkPrinters, puladosPorIdadeRef);
         if (failed) fetchFailed = true;
       }
+      setItensAntigosPulados(puladosPorIdadeRef.current.kitchen.size + puladosPorIdadeRef.current.bar.size);
     } catch (e) {
       // try/catch em volta do CORPO INTEIRO do reconcile, não só das
       // chamadas de impressão — achado real do station original (fix round
@@ -1089,6 +1121,7 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
     persistentReconcileFailure,
     backlogGapSince,
     dismissBacklogGap,
+    itensAntigosPulados,
     failedItems: Array.from(failedItemsState.values()),
     retryItem,
   };
@@ -1277,6 +1310,14 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
             {status.failedItems.length}
           </span>
         )}
+        {status.itensAntigosPulados > 0 && (
+          <span
+            title={`${status.itensAntigosPulados} item(ns) antigo(s) não impresso(s) automaticamente`}
+            className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)] text-[10px] font-bold num"
+          >
+            {status.itensAntigosPulados}
+          </span>
+        )}
       </button>
 
       <Modal isOpen={showDetails} onClose={() => setShowDetails(false)} title="Impressão automática (Caixa)" variant="sheet">
@@ -1322,6 +1363,12 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
                 Já conferi, dispensar aviso
               </Button>
             </div>
+          )}
+
+          {status.itensAntigosPulados > 0 && (
+            <p className="text-[13px] text-[var(--text-muted)] p-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)]">
+              {status.itensAntigosPulados === 1 ? '1 item antigo não foi impresso' : `${status.itensAntigosPulados} itens antigos não foram impressos`} automaticamente (mais de {MAX_IDADE_AUTOIMPRESSAO_MIN} minutos). Se ainda precisar, use Reimprimir em &quot;Pedidos do Dia&quot;.
+            </p>
           )}
 
           {status.persistentReconcileFailure && (
