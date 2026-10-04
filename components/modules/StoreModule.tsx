@@ -55,6 +55,7 @@ import { Skeleton, stagger } from '@/components/Skeleton';
 import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
 import { VendasCanceladasView } from '@/components/modules/VendasCanceladasView';
 import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
+import { roleCan, roleCanOr } from '@/lib/rolePermissions';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
@@ -3692,7 +3693,7 @@ NOTIFY pgrst, 'reload schema';`;
 
     const handleMoveTable = async () => {
         if (isAberto) { avisarSoComLogin(); return; }
-        if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para trocar de mesa.'); return; }
+        if (!roleCan(loggedUser, store, 'trocar_mesa')) { toast.error('Você não tem permissão para trocar de mesa.'); return; }
         if (!selectedTable || !targetTableId) return;
         
         if (await confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
@@ -4408,7 +4409,7 @@ NOTIFY pgrst, 'reload schema';`;
 
     const abrirMoverItem = (itemId: string) => {
         if (isAberto) { avisarSoComLogin(); return; }
-        if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para mover item.'); return; }
+        if (!roleCan(loggedUser, store, 'mover_item')) { toast.error('Você não tem permissão para mover item.'); return; }
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
         setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', enviando: false });
     };
@@ -4436,7 +4437,7 @@ NOTIFY pgrst, 'reload schema';`;
 
     const handleDeleteItem = async (itemId: string) => {
         if (isAberto) { avisarSoComLogin(); return; }
-        if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para excluir item.'); return; }
+        if (!podeTrocarOuExcluir(loggedUser, store)) { toast.error('Você não tem permissão para excluir item.'); return; }
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
@@ -4467,7 +4468,7 @@ NOTIFY pgrst, 'reload schema';`;
     // universal/supervisor (decisão do dono do Sertão, 2026-09-29: "só gerente cancela").
     // Fica no nome de quem cancelou (auditoria) e sai a comanda de cancelamento. Item já
     // faturado em nota por pessoa não entra: precisa cancelar a nota antes.
-    const podeCancelarPedido = podeVerCaixasDaEquipe(loggedUser);
+    const podeCancelarPedido = roleCan(loggedUser, store, 'cancelar_pedido');
     const [showCancelarPedido, setShowCancelarPedido] = useState(false);
     const [cancelarMotivo, setCancelarMotivo] = useState('');
     const [cancelandoPedido, setCancelandoPedido] = useState(false);
@@ -4822,7 +4823,7 @@ NOTIFY pgrst, 'reload schema';`;
                         alerta,
                     };
                 };
-                const podeEditarPlanta = loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal';
+                const podeEditarPlanta = roleCan(loggedUser, store, 'editar_planta');
                 const moverVariasNaPlanta = async (itens: PosicaoMesa[]): Promise<boolean> => {
                     const porId = new Map(itens.map(i => [i.id, i]));
                     setTables(prev => prev.map(t => {
@@ -5207,7 +5208,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                         </div>
                                                         <div className="flex items-center gap-3 shrink-0">
                                                             <span className="num text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
-                                                            {podeTrocarOuExcluir(loggedUser) && (
+                                                            {roleCan(loggedUser, store, 'mover_item') && (
                                                             <button
                                                                 onClick={() => abrirMoverItem(item.id)}
                                                                 className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--brand)] p-1 u-motion u-press"
@@ -5217,7 +5218,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 <ArrowRightLeft size={16} />
                                                             </button>
                                                             )}
-                                                            {podeTrocarOuExcluir(loggedUser) && (
+                                                            {podeTrocarOuExcluir(loggedUser, store) && (
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press"
@@ -5277,7 +5278,7 @@ NOTIFY pgrst, 'reload schema';`;
 
                             <div className="grid grid-cols-3 gap-2 mb-3">
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowFullBill(false)}>Voltar</Button>
-                                {podeTrocarOuExcluir(loggedUser) ? (
+                                {roleCan(loggedUser, store, 'trocar_mesa') ? (
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowMoveTableModal(true)}>
                                     <ArrowRightLeft size={16}/> Trocar
                                 </Button>
@@ -5345,7 +5346,7 @@ NOTIFY pgrst, 'reload schema';`;
                 return (
                         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                             <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" podeEsgotar={loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'menu', store)} />
+                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" podeEsgotar={roleCanOr(loggedUser, store, 'esgotar', loggedUser.role === 'manager' || hasTabPermission(loggedUser, 'menu', store))} />
                             </div>
                             {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
                                 mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
@@ -5427,7 +5428,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
                                                 )}
                                             </div>
-                                            {podeTrocarOuExcluir(loggedUser) && (
+                                            {roleCan(loggedUser, store, 'mover_item') && (
                                             <button
                                                 type="button"
                                                 onClick={() => abrirMoverItem(item.id)}
@@ -5438,7 +5439,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <ArrowRightLeft size={15} />
                                             </button>
                                             )}
-                                            {podeTrocarOuExcluir(loggedUser) && (
+                                            {podeTrocarOuExcluir(loggedUser, store) && (
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteItem(item.id)}
@@ -7151,7 +7152,7 @@ const CounterView: React.FC<{
             >
                 <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                     <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" podeEsgotar={loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'menu', store)} />
+                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" podeEsgotar={roleCanOr(loggedUser, store, 'esgotar', loggedUser.role === 'manager' || hasTabPermission(loggedUser, 'menu', store))} />
                     </div>
                     <div className="md:w-[320px] lg:w-[34%] lg:max-w-[420px] max-md:max-h-[50%] flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
                         <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">
@@ -8822,7 +8823,7 @@ const parseOptionalInt = (value: string): number | null => {
 // domingo, mesmo indice usado em Category.available_days/getDay()).
 const SCHEDULE_DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => {
+const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void, podeEditar?: boolean }> = ({ store, onStoreUpdate, podeEditar = true }) => {
     const storeId = store.id;
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -9029,6 +9030,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleDragEnd = async (result: DropResult) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         const { source, destination, type } = result;
         if (!destination) return;
         if (source.droppableId === destination.droppableId && source.index === destination.index) return;
@@ -9119,6 +9121,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     useEffect(() => { loadMenu(); }, [storeId]);
 
     const handleAddCategory = async () => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (!newCatName) return;
         await createCategory(storeId, newCatName);
         setNewCatName('');
@@ -9126,6 +9129,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleDeleteCategory = async (id: string) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (await confirm({ message: 'Excluir categoria? Produtos nela podem ficar órfãos.', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteCategory(id);
             loadMenu();
@@ -9133,6 +9137,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleAddCategoryGroup = async () => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (!newGroupName) return;
         try {
             await createCategoryGroup(storeId, newGroupName);
@@ -9145,6 +9150,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleDeleteCategoryGroup = async (id: string) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         // Fix minor da revisão final (2026-09-22): mensagem de confirmação
         // mostra quantas categorias ficam sem grupo, não é só um aviso genérico.
         const affectedCount = categories.filter(c => c.group_id === id).length;
@@ -9163,6 +9169,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleChangeCategorySector = async (categoryId: string, sectorId: string | null) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, sector_id: sectorId } : c));
         try {
             await updateCategorySector(categoryId, sectorId);
@@ -9173,6 +9180,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleChangeCategoryGroup = async (categoryId: string, groupId: string | null) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, group_id: groupId } : c));
         try {
             await updateCategoryGroupAssignment(categoryId, groupId);
@@ -9197,6 +9205,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleSaveSchedule = async () => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (!scheduleCategory) return;
         setIsSavingSchedule(true);
         try {
@@ -9216,6 +9225,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const openProductModal = (product?: Product) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (product) {
             setEditingProduct(product);
             setPName(product.name);
@@ -9276,6 +9286,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleSaveProduct = async () => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (!pName || !pPrice || !pCat) return toast.error('Preencha os campos obrigatórios');
         const priceNum = parseFloat(pPrice);
         if (isNaN(priceNum) || priceNum < 0) return toast.error('Preço não pode ser negativo.');
@@ -9415,6 +9426,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleDeleteProduct = async (id: string) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (await confirm({ message: 'Excluir produto?', variant: 'danger', confirmLabel: 'Excluir' })) {
             await deleteProduct(id, storeId);
             loadMenu();
@@ -9422,6 +9434,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleToggleAvailability = async (product: Product) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         await updateProduct(product.id, storeId, { available: !product.available });
         loadMenu();
     }
@@ -9466,6 +9479,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleConsolidateGroup = async () => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (!groupBaseId || !groupNameInput.trim()) {
             return toast.error('Escolha o produto base e dê um nome pro grupo.');
         }
@@ -9653,6 +9667,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     return (
         <div className="space-y-8">
+            {!podeEditar && (
+                <p className="rounded-[var(--r-md)] bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3 text-[13px] text-[var(--text-muted)]" role="status">
+                    Seu perfil só pode consultar o cardápio. Peça ao gerente ou ao dono para alterar.
+                </p>
+            )}
             {/* Locais de preparo saíram do Cardápio (04/10/2026): cadastro único em Administração → Locais de preparo. */}
             <p className="text-[13px] text-[var(--text-muted)] -mb-4">
                 Locais de preparo (Cozinha, Bar, Pizzaria...) agora ficam em Administração → Locais de preparo.
@@ -10847,6 +10866,8 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
 const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpdate?: (store: Store) => void }> = ({ store, loggedUser, onStoreUpdate }) => {
     const storeId = store.id;
+    // Permissões por função (lib/rolePermissions.ts): sem config salva, quem entra na Administração continua vendo.
+    const podeEditarPrecosHorario = roleCanOr(loggedUser, store, 'editar_precos_horario', true);
 
     // Aba "Operação" (self-service de módulos/fluxo de pedido pelo
     // lojista) REMOVIDA (2026-08-28, pedido direto do dono): decidir
@@ -11540,7 +11561,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         { label: 'Operação', icon: <Wallet size={14} />, tabs: [
             { id: 'shifts', label: 'Turnos' },
             { id: 'relatorios', label: 'Relatórios' },
-            ...(podeVerCaixasDaEquipe(loggedUser) ? [{ id: 'excecoes', label: 'Exceções' }] : []),
+            ...(roleCan(loggedUser, store, 'ver_excecoes') ? [{ id: 'excecoes', label: 'Exceções' }] : []),
             { id: 'impressao', label: 'Impressão' },
             { id: 'locais', label: 'Locais de preparo' },
         ]},
@@ -11551,7 +11572,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             { id: 'link', label: 'Meu link / QR code' },
             { id: 'settings', label: 'Configurações' },
             { id: 'cupons', label: 'Cupons de desconto' },
-            { id: 'precos', label: 'Preço por horário' },
+            ...(podeEditarPrecosHorario ? [{ id: 'precos', label: 'Preço por horário' }] : []),
             { id: 'fiscal', label: 'Notas fiscais', sensitive: true },
         ]},
     ];
@@ -12024,9 +12045,9 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             {activeTab === 'locais' && <LocaisPreparoView store={store} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
-            {activeTab === 'precos' && <PriceSchedulesView storeId={storeId} />}
+            {activeTab === 'precos' && podeEditarPrecosHorario && <PriceSchedulesView storeId={storeId} />}
             {activeTab === 'relatorios' && <ReportsView storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} />}
-            {activeTab === 'excecoes' && podeVerCaixasDaEquipe(loggedUser) && <ExceptionsReportView storeId={storeId} storeName={store.name} userName={loggedUser.name} />}
+            {activeTab === 'excecoes' && roleCan(loggedUser, store, 'ver_excecoes') && <ExceptionsReportView storeId={storeId} storeName={store.name} userName={loggedUser.name} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">
@@ -13427,7 +13448,7 @@ export const StoreModule: React.FC = () => {
             )}
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
-            {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
+            {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} podeEditar={roleCanOr(user, user.store, 'editar_cardapio', true)} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
             {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} loggedUser={user} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
 
             {!canAccess(tab) && (

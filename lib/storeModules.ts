@@ -7,6 +7,8 @@
 // módulos ligados e fluxo `kds` — é o comportamento das 6 lojas reais de hoje
 // (nenhuma delas tem `modules` configurado). O default é sempre o
 // comportamento atual, nunca um estado "tudo desligado".
+import { roleCan } from './rolePermissions';
+
 export type StoreModules = {
   tables: boolean; counter: boolean; kitchen_kds: boolean;
   bar_kds: boolean; caixa: boolean; menu: boolean; admin: boolean;
@@ -311,8 +313,7 @@ export const STORE_PROFILE_PRESETS: Record<string, { label: string; modules: Sto
 };
 
 // Trocar de mesa / excluir item da comanda (2026-10-03, pedido do Ramon).
-export const podeTrocarOuExcluir = (user: { role: string; permissions?: { trocas?: boolean } }): boolean => {
-  if (user.role === 'owner' || user.role === 'universal' || user.role === 'manager') return true;
-  if (user.role === 'open') return false;
-  return user.permissions?.trocas === true;
-};
+export const podeTrocarOuExcluir = (
+  user: { role: string; permissions?: { trocas?: boolean } },
+  store?: { config?: any } | null
+): boolean => roleCan(user, store, 'cancelar_item');

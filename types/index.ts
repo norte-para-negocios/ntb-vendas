@@ -48,6 +48,8 @@ export interface Store {
     // de observacao do cliente, editaveis pelo lojista em MenuManagementView.
     // undefined/[] = nenhum chip aparece (comportamento atual, sem mudanca).
     note_suggestions?: string[];
+    // Permissões por função (04/10/2026, lib/rolePermissions.ts): matriz função x ação. Ausente = padrões.
+    role_permissions?: Partial<Record<'manager' | 'cashier' | 'waiter', Partial<Record<string, boolean>>>>;
     // Vende mais II (migration 020): liga o badge "mais vendido" automatico
     // no cardapio do cliente. undefined/false = nenhum badge aparece
     // (comportamento atual, sem mudanca).
