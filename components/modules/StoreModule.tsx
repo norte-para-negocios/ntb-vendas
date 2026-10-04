@@ -235,7 +235,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
             setPassword('');
         } catch (e: any) {
             // Senha repetida na loja (migration 136) chega com a mensagem pronta.
-            setError(String(e?.message || '').includes('já é usada') ? e.message : 'Erro ao atualizar senha.');
+            setError(/já (é usada|está em uso)/.test(String(e?.message || '')) ? e.message : 'Erro ao atualizar senha.');
         } finally {
             setIsLoading(false);
         }
@@ -1526,7 +1526,9 @@ const MyProfileModal: React.FC<{
 };
 
 // --- SUB-MODULE: KDS (Kitchen / Bar) ---
-const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLocal?: string }> = ({ destination, store, fixedLocal }) => {
+const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLocal?: string; loggedUser?: StoreUser }> = ({ destination, store, fixedLocal, loggedUser }) => {
+    // Cancelar item no KDS segue a mesma regra da comanda: só gerente/dono ou quem tem a permissão de trocas (R1).
+    const podeCancelarNoKds = !!loggedUser && roleCan(loggedUser, store, 'cancelar_item');
   const storeId = store.id;
   const storeName = store.name;
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -1822,13 +1824,14 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                 >
                                     <AlertTriangle size={15} />
                                 </button>
-                                <button
+                                {podeCancelarNoKds && <button
                                     disabled={cancellingIds.has(item.id)}
                                     onClick={async () => {
                                         if (cancellingIds.has(item.id)) return;
+                                        if (!podeCancelarNoKds) return;
                                         if (await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
                                             setCancellingIds(prev => new Set(prev).add(item.id));
-                                            await cancelSpecificOrderItem(item.id);
+                                            await cancelSpecificOrderItem(item.id, loggedUser!.id, loggedUser!.name, 'Cancelado no KDS');
                                             setOrders(prev => prev.filter(o => o.id !== item.id));
                                         }
                                     }}
@@ -1837,7 +1840,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                     aria-label="Cancelar item"
                                 >
                                     <X size={16} />
-                                </button>
+                                </button>}
                             </div>
                         </div>
                     </Card>
@@ -3738,7 +3741,7 @@ NOTIFY pgrst, 'reload schema';`;
         if (!selectedTable || !targetTableId) return;
         
         if (await confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
-            const result = await moveTable(selectedTable.id, targetTableId);
+            const result = await moveTable(selectedTable.id, targetTableId, loggedUser.id);
             if (result.success) {
                 toast.success("Mesa trocada com sucesso!");
                 setShowMoveTableModal(false);
@@ -4461,7 +4464,7 @@ NOTIFY pgrst, 'reload schema';`;
         if (!dlg.targetId) { toast.error('Escolha a mesa de destino.'); return; }
         setMoveItemDlg({ ...dlg, enviando: true });
         const origemId = selectedTable?.id ?? null;
-        const operadorId = loggedUser.role === 'universal' ? null : loggedUser.id;
+        const operadorId = loggedUser.id;
         const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, operadorId, loggedUser.name);
         setMoveItemDlg(null);
         if (r.success) {
@@ -4495,7 +4498,7 @@ NOTIFY pgrst, 'reload schema';`;
         setCancelItemDlg({ ...dlg, enviando: true });
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === dlg.itemId) : undefined;
         try {
-            const ok = await cancelSpecificOrderItem(dlg.itemId, loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name, motivoFinal);
+            const ok = await cancelSpecificOrderItem(dlg.itemId, loggedUser.id, loggedUser.name, motivoFinal);
             if (!ok) { toast.error("Erro ao cancelar item."); setCancelItemDlg(null); return; }
             if (itemAlvo && selectedTable) await imprimirCancelamento([itemAlvo], selectedTable.number, motivoFinal);
             setCancelItemDlg(null);
@@ -4515,6 +4518,7 @@ NOTIFY pgrst, 'reload schema';`;
     const [cancelandoPedido, setCancelandoPedido] = useState(false);
     const handleCancelarPedidoMesa = async () => {
         if (isAberto) { avisarSoComLogin(); return; }
+        if (!podeCancelarPedido) { toast.error('Você não tem permissão para cancelar o pedido.'); return; }
         if (!selectedTable || cancelandoPedido) return;
         if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
@@ -4525,11 +4529,11 @@ NOTIFY pgrst, 'reload schema';`;
         }
         setCancelandoPedido(true);
         try {
-            const operador = loggedUser.role === 'universal' ? null : loggedUser.id;
+            const operador = loggedUser.id;
             const cancelados: OrderItem[] = [];
             for (const it of itens) {
                 // eslint-disable-next-line no-await-in-loop -- um por vez: ordem e falha parcial ficam claras
-                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name, cancelarMotivo.trim() || 'Pedido cancelado pelo gerente')) cancelados.push(it);
+                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name, cancelarMotivo.trim() || 'Pedido cancelado pelo gerente', 'cancelar_pedido')) cancelados.push(it);
             }
             if (cancelados.length > 0) await imprimirCancelamento(cancelados, selectedTable.number, cancelarMotivo.trim() || undefined);
             if (cancelados.length === itens.length) toast.success('Pedido cancelado.');
@@ -5515,6 +5519,11 @@ NOTIFY pgrst, 'reload schema';`;
                         if (!senha) { setSenhaPedido((x) => ({ ...x, erro: 'Digite a sua senha.' })); return; }
                         setSenhaPedido((x) => ({ ...x, verificando: true, erro: '' }));
                         const r = await verificarSenhaEquipe(storeId, senha);
+                        // Com login (não é o modo Aberto): a senha tem que ser da PRÓPRIA pessoa logada, nunca de outra (R3).
+                        if (r.success && !isAberto && loggedUser.role !== 'universal' && r.user_id !== loggedUser.id) {
+                            setSenhaPedido((x) => ({ ...x, verificando: false, erro: 'Essa senha não é a sua. Digite a sua própria senha.', senha: '' }));
+                            return;
+                        }
                         if (r.success) {
                             setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false });
                             toast.success(`Pedido no nome de ${r.name}.`);
@@ -10557,13 +10566,15 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             // significou negado — ver StoreUserPermissions em
             // types/index.ts) — mantido `=== true`, igual a
             // hasTabPermission/canFinalizeBill.
+            // Mesma regra do acesso real (hasTabPermission): garçom/caixa só tem o que está marcado explicitamente.
+            const efetiva = (t: string) => hasTabPermission({ role: user.role, permissions: user.permissions as any }, t);
             setPermissions({
-                tables: user.permissions?.tables !== false,
-                counter: user.permissions?.counter !== false,
-                kitchen: user.permissions?.kitchen !== false,
-                bar: user.permissions?.bar !== false,
-                menu: user.permissions?.menu !== false,
-                admin: user.permissions?.admin !== false,
+                tables: efetiva('tables'),
+                counter: efetiva('counter'),
+                kitchen: efetiva('kitchen'),
+                bar: efetiva('bar'),
+                menu: efetiva('menu'),
+                admin: efetiva('admin'),
                 caixa: user.permissions?.caixa === true,
                 supervisiona_caixa: user.permissions?.supervisiona_caixa === true,
                 trocas: user.permissions?.trocas === true,
@@ -10646,14 +10657,15 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
                         <div className="mt-3 space-y-1">
                             <p className="text-[13px] font-medium text-[var(--text-muted)]">Acessos</p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {user.permissions?.tables && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Mesas</span>}
-                                {user.permissions?.counter && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Balcão</span>}
-                                {user.permissions?.kitchen && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Cozinha</span>}
-                                {user.permissions?.bar && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Bar</span>}
-                                {user.permissions?.menu && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Cardápio</span>}
-                                {user.permissions?.admin && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Admin</span>}
-                                {user.permissions?.caixa && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Caixa</span>}
+                            <div className="flex flex-wrap gap-1.5" data-testid="resumo-acessos">
+                                {([['tables', 'Mesas'], ['counter', 'Balcão'], ['kitchen', 'Cozinha'], ['bar', 'Bar'], ['menu', 'Cardápio'], ['admin', 'Admin'], ['caixa', 'Caixa']] as const).map(([k, rotulo]) => {
+                                    const pode = hasTabPermission({ role: user.role, permissions: user.permissions as any }, k);
+                                    return pode
+                                        ? <span key={k} className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">{rotulo} ✓</span>
+                                        : <span key={k} className="px-2 py-0.5 text-[var(--text-muted)] text-[12px] rounded-full border border-[var(--border)] inline-flex items-center gap-1"><Lock size={10} aria-hidden /> {rotulo}</span>;
+                                })}
+                                {user.permissions?.trocas === true && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Trocas ✓</span>}
+                                {user.permissions?.supervisiona_caixa === true && <span className="px-2 py-0.5 bg-[var(--surface-2)] text-[var(--text)] text-[12px] font-medium rounded-full">Supervisiona ✓</span>}
                             </div>
                         </div>
 
@@ -10673,7 +10685,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     
                     <div>
                         <label className="text-[13px] font-medium text-[var(--text-muted)] mb-1 block">Função</label>
-                        <select className="w-full h-[38px] max-sm:h-11 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[var(--text)] px-3 text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40" value={role} onChange={e => setRole(e.target.value)}>
+                        <select className="w-full h-[38px] max-sm:h-11 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[var(--text)] px-3 text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40" value={role} onChange={e => { const r = e.target.value; setRole(r); if (!editingUser) setPermissions(r === 'manager' ? { tables: true, counter: true, kitchen: true, bar: true, menu: true, admin: true, caixa: true, supervisiona_caixa: true, trocas: true } : { ...DEFAULT_TEAM_PERMISSIONS }); }}>
                             <option value="waiter">Garçom</option>
                             <option value="cashier">Caixa</option>
                             <option value="cook">Cozinheiro</option>
@@ -13461,10 +13473,10 @@ export const StoreModule: React.FC = () => {
             )}
             {tab === 'producao' && canAccess('producao') && (
                 <ProducaoView store={user.store} acessiveis={accessibleTabIds}
-                    renderKds={(l) => <KdsView key={l.chave} destination={l.base} store={user.store} fixedLocal={l.setorId ?? 'padrao'} />} />
+                    renderKds={(l) => <KdsView key={l.chave} destination={l.base} store={user.store} fixedLocal={l.setorId ?? 'padrao'} loggedUser={user} />} />
             )}
-            {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
-            {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
+            {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} loggedUser={user} />}
+            {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} loggedUser={user} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} podeEditar={roleCanOr(user, user.store, 'editar_cardapio', true)} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
             {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} loggedUser={user} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
 

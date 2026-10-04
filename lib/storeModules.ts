@@ -226,6 +226,9 @@ export const hasTabPermission = (
   // checado à parte por quem chama esta função via TAB_MODULE_KEY
   // (computeAccessibleTabIds) — aqui só a permissão do usuário.
   if (tabId === 'caixa') return user.permissions?.caixa === true;
+  // Garçom e caixa: chave ausente NÃO libera (04/10, regra do dono: garçom só tem o que o gerente liberou;
+  // um garçom com permissions {} não pode ganhar acesso total). Gerente e demais mantêm o padrão permissivo.
+  if (user.role === 'waiter' || user.role === 'cashier') return user.permissions?.[tabId] === true;
   return user.permissions?.[tabId] !== false;
 };
 

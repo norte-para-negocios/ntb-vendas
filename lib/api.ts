@@ -1051,7 +1051,7 @@ export const deletePriceSchedule = async (storeId: string, id: string): Promise<
 
 // Transferir item(ns) entre mesas (migration 152).
 export const transferItems = async (storeId: string, itemIds: string[], targetTableId: string, operatorUserId: string | null, operatorName: string, fromTableId: string | null = null): Promise<{ success: boolean; moved?: number; message?: string }> => {
-  const { data, error } = await supabase.rpc('transfer_items_secure', { p_store_id: storeId, p_item_ids: itemIds, p_target_table_id: targetTableId, p_operator_user_id: operatorUserId, p_operator_name: operatorName, p_from_table_id: fromTableId });
+  const { data, error } = await supabase.rpc('transfer_items_v2', { p_store_id: storeId, p_item_ids: itemIds, p_target_table_id: targetTableId, p_operator_user_id: operatorUserId, p_operator_name: operatorName, p_from_table_id: fromTableId });
   if (error) { console.error('transferItems falhou:', error); return { success: false, message: 'Não consegui mover o item.' }; }
   return data as { success: boolean; moved?: number; message?: string };
 };
@@ -1667,14 +1667,17 @@ export const updateOrderItemStatus = async (itemId: string, status: OrderStatus)
   }
 };
 
-export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string, reason?: string | null): Promise<boolean> => {
-  const { error } = await supabase.rpc('cancel_order_item_secure', {
+// Migration 159: o servidor confere o papel do operador (cancel_order_item_v2). Sem operador = recusado.
+export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string, reason?: string | null, acao: 'cancelar_item' | 'cancelar_pedido' = 'cancelar_item'): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('cancel_order_item_v2', {
     p_item_id: itemId,
     p_operator_user_id: operatorUserId ?? null,
     p_operator_name: operatorName ?? null,
     p_reason: reason ?? null,
+    p_action: acao,
   });
-  return !error;
+  if (error) { console.error('cancelSpecificOrderItem falhou:', error); return false; }
+  return (data as { success?: boolean } | null)?.success === true;
 };
 
 // Relatório de exceções do período (migration 150). Vazio se a RPC ainda não existe (app novo, banco antigo).
@@ -2101,10 +2104,11 @@ export const toggleTableBlock = async (tableId: string, _currentStatus: TableSta
   if (error) throw error;
 };
 
-export const moveTable = async (sourceTableId: string, targetTableId: string): Promise<{ success: boolean; message?: string }> => {
-  const { data, error } = await supabase.rpc('move_table_secure', {
+export const moveTable = async (sourceTableId: string, targetTableId: string, operatorUserId: string | null = null): Promise<{ success: boolean; message?: string }> => {
+  const { data, error } = await supabase.rpc('move_table_v2', {
     p_source_table_id: sourceTableId,
     p_target_table_id: targetTableId,
+    p_operator_user_id: operatorUserId,
   });
   if (error) return { success: false, message: error.message };
   return (data as any) || { success: false, message: 'Erro desconhecido.' };
