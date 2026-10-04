@@ -70,7 +70,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
 import { setorDoItem } from '@/lib/setores';
-import { chavePreConta } from '@/lib/preConta';
+import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
 import { descreverHoraDoPedido } from '@/lib/tempo';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
@@ -3670,6 +3670,8 @@ NOTIFY pgrst, 'reload schema';`;
     // de impressão do navegador no aparelho de quem pediu) e não repete no mesmo minuto (garçom + cliente pedindo junto).
     const printTableBill = async (tableId: string, automatica = false) => {
         if (isAberto) { avisarSoComLogin(); return; }
+        // Interruptor 'Imprimir pré-conta automaticamente' (Configurações > Impressão): desligado, só o botão manual imprime.
+        if (automatica && !preContaAutomaticaLigada((await fetchStoreById(store.id).catch(() => null) ?? store).config)) return;
         const summary = getTableSummary(tableId);
         const table = tables.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
