@@ -32,7 +32,9 @@ async function main() {
   ok(BASE_URL, 'defina BASE_URL (ex.: BASE_URL=http://localhost:3777)');
   const url = new URL(BASE_URL);
   const local = ['localhost', '127.0.0.1'].includes(url.hostname);
-  fs.rmSync(SAIDA, { recursive: true, force: true }); fs.mkdirSync(SAIDA, { recursive: true });
+  fs.mkdirSync(SAIDA, { recursive: true });
+  // limpa só os artefatos de execuções anteriores do fluxo (o portão também guarda aqui os logs do tsc/testes/build)
+  for (const f of fs.readdirSync(SAIDA)) if (/^(falha-.*\.png|relatorio\.json|fechamento-dia\.(xlsx|pdf)|erros-console\.txt)$/.test(f)) fs.rmSync(path.join(SAIDA, f), { force: true });
 
   const amb = new Ambiente({ lojaId: LOJA, baseUrl: BASE_URL });
   const loja = await amb.guardas();
@@ -797,8 +799,7 @@ async function secRelatorios(C) {
     ok(new RegExp(`Mesa ${mesa.number}\\s+3 itens\\s+R\\$ ${brl(C.totalConta)}`).test(bloco), `a linha da mesa ${mesa.number} deveria dizer "3 itens" (1 item foi cancelado): ${(bloco.match(new RegExp(`Mesa ${mesa.number}.{0,40}`)) ?? ['?'])[0]}`);
   });
   const abrirVendaNoHistorico = async () => {
-    const linha = m.page.locator('main div').filter({ hasText: new RegExp(`Mesa ${mesa.number}\\b`) }).filter({ hasText: totalTxt }).last();
-    await linha.click();
+    await m.page.locator('main').getByText(new RegExp(`^Mesa ${mesa.number}$`)).first().click(); // a célula "Cliente / mesa" da linha da venda
     await sleep(1500);
     const dlg = m.page.getByRole('dialog').last();
     ok(await dlg.count(), 'a venda do Histórico não abre detalhes');

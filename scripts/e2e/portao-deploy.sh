@@ -97,7 +97,7 @@ if quer fluxo; then
     done
     # aquece as rotas do modo dev (a primeira compilação de cada rota é lenta)
     [ -n "${PORTAO_RAPIDO:-}" ] && curl -s -o /dev/null --max-time 120 "http://localhost:$PORTA/loja"
-    BASE_URL="http://localhost:$PORTA" node scripts/e2e/fluxo-completo.mjs 2>&1 | tee "$SAIDA/fluxo.log" | sed 's/^/  /'
+    BASE_URL="http://localhost:$PORTA" node scripts/e2e/fluxo-completo.mjs 2>&1 | tee "$SAIDA/fluxo.log" | awk '{ print "  " $0; fflush() }'
     RC=${PIPESTATUS[0]}
     if [ "$RC" -ne 0 ]; then
       FALHAS=$((FALHAS + 1)); echo "  FALHOU  fluxo completo (código $RC) — detalhes em scripts/e2e/.out/fluxo.log, capturas em scripts/e2e/.out/"
