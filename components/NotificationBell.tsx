@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Bell, Hand, Receipt, ChefHat, CheckCircle2, Clock, Package, FileWarning, Wallet, Printer } from 'lucide-react';
@@ -18,9 +18,8 @@ export const NotificationBell: React.FC<{ variant: 'header' | 'sidebar'; collaps
   const { eventos, naoLidos, marcarLidos, pausado } = useNotificacoes();
   const [aberto, setAberto] = useState(false);
   // O cabeçalho do celular tem backdrop-blur, que vira o "bloco de contenção" do `fixed` e empurra o Modal para fora da tela.
-  // Por isso a janela vai para o <body> (portal), depois de montar no cliente.
-  const [montado, setMontado] = useState(false);
-  useEffect(() => { setMontado(true); }, []);
+  // Por isso a janela vai para o <body> (portal). Fechada, ela não renderiza nada, então não há diferença entre servidor e cliente.
+  const montado = typeof document !== 'undefined';
   const agora = Date.now();
   const botao = variant === 'sidebar'
     ? `flex items-center w-full px-3 h-10 rounded-[10px] text-[13px] font-medium u-motion whitespace-nowrap text-white/60 hover:bg-white/10 hover:text-white ${collapsed ? 'justify-center' : 'gap-3'}`
