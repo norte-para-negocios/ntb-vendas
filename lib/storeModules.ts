@@ -160,7 +160,10 @@ export const computeAccessibleTabIds = (
     if (moduleKey && !modules[moduleKey]) return false;
     return hasPermission(tabId);
   });
-  return reachable.length > 0 ? new Set(reachable) : new Set(['admin']);
+  if (reachable.length > 0) return new Set(reachable);
+  // Rede de segurança contra "auto-bloqueio" só para quem TEM permissão de admin; quem não tem (ex.: garçom com
+  // permissions {}) fica sem nenhuma área em vez de ganhar a Administração (04/10).
+  return hasPermission('admin') ? new Set(['admin']) : new Set<string>();
 };
 
 // Permissão mínima que um usuário precisa pra ver uma ABA — não confundir

@@ -51,4 +51,7 @@ assert.ok(todas.includes('excecoes') && todas.includes('permissoes'));
 assert.ok(!areasVisiveis(ctxGarcom).flatMap((a) => a.abas.map((b) => b.id)).includes('permissoes'));
 const ctxGerente = { user: { role: 'manager' }, podeVerExcecoes: true, can: () => true };
 assert.equal(abasBloqueadas(ctxGerente).size, 0);
+// garçom {} sem nenhuma aba NÃO cai na Administração (a rede de segurança é só de quem tem admin)
+assert.deepEqual([...computeAccessibleTabIds(mods, (t) => hasTabPermission(garcomVazio, t, loja))], []);
+assert.deepEqual([...computeAccessibleTabIds({ ...mods, tables: false, counter: false, kitchen_kds: false, bar_kds: false, caixa: false, menu: false }, (t) => hasTabPermission(gerente, t, loja))], ['admin']);
 console.log('regrasGarcomGerente: ok');
