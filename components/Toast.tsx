@@ -6,13 +6,13 @@ import { AnimatePresence, MotionConfig, motion, useDragControls } from 'motion/r
 import { SPRING_SHEET, SPRING_UI } from '@/lib/motion';
 
 type ToastVariant = 'success' | 'error' | 'warning' | 'info';
-interface ToastItem { id: number; message: string; variant: ToastVariant; duration: number; }
+interface ToastItem { id: number; message: string; variant: ToastVariant; duration: number; action?: { label: string; run: () => void | Promise<void> }; }
 
 let push: ((t: Omit<ToastItem, 'id'>) => void) | null = null;
 let counter = 0;
 
-function show(message: string, variant: ToastVariant, duration = 4000) {
-  push?.({ message, variant, duration });
+function show(message: string, variant: ToastVariant, duration = 4000, action?: ToastItem['action']) {
+  push?.({ message, variant, duration, action });
 }
 
 export const toast = {
@@ -20,6 +20,8 @@ export const toast = {
   error: (msg: string, duration?: number) => show(msg, 'error', duration),
   warning: (msg: string, duration?: number) => show(msg, 'warning', duration),
   info: (msg: string, duration?: number) => show(msg, 'info', duration),
+  // Ação reversível: avisa no passado e oferece "Desfazer" por alguns segundos (em vez de pedir confirmação antes).
+  undo: (msg: string, label: string, onUndo: () => void | Promise<void>, duration = 8000) => show(msg, 'success', duration, { label, run: onUndo }),
 };
 
 const VARIANT: Record<ToastVariant, { icon: typeof CheckCircle2; color: string }> = {
@@ -94,6 +96,14 @@ const ToastCard = forwardRef<HTMLDivElement, { item: ToastItem; onDismiss: () =>
     >
       <Icon size={18} style={{ color }} className="shrink-0 mt-0.5" />
       <p className="flex-1 text-[var(--text)] whitespace-pre-line">{t.message}</p>
+      {t.action && (
+        <button
+          onClick={() => { onDismiss(); void t.action!.run(); }}
+          className="shrink-0 min-h-11 px-3 -my-2 rounded-full text-[13px] font-bold text-[var(--brand)] hover:bg-[var(--surface-2)] u-press"
+        >
+          {t.action.label}
+        </button>
+      )}
       <button onClick={onDismiss} aria-label="Fechar aviso" className="relative hit-44 text-[var(--text-muted)] hover:text-[var(--text)] u-motion shrink-0">
         <X size={14} />
       </button>

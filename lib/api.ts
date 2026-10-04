@@ -995,8 +995,8 @@ export const deletePriceSchedule = async (storeId: string, id: string): Promise<
 };
 
 // Transferir item(ns) entre mesas (migration 152).
-export const transferItems = async (storeId: string, itemIds: string[], targetTableId: string, operatorUserId: string | null, operatorName: string): Promise<{ success: boolean; moved?: number; message?: string }> => {
-  const { data, error } = await supabase.rpc('transfer_items_secure', { p_store_id: storeId, p_item_ids: itemIds, p_target_table_id: targetTableId, p_operator_user_id: operatorUserId, p_operator_name: operatorName });
+export const transferItems = async (storeId: string, itemIds: string[], targetTableId: string, operatorUserId: string | null, operatorName: string, fromTableId: string | null = null): Promise<{ success: boolean; moved?: number; message?: string }> => {
+  const { data, error } = await supabase.rpc('transfer_items_secure', { p_store_id: storeId, p_item_ids: itemIds, p_target_table_id: targetTableId, p_operator_user_id: operatorUserId, p_operator_name: operatorName, p_from_table_id: fromTableId });
   if (error) { console.error('transferItems falhou:', error); return { success: false, message: 'Não consegui mover o item.' }; }
   return data as { success: boolean; moved?: number; message?: string };
 };

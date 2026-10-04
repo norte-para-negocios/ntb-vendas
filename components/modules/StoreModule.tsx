@@ -25,6 +25,7 @@ import { FloorPlanView } from './FloorPlanView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { PriceSchedulesView } from './PriceSchedulesView';
 import { ReportsView } from './ReportsView';
+import { canUndo } from '@/lib/undoGuard';
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
@@ -2136,7 +2137,14 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
             setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, sold_out: !novo } : p)));
             toast.error('Não consegui atualizar o produto.');
         } else {
-            toast.success(novo ? `${product.name} marcado como esgotado.` : `${product.name} voltou ao cardápio.`);
+            toast.undo(novo ? `${product.name} marcado como esgotado.` : `${product.name} voltou ao cardápio.`, 'Desfazer', async () => {
+                // Só desfaz se ninguém mexeu depois: relê o estado atual do produto.
+                const { products: atuais } = await fetchMenu(storeId, true);
+                const atual = atuais.find((p) => p.id === product.id);
+                if (!atual || !canUndo(String(novo), String(!!atual.sold_out))) { toast.info('Outra pessoa já alterou este produto. Nada foi desfeito.'); return; }
+                setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, sold_out: !novo } : p)));
+                if (!(await setProductSoldOut(storeId, product.id, !novo))) toast.error('Não consegui desfazer.');
+            });
         }
     };
 
@@ -4504,9 +4512,19 @@ NOTIFY pgrst, 'reload schema';`;
         if (!dlg || dlg.enviando) return;
         if (!dlg.targetId) { toast.error('Escolha a mesa de destino.'); return; }
         setMoveItemDlg({ ...dlg, enviando: true });
-        const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name);
+        const origemId = selectedTable?.id ?? null;
+        const operadorId = loggedUser.role === 'universal' ? null : loggedUser.id;
+        const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, operadorId, loggedUser.name);
         setMoveItemDlg(null);
-        if (r.success) { toast.success('Item movido para a outra mesa.'); loadData(); }
+        if (r.success) {
+            loadData();
+            toast.undo('Item movido para a outra mesa.', 'Desfazer', async () => {
+                // O servidor só devolve se o item ainda está na mesa de destino (p_from_table_id).
+                const volta = origemId ? await transferItems(storeId, [dlg.itemId], origemId, operadorId, loggedUser.name, dlg.targetId) : { success: false as const };
+                if (volta.success) { toast.success('Item devolvido para a mesa de origem.'); loadData(); }
+                else toast.info('Outra pessoa já mexeu neste item. Nada foi desfeito.');
+            });
+        }
         else toast.error(r.message || 'Não consegui mover o item.');
     };
 

@@ -8,7 +8,8 @@ create or replace function public.transfer_items_secure(
   p_item_ids uuid[],
   p_target_table_id uuid,
   p_operator_user_id uuid default null,
-  p_operator_name text default null)
+  p_operator_name text default null,
+  p_from_table_id uuid default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_target tables%rowtype;
@@ -40,6 +41,8 @@ begin
      order by oi.created_at
   loop
     if v_item.status = 'canceled' or v_item.fee_type is not null or v_item.src_table = p_target_table_id then continue; end if;
+    -- Desfazer: só move se o item ainda está na mesa esperada (ninguém mexeu depois).
+    if p_from_table_id is not null and v_item.src_table is distinct from p_from_table_id then continue; end if;
 
     -- Pedido aberto da mesa de destino (que não seja só de taxa), senão cria um.
     select o.id into v_target_order from orders o
@@ -84,6 +87,6 @@ begin
   return jsonb_build_object('success', true, 'moved', v_moved, 'valor', v_total_moved);
 end;
 $$;
-grant execute on function public.transfer_items_secure(uuid, uuid[], uuid, uuid, text) to anon, authenticated;
+grant execute on function public.transfer_items_secure(uuid, uuid[], uuid, uuid, text, uuid) to anon, authenticated;
 
 notify pgrst, 'reload schema';
