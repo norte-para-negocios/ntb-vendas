@@ -40,7 +40,7 @@ import { subtituloHistorico, nomeArquivoHistorico, type FiltrosHistorico } from 
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
-import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -51,6 +51,7 @@ import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
 import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
+import { useConexaoEstoque, SeloConexao, PainelConexao, BaixasEstoque } from '@/components/modules/settings/IntegracaoEstoque';
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
 import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
@@ -11585,7 +11586,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
 
             {activeTab === 'notas' && <FiscalNotasView storeId={storeId} onConfigurarEmissor={() => irPara('fiscal')} />}
 
-            {activeTab === 'integracoes' && <IntegracoesView storeId={storeId} podeEditarEstoque={roleCan(loggedUser, store, 'editar_cardapio')} />}
+            {activeTab === 'integracoes' && <IntegracoesView storeId={storeId} podeEditarEstoque={roleCan(loggedUser, store, 'editar_cardapio')} operador={loggedUser.name} />}
 
             {activeTab === 'fiscal' && (
                 <>
@@ -12403,8 +12404,11 @@ const RETRYABLE_FISCAL_STATUSES = ['erro', 'rejeitada', 'pendente'];
 // Administração → Configurações → Integrações. Antes: "Integração com o NTB Estoque" morava na tela de
 // Cardápio e "Integração direta com a Omie" dentro do Emissor fiscal; ambas são configuração, não operação.
 // URL/chave nunca voltam do banco (write-only), só o toggle `ativo` e se já está configurada.
-const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean }> = ({ storeId, podeEditarEstoque }) => {
+const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; operador: string }> = ({ storeId, podeEditarEstoque, operador }) => {
     const [ntbEstoqueStatus, setNtbEstoqueStatus] = useState<NtbEstoqueIntegracaoStatus>({ configurado: false, ativo: false });
+    // Estado REAL da ligação (a chave responde? a loja do Estoque é de teste?) e baixas que não fecharam.
+    const conexaoEstoque = useConexaoEstoque(storeId, ntbEstoqueStatus.configurado);
+    const [baixasResumo, setBaixasResumo] = useState<BaixasEstoqueResumo | null>(null);
     const [ntbEstoqueUrlInput, setNtbEstoqueUrlInput] = useState('');
     const [ntbEstoqueApiKeyInput, setNtbEstoqueApiKeyInput] = useState('');
     const [isSavingNtbEstoque, setIsSavingNtbEstoque] = useState(false);
@@ -12470,10 +12474,12 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean }>
             <Collapsible
                 title="Integração com o NTB Estoque"
                 defaultOpen={true}
-                badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
+                badge={<SeloConexao configurado={ntbEstoqueStatus.configurado} teste={conexaoEstoque.teste} testando={conexaoEstoque.testando} />}
             >
                 <div className="space-y-4">
                     <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
+
+                    <PainelConexao configurado={ntbEstoqueStatus.configurado} ativo={ntbEstoqueStatus.ativo} teste={conexaoEstoque.teste} testando={conexaoEstoque.testando} onTestar={conexaoEstoque.testar} />
 
                     <div className="flex items-center justify-between gap-3 p-4 bg-[var(--surface-2)] rounded-[var(--r-md)]">
                         <div>
@@ -12516,6 +12522,14 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean }>
                         Salvar integração com o NTB Estoque
                     </Button>
                 </div>
+            </Collapsible>
+
+            <Collapsible
+                title="Baixas de estoque"
+                defaultOpen={true}
+                badge={baixasResumo && baixasResumo.com_erro > 0 ? <Badge variant="critical" dot>{baixasResumo.com_erro} com erro</Badge> : undefined}
+            >
+                <BaixasEstoque storeId={storeId} podeAgir={podeEditarEstoque} operador={operador} onResumo={setBaixasResumo} />
             </Collapsible>
 
             {/* Integração direta com a Omie (2026-09-05) — só pra loja que NÃO usa

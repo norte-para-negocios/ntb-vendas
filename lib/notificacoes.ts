@@ -5,7 +5,7 @@ import { itemPrecisaAcao } from './producaoNav';
 
 export type TipoNotificacao =
   | 'chamada_garcom' | 'pedido_conta' | 'pedido_novo' | 'item_pronto' | 'item_atrasado'
-  | 'estoque_baixo' | 'nota_rejeitada' | 'sangria_alta' | 'impressora_falhou';
+  | 'estoque_baixo' | 'nota_rejeitada' | 'sangria_alta' | 'impressora_falhou' | 'baixa_estoque_erro';
 export type Publico = 'gerencia' | 'caixa' | 'salao' | 'cozinha' | 'bar';
 export type Som = 'mesa' | 'pedido' | 'pronto' | 'atraso' | 'falha';
 
@@ -27,6 +27,7 @@ export const TIPOS: DefTipo[] = [
   { tipo: 'nota_rejeitada', label: 'Nota fiscal rejeitada', desc: 'A SEFAZ rejeitou uma nota ou ela deu erro.', publicos: ['gerencia', 'caixa'], som: 'falha', resolve: true },
   { tipo: 'sangria_alta', label: 'Sangria acima do limite', desc: 'Sangria maior que o limite configurado no caixa.', publicos: ['gerencia'], som: 'falha', resolve: false },
   { tipo: 'impressora_falhou', label: 'Impressora com falha', desc: 'Um pedido não saiu na impressora.', publicos: ['gerencia', 'caixa'], som: 'falha', resolve: true },
+  { tipo: 'baixa_estoque_erro', label: 'Baixa de estoque com erro', desc: 'Uma venda não baixou no Estoque (erro ou precisa conferir).', publicos: ['gerencia'], som: 'falha', resolve: true },
 ];
 const DEF = Object.fromEntries(TIPOS.map((t) => [t.tipo, t])) as Record<TipoNotificacao, DefTipo>;
 
@@ -135,6 +136,17 @@ export function detectarNotas(
       id: `nota_rejeitada:${n.id}`, tipo: 'nota_rejeitada' as const,
       titulo: `${n.modelo === '65' ? 'NFC-e' : 'NF-e'}${n.numero ? ` nº ${n.numero}` : ''} ${n.status === 'erro' ? 'com erro' : 'rejeitada'}`,
       detalhe: n.motivo_erro ? n.motivo_erro.slice(0, 120) : undefined,
+    }));
+}
+
+// Baixa de estoque (outbox, migration 156) que não fechou: erro/parcial (o servidor tenta de novo) ou incerta (o gerente confere).
+export function detectarBaixas(baixas: { id: string; status: string; rotulo: string | null; ultimo_erro: string | null; created_at: string }[]): Detectado[] {
+  return baixas
+    .filter((b) => b.status === 'erro' || b.status === 'parcial' || b.status === 'incerto')
+    .map((b) => ({
+      id: `baixa_estoque_erro:${b.id}`, tipo: 'baixa_estoque_erro' as const,
+      titulo: b.status === 'incerto' ? `Baixa de estoque para conferir · ${b.rotulo || 'Pedido'}` : `Baixa de estoque com erro · ${b.rotulo || 'Pedido'}`,
+      detalhe: b.ultimo_erro ? b.ultimo_erro.slice(0, 140) : undefined,
     }));
 }
 

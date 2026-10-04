@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, Hand, Receipt, ChefHat, CheckCircle2, Clock, Package, FileWarning, Wallet, Printer } from 'lucide-react';
+import { Bell, Hand, Receipt, ChefHat, CheckCircle2, Clock, Package, FileWarning, Wallet, Printer, PackageX } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { useNotificacoes } from '@/components/NotificacoesContext';
@@ -11,7 +11,7 @@ import { tempoRelativo, type TipoNotificacao } from '@/lib/notificacoes';
 
 const ICONE: Record<TipoNotificacao, React.ElementType> = {
   chamada_garcom: Hand, pedido_conta: Receipt, pedido_novo: ChefHat, item_pronto: CheckCircle2, item_atrasado: Clock,
-  estoque_baixo: Package, nota_rejeitada: FileWarning, sangria_alta: Wallet, impressora_falhou: Printer,
+  estoque_baixo: Package, nota_rejeitada: FileWarning, sangria_alta: Wallet, impressora_falhou: Printer, baixa_estoque_erro: PackageX,
 };
 
 export const NotificationBell: React.FC<{ variant: 'header' | 'sidebar'; collapsed?: boolean }> = ({ variant, collapsed }) => {

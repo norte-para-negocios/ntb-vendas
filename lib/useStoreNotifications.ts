@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { fetchTables, fetchKitchenOrders, fetchPrintSectors, fetchRecentPrintJobs, fetchFiscalNotas, fetchExceptionsReport, fetchLowStockAlerts } from '@/lib/api';
+import { fetchTables, fetchKitchenOrders, fetchPrintSectors, fetchRecentPrintJobs, fetchFiscalNotas, fetchExceptionsReport, fetchLowStockAlerts, fetchIntegracaoBaixas } from '@/lib/api';
 import { toast } from '@/components/Toast';
 import { playNewOrderAlert, playReadyAlert, playItemLateAlert, playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { aoPublicar, mesasRecentes, kdsRecente } from '@/lib/dadosAoVivo';
@@ -10,7 +10,7 @@ import { listarLocaisComTela, type SetorLike } from '@/lib/locaisPreparo';
 import { contarPorLocal, itemPrecisaAcao, locaisAcessiveis, type ItemKds } from '@/lib/producaoNav';
 import {
   resolverPrefs, tiposAplicaveis, publicosDoUsuario, detectarMesas, detectarItens, detectarImpressoras, detectarNotas,
-  detectarSangrias, detectarEstoque, reconciliar, filtrarEventos, contarNaoLidos, marcarLidos as marcarLidosLib, somDoEvento,
+  detectarSangrias, detectarEstoque, detectarBaixas, reconciliar, filtrarEventos, contarNaoLidos, marcarLidos as marcarLidosLib, somDoEvento,
   serializarEventos, restaurarEventos, type Detectado, type EventoNotificacao, type ItemKdsCompleto, type Som, type TipoNotificacao,
 } from '@/lib/notificacoes';
 import type { Store, StoreUser, Table } from '@/types';
@@ -169,6 +169,9 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
       detectados.push(...detectarSangrias((await fetchExceptionsReport(storeId, inicio, new Date())).events));
       vistos.push('sangria_alta');
     } catch { /* fonte fora */ }
+    if (pu.includes('gerencia')) {
+      try { detectados.push(...detectarBaixas((await fetchIntegracaoBaixas(storeId)).itens)); vistos.push('baixa_estoque_erro'); } catch { /* fonte fora */ }
+    }
     if (pu.includes('gerencia') && agora - ultimoEstoque.current > 10 * 60000) {
       ultimoEstoque.current = agora;
       try { detectados.push(...detectarEstoque(await fetchLowStockAlerts(storeId))); vistos.push('estoque_baixo'); } catch { /* fonte fora */ }

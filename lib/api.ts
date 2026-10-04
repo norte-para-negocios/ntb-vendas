@@ -2284,6 +2284,44 @@ export const saveNtbEstoqueIntegracaoConfig = async (
   }
 };
 
+// Baixas de estoque (outbox, migration 156): estado do que a venda mandou para o Estoque. A lista traz só o que NÃO
+// está ok. As ações (tentar de novo / já conferi) passam pela rota do servidor, que é quem fala com o Estoque.
+export interface BaixaEstoqueItem {
+  codigo: string; status: 'ok' | 'erro' | 'incerto'; retentavel: boolean; tentativas: number; erro?: string; detalhe?: string;
+}
+export interface BaixaEstoque {
+  id: string; order_id: string; rotulo: string | null; status: 'pending' | 'parcial' | 'erro' | 'incerto';
+  tentativas: number; ultimo_erro: string | null; resultado: (BaixaEstoqueItem | null)[]; total_itens: number;
+  proxima_tentativa: string; created_at: string; updated_at: string;
+}
+export interface BaixasEstoqueResumo { pendentes: number; com_erro: number; itens: BaixaEstoque[] }
+
+export const fetchIntegracaoBaixas = async (storeId: string): Promise<BaixasEstoqueResumo> => {
+  const { data, error } = await supabase.rpc('fetch_integracao_baixas_secure', { p_store_id: storeId, p_limite: 50 });
+  // Lança em erro (rede, ou a migration 156 ainda não aplicada): quem chama decide. O sino não pode tratar falha de leitura
+  // como "sem baixas" (resolveria avisos que ainda valem).
+  if (error || !data) throw new Error(error?.message || 'Falha ao ler as baixas de estoque');
+  return data as BaixasEstoqueResumo;
+};
+
+export const acaoBaixaEstoque = async (
+  storeId: string,
+  id: string,
+  acao: 'reprocessar' | 'conferir',
+  quem?: string,
+): Promise<{ success: boolean; message?: string; status?: string }> => {
+  try {
+    const res = await fetch(resolverUrlApi('/api/integracao/baixas'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, id, acao, quem }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+};
+
 // Chave direta da Omie (store_omie_secrets, migration 071) — pra lojas
 // que NÃO usam ntb-estoque, registra a NFC-e autorizada direto na Omie
 // (ver app/api/fiscal/emitir/route.ts). Mesmo princípio write-only já

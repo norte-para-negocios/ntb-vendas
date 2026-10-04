@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   publicosDoUsuario, tiposAplicaveis, resolverPrefs, detectarMesas, detectarItens, reconciliar, filtrarEventos,
-  contarNaoLidos, marcarLidos, somDoEvento, tempoRelativo, detectarImpressoras, detectarNotas, detectarSangrias, detectarEstoque, serializarEventos, restaurarEventos, type EventoNotificacao,
+  contarNaoLidos, marcarLidos, somDoEvento, tempoRelativo, detectarImpressoras, detectarNotas, detectarSangrias, detectarEstoque, detectarBaixas, serializarEventos, restaurarEventos, type EventoNotificacao,
 } from '../../lib/notificacoes';
 
 const AGORA = Date.parse('2026-10-04T22:00:00Z');
@@ -127,6 +127,29 @@ assert.equal(sang.length, 1);
 assert.equal(sang[0].titulo, 'Sangria de R$ 1500,00');
 assert.equal(sang[0].detalhe, 'ANE · cofre');
 assert.deepEqual(detectarEstoque([{ name: 'Mussarela', stock: 2, threshold: 5 }, { name: 'Calabresa', stock: null, threshold: 3 }]).map((e) => e.detalhe), ['2 em estoque · mínimo 5', 'mínimo 3']);
+
+// -- baixa de estoque com erro: só gerência vê; ok/pending não avisam
+const baixas = detectarBaixas([
+  { id: 'b1', status: 'erro', rotulo: 'Mesa 12', ultimo_erro: 'T-NOREG: Produto sem cadastro correspondente no ntb-estoque', created_at: '2026-10-04T21:00:00Z' },
+  { id: 'b2', status: 'incerto', rotulo: 'Balcão · Ana', ultimo_erro: null, created_at: '2026-10-04T21:10:00Z' },
+  { id: 'b3', status: 'parcial', rotulo: null, ultimo_erro: 'x', created_at: '2026-10-04T21:20:00Z' },
+  { id: 'b4', status: 'ok', rotulo: 'Mesa 1', ultimo_erro: null, created_at: '2026-10-04T21:30:00Z' },
+  { id: 'b5', status: 'pending', rotulo: 'Mesa 2', ultimo_erro: null, created_at: '2026-10-04T21:40:00Z' },
+]);
+assert.deepEqual(baixas.map((b) => b.id), ['baixa_estoque_erro:b1', 'baixa_estoque_erro:b2', 'baixa_estoque_erro:b3']);
+assert.equal(baixas[0].titulo, 'Baixa de estoque com erro · Mesa 12');
+assert.match(baixas[0].detalhe ?? '', /sem cadastro/);
+assert.match(baixas[1].titulo, /conferir/i, 'incerto pede conferência');
+assert.equal(baixas[2].titulo, 'Baixa de estoque com erro · Pedido');
+{
+  const ev = baixas.map((d) => ({ ...d, criadoEm: AGORA, lido: false, ativo: true }));
+  const ctx = (role: string) => ({ prefs: resolverPrefs(undefined), aplicaveis: tiposAplicaveis(undefined), publicos: publicosDoUsuario({ role }), locaisPermitidos: null });
+  assert.equal(filtrarEventos(ev, ctx('manager')).length, 3, 'gerente vê');
+  assert.equal(filtrarEventos(ev, ctx('owner')).length, 3, 'dono vê');
+  assert.equal(filtrarEventos(ev, ctx('cashier')).length, 0, 'caixa não vê');
+  assert.equal(filtrarEventos(ev, ctx('waiter')).length, 0, 'garçom não vê');
+  assert.equal(somDoEvento(ev[0], { prefs: resolverPrefs(undefined), abaAtual: 'tables' }), 'falha');
+}
 
 // -- tempo relativo
 assert.equal(tempoRelativo(AGORA, AGORA), 'agora');
