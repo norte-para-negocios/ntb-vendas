@@ -270,6 +270,8 @@
     outline-offset: 2px;
     border-radius: 4px;
   }
+  /* Dígitos de largura fixa em tabelas e totais (pesquisa de design, 04/10): colunas de valor não "pulam". */
+  table, th, td { font-variant-numeric: tabular-nums; }
   .num {
     font-family: inherit;
     font-variant-numeric: tabular-nums;

@@ -25,6 +25,7 @@ import { FloorPlanView } from './FloorPlanView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { PriceSchedulesView } from './PriceSchedulesView';
 import { ReportsView } from './ReportsView';
+import { StaffOfflineBanner } from '@/components/StaffOfflineBanner';
 import { canUndo } from '@/lib/undoGuard';
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
@@ -1127,6 +1128,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   return (
     <>
     <div className={`min-h-screen supports-[height:100dvh]:min-h-dvh bg-[var(--bg)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
+      <StaffOfflineBanner />
       <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
 
       {/* Mobile Header */}
