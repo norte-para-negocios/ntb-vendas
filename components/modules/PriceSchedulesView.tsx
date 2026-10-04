@@ -156,7 +156,7 @@ export const PriceSchedulesView: React.FC<{ storeId: string }> = ({ storeId }) =
               {DIAS.map((d, i) => (
                 <button key={d} type="button" aria-pressed={form.days.includes(i)}
                   onClick={() => setForm({ ...form, days: form.days.includes(i) ? form.days.filter((x) => x !== i) : [...form.days, i] })}
-                  className={`h-9 min-w-[44px] px-3 rounded-full border text-[13px] font-semibold u-press ${form.days.includes(i) ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text)] border-[var(--border)]'}`}>{d}</button>
+                  className={`h-9 max-sm:h-11 min-w-[44px] px-3 rounded-full border text-[13px] font-semibold u-press ${form.days.includes(i) ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text)] border-[var(--border)]'}`}>{d}</button>
               ))}
             </div>
           </div>

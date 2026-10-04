@@ -57,7 +57,7 @@ export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: numbe
               role="tab"
               aria-selected={periodo === id}
               onClick={() => setPeriodo(id)}
-              className={`h-8 px-4 rounded-full text-[13px] font-semibold u-press ${periodo === id ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
+              className={`h-8 max-sm:h-11 px-4 rounded-full text-[13px] font-semibold u-press ${periodo === id ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
             >{label}</button>
           ))}
         </div>

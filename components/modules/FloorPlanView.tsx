@@ -121,7 +121,7 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
           <button
             type="button"
             onClick={() => { setEditing((v) => !v); setPicked(null); }}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold text-[var(--text)] u-press"
+            className="inline-flex items-center gap-1.5 h-9 max-sm:h-11 px-3 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold text-[var(--text)] u-press"
           >
             {editing ? <><Check size={14} /> Concluir</> : <><Pencil size={14} /> Editar planta</>}
           </button>
@@ -151,7 +151,7 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
                 key={t.id}
                 type="button"
                 onClick={() => setPicked((p) => (p === t.id ? null : t.id))}
-                className={`h-9 min-w-[44px] px-3 rounded-xl border text-[13px] font-semibold u-press ${picked === t.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text)] border-[var(--border)]'}`}
+                className={`h-9 max-sm:h-11 min-w-[44px] px-3 rounded-xl border text-[13px] font-semibold u-press ${picked === t.id ? 'bg-[var(--brand)] text-white border-[var(--brand)]' : 'bg-[var(--surface)] text-[var(--text)] border-[var(--border)]'}`}
               >
                 {t.number}
               </button>

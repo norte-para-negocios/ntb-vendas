@@ -25,6 +25,7 @@ import { FloorPlanView } from './FloorPlanView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { PriceSchedulesView } from './PriceSchedulesView';
 import { ReportsView } from './ReportsView';
+import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
 import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
@@ -2263,7 +2264,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); alternarEsgotado(product); }}
-                        className="shrink-0 min-h-9 px-3 rounded-full bg-[var(--surface-2)] text-[12px] font-semibold text-[var(--text)] hover:bg-[var(--border)] u-press"
+                        className="shrink-0 min-h-9 max-sm:min-h-11 px-3 rounded-full bg-[var(--surface-2)] text-[12px] font-semibold text-[var(--text)] hover:bg-[var(--border)] u-press"
                         aria-label={product.sold_out ? `Voltar ${product.name} ao cardápio` : `Marcar ${product.name} como esgotado`}
                     >
                         {product.sold_out ? 'Voltou' : 'Esgotar'}
@@ -4913,7 +4914,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     role="tab"
                                     aria-selected={tablesViewMode === m}
                                     onClick={() => mudarTablesViewMode(m)}
-                                    className={`h-8 px-4 rounded-full text-[13px] font-semibold u-press ${tablesViewMode === m ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
+                                    className={`h-8 max-sm:h-11 px-4 rounded-full text-[13px] font-semibold u-press ${tablesViewMode === m ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
                                 >
                                     {m === 'lista' ? 'Lista' : 'Mapa'}
                                 </button>
@@ -11351,6 +11352,16 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     const [filterMaxItems, setFilterMaxItems] = useState('');
     const [filterMinTotal, setFilterMinTotal] = useState('');
     const [filterMaxTotal, setFilterMaxTotal] = useState('');
+    // Filtros combináveis (relatórios, 04/10): operador, forma, bandeira, mesa, status, nota, horário + filtros salvos.
+    const [salesFilters, setSalesFilters] = useState<SalesFilters>(EMPTY_FILTERS);
+    const [savedFilters, setSavedFilters] = useState<{ name: string; f: SalesFilters }[]>(() => {
+        try { return JSON.parse(localStorage.getItem(`saved_sales_filters_${storeId}`) || '[]'); } catch { return []; }
+    });
+    const [saveFilterName, setSaveFilterName] = useState<string | null>(null);
+    const persistSavedFilters = (list: { name: string; f: SalesFilters }[]) => {
+        setSavedFilters(list);
+        try { localStorage.setItem(`saved_sales_filters_${storeId}`, JSON.stringify(list)); } catch { /* sem storage: só não lembra */ }
+    };
     const [showFilters, setShowFilters] = useState(false);
 
     // Sorting
@@ -11484,6 +11495,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         if (filterMaxTotal) {
             result = result.filter(order => getOrderDisplayTotal(order) <= parseFloat(filterMaxTotal));
         }
+        result = applySalesFilters(result, salesFilters);
 
         // Apply sorting
         result.sort((a, b) => {
@@ -11512,7 +11524,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         });
 
         return result;
-    }, [sales, filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, sortColumn, sortDirection]);
+    }, [sales, filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, salesFilters, sortColumn, sortDirection]);
 
     const totalRevenue = filteredAndSortedSales.reduce((acc, order) => acc + getOrderDisplayTotal(order), 0);
 
@@ -11564,7 +11576,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // pode ficar preso numa página que não existe mais no novo resultado filtrado.
     useEffect(() => {
         setSalesPage(0);
-    }, [filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, sortColumn, sortDirection]);
+    }, [filterMonth, filterStartDate, filterEndDate, filterType, filterCustomer, filterMinItems, filterMaxItems, filterMinTotal, filterMaxTotal, salesFilters, sortColumn, sortDirection]);
 
     const salesTotalPages = Math.max(1, Math.ceil(filteredAndSortedSales.length / SALES_PAGE_SIZE));
     const pagedSales = filteredAndSortedSales.slice(salesPage * SALES_PAGE_SIZE, (salesPage + 1) * SALES_PAGE_SIZE);
@@ -11707,7 +11719,12 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         setFilterMaxItems('');
         setFilterMinTotal('');
         setFilterMaxTotal('');
+        setSalesFilters(EMPTY_FILTERS);
     };
+    const salesOperators = useMemo(
+        () => Array.from(new Set(sales.map((o) => (o.payment_details as { operador_nome?: string } | null)?.operador_nome).filter(Boolean) as string[])).sort(),
+        [sales],
+    );
 
     // Menu lateral de Administração (Task 4, redesign 2026-08-29) — substitui
     // a antiga barra de 8 abas soltas em linha por 4 categorias agrupadas.
@@ -12340,12 +12357,74 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                             <Input type="number" inputMode="decimal" min="0" step="0.01" value={filterMaxTotal} onChange={e => setFilterMaxTotal(e.target.value)} />
                                         </div>
                                     </div>
+                                    {([
+                                        ['operator', 'Operador', [['', 'Todos'], ...salesOperators.map((n) => [n, n] as [string, string])]],
+                                        ['method', 'Forma de pagamento', [['', 'Todas'], ['CASH', 'Dinheiro'], ['PIX', 'PIX'], ['DEBIT', 'Débito'], ['CREDIT', 'Crédito']]],
+                                        ['brand', 'Bandeira', [['', 'Todas'], ...Object.entries(CARD_BRAND_LABELS).map(([id, label]) => [id, label] as [string, string])]],
+                                        ['status', 'Situação', [['all', 'Todas'], ['delivered', 'Entregues'], ['canceled', 'Canceladas']]],
+                                        ['invoice', 'Nota fiscal', [['all', 'Todas'], ['with', 'Com nota'], ['without', 'Sem nota']]],
+                                    ] as [keyof SalesFilters, string, [string, string][]][]).map(([key, label, opts]) => (
+                                        <div key={key}>
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">{label}</label>
+                                            <select
+                                                className="w-full h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-[15px] text-[var(--text)]"
+                                                value={String(salesFilters[key])}
+                                                onChange={(e) => setSalesFilters({ ...salesFilters, [key]: e.target.value } as SalesFilters)}
+                                            >
+                                                {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                            </select>
+                                        </div>
+                                    ))}
+                                    <div>
+                                        <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Mesa</label>
+                                        <Input inputMode="numeric" placeholder="Número" value={salesFilters.table} onChange={(e) => setSalesFilters({ ...salesFilters, table: e.target.value.replace(/\D/g, '') })} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Das</label>
+                                            <Input type="time" value={salesFilters.hourFrom} onChange={(e) => setSalesFilters({ ...salesFilters, hourFrom: e.target.value })} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-[13px] font-medium text-[var(--text-muted)] mb-1">Até</label>
+                                            <Input type="time" value={salesFilters.hourTo} onChange={(e) => setSalesFilters({ ...salesFilters, hourTo: e.target.value })} />
+                                        </div>
+                                    </div>
                                     <div className="flex items-end">
                                         <Button variant="secondary" className="w-full" onClick={clearFilters}>Limpar Filtros</Button>
                                     </div>
                                 </div>
                             )}
                         </div>
+                        {(describeFilters(salesFilters).length > 0 || savedFilters.length > 0) && (
+                            <div className="flex flex-wrap items-center gap-2 px-1 pb-3">
+                                {describeFilters(salesFilters).map((c) => (
+                                    <button
+                                        key={c.key}
+                                        type="button"
+                                        onClick={() => setSalesFilters(c.key === 'hourFrom' ? { ...salesFilters, hourFrom: '', hourTo: '' } : { ...salesFilters, [c.key]: EMPTY_FILTERS[c.key] } as SalesFilters)}
+                                        className="inline-flex items-center gap-1.5 min-h-9 max-sm:min-h-11 px-3 rounded-full bg-[var(--surface-2)] text-[13px] font-medium text-[var(--text)] hover:bg-[var(--border)] u-press"
+                                        aria-label={`Remover filtro ${c.label}`}
+                                    >
+                                        {c.label} <X size={13} />
+                                    </button>
+                                ))}
+                                {describeFilters(salesFilters).length > 0 && (saveFilterName === null ? (
+                                    <button type="button" onClick={() => setSaveFilterName('')} className="min-h-9 max-sm:min-h-11 px-3 rounded-full border border-[var(--border)] text-[13px] font-semibold text-[var(--brand)] u-press">Salvar este filtro</button>
+                                ) : (
+                                    <span className="inline-flex items-center gap-2">
+                                        <Input className="!h-9 w-44" placeholder="Nome (ex.: Crédito da Claudia)" value={saveFilterName} onChange={(e) => setSaveFilterName(e.target.value)} maxLength={40} />
+                                        <Button size="sm" onClick={() => { const nome = (saveFilterName ?? '').trim(); if (!nome) return; persistSavedFilters([...savedFilters.filter((x) => x.name !== nome), { name: nome, f: salesFilters }]); setSaveFilterName(null); }}>Salvar</Button>
+                                        <Button size="sm" variant="secondary" onClick={() => setSaveFilterName(null)}>Cancelar</Button>
+                                    </span>
+                                ))}
+                                {savedFilters.map((sf) => (
+                                    <span key={sf.name} className="inline-flex items-center rounded-full border border-[var(--border)] overflow-hidden">
+                                        <button type="button" onClick={() => setSalesFilters(sf.f)} className="min-h-9 pl-3 pr-2 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--surface-2)] u-press">{sf.name}</button>
+                                        <button type="button" onClick={() => persistSavedFilters(savedFilters.filter((x) => x.name !== sf.name))} className="min-h-9 px-2 text-[var(--text-muted)] hover:text-[var(--err)] u-press" aria-label={`Apagar filtro salvo ${sf.name}`}><X size={13} /></button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                         {historyView === 'canceled' ? (
                             <VendasCanceladasView storeId={storeId} />
                         ) : historyView === 'product' ? (
