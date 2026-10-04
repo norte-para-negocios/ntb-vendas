@@ -20,7 +20,7 @@ interface Props {
   onReimprimir: (l: LinhaPedido) => void;
 }
 
-const Tile: React.FC<{ rotulo: string; valor: number; destaque?: boolean; onClick?: () => void }> = ({ rotulo, valor, destaque, onClick }) => {
+export const Tile: React.FC<{ rotulo: string; valor: number; destaque?: boolean; onClick?: () => void }> = ({ rotulo, valor, destaque, onClick }) => {
   const cls = `text-left rounded-[var(--r-md)] border px-3 py-2 sm:px-4 sm:py-3 ${destaque ? 'border-[var(--warn)]/40 bg-[var(--warn)]/10' : 'border-[var(--border)] bg-[var(--surface-2)]'}`;
   const inner = (
     <>

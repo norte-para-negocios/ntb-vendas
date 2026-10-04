@@ -62,3 +62,15 @@ export const abasProducao = (locais: LocalPreparo[], contagens: Record<string, n
   locais.map((l) => ({ ...l, count: contagens[l.chave] ?? 0 }));
 
 export const somaContagens = (abas: { count: number }[]): number => abas.reduce((s, a) => s + a.count, 0);
+
+// Contadores do cabeçalho da Produção: novos (pendente/aceito), preparando, prontos e atrasados.
+export function resumirKds<T extends { status: string }>(itens: T[], atrasado: (i: T) => boolean): { novos: number; preparando: number; prontos: number; atrasados: number } {
+  const r = { novos: 0, preparando: 0, prontos: 0, atrasados: 0 };
+  itens.forEach((i) => {
+    if (i.status === 'pending' || i.status === 'accepted') r.novos++;
+    else if (i.status === 'preparing') r.preparando++;
+    else if (i.status === 'ready') r.prontos++;
+    if (atrasado(i)) r.atrasados++;
+  });
+  return r;
+}

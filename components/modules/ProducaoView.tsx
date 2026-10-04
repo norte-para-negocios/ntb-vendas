@@ -1,7 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { SegmentedControl } from '@/components/ui';
-import { AnimatedNumber } from '@/components/AnimatedNumber';
+import { ChipsLocal } from '@/components/modules/ProducaoCabecalho';
 import { useNotificacoes } from '@/components/NotificacoesContext';
 import { abasProducao, locaisAcessiveis } from '@/lib/producaoNav';
 import type { Store } from '@/types';
@@ -17,16 +16,11 @@ export const ProducaoView: React.FC<{ store: Store; acessiveis: Set<string>; ren
   const escolher = (v: string) => { setAtiva(v); try { localStorage.setItem(chaveSalva, v); } catch { /* sem persistência */ } };
   return (
     <div>
-      <div className="overflow-x-auto no-scrollbar mb-4 -mx-1 px-1">
-        <SegmentedControl
-          value={atual.chave}
-          onChange={escolher}
-          options={abas.map((a) => ({
-            value: a.chave,
-            label: <>{a.nome} <AnimatedNumber value={a.count} format={(n) => String(Math.round(n))} className="num font-medium text-[var(--text-muted)]" /></>,
-          }))}
-        />
-      </div>
+      {abas.length > 1 && (
+        <div className="mb-3">
+          <ChipsLocal value={atual.chave} onChange={escolher} opcoes={abas.map((a) => ({ id: a.chave, nome: a.nome, count: a.count }))} />
+        </div>
+      )}
       {renderKds(atual)}
     </div>
   );

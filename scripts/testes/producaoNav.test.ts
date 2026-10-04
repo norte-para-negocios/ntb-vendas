@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/producaoNav.test.ts
 import assert from 'node:assert/strict';
-import { contarPorLocal, usaMenuProducao, modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens, itemPrecisaAcao } from '../../lib/producaoNav';
+import { contarPorLocal, usaMenuProducao, modoProducao, abaCorretaDeProducao, resumirKds, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens, itemPrecisaAcao } from '../../lib/producaoNav';
 import { listarLocaisComTela } from '../../lib/locaisPreparo';
 
 const it = (status: string, sector_id: string | null = null, tipo = 'table') => ({ status, sector_id, order: { order_type: tipo } });
@@ -52,4 +52,9 @@ assert.deepEqual(locaisAcessiveis(comSetor, new Set(['bar'])).map((l) => l.chave
 const abas = abasProducao(comSetor, c);
 assert.deepEqual(abas.map((a) => [a.chave, a.count]), [['kitchen', 2], ['bar', 1], ['setor:p1', 2]]);
 assert.equal(somaContagens(abas), 5);
+
+// Contadores do cabeçalho da tela de Produção (mesmo padrão dos tiles de Pedidos do Dia)
+const r = resumirKds([it('pending'), it('accepted', null, 'counter'), it('preparing'), it('preparing'), it('ready')], (i) => i.status === 'preparing');
+assert.deepEqual(r, { novos: 2, preparando: 2, prontos: 1, atrasados: 2 });
+assert.deepEqual(resumirKds([], () => false), { novos: 0, preparando: 0, prontos: 0, atrasados: 0 });
 console.log('producaoNav: ok');

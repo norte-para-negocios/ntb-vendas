@@ -56,7 +56,8 @@ import { NotificacoesProvider } from '@/components/NotificacoesContext';
 import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ProducaoView } from '@/components/modules/ProducaoView';
-import { modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
+import { ResumoKds, ChipsLocal } from '@/components/modules/ProducaoCabecalho';
+import { resumirKds, modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -1526,6 +1527,11 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
   useEffect(() => {
       fetchPrintSectors(storeId).then(l => setLocaisKds(l.filter(x => x.base === destination))).catch(() => {});
   }, [storeId, destination]);
+  // Loja com impressora ligada para este destino: o ticket sai sozinho, o botão manual vira "Reimprimir".
+  const [imprimeAuto, setImprimeAuto] = useState(false);
+  useEffect(() => {
+      hasActivePrinterForDestination(storeId, destination).then(setImprimeAuto).catch(() => setImprimeAuto(false));
+  }, [storeId, destination]);
   const escolherLocalKds = (v: string) => { setLocalKds(v); try { localStorage.setItem(chaveLocalKds, v); } catch { /* sem persistência */ } };
 
   // Snapshot do fetch anterior — usado só pra diff (detectar item novo em
@@ -1706,18 +1712,16 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
 
   return (
     <div>
-        {locaisKds.length > 0 && !fixedLocal && (
-            <div className="overflow-x-auto no-scrollbar mb-4 -mx-1 px-1">
-                <SegmentedControl
+        <div className="mb-4 space-y-3">
+            <ResumoKds resumo={resumirKds(visibleOrders, isItemLate)} />
+            {locaisKds.length > 0 && !fixedLocal && (
+                <ChipsLocal
                     value={localAtivo}
                     onChange={escolherLocalKds}
-                    options={[{ id: 'todos', nome: 'Tudo' }, { id: 'padrao', nome: destination === 'bar' ? 'Bar' : 'Cozinha' }, ...locaisKds.map(x => ({ id: x.id, nome: x.name }))].map(l => ({
-                        value: l.id,
-                        label: <>{l.nome} <span className="num font-medium text-[var(--text-muted)]">{orders.filter(it => pertenceAoLocal(it, l.id)).length}</span></>,
-                    }))}
+                    opcoes={[{ id: 'todos', nome: 'Tudo' }, { id: 'padrao', nome: destination === 'bar' ? 'Bar' : 'Cozinha' }, ...locaisKds.map(x => ({ id: x.id, nome: x.name }))].map(l => ({ ...l, count: orders.filter(it => pertenceAoLocal(it, l.id)).length }))}
                 />
-            </div>
-        )}
+            )}
+        </div>
         <div className="relative grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
             {/* Lista viva (Task 10 Step 6): chave estável por item — a cada
                 poll/realtime só o que entra/sai anima; o resto se reorganiza. */}
@@ -1733,35 +1737,72 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                         key={item.id}
                         {...LIST_ITEM_MOTION}
                     >
-                    <Card className={`p-4 ${item.priority ? 'ring-2 ring-[var(--err)]' : late ? 'ring-2 ring-[var(--err)]/40' : ''}`} style={(late || item.priority) ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
-                        <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-2 mb-2">
+                    <Card className={`p-4 flex flex-col ${item.priority ? 'ring-2 ring-[var(--err)]' : late ? 'ring-2 ring-[var(--err)]/40' : ''}`} style={(late || item.priority) ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
+                        {/* 1) Quem e quando: mesa/cliente, status em Badge, hora e tempo */}
+                        <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-2">
                             <div className="min-w-0 flex-1 basis-[120px]">
                                 <p className="text-[17px] font-semibold text-[var(--text)] tracking-[-0.01em] break-words">
                                     {item.order?.order_type === 'counter'
                                         ? (item.order?.customer_name || 'Balcão')
                                         : `Mesa ${item.order?.tables?.number || '?'}`}
                                 </p>
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[13px] text-[var(--text-muted)]">
-                                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getStatusInfo(item.status).dot }} />
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    <Badge variant={item.status === OrderStatus.READY ? 'success' : item.status === OrderStatus.PREPARING ? 'default' : 'warning'} dot>
                                         {getStatusInfo(item.status).label}
-                                    </span>
-                                    {item.order?.order_type === 'counter' && item.order?.customer_name && <span className="whitespace-nowrap">· Balcão</span>}
-                                    {late && (
-                                        <span className="inline-flex items-center gap-1 font-semibold text-[var(--err)]">
-                                            · <AlertCircle size={12}/> Atrasado
-                                        </span>
-                                    )}
+                                    </Badge>
+                                    {item.order?.order_type === 'counter' && item.order?.customer_name && <Badge>Balcão</Badge>}
+                                    {late && <Badge variant="critical"><AlertCircle size={12}/> Atrasado</Badge>}
+                                    {item.priority && <Badge variant="critical">Prioridade</Badge>}
                                 </div>
                             </div>
+                            <span
+                                className={`inline-flex items-center gap-1 text-[13px] num px-2 h-8 rounded-full bg-[var(--surface-2)] shrink-0 ${timerColorClass}`}
+                                title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
+                            >
+                                <Clock size={12}/>
+                                {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · {formatDuration(Math.floor(elapsedMinutes))}
+                            </span>
+                        </div>
+
+                        {/* 2) O que fazer: item com nome completo, cliente e observação em destaque */}
+                        <h3 className="font-semibold text-[var(--text)] leading-snug mt-3 mb-2 text-[17px] break-words">
+                            <span className="num">{item.quantity}×</span> {getOrderItemDisplayName(item)}
+                        </h3>
+
+                        {client && (
+                            <p className="mb-2 text-[13px] text-[var(--text-muted)] flex items-center gap-1.5">
+                                <User size={13}/> {client}
+                            </p>
+                        )}
+
+                        {observation && (
+                            <div className="bg-[var(--warn)]/10 text-[var(--warn)] px-3 py-2 rounded-[var(--r-md)] text-[14px] font-semibold mb-3 break-words whitespace-pre-line">
+                                Obs: {observation}
+                            </div>
+                        )}
+
+                        {/* 3) Ação principal única */}
+                        <div className="mt-auto pt-2">
+                            <Button
+                                size="lg"
+                                onClick={() => advanceStatus(item)}
+                                className={`w-full max-sm:h-12 ${item.status === 'preparing' ? '!bg-[var(--ok-fill)] hover:!opacity-90' : ''}`}
+                            >
+                                {(item.status === 'pending' || item.status === 'accepted') && 'Iniciar preparo'}
+                                {item.status === 'preparing' && 'Marcar pronto'}
+                                {item.status === 'ready' && 'Entregar'}
+                            </Button>
+                        </div>
+
+                        {/* 4) Ações secundárias, discretas: impressão e controles do item */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-[var(--border)]">
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                {imprimeAuto && <span title="O ticket sai sozinho na impressora deste local"><Badge variant="success">Impresso</Badge></span>}
+                                <Button size="sm" variant="ghost" className="max-sm:!h-11" onClick={() => printOrderTicket(item)} title={imprimeAuto ? 'Imprimir o ticket de novo' : 'Imprimir ticket'}>
+                                    <Printer size={14} /> {imprimeAuto ? 'Reimprimir' : 'Imprimir'}
+                                </Button>
+                            </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                                <span
-                                    className={`inline-flex items-center gap-1 text-[13px] num px-2 h-8 rounded-full bg-[var(--surface-2)] ${timerColorClass}`}
-                                    title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
-                                >
-                                    <Clock size={12}/>
-                                    {formatDuration(Math.floor(elapsedMinutes))}
-                                </span>
                                 <button
                                     onClick={() => handleTogglePriority(item.id)}
                                     className={`w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full u-motion u-press ${item.priority ? 'bg-[var(--err-fill)] text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--err)]/12'}`}
@@ -1769,14 +1810,6 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                     aria-label={item.priority ? 'Remover prioridade' : 'Priorizar'}
                                 >
                                     <AlertTriangle size={15} />
-                                </button>
-                                <button
-                                    onClick={() => printOrderTicket(item)}
-                                    className="w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion u-press"
-                                    title="Imprimir ticket"
-                                    aria-label="Imprimir ticket"
-                                >
-                                    <Printer size={15} />
                                 </button>
                                 <button
                                     disabled={cancellingIds.has(item.id)}
@@ -1795,33 +1828,6 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                     <X size={16} />
                                 </button>
                             </div>
-                        </div>
-                        <h3 className="font-semibold text-[var(--text)] leading-snug mt-3 mb-2 text-[17px]">
-                            <span className="num">{item.quantity}×</span> {getOrderItemDisplayName(item)}
-                        </h3>
-
-                        {client && (
-                            <p className="mb-2 text-[13px] text-[var(--text-muted)] flex items-center gap-1.5">
-                                <User size={13}/> {client}
-                            </p>
-                        )}
-
-                        {observation && (
-                            <div className="bg-[var(--warn)]/10 text-[var(--warn)] px-3 py-2 rounded-[var(--r-md)] text-[14px] font-semibold mb-3">
-                                {observation}
-                            </div>
-                        )}
-
-                        <div className="mt-auto pt-2">
-                            <Button
-                                size="lg"
-                                onClick={() => advanceStatus(item)}
-                                className={`w-full max-sm:h-12 ${item.status === 'preparing' ? '!bg-[var(--ok-fill)] hover:!opacity-90' : ''}`}
-                            >
-                                {(item.status === 'pending' || item.status === 'accepted') && 'Iniciar preparo'}
-                                {item.status === 'preparing' && 'Marcar pronto'}
-                                {item.status === 'ready' && 'Entregar'}
-                            </Button>
                         </div>
                     </Card>
                     </motion.div>
@@ -6898,13 +6904,9 @@ const CounterView: React.FC<{
                                  <p className="text-[13px] text-[var(--text-muted)]">Total</p>
                                  <p className="text-[22px] font-semibold text-[var(--text)] num leading-tight">R$ <AnimatedNumber value={total} format={formatBRL} /></p>
                              </div>
-                             <button
-                                 onClick={() => printCounterReceipt(order)}
-                                 className="p-2.5 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] border border-[var(--border)] u-motion u-press shrink-0"
-                                 title="Imprimir Comprovante"
-                             >
-                                 <Printer size={18} />
-                             </button>
+                             <Button size="sm" variant="ghost" className="shrink-0 max-sm:!h-11" onClick={() => printCounterReceipt(order)} title="Imprimir comprovante">
+                                 <Printer size={14} /> Comprovante
+                             </Button>
                              {/* Achado ao vivo (2026-09-10): loja `direct_print` (sem tela de
                                  acompanhamento/KDS) forçava o mesmo "Enviar p/ Cozinha" das
                                  lojas com KDS antes de liberar Receber/Entregar — mas nessa
