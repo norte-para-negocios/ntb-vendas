@@ -3860,7 +3860,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         {currentTable && (
                             <button
                                 onClick={() => setShowBill(true)}
-                                className={`flex h-8 flex-shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-semibold u-motion ${
+                                className={`flex h-8 flex-shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-semibold u-motion max-sm:min-h-11 ${
                                     isWaitingBill
                                         ? 'bg-[var(--warn-fill)] text-white'
                                         : 'bg-[var(--surface-2)] text-[var(--text)]'
@@ -4213,7 +4213,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                         type="button"
                         onClick={() => setShowAllCategories(true)}
                         aria-label="Ver todas as categorias"
-                        className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold u-motion u-press-sm"
+                        className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold u-motion u-press-sm max-sm:min-h-11"
                         style={{ color: ACTION_FG }}
                     >
                         <LayoutGrid size={15} /> Categorias
@@ -4292,7 +4292,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                                 ref={el => { subTabButtonRefs.current[cat.id] = el; }}
                                                 onClick={() => handleTabClick(cat.id)}
                                                 aria-current={isActiveSub ? 'true' : undefined}
-                                                className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[13px] whitespace-nowrap u-motion ${isActiveSub ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
+                                                className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[13px] whitespace-nowrap u-motion max-sm:min-h-11 ${isActiveSub ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
                                                 style={isActiveSub ? { color: ACTION_FG } : undefined}
                                             >
                                                 {cat.name}

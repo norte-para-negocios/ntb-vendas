@@ -513,7 +513,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                             type="submit"
                             aria-label="Entrar"
                             disabled={!password || isLoading}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-white text-[#484DB5] disabled:bg-white/25 disabled:text-white/60 u-motion"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-white text-[#484DB5] disabled:bg-white/25 disabled:text-white/60 u-motion max-sm:min-h-11 max-sm:min-w-11"
                         >
                             {isLoading ? <RefreshCw size={15} className="animate-spin" /> : <ArrowRight size={16} strokeWidth={2.5} />}
                         </button>
@@ -1257,7 +1257,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           )}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className={`text-white/60 hover:text-white hover:bg-white/10 w-8 h-8 flex items-center justify-center shrink-0 rounded-full u-motion ${isCollapsed ? '' : 'ml-2'}`}
+            className={`text-white/60 hover:text-white hover:bg-white/10 w-8 h-8 flex items-center justify-center shrink-0 rounded-full u-motion max-sm:min-h-11 max-sm:min-w-11 ${isCollapsed ? '' : 'ml-2'}`}
             title={isCollapsed ? "Expandir Menu" : "Recolher Menu"}
           >
             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
@@ -1352,7 +1352,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           {user.role === 'universal' && onSwitchStore && (
             <button
               onClick={onSwitchStore}
-              className={`flex items-center h-9 text-white hover:bg-white/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap ${isCollapsed ? 'w-9 justify-center' : 'px-3 gap-2'}`}
+              className={`flex items-center h-9 text-white hover:bg-white/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap max-sm:min-h-11 ${isCollapsed ? 'w-9 justify-center' : 'px-3 gap-2'}`}
               title="Trocar de Loja"
               aria-label="Trocar de Loja"
             >
@@ -1362,7 +1362,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           )}
           <button
             onClick={onLogout}
-            className={`flex items-center h-9 text-white/80 hover:text-white hover:bg-white/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap ${isCollapsed || (user.role === 'universal' && onSwitchStore) ? 'w-9 justify-center' : 'px-3 gap-2'}`}
+            className={`flex items-center h-9 text-white/80 hover:text-white hover:bg-white/10 rounded-full u-motion text-[13px] font-medium whitespace-nowrap max-sm:min-h-11 ${isCollapsed || (user.role === 'universal' && onSwitchStore) ? 'w-9 justify-center' : 'px-3 gap-2'}`}
             title="Sair"
             aria-label="Sair"
           >
@@ -2312,7 +2312,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 type="button"
                 onClick={onClick}
                 aria-current={active ? 'true' : undefined}
-                className={`flex-shrink-0 h-9 px-3.5 rounded-full text-[14px] whitespace-nowrap u-motion u-press-sm ${active ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
+                className={`flex-shrink-0 h-9 px-3.5 rounded-full text-[14px] whitespace-nowrap u-motion u-press-sm max-sm:min-h-11 ${active ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
                 style={active ? { color: GARCOM_ACTION } : undefined}
             >
                 {label}
@@ -2443,7 +2443,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         <button
                             type="button"
                             onClick={goBack}
-                            className="flex items-center -ml-1.5 pr-2 h-9 rounded-full text-[15px] font-medium u-motion u-press-sm max-w-[45%]"
+                            className="flex items-center -ml-1.5 pr-2 h-9 rounded-full text-[15px] font-medium u-motion u-press-sm max-w-[45%] max-sm:min-h-11"
                             style={{ color: GARCOM_ACTION }}
                         >
                             <ChevronLeft size={22} className="flex-shrink-0" />
@@ -2837,7 +2837,7 @@ const WaiterOrderSurface: React.FC<{
                                     onClick={onClose}
                                     aria-label="Sair"
                                     title="Sair"
-                                    className="flex items-center justify-center flex-shrink-0 w-8 h-8 max-md:w-10 max-md:h-10 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion"
+                                    className="flex items-center justify-center flex-shrink-0 w-8 h-8 max-md:w-10 max-md:h-10 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] u-motion max-sm:min-h-11 max-sm:min-w-11"
                                 >
                                     <X size={16} strokeWidth={2.25} />
                                 </button>
@@ -5415,9 +5415,9 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 <div className="text-[13px] text-[var(--text-muted)] mt-0.5 num">R$ {formatBRL(unit * l.qty)}</div>
                                                             </div>
                                                             <div className="flex items-center gap-0.5 flex-shrink-0">
-                                                                <button type="button" onClick={() => mudarQtdMesa(l.key, -1)} disabled={l.qty <= 1} aria-label={`Diminuir ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] disabled:opacity-40 u-motion u-press-sm"><Minus size={15} /></button>
+                                                                <button type="button" onClick={() => mudarQtdMesa(l.key, -1)} disabled={l.qty <= 1} aria-label={`Diminuir ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] disabled:opacity-40 u-motion u-press-sm max-sm:min-h-11 max-sm:min-w-11"><Minus size={15} /></button>
                                                                 <span className="font-semibold text-[15px] num w-7 text-center">{l.qty}</span>
-                                                                <button type="button" onClick={() => mudarQtdMesa(l.key, 1)} aria-label={`Aumentar ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] u-motion u-press-sm"><Plus size={15} /></button>
+                                                                <button type="button" onClick={() => mudarQtdMesa(l.key, 1)} aria-label={`Aumentar ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] u-motion u-press-sm max-sm:min-h-11 max-sm:min-w-11"><Plus size={15} /></button>
                                                             </div>
                                                             <button
                                                                 type="button"
@@ -7308,9 +7308,9 @@ const CounterView: React.FC<{
                                                     <div className="text-[13px] text-[var(--text-muted)] mt-0.5 num">R$ {formatBRL(unit * l.qty)}</div>
                                                 </div>
                                                 <div className="flex items-center gap-0.5 flex-shrink-0">
-                                                    <button type="button" onClick={() => mudarQtdVenda(l.key, -1)} disabled={l.qty <= 1} aria-label={`Diminuir ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] disabled:opacity-40 u-motion u-press-sm"><Minus size={15} /></button>
+                                                    <button type="button" onClick={() => mudarQtdVenda(l.key, -1)} disabled={l.qty <= 1} aria-label={`Diminuir ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] disabled:opacity-40 u-motion u-press-sm max-sm:min-h-11 max-sm:min-w-11"><Minus size={15} /></button>
                                                     <span className="font-semibold text-[15px] num w-7 text-center">{l.qty}</span>
-                                                    <button type="button" onClick={() => mudarQtdVenda(l.key, 1)} aria-label={`Aumentar ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] u-motion u-press-sm"><Plus size={15} /></button>
+                                                    <button type="button" onClick={() => mudarQtdVenda(l.key, 1)} aria-label={`Aumentar ${l.product.name}`} className="w-8 h-8 max-sm:w-9 max-sm:h-9 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--brand)] u-motion u-press-sm max-sm:min-h-11 max-sm:min-w-11"><Plus size={15} /></button>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -9689,7 +9689,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             type="button"
                             onClick={() => toggleProductForGroup(prod.id)}
                             aria-pressed={selectedForGroup.has(prod.id)}
-                            className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-[var(--r-lg)] ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
+                            className={`absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center z-10 rounded-l-[var(--r-lg)] max-sm:min-h-11 max-sm:min-w-11 ${selectedForGroup.has(prod.id) ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)]/50 text-[var(--border)]'}`}
                         >
                             {selectedForGroup.has(prod.id) ? <CheckSquare size={18} /> : <Square size={18} />}
                         </button>
@@ -9940,7 +9940,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 <button
                                     key={cat.id}
                                     onClick={() => setActiveMenuCategoryId(cat.id)}
-                                    className={`flex-shrink-0 px-4 h-9 max-sm:h-10 rounded-full text-[14px] font-semibold whitespace-nowrap u-motion ${isActive ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
+                                    className={`flex-shrink-0 px-4 h-9 max-sm:h-10 rounded-full text-[14px] font-semibold whitespace-nowrap u-motion max-sm:min-h-11 ${isActive ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
                                 >
                                     {cat.name} <span className="num font-medium text-[var(--text-muted)]">{count}</span>
                                 </button>
@@ -11814,7 +11814,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                         <button
                                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
                                             aria-current={activeTab === tab.id ? 'page' : undefined}
-                                            className={`relative isolate w-full text-left px-3 h-9 rounded-[10px] text-[15px] u-motion u-press-sm flex items-center gap-1.5 ${
+                                            className={`relative isolate w-full text-left px-3 h-9 rounded-[10px] text-[15px] u-motion u-press-sm flex items-center gap-1.5 max-sm:min-h-11 ${
                                                 activeTab === tab.id
                                                     ? 'text-[var(--brand)] font-semibold'
                                                     : 'text-[var(--text)] hover:bg-[var(--surface-2)]'
@@ -12445,8 +12445,8 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                 ))}
                                 {savedFilters.map((sf) => (
                                     <span key={sf.name} className="inline-flex items-center rounded-full border border-[var(--border)] overflow-hidden">
-                                        <button type="button" onClick={() => setSalesFilters(sf.f)} className="min-h-9 pl-3 pr-2 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--surface-2)] u-press">{sf.name}</button>
-                                        <button type="button" onClick={() => persistSavedFilters(savedFilters.filter((x) => x.name !== sf.name))} className="min-h-9 px-2 text-[var(--text-muted)] hover:text-[var(--err)] u-press" aria-label={`Apagar filtro salvo ${sf.name}`}><X size={13} /></button>
+                                        <button type="button" onClick={() => setSalesFilters(sf.f)} className="min-h-9 pl-3 pr-2 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--surface-2)] u-press max-sm:min-h-11">{sf.name}</button>
+                                        <button type="button" onClick={() => persistSavedFilters(savedFilters.filter((x) => x.name !== sf.name))} className="min-h-9 px-2 text-[var(--text-muted)] hover:text-[var(--err)] u-press max-sm:min-h-11" aria-label={`Apagar filtro salvo ${sf.name}`}><X size={13} /></button>
                                     </span>
                                 ))}
                             </div>

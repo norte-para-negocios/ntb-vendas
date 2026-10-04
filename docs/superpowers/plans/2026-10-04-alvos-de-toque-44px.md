@@ -108,6 +108,7 @@ Expected: FAIL com "Cannot find module '../auditoria/alvos-de-toque.mjs'"
 // Protege botões pequenos (h-7/8/9, w-7/8/9, min-h-9) com variantes só de celular (max-sm:).
 // Uso: node scripts/auditoria/alvos-de-toque.mjs --check|--write [arquivos...]
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const PEQUENO_ALTURA = /(^|[\s"'`])(h-7|h-8|h-9|min-h-9)(?=[\s"'`$]|$)/;
 const PEQUENA_LARGURA = /(^|[\s"'`])(w-7|w-8|w-9)(?=[\s"'`$]|$)/;
@@ -157,7 +158,7 @@ export function protegerBotoes(source) {
   return { source: out, changes };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const modo = process.argv.includes('--write') ? 'write' : 'check';
   const arquivos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   const alvos = arquivos.length ? arquivos : fs.readdirSync('components/modules').filter((f) => f.endsWith('.tsx')).map((f) => `components/modules/${f}`);
