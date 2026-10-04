@@ -9,14 +9,13 @@ import { printRelatorioDia } from '@/lib/print';
 import { montarPainelDeVendas } from '@/lib/reports/painelDia';
 import { buildFechamentoWorkbook } from '@/lib/reports/fechamentoXlsx';
 import { baixarWorkbook } from '@/lib/reports/baixar';
-import { hojeISO } from '@/lib/reports/dia';
 import type { Order } from '@/types';
 
 export const RelatorioMenu: React.FC<{
   storeId: string; storeName: string; storeSlug: string; userName: string;
-  vendas: Order[]; periodoLabel: string; disabled?: boolean;
+  vendas: Order[]; periodoLabel: string; nomeArquivo: string; disabled?: boolean;
   onPrintList: () => void; onCsv: () => void;
-}> = ({ storeId, storeName, storeSlug, userName, vendas, periodoLabel, disabled, onPrintList, onCsv }) => {
+}> = ({ storeId, storeName, storeSlug, userName, vendas, periodoLabel, nomeArquivo, disabled, onPrintList, onCsv }) => {
   const [aberto, setAberto] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
@@ -70,8 +69,8 @@ export const RelatorioMenu: React.FC<{
     setOcupado(true);
     try {
       const nomeCat = await garantirNomes();
-      const wb = await buildFechamentoWorkbook({ ...meta(), painel: montarPainelDeVendas(vendas, nomeCat), nomeCategoria: nomeCat, turnos: [], vendas, excecoes: [] });
-      await baixarWorkbook(wb, `relatorio-vendas_${hojeISO()}_${storeSlug}.xlsx`);
+      const wb = await buildFechamentoWorkbook({ ...meta(), titulo: 'Relatório de vendas', painel: montarPainelDeVendas(vendas, nomeCat), nomeCategoria: nomeCat, turnos: [], vendas, excecoes: [] });
+      await baixarWorkbook(wb, nomeArquivo);
       toast.success('Arquivo gerado.');
     } catch (e) {
       console.error('RelatorioMenu excel falhou:', e);

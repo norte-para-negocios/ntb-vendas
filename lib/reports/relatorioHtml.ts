@@ -57,7 +57,7 @@ export function buildRelatorioHtml(p: PainelDia, m: RelatorioMeta): string {
   const k = p.kpis;
   const cards: [string, string][] = [
     ['Total recebido', brl(k.recebido)], ['Contas pagas', String(k.contas)], ['Ticket médio', k.ticket != null ? brl(k.ticket) : '—'], ['Itens vendidos', String(k.itens)],
-    ['Cartão de crédito', brl(k.credito)], ['Cartão de débito', brl(k.debito)], ['Taxa de serviço', brl(k.taxa)], ['Cancelamentos', String(k.cancelamentos)],
+    ['Cartão de crédito', brl(k.credito)], ['Cartão de débito', brl(k.debito)], ['Taxa de serviço', brl(k.taxa)], [p.rotuloCancelamentos ?? 'Cancelamentos', String(k.cancelamentos)],
   ];
   const somar = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
   const rel = (xs: { total: number }[]) => relativas(xs, (x) => x.total);

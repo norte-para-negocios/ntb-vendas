@@ -36,6 +36,7 @@ import { ReportsView } from './ReportsView';
 import { RelatorioMenu } from './RelatorioMenu';
 import { StaffOfflineBanner } from '@/components/StaffOfflineBanner';
 import { canUndo } from '@/lib/undoGuard';
+import { subtituloHistorico, nomeArquivoHistorico, type FiltrosHistorico } from '@/lib/reports/historicoRotulos';
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
@@ -11434,6 +11435,9 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         return 'Todo o histórico';
     }, [filterMonth, filterStartDate, filterEndDate]);
 
+    // Subtítulo e nome do arquivo do relatório (Excel/PDF) dizem o período E os filtros aplicados.
+    const filtrosHistorico: FiltrosHistorico = { mes: filterMonth, inicio: filterStartDate, fim: filterEndDate, tipo: filterType, cliente: filterCustomer, minItens: filterMinItems, maxItens: filterMaxItems, minTotal: filterMinTotal, maxTotal: filterMaxTotal, filtros: salesFilters };
+
     // "2x Pizza Marguerita (Catupiry), 1x Coca-Cola" — reusa getOrderItemDisplayName
     // (produto + adicional) por item da venda, não só a contagem de linhas.
     const buildItemsSummary = (order: Order) =>
@@ -12081,7 +12085,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                         <Search size={15} />
                                         Filtros
                                     </Button>
-                                    <RelatorioMenu storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} vendas={filteredAndSortedSales} periodoLabel={periodLabel}
+                                    <RelatorioMenu storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} vendas={filteredAndSortedSales} periodoLabel={subtituloHistorico(filtrosHistorico)} nomeArquivo={nomeArquivoHistorico(filtrosHistorico, store.slug)}
                                         disabled={filteredAndSortedSales.length === 0} onPrintList={handlePrintReport} onCsv={handleExportCsv} />
                                     <div className="w-px h-5 bg-[var(--border)] mx-1 max-sm:hidden" />
                                     <Button variant="ghost" size="sm" className="!text-[var(--err)] hover:!bg-[var(--err)]/10 max-sm:order-last max-sm:w-full max-sm:mt-1 max-sm:!h-11" onClick={handleClearSales} isLoading={isClearing}>

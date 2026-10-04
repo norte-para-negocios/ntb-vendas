@@ -2,6 +2,7 @@
 import type { Order } from '@/types';
 import type { FechamentoData } from './fechamentoXlsx';
 import { groupSales, type GroupRow } from './groupSales';
+import { getOrderDisplayTotal } from '../calc';
 import { salesOfShift } from './shiftSales';
 import { completarFormas, completarCartoes, ticketMedio } from '../caixaResumo';
 
@@ -15,6 +16,8 @@ export interface PainelDia {
   porCategoria: GroupRow[];
   topProdutos: TopProduto[];
   melhorHora: GroupRow | null;
+  /** Rótulo do KPI de cancelamentos quando não é o padrão (no Histórico são vendas canceladas, não exceções do caixa). */
+  rotuloCancelamentos?: string;
 }
 
 // Parte comum: tudo que sai direto das vendas (itens, hora, operador, categoria, produtos mais vendidos).
@@ -89,11 +92,27 @@ export function montarPainel(d: FechamentoData, nomeCategoria: (id: string) => s
   };
 }
 
+// Taxa de serviço cobrada: total da conta (payment_details.total) menos os itens, uma vez por conta (mesmo agrupamento de somarPagamentos).
+function taxaDasVendas(vendas: Order[]): number {
+  const contas = new Map<string, { total: number; itens: number }>();
+  vendas.filter((o) => o.status !== 'canceled').forEach((o) => {
+    const methods = (o.payment_details as Pd)?.methods;
+    if (!Array.isArray(methods) || methods.length === 0) return;
+    const chave = `${o.table_id ?? o.id}|${JSON.stringify(methods)}`;
+    const itens = (o.order_items ?? []).filter((i) => i.status !== ('canceled' as never)).reduce((s, i) => s + Number(i.price_at_time) * i.quantity, 0);
+    const cur = contas.get(chave);
+    if (cur) cur.itens += itens; else contas.set(chave, { total: getOrderDisplayTotal(o as never), itens });
+  });
+  let taxa = 0;
+  contas.forEach((c) => { const f = Math.round((c.total - c.itens) * 100) / 100; if (f > 0.005) taxa += f; });
+  return Math.round(taxa * 100) / 100;
+}
+
 type Pd = { methods?: { method: string; brand?: string; amount: number }[] } | null;
 
 // Painel a partir das próprias vendas (Histórico de vendas, com filtros): formas, cartões e contas saem de
 // payment_details.methods, uma vez por conta (mesma regra de groupSales). Não há turno aqui, então taxa de
-// serviço, sangria e suprimento ficam em 0 (não existem nas vendas).
+// serviço sai do total cobrado menos os itens; sangria e suprimento ficam em 0 (não existem nas vendas).
 // Formas, cartões e contas pagas a partir das vendas (payment_details.methods, uma vez por conta).
 function somarPagamentos(vendas: Order[]) {
   const formas: Record<string, number> = {};
@@ -122,7 +141,8 @@ export function montarPainelDeVendas(vendas: Order[], nomeCategoria: (id: string
   const soma = (pref: string) => Object.entries(cartoesTot).filter(([k]) => k.startsWith(pref)).reduce((s, [, v]) => s + v, 0);
   const { itens, ...analise } = analiseDeVendas(vendas, nomeCategoria);
   return {
-    kpis: { contas, recebido, ticket: ticketMedio(recebido, contas), taxa: 0, sangria: 0, suprimento: 0, itens, cancelamentos: vendas.filter((o) => o.status === 'canceled').length, credito: soma('CREDIT|'), debito: soma('DEBIT|') },
+    rotuloCancelamentos: 'Vendas canceladas',
+    kpis: { contas, recebido, ticket: ticketMedio(recebido, contas), taxa: taxaDasVendas(vendas), sangria: 0, suprimento: 0, itens, cancelamentos: vendas.filter((o) => o.status === 'canceled').length, credito: soma('CREDIT|'), debito: soma('DEBIT|') },
     formas: completarFormas(formasTot),
     cartoes: completarCartoes(cartoesTot),
     ...analise,

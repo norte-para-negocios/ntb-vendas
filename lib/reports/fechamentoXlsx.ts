@@ -7,7 +7,7 @@ import { montarPainel, type PainelDia } from './painelDia';
 import { getPaymentMethodLabel, getCardBrandLabel } from '../labels';
 
 export interface FechamentoTurno { id?: string; /** O turno sai do período: totais só das vendas do período. */ parcial?: boolean; operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
-export interface FechamentoData { painel?: PainelDia; nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
+export interface FechamentoData { /** Título da faixa (padrão: Relatório do dia). */ titulo?: string; painel?: PainelDia; nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
 
 const FONT = 'Calibri';
 const BRL = '"R$" #,##0.00';
@@ -141,7 +141,7 @@ function montarPainelSheet(wb: Workbook, d: FechamentoData, p: PainelDia) {
   // Faixa de título
   ws.mergeCells('A1:H1');
   const t = ws.getCell('A1');
-  t.value = 'NORTE VENDAS  ·  Relatório do dia';
+  t.value = `NORTE VENDAS  ·  ${d.titulo ?? 'Relatório do dia'}`;
   t.font = { bold: true, size: 11, color: { argb: 'FFDCDEF8' } };
   t.fill = fill(HEAD_DARK);
   t.alignment = { vertical: 'middle', indent: 1 };
@@ -165,7 +165,7 @@ function montarPainelSheet(wb: Workbook, d: FechamentoData, p: PainelDia) {
   // Cartões de indicadores (4 por linha, 2 colunas cada)
   const cards: [string, number, string?][][] = [
     [['Total recebido', p.kpis.recebido, BRL], ['Contas pagas', p.kpis.contas], ['Ticket médio', p.kpis.ticket ?? 0, BRL], ['Itens vendidos', p.kpis.itens]],
-    [['Cartão de crédito', p.kpis.credito, BRL], ['Cartão de débito', p.kpis.debito, BRL], ['Taxa de serviço', p.kpis.taxa, BRL], ['Cancelamentos', p.kpis.cancelamentos]],
+    [['Cartão de crédito', p.kpis.credito, BRL], ['Cartão de débito', p.kpis.debito, BRL], ['Taxa de serviço', p.kpis.taxa, BRL], [p.rotuloCancelamentos ?? 'Cancelamentos', p.kpis.cancelamentos]],
   ];
   cards.forEach((linha) => {
     const rl = ws.addRow([]); const rv = ws.addRow([]);

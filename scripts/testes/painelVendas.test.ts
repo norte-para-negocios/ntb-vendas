@@ -32,4 +32,13 @@ const semNome = montarPainelDeVendas(vendas, () => undefined);
 assert.ok(semNome.porCategoria.every((r) => r.label === 'Sem categoria'), 'sem id de categoria na tela');
 assert.equal(semNome.porCategoria.length, 1, 'categorias sem nome somam numa linha só');
 assert.equal(semNome.porCategoria[0].total, 160);
+
+// Taxa de serviço sai da diferença entre o total cobrado da conta e os itens (uma vez por conta, como o CSV do Histórico)
+const comTaxa = (id: string, mesa: string, total: number, itens: any[]): any => ({ id, table_id: mesa, status: 'delivered', created_at: '2026-10-04T22:00:00Z', order_type: 'table', total: 0,
+  payment_details: { total, methods: [{ method: 'CASH', amount: total }] }, order_items: itens });
+const pt = montarPainelDeVendas([comTaxa('a', 'M1', 33, [it('Prato', 1, 30)]), comTaxa('b', 'M2', 11, [it('Suco', 1, 10)]), comTaxa('c', 'M3', 20, [it('Sem taxa', 1, 20)])]);
+assert.equal(pt.kpis.taxa, 4, '3,00 + 1,00; conta sem taxa não soma');
+const dupla = montarPainelDeVendas([comTaxa('a', 'M1', 33, [it('Prato', 1, 20)]), comTaxa('b', 'M1', 33, [it('Suco', 1, 10)])]);
+assert.equal(dupla.kpis.taxa, 3, 'dois pedidos da mesma conta: a taxa conta uma vez');
+assert.match(String(pt.rotuloCancelamentos), /canceladas/i, 'no Histórico o número é de vendas canceladas, e o rótulo diz isso');
 console.log('painelVendas: ok');
