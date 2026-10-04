@@ -968,6 +968,13 @@ export const updateTablePosition = async (storeId: string, tableId: string, x: n
   return data === true;
 };
 
+// Esgotado em tempo real (migration 151).
+export const setProductSoldOut = async (storeId: string, productId: string, soldOut: boolean): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('set_product_sold_out_secure', { p_store_id: storeId, p_product_id: productId, p_sold_out: soldOut });
+  if (error) { console.error('setProductSoldOut falhou:', error); return false; }
+  return data === true;
+};
+
 // Alerta de estoque baixo (2026-10-03): produtos com saldo abaixo do limite que o lojista definiu.
 export interface LowStockAlert { name: string; stock: number | null; threshold: number }
 export const fetchLowStockAlerts = async (storeId: string): Promise<LowStockAlert[]> => {

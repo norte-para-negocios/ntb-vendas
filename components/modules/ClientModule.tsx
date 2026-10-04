@@ -1118,12 +1118,15 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
             onClick={open}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
             aria-disabled={disabled}
-            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand)] ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+            className={`u-grow-in group flex items-start gap-3 py-4 text-left w-full u-motion border-b border-[var(--border)] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand)] ${disabled ? 'opacity-60 pointer-events-none' : product.sold_out ? 'opacity-60 cursor-pointer' : 'cursor-pointer'}`}
             style={style}
         >
             <div className="flex-1 min-w-0">
                 <h3 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">
                     {product.name}
+                    {product.sold_out && (
+                        <span className="ml-2 align-middle text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[var(--err-fill)] text-white">Esgotado</span>
+                    )}
                 </h3>
                 {product.description && (
                     <p className="text-[13px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{product.description}</p>
@@ -1158,7 +1161,7 @@ const ProductCard = React.memo(function ProductCard({ product, onSelect, onQuick
                 favorito ficarem sobrepostos nos cantos (mesmo padrão iFood). */}
             <div className="relative flex-shrink-0">
                 <ProductThumb src={product.image_url} name={product.name} size="row" />
-                {onQuickAdd && (
+                {onQuickAdd && !product.sold_out && (
                     // Vermelho iFood (correção 2026-08-21: --brand/azul saiu de toda
                     // "ação" do cardápio, ver ACTION_FG acima). whileTap com spring
                     // de verdade (SPRING_TAP, lib/motion.ts — validado com o usuário,
@@ -1674,7 +1677,7 @@ const ProductModal: React.FC<{
                             // no componente). Texto/total continuam brancos (herdado do
                             // Button), contraste de branco sobre ACTION_BG (#484DB5) é alto o bastante.
                             style={{ backgroundColor: ACTION_BG }}
-                            disabled={missingRequired}
+                            disabled={missingRequired || !!product.sold_out}
                             aria-describedby={missingRequired ? 'product-modal-required-error' : undefined}
                             onClick={() => { onAdd(qty, notes, selectedOptions); onClose(); }}
                         >

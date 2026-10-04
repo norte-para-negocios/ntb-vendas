@@ -23,7 +23,7 @@ import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { FloorPlanView } from './FloorPlanView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { resolveCancelReasons } from '@/lib/excecoes';
-import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, setProductSoldOut, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -2079,7 +2079,7 @@ const MenuTile: React.FC<{ title: string; meta: string; hint?: string; onClick: 
 
 const itensLabel = (n: number) => `${n} ${n === 1 ? 'item' : 'itens'}`;
 
-const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void, addLabel?: string }> = ({ storeId, onAddItem, addLabel }) => {
+const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, qty: number, notes: string, selectedOptions: SelectedOption[]) => void, addLabel?: string, podeEsgotar?: boolean }> = ({ storeId, onAddItem, addLabel, podeEsgotar = false }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -2110,6 +2110,30 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
         });
     }, [storeId]);
     useEffect(() => { setLoaded(false); loadMenu(0); }, [loadMenu]);
+
+    // Esgotado em tempo real (migration 151): atualiza a lista a cada 15 s e ao voltar pra aba,
+    // sem mexer na navegação nem mostrar "carregando".
+    useEffect(() => {
+        const refrescar = () => {
+            fetchMenu(storeId, true).then(({ products, error }) => { if (!error && products.length > 0) setProducts(semTaxas(products)); }).catch(() => {});
+        };
+        const id = setInterval(refrescar, 15000);
+        const onVis = () => { if (document.visibilityState === 'visible') refrescar(); };
+        document.addEventListener('visibilitychange', onVis);
+        return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+    }, [storeId]);
+
+    const alternarEsgotado = async (product: Product) => {
+        const novo = !product.sold_out;
+        setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, sold_out: novo } : p))); // otimista
+        const ok = await setProductSoldOut(storeId, product.id, novo);
+        if (!ok) {
+            setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, sold_out: !novo } : p)));
+            toast.error('Não consegui atualizar o produto.');
+        } else {
+            toast.success(novo ? `${product.name} marcado como esgotado.` : `${product.name} voltou ao cardápio.`);
+        }
+    };
 
     // Grupo→subcategoria. Fonte única de ordenação via buildTopLevelItems
     // (lib/categoryGroups.ts). Grupo com UMA categoria vira categoria solta
@@ -2204,9 +2228,9 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 key={product.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelectedProduct(product)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProduct(product); } }}
-                className="flex items-center gap-3 px-2 -mx-2 py-3 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)] rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                onClick={() => { if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; } setSelectedProduct(product); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; } setSelectedProduct(product); } }}
+                className={`flex items-center gap-3 px-2 -mx-2 py-3 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)] rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${product.sold_out ? 'opacity-60' : ''}`}
             >
                 <div className="flex-1 min-w-0">
                     <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
@@ -2228,6 +2252,19 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                         )}
                     </div>
                 </div>
+                {product.sold_out && (
+                    <span className="shrink-0 text-[12px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-[var(--err-fill)] text-white">Esgotado</span>
+                )}
+                {podeEsgotar && (
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); alternarEsgotado(product); }}
+                        className="shrink-0 min-h-9 px-3 rounded-full bg-[var(--surface-2)] text-[12px] font-semibold text-[var(--text)] hover:bg-[var(--border)] u-press"
+                        aria-label={product.sold_out ? `Voltar ${product.name} ao cardápio` : `Marcar ${product.name} como esgotado`}
+                    >
+                        {product.sold_out ? 'Voltou' : 'Esgotar'}
+                    </button>
+                )}
                 <ProductThumb src={product.image_url} name={product.name} size="option" className="!rounded-[12px]" />
             </div>
         );
@@ -5257,7 +5294,7 @@ NOTIFY pgrst, 'reload schema';`;
                 return (
                         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                             <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" />
+                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" podeEsgotar={loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'menu', store)} />
                             </div>
                             {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
                                 mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
@@ -7139,7 +7176,7 @@ const CounterView: React.FC<{
             >
                 <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                     <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" />
+                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" podeEsgotar={loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal' || hasTabPermission(loggedUser, 'menu', store)} />
                     </div>
                     <div className="md:w-[320px] lg:w-[34%] lg:max-w-[420px] max-md:max-h-[50%] flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
                         <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">

@@ -260,6 +260,8 @@ export interface Product {
   price: number;
   image_url: string | null;
   available: boolean;
+  // Esgotado (migration 151): aparece no cardápio marcado e não dá pra pedir; oculto = available=false.
+  sold_out?: boolean;
   prep_time_minutes: number;
   order?: number;
   destination?: 'kitchen' | 'bar';
