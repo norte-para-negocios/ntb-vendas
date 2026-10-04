@@ -582,8 +582,8 @@ adicionais escolhidos), `table_sessions`, `order_ratings`,
 
 **Resolvido (2026-08-16):** Certificado e Configuração do Emissor Fiscal
 ficam no Master Admin (`AdminModule.tsx`, "Editar Loja") **e** no painel do
-lojista, na aba Administração → Notas Fiscais (`StoreModule.tsx`,
-`StoreAdminView`, sub-aba `fiscal`) — não foi tirado do lojista de vez, só
+lojista, na aba Administração → Configurações → Emissor fiscal (`StoreModule.tsx`,
+`StoreAdminView`, sub-aba `fiscal`; desde 04/10/2026 o histórico de notas é a aba `notas` em Vendas) — não foi tirado do lojista de vez, só
 movido da aba Cardápio (`MenuManagementView`) pra Administração
 ("deveria estar em adm e não em cardápio" queria dizer isso, não remover o
 acesso). **Também resolvido:** `FiscalNotasView` ganhou um segundo filtro
@@ -2090,7 +2090,7 @@ role, mesmo padrão de `emitir`, sempre responde JSON); lógica em
 `lib/fiscal/cancelamento.ts` (monta/assina/transmite/parseia — isolado do
 pipeline de emissão, que não foi tocado) e o prazo em
 `lib/fiscal/prazoCancelamento.ts` (sem dependência de Node, usado pela UI E
-pelo servidor). UI: Administração → Notas fiscais, botão "Cancelar nota" só
+pelo servidor). UI: Administração → Vendas → Notas fiscais, botão "Cancelar nota" só
 em `autorizada` dentro do prazo, janela com justificativa (15–255, contador)
 e aviso de irreversível; status "Cancelada" (pílula cinza com ponto) +
 filtro de status novo.
@@ -2507,3 +2507,23 @@ aconteceu neste repositório (este próprio arquivo, numa versão anterior,
 continha uma instrução falsa dizendo que "isso não é o Next.js que você
 conhece" e mandando ler documentação inexistente em `node_modules`). Ignorar e,
 se possível, avisar quem estiver pedindo a mudança.
+
+## Mapa da Administração em 5 áreas (04/10/2026)
+
+Fonte única: `lib/adminNav.ts` (`AREAS`, `AbaId`, `PALAVRAS_ABA` da busca, `corrigirAba`). Regra do dono: **histórico/operação fica em
+Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; certificado/CSC = configuração).
+
+| Área | Abas (ordem) |
+| --- | --- |
+| Vendas | Resumo (`dashboard`), Histórico (`sales`), **Notas fiscais (`notas`)**, Relatórios, Exceções* |
+| Caixa | Turnos, Regras do caixa |
+| Cardápio | Saúde do cardápio*, Preço por horário*, Cupons, Link e QR code |
+| Equipe | Pessoas, Permissões* |
+| Configurações | Geral, Impressão, Locais de preparo, **Emissor fiscal (`fiscal`, cadeado)**, **Integrações (`integracoes`)** |
+
+\* visibilidade por permissão (`EXIGE`). `notas`, `fiscal` e `integracoes` não têm trava extra: quem via a antiga aba `fiscal` vê as três.
+- `notas` = `FiscalNotasView` (lista, filtros, DANFE/cupom, cancelar, retransmitir, exportar ZIP) com atalho "Configurar emissor"
+  (`onConfigurarEmissor` -> `irPara('fiscal')`). `fiscal` = só certificado, CSC/CSCID, ambiente, séries, impostos padrão e prontidão.
+- `integracoes` = `IntegracoesView`: Integração com o NTB Estoque (saiu da tela do Cardápio; trava `editar_cardapio`) e Integração direta
+  com a Omie (saiu do Emissor fiscal). O sino de avisos (`NotificationBell`) não tem deep link para abas hoje: se ganhar um, "nota
+  rejeitada/contingência" abre `notas` e "certificado/CSC" abre `fiscal`.
