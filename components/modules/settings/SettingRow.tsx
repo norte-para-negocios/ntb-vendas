@@ -23,7 +23,7 @@ export const Switch: React.FC<{ ligado: boolean; onChange: () => void; rotulo: s
 );
 
 /** Número que grava sozinho ~700 ms depois de parar de digitar (ou ao sair do campo). */
-export const NumberField: React.FC<{ valor: number; onChange: (n: number) => void; prefixo?: string; sufixo?: string; rotulo: string; largura?: string }> = ({ valor, onChange, prefixo, sufixo, rotulo, largura = 'w-20' }) => {
+export const NumberField: React.FC<{ valor: number; onChange: (n: number) => void; prefixo?: string; sufixo?: string; rotulo: string; largura?: string; max?: number; passo?: number }> = ({ valor, onChange, prefixo, sufixo, rotulo, largura = 'w-20', max, passo = 5 }) => {
   const [rascunho, setRascunho] = useState<string>(String(valor));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ultimo = useRef(valor);
@@ -31,14 +31,15 @@ export const NumberField: React.FC<{ valor: number; onChange: (n: number) => voi
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const confirmar = (texto: string) => {
     if (texto.trim() === '') setRascunho(String(ultimo.current));
-    const n = Math.max(0, Number(texto) || 0);
+    const n = Math.min(max ?? Infinity, Math.max(0, Number(texto) || 0));
+    if (texto.trim() !== '' && String(n) !== texto.trim()) setRascunho(String(n)); // acima do teto / negativo: mostra o valor que valeu
     if (n !== ultimo.current) { ultimo.current = n; onChange(n); }
   };
   return (
     <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
       {prefixo}
       <input
-        type="number" min={0} step={5} value={rascunho} aria-label={rotulo}
+        type="number" min={0} max={max} step={passo} value={rascunho} aria-label={rotulo}
         onChange={(e) => {
           setRascunho(e.target.value);
           if (timer.current) clearTimeout(timer.current);

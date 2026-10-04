@@ -17,7 +17,7 @@ import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getTableStatusLabel, getOrderItemDisplayName, getCartItemDisplayName, getTagDisplay } from '@/lib/labels';
-import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE, resolveSelectedOptions, displayOptionDelta } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, calculateCartItemUnitPrice, calculateCartTotal, getEffectivePrice, formatBRL, formatServiceFeeRate, SERVICE_FEE_RATE, resolveServiceFeeRate, resolveSelectedOptions, displayOptionDelta } from '@/lib/calc';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { isCategoryAvailableNow } from '@/lib/schedule';
@@ -2124,7 +2124,7 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
 
             // Calculate service fee
             const isFeeEnabled = !!(storeConfig?.charge_service_fee && !tableData?.service_fee_removed);
-            const feeRate = storeConfig?.service_fee_rate ?? SERVICE_FEE_RATE;
+            const feeRate = resolveServiceFeeRate(storeConfig);
             const calculatedSubtotal = data.total;
             const calculatedServiceFee = isFeeEnabled ? calculateServiceFee(calculatedSubtotal, feeRate) : 0;
 
@@ -3536,7 +3536,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // — nunca dado de entrega (km/tempo/pedido mínimo/avaliação/cupom, sem
     // equivalente real neste app). Taxa de serviço sempre lida de
     // lib/calc.ts (SERVICE_FEE_RATE como fallback), nunca reescrita aqui.
-    const serviceFeeRateForHero = currentStore.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    const serviceFeeRateForHero = resolveServiceFeeRate(currentStore.config);
     // Mesa/Balcão NÃO entra aqui (achado da revisão final): já aparece no
     // chip de sessão logo abaixo (que também carrega nome do cliente + PIN),
     // renderizar de novo aqui duplicava a informação na mesma tela.

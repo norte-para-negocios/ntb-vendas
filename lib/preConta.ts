@@ -1,7 +1,7 @@
 // Pré-conta ("nota antes da nota"): o extrato da mesa impresso quando pedem a conta, pro cliente conferir antes de
 // pagar. Um lugar só pra montar — usado pelo botão Imprimir, pelo "Pedir conta" do garçom e pelo PC do caixa, que
 // imprime sozinho quando qualquer mesa pede a conta (Ramon, 29/09: pediu pelo celular e não saiu).
-import { calculateOrderTotal, calculateServiceFee, SERVICE_FEE_RATE } from './calc';
+import { calculateOrderTotal, calculateServiceFee, resolveServiceFeeRate } from './calc';
 import { getOrderItemDisplayName, parseItemNote } from './labels';
 import { contaTemTaxaPercentual } from './taxas';
 
@@ -33,7 +33,7 @@ export function montarPreConta(
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   if (itens.length === 0) return null;
   const subtotal = itens.reduce((s, i) => s + i.price_at_time * i.quantity, 0);
-  const rate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+  const rate = resolveServiceFeeRate(store.config);
   const cobra = !!store.config?.charge_service_fee;
   // Taxa de serviço já lançada como item pelo caixa (migration 138): sai na lista, o automático não soma.
   const temTaxaItem = contaTemTaxaPercentual(itens);

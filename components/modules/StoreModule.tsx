@@ -76,7 +76,7 @@ import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceip
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
-import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
@@ -2859,7 +2859,7 @@ const TablesView: React.FC<{
     onAutoOpenTableHandled?: () => void;
 }> = ({ store, loggedUser, autoOpenTableId, onAutoOpenTableHandled }) => {
     const storeId = store.id;
-    const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    const serviceFeeRate = resolveServiceFeeRate(store.config);
     // Task 2 (2026-08-22, plano perfis-de-loja-e-caixa): loja sem `config`
     // (as 6 lojas reais de hoje) resolve pra 'kds' — nada aqui muda o
     // comportamento delas. Só o Sertão (order_flow: 'direct_print') entra
@@ -7311,7 +7311,7 @@ const CaixaViewMeu: React.FC<{
     onOpenCounterPayment: (orderId: string) => void;
 }> = ({ store, loggedUser, onOpenTablePayment, onOpenCounterPayment }) => {
     const storeId = store.id;
-    const serviceFeeRate = store.config?.service_fee_rate ?? SERVICE_FEE_RATE;
+    const serviceFeeRate = resolveServiceFeeRate(store.config);
     const orderFlow = resolveOrderFlow(store);
 
     // Melhorias no fluxo de Caixa (2026-08-28): contagem cega — owner/
@@ -11410,7 +11410,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 subtotal: itemsTotal,
                 serviceFee: order.order_type === 'table' ? {
                     charged: feeAmount > 0.005,
-                    rate: store.config?.service_fee_rate ?? SERVICE_FEE_RATE,
+                    rate: resolveServiceFeeRate(store.config),
                     amount: Math.max(0, feeAmount),
                     removedForTable: false,
                 } : undefined,
@@ -12304,7 +12304,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                     )}
                                     {feeAmount > 0.01 && (
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-[var(--text-muted)]">Taxa de Serviço ({formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE)} opcional)</span>
+                                            <span className="text-[var(--text-muted)]">Taxa de Serviço ({formatServiceFeeRate(resolveServiceFeeRate(store.config))} opcional)</span>
                                             <span className="font-medium text-[var(--text)]">R$ {formatBRL(feeAmount)}</span>
                                         </div>
                                     )}

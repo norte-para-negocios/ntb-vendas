@@ -13,7 +13,7 @@ const STORE: Store = {
   contract_type: 'balcao_mesas',
   contract_period_months: 12,
   activation_date: '2024-01-01',
-  config: { use_pin: false, allow_client_open: true, require_pin_for_open: false, charge_service_fee: true },
+  config: { require_pin_for_open: false, charge_service_fee: true },
 };
 
 const STORE2: Store = {
@@ -26,7 +26,7 @@ const STORE2: Store = {
   contract_type: 'balcao_mesas',
   contract_period_months: 6,
   activation_date: '2024-03-01',
-  config: { use_pin: false, allow_client_open: true, require_pin_for_open: false, charge_service_fee: false },
+  config: { require_pin_for_open: false, charge_service_fee: false },
 };
 
 const ADMIN_DB = { id: 'adm-1', username: 'admin', password: 'admin123', must_change_password: false };

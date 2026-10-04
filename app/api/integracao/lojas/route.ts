@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         contract_type: 'balcao_mesas',
         contract_period_months: 12,
         is_active: true,
-        config: { use_pin: true, allow_client_open: true, service_fee_rate: 0.1 },
+        config: { service_fee_rate: 0.1 },
       })
       .select('id, slug')
       .single();

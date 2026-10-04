@@ -2633,7 +2633,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
         cover_url: params.coverUrl || null,
-        config: applyModulesConfigFields({ use_pin: true, allow_client_open: true, service_fee_rate: params.serviceFeeRate }, params),
+        config: applyModulesConfigFields({ service_fee_rate: params.serviceFeeRate }, params),
       })
       .select()
       .single();
@@ -2726,7 +2726,7 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
 
     // Busca o config atual pra só sobrescrever service_fee_rate (e o perfil
     // de módulos, ver applyModulesConfigFields), sem apagar outras flags
-    // (use_pin, allow_client_open, require_pin_for_open, charge_service_fee)
+    // (require_pin_for_open, charge_service_fee, e as chaves antigas inertes)
     // que o lojista já pode ter configurado.
     const { data: current } = await supabase.from('stores').select('config').eq('id', id).single();
     const { error } = await supabase

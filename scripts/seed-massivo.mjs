@@ -235,7 +235,7 @@ async function main() {
       ['name', 'slug', 'cnpj', 'logo_url', 'is_active', 'contract_type', 'contract_period_months', 'config'],
       [[
         storeDef.name, slug, storeDef.cnpj, img(logoSeed, 200, 200), true, 'balcao_mesas', 12,
-        JSON.stringify({ use_pin: false, allow_client_open: true, require_pin_for_open: false, charge_service_fee: true }),
+        JSON.stringify({ require_pin_for_open: false, charge_service_fee: true }),
       ]],
       'id'
     )

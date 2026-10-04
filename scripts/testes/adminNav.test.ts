@@ -57,7 +57,8 @@ assert.equal(buscarAjustes('notificações som')[0].id, 'notificacoes');
 assert.equal(new Set(AJUSTES.map((a) => a.id)).size, AJUSTES.length);
 AJUSTES.forEach((a) => assert.ok(todas.includes(a.aba), `aba ${a.aba} do ajuste ${a.id} existe`));
 assert.equal(AJUSTES.find((a) => a.id === 'contagem_cega')!.aba, 'regras_caixa');
-assert.equal(AJUSTES.length, 15);
+assert.equal(AJUSTES.length, 16);
+assert.equal(buscarAjustes('percentual')[0].id, 'taxa_servico_percentual');
 
 // Notas fiscais (histórico) fica em Vendas logo depois de Histórico; emissor e integrações em Configurações
 const ids = (a: string) => AREAS.find((x) => x.id === a)!.abas.map((b) => b.id);

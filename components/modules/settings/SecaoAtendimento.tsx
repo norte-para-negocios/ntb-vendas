@@ -2,7 +2,7 @@
 import React from 'react';
 import { useSetting } from './SettingsConfigContext';
 import { SettingRow, Switch, NumberField } from './SettingRow';
-import { SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
+import { resolveServiceFeeRate, formatServiceFeeRate, taxaPercentualParaConfig, TAXA_MAXIMA_PERCENT } from '@/lib/calc';
 import type { Store } from '@/types';
 
 export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
@@ -10,7 +10,10 @@ export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
     const [taxa, setTaxa] = useSetting<boolean>('charge_service_fee', false, 'Taxa de serviço', (b) => (b ?? false) as boolean);
     const [ocupada, setOcupada] = useSetting<number>('table_alert_occupied_minutes', 0, 'Aviso de mesa ocupada');
     const [semPedido, setSemPedido] = useSetting<number>('table_alert_no_order_minutes', 0, 'Aviso de mesa sem pedido');
-    const taxaFmt = formatServiceFeeRate(store.config?.service_fee_rate ?? SERVICE_FEE_RATE);
+    // Percentual da taxa (stores.config.service_fee_rate, fração). Antes só o Master Admin mexia; agora o lojista também (0 a 30%).
+    const [taxaRate, setTaxaRate] = useSetting<number>('service_fee_rate', resolveServiceFeeRate(undefined), 'Percentual da taxa de serviço', (b) => resolveServiceFeeRate({ service_fee_rate: b }));
+    const taxaPercent = Number((taxaRate * 100).toFixed(2));
+    const taxaFmt = formatServiceFeeRate(taxaRate);
     return (
         <section id="sec-atendimento" className="space-y-3 scroll-mt-24">
             <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Atendimento</h3>
@@ -25,6 +28,9 @@ export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
             </SettingRow>
             <SettingRow id="aj-taxa_servico" titulo={`Cobrar taxa de serviço (${taxaFmt})`} descricao={`Aplica ${taxaFmt} de taxa opcional no total das comandas e pedidos.`}>
                 <Switch ligado={taxa} onChange={() => setTaxa(!taxa)} rotulo="Cobrar taxa de serviço" />
+            </SettingRow>
+            <SettingRow id="aj-taxa_servico_percentual" titulo="Percentual da taxa de serviço" descricao={`De 0% a ${TAXA_MAXIMA_PERCENT}%. Vale para comanda, caixa, pré-conta e a conta que o cliente vê. O padrão é 10%.`}>
+                <NumberField valor={taxaPercent} onChange={(n) => setTaxaRate(taxaPercentualParaConfig(n))} sufixo="%" max={TAXA_MAXIMA_PERCENT} passo={0.5} largura="w-16" rotulo="Percentual da taxa de serviço" />
             </SettingRow>
             <SettingRow id="aj-avisos_tempo" titulo="Avisos de tempo na gestão de mesas" descricao="Destaca o card da mesa quando passar desse tempo. Deixe 0 pra desligar.">
                 <div className="flex items-center gap-4 flex-wrap max-sm:justify-end">

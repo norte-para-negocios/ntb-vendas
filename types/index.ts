@@ -39,8 +39,8 @@ export interface Store {
   contract_period_months: number | null;
   activation_date: string;
   config: {
-    use_pin: boolean;
-    allow_client_open: boolean;
+    // use_pin e allow_client_open foram removidos (04/10/2026): eram gravados na criação da loja e nunca lidos por nada.
+    // Lojas antigas ainda têm as chaves no jsonb; ficam lá, inertes (updateStoreConfig preserva o objeto).
     require_pin_for_open: boolean;
     charge_service_fee?: boolean;
     service_fee_rate?: number;

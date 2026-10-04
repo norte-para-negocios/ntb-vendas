@@ -5,6 +5,24 @@ import { scheduledPrice, type PriceSchedule } from './priceSchedule';
 // SERVICE_FEE_RATE é só o valor padrão pra lojas que ainda não configuraram.
 export const SERVICE_FEE_RATE = 0.10;
 
+// Percentual de taxa de serviço da loja (fração: 0,1 = 10%). ÚNICO ponto que lê stores.config.service_fee_rate: comanda,
+// caixa, pré-conta, conta do cliente, divisão e fechamento passam por aqui. 0% é válido (loja que não cobra); ausente ou
+// inválido (negativo, acima de 100%, texto) cai no padrão de 10%, nunca em NaN na conta.
+export function resolveServiceFeeRate(config: { service_fee_rate?: unknown } | null | undefined): number {
+  const r = config?.service_fee_rate;
+  return typeof r === 'number' && Number.isFinite(r) && r >= 0 && r <= 1 ? r : SERVICE_FEE_RATE;
+}
+
+/** Teto do campo de percentual em Configurações > Geral > Atendimento (o Master Admin pode ir além, até 100%). */
+export const TAXA_MAXIMA_PERCENT = 30;
+
+/** Percentual digitado na tela (0 a 30) -> fração gravada em service_fee_rate, com duas casas no percentual. */
+export function taxaPercentualParaConfig(percentual: number): number {
+  if (!Number.isFinite(percentual)) return SERVICE_FEE_RATE;
+  const pct = Math.min(TAXA_MAXIMA_PERCENT, Math.max(0, percentual));
+  return Math.round(pct * 100) / 10000;
+}
+
 export function calculateServiceFee(subtotal: number, rate: number = SERVICE_FEE_RATE): number {
   return subtotal * rate;
 }
