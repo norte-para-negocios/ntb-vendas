@@ -1,6 +1,7 @@
 import type { PriceSchedule } from '@/lib/priceSchedule';
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
 import { vendaTemCobranca } from '@/lib/calc';
+import { dividirEmLotes } from '@/lib/planta';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
 import { impressoraRecebe, type DocPrint } from '@/lib/printDocs';
 import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, OptionVariant, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
@@ -983,6 +984,41 @@ export const updateTablePosition = async (storeId: string, tableId: string, x: n
   if (error) { console.error('updateTablePosition falhou:', error); return false; }
   return data === true;
 };
+
+// Planta em lote (migration 154). x e y andam juntos; área é opcional. Banco sem a 154 (PGRST202): cai na RPC antiga, uma mesa por vez.
+export interface PosicaoMesa { id: string; x?: number | null; y?: number | null; area?: string | null }
+
+const posicaoParaJson = (i: PosicaoMesa): Record<string, unknown> => {
+  const o: Record<string, unknown> = { id: i.id };
+  if (i.x !== undefined) { o.x = i.x; o.y = i.y ?? null; }
+  if (i.area !== undefined) o.area = i.area;
+  return o;
+};
+
+export const updateTablesPositions = async (storeId: string, itens: PosicaoMesa[]): Promise<boolean> => {
+  if (itens.length === 0) return true;
+  for (const lote of dividirEmLotes(itens, 200)) {
+    // eslint-disable-next-line no-await-in-loop -- poucos lotes (500 mesas = 3)
+    const { error } = await supabase.rpc('update_tables_positions_secure', { p_store_id: storeId, p_items: lote.map(posicaoParaJson) });
+    if (error) {
+      if (error.code === 'PGRST202') return updateTablesPositionsLegado(storeId, itens);
+      console.error('updateTablesPositions falhou:', error);
+      return false;
+    }
+  }
+  return true;
+};
+
+async function updateTablesPositionsLegado(storeId: string, itens: PosicaoMesa[]): Promise<boolean> {
+  if (itens.some((i) => i.area !== undefined)) { console.warn('Áreas exigem a migration 154 aplicada no banco.'); return false; }
+  const comPos = itens.filter((i) => i.x !== undefined);
+  for (const grupo of dividirEmLotes(comPos, 10)) {
+    // eslint-disable-next-line no-await-in-loop
+    const r = await Promise.all(grupo.map((i) => updateTablePosition(storeId, i.id, i.x ?? null, i.y ?? null)));
+    if (r.some((ok) => !ok)) return false;
+  }
+  return true;
+}
 
 // Preço por horário (migration 153). Tolerante: banco sem a tabela (app novo, migration ainda não aplicada) = sem regras.
 export const fetchPriceSchedules = async (storeId: string): Promise<PriceSchedule[]> => {

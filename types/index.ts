@@ -179,6 +179,8 @@ export interface Table {
   // Posição na planta, em % do mapa (migration 142/149). null = ainda não posicionada.
   floor_x?: number | null;
   floor_y?: number | null;
+  // Área da planta (migration 154), ex.: "Salão", "Varanda". null = sem área.
+  area?: string | null;
 }
 
 export interface Category {
