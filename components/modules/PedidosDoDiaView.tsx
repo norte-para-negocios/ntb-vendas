@@ -21,11 +21,11 @@ interface Props {
 }
 
 const Tile: React.FC<{ rotulo: string; valor: number; destaque?: boolean; onClick?: () => void }> = ({ rotulo, valor, destaque, onClick }) => {
-  const cls = `text-left rounded-[var(--r-md)] border px-4 py-3 ${destaque ? 'border-[var(--warn)]/40 bg-[var(--warn)]/10' : 'border-[var(--border)] bg-[var(--surface-2)]'}`;
+  const cls = `text-left rounded-[var(--r-md)] border px-3 py-2 sm:px-4 sm:py-3 ${destaque ? 'border-[var(--warn)]/40 bg-[var(--warn)]/10' : 'border-[var(--border)] bg-[var(--surface-2)]'}`;
   const inner = (
     <>
-      <p className="text-[12px] text-[var(--text-muted)] flex items-center gap-1">{destaque && <TriangleAlert size={12} className="text-[var(--warn)]" />}{rotulo}</p>
-      <p className={`text-[22px] font-semibold num leading-tight ${destaque ? 'text-[var(--warn)]' : 'text-[var(--text)]'}`}>{valor}</p>
+      <p className="text-[11px] sm:text-[12px] leading-tight text-[var(--text-muted)] flex items-center gap-1">{destaque && <TriangleAlert size={12} className="text-[var(--warn)]" />}{rotulo}</p>
+      <p className={`text-[18px] sm:text-[22px] font-semibold num leading-tight ${destaque ? 'text-[var(--warn)]' : 'text-[var(--text)]'}`}>{valor}</p>
     </>
   );
   return onClick ? <button type="button" onClick={onClick} className={`${cls} u-press-sm max-sm:min-h-11`}>{inner}</button> : <div className={cls}>{inner}</div>;
@@ -78,13 +78,13 @@ export const PedidosDoDiaView: React.FC<Props> = ({ linhas, locais, meuNome, soM
 
   return (
     <div className="space-y-4">
-      {/* Controles ficam à vista enquanto a lista rola */}
-      <div className="sticky top-0 z-10 -mx-5 -mt-5 px-5 pt-5 pb-3 bg-[var(--surface)] space-y-3 border-b border-[var(--border)]">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* No computador os controles ficam à vista enquanto a lista rola; no celular rolam junto (não comem a tela). */}
+      <div className="sm:sticky sm:top-0 z-10 -mx-5 -mt-5 px-5 pt-4 pb-3 bg-[var(--surface)] space-y-3 border-b border-[var(--border)]">
+        <div className="grid grid-cols-4 gap-2">
           <Tile rotulo="Itens lançados" valor={resumo.unidades} />
           <Tile rotulo="Impressos" valor={resumo.impressos} />
           <Tile
-            rotulo="Sem registro (mesas abertas)"
+            rotulo="Sem registro"
             valor={resumo.semRegistroAbertas}
             destaque={resumo.semRegistroAbertas > 0}
             onClick={resumo.semRegistroAbertas > 0 ? () => set({ estado: 'sem_registro' }) : undefined}
