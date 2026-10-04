@@ -847,6 +847,16 @@ export const updateCategorySector = async (categoryId: string, sectorId: string 
   const { error } = await supabase.from('categories').update({ sector_id: sectorId }).eq('id', categoryId);
   if (error) throw error;
 };
+// Marca a categoria inteira como Cozinha ou Bar (migration 155): products.destination de todos os produtos dela
+// + categories.sector_id = null. Devolve quantos produtos mudaram. Banco sem a 155 (PGRST202): erro claro.
+export const setCategoryDestination = async (storeId: string, categoryId: string, destination: 'kitchen' | 'bar'): Promise<number> => {
+  const { data, error } = await supabase.rpc('set_category_destination_secure', { p_store_id: storeId, p_category_id: categoryId, p_destination: destination });
+  if (error) {
+    if (error.code === 'PGRST202') throw new Error('O banco ainda não tem a atualização 155 (destino da categoria). Peça para aplicarem a migration.');
+    throw error;
+  }
+  return Number(data) || 0;
+};
 export const updateProductSector = async (productId: string, storeId: string, sectorId: string | null, ignoreCategory = false) => {
   const { error } = await supabase.rpc('set_product_sector_secure', { p_product_id: productId, p_store_id: storeId, p_sector_id: sectorId, p_ignore_category: ignoreCategory });
   if (error) throw error;
