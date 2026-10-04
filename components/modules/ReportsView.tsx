@@ -4,18 +4,15 @@ import React, { useState } from 'react';
 import { Download, FileSpreadsheet, BarChart3, ListChecks } from 'lucide-react';
 import { Button, Card, Input } from '@/components/ui';
 import { toast } from '@/components/Toast';
-import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchSalesHistory, fetchExceptionsReport, fetchMenu, type CashShiftSummary, type CashShiftHistoryRow } from '@/lib/api';
+import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchSalesHistory, fetchMenu, type CashShiftSummary, type CashShiftHistoryRow } from '@/lib/api';
 import { groupSales, type GroupBy, type GroupRow } from '@/lib/reports/groupSales';
 import { salesOfShift } from '@/lib/reports/shiftSales';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { formatBRL } from '@/lib/calc';
 import type { Order } from '@/types';
-import { buildFechamentoWorkbook, fechamentoFileName, type FechamentoTurno } from '@/lib/reports/fechamentoXlsx';
-
-const hojeISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Bahia' });
-
-// Início e fim do dia em Bahia (UTC-3, sem horário de verão) como instantes UTC.
-const limitesDoDia = (dia: string): [Date, Date] => [new Date(`${dia}T00:00:00-03:00`), new Date(`${dia}T23:59:59.999-03:00`)];
+import { buildFechamentoWorkbook, fechamentoFileName } from '@/lib/reports/fechamentoXlsx';
+import { hojeISO, limitesDoDia, turnosDoPeriodo } from '@/lib/reports/dia';
+import { carregarFechamento } from '@/lib/reports/carregarFechamento';
 
 export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSlug: string; userName: string }> = ({ storeId, storeName, storeSlug, userName }) => {
   const [dia, setDia] = useState(hojeISO());
@@ -53,7 +50,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
     try {
       const [ini, fim] = limitesDoDia(dia);
       const [rows, vendas] = await Promise.all([fetchCashShiftsHistory(storeId, 200), fetchSalesHistory(storeId, ini.toISOString(), fim.toISOString())]);
-      setTurnos(rows.filter((t) => new Date(t.opened_at) >= ini && new Date(t.opened_at) <= fim));
+      setTurnos(turnosDoPeriodo(rows, ini, fim));
       setVendasDia(vendas);
     } catch (e) {
       console.error('carregarTurnos falhou:', e);
@@ -72,23 +69,8 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
   const baixarFechamento = async () => {
     setGerando(true);
     try {
-      const [ini, fim] = limitesDoDia(dia);
-      const [turnosRows, vendas, exc] = await Promise.all([
-        fetchCashShiftsHistory(storeId, 200),
-        fetchSalesHistory(storeId, ini.toISOString(), fim.toISOString()),
-        fetchExceptionsReport(storeId, ini, fim),
-      ]);
-      const doDia = turnosRows.filter((t) => new Date(t.opened_at) >= ini && new Date(t.opened_at) <= fim);
-      const turnos: FechamentoTurno[] = [];
-      for (const t of doDia) {
-        // eslint-disable-next-line no-await-in-loop -- poucos turnos por dia
-        const resumo = await fetchCashShiftSummary(t.id);
-        if (resumo) turnos.push({ operador: t.operator_name ?? 'Equipe', abertoEm: t.opened_at, fechadoEm: t.closed_at, fundo: Number(t.opening_float), contado: t.closing_counted_cash, resumo });
-      }
-      const wb = await buildFechamentoWorkbook({
-        loja: storeName, periodoLabel: new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('pt-BR'), geradoEm: new Date(), geradoPor: userName,
-        turnos, vendas, excecoes: exc.events,
-      });
+      const dados = await carregarFechamento({ storeId, storeName, userName, dia });
+      const wb = await buildFechamentoWorkbook(dados);
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
@@ -99,7 +81,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      toast.success(turnos.length === 0 ? 'Arquivo gerado (nenhum turno de caixa nesse dia).' : 'Arquivo gerado.');
+      toast.success(dados.turnos.length === 0 ? 'Arquivo gerado (nenhum turno de caixa nesse dia).' : 'Arquivo gerado.');
     } catch (e) {
       console.error('baixarFechamento falhou:', e);
       toast.error('Não consegui gerar o arquivo. Tente de novo.');
