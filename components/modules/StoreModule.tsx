@@ -26,6 +26,7 @@ import { PedidosDoDiaView } from './PedidosDoDiaView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { PriceSchedulesView } from './PriceSchedulesView';
 import { ReportsView } from './ReportsView';
+import { RelatorioMenu } from './RelatorioMenu';
 import { StaffOfflineBanner } from '@/components/StaffOfflineBanner';
 import { canUndo } from '@/lib/undoGuard';
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
@@ -12091,14 +12092,8 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                         <Search size={15} />
                                         Filtros
                                     </Button>
-                                    <Button variant="secondary" size="sm" className="max-sm:!h-11 max-sm:flex-1" onClick={handlePrintReport} disabled={filteredAndSortedSales.length === 0} title="Imprimir relatório">
-                                        <Printer size={15} />
-                                        Imprimir
-                                    </Button>
-                                    <Button variant="secondary" size="sm" className="max-sm:!h-11 max-sm:flex-1" onClick={handleExportCsv} disabled={filteredAndSortedSales.length === 0} title="Exportar CSV">
-                                        <Download size={15} />
-                                        CSV
-                                    </Button>
+                                    <RelatorioMenu storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} vendas={filteredAndSortedSales} periodoLabel={periodLabel}
+                                        disabled={filteredAndSortedSales.length === 0} onPrintList={handlePrintReport} onCsv={handleExportCsv} />
                                     <div className="w-px h-5 bg-[var(--border)] mx-1 max-sm:hidden" />
                                     <Button variant="ghost" size="sm" className="!text-[var(--err)] hover:!bg-[var(--err)]/10 max-sm:order-last max-sm:w-full max-sm:mt-1 max-sm:!h-11" onClick={handleClearSales} isLoading={isClearing}>
                                         <Trash2 size={15} />
