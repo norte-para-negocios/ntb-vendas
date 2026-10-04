@@ -2396,6 +2396,20 @@ operador corretamente recusada, `fetch_open_cash_shift_secure`/
 `fetch_open_cash_shifts_secure` devolvendo os valores certos, e o fluxo
 completo abrir→ver no dashboard→fechar confirmado na tela de Caixa real.
 
+## Locais de preparo, Produção e notificações (04/10/2026)
+
+- **Local de preparo** = `print_sectors` (nome + `base` kitchen/bar) além de Cozinha e Bar padrão. Chave única
+  `'kitchen' | 'bar' | 'setor:<id>'` (`lib/locaisPreparo.ts`, igual a `chaveDestinoEstoque`). Cadastro único em
+  Administração → Locais de preparo (`LocaisPreparoView`): nome, base, impressora, baixa de estoque Omie e categorias, com
+  checklist do que falta. Criar/editar/apagar dispara `ntb-setores-changed` (feito em `lib/api.ts`).
+- **"Produção"** (`ProducaoView`, aba derivada `'producao'`, `lib/producaoNav.ts`) substitui Cozinha/Bar no menu SÓ quando a
+  loja tem ao menos um setor; abas por local com contador, reaproveitando `KdsView` com `fixedLocal`. Loja sem setores = menu de sempre.
+- **Central de notificações**: regras puras em `lib/notificacoes.ts` (público por função, dedupe, som), busca em
+  `lib/useStoreNotifications.ts` (contexto em `NotificacoesContext`), sino em `NotificationBell`. Preferências em
+  `stores.config.notifications` (Configurações → Notificações); histórico/lido no `localStorage` por loja+usuário. Sem aviso de
+  "cliente sentou". Contadores de Cozinha/Bar/Produção contam sempre; avisos de KDS só em loja com KDS (não `direct_print`).
+- Sem migration nova.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`

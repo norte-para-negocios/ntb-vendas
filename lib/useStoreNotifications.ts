@@ -86,7 +86,8 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
     } catch { /* mantém o que já tinha */ }
 
     const { aplicaveis: ap, setores: st, modulos: m } = ctxRef.current;
-    if (ap.has('pedido_novo')) {
+    // Contadores de Cozinha/Bar/Produção sempre contam (como o badge antigo); só os AVISOS dependem de a loja usar KDS.
+    if (m.kitchen_kds || m.bar_kds) {
       let falhou = false;
       const onError = () => { falhou = true; };
       const [k, b] = await Promise.all([
@@ -96,8 +97,10 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
       if (!falhou) {
         const nomes = Object.fromEntries(st.map((s) => [s.id, s.name]));
         const agora = Date.now();
-        detectados.push(...detectarItens(k as ItemKdsCompleto[], 'kitchen', nomes, agora), ...detectarItens(b as ItemKdsCompleto[], 'bar', nomes, agora));
-        vistos.push('pedido_novo', 'item_pronto', 'item_atrasado');
+        if (ap.has('pedido_novo')) {
+          detectados.push(...detectarItens(k as ItemKdsCompleto[], 'kitchen', nomes, agora), ...detectarItens(b as ItemKdsCompleto[], 'bar', nomes, agora));
+          vistos.push('pedido_novo', 'item_pronto', 'item_atrasado');
+        }
         setCounts((c) => ({ ...c, kitchen: (k as ItemKds[]).filter(itemPrecisaAcao).length, bar: (b as ItemKds[]).filter(itemPrecisaAcao).length }));
         setPorLocal(contarPorLocal({ kitchen: k as ItemKds[], bar: b as ItemKds[] }, new Set(st.map((s) => s.id))));
       }
