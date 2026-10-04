@@ -36,7 +36,8 @@ export const RelatorioMenu: React.FC<{
   const garantirNomes = async (): Promise<(id: string) => string | undefined> => {
     if (!nomes.current) {
       try {
-        const menu = await fetchMenu(storeId, false, true);
+        // Limite de 8s: sem rede o relatório sai mesmo assim (categoria vira "Sem categoria").
+        const menu = await Promise.race([fetchMenu(storeId, false, true), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))]);
         nomes.current = new Map(menu.categories.map((c) => [c.id, c.name]));
       } catch (e) {
         console.error('RelatorioMenu: categorias não carregaram:', e);

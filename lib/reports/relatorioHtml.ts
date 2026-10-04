@@ -27,7 +27,7 @@ export const RELATORIO_STYLES = `
   table { width: 100%; border-collapse: collapse; break-inside: avoid; }
   th { background: #EEEFFB; color: #2B2E83; font-size: 8.5px; text-transform: uppercase; text-align: left; padding: 4px 9px; }
   td { padding: 4px 9px; border-bottom: 1px solid #E4E5F2; }
-  td.d, th.d { text-align: right; }
+  td.d, th.d { text-align: right; white-space: nowrap; }
   td.zero { color: #8A8EA0; }
   tr.tot td { font-weight: 700; border-top: 1.5px solid #484DB5; border-bottom: 0; }
   .bar { width: 100%; height: 7px; background: #EEEFFB; border-radius: 4px; overflow: hidden; }
