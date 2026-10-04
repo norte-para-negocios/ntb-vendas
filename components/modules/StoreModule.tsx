@@ -1002,9 +1002,6 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // Regra única (04/10): 2+ abas de KDS => "Produção" com abas; 1 aba => item com o nome dela; ver lib/producaoNav.ts.
   const locaisDoUsuario = locaisAcessiveis(notif.locais, accessibleTabIds);
   const modoProd = modoProducao(locaisDoUsuario);
-  // Menu mostra TODAS as áreas que a loja tem ligadas; as que a pessoa não pode acessar ficam com cadeado (04/10).
-  const modulosLigadosIds = computeAccessibleTabIds(storeModules, () => true);
-  const modoProdMenu = modoProducao(locaisAcessiveis(notif.locais, modulosLigadosIds));
   const tabAcessivel = (id: string) => (id === 'producao' ? producaoAcessivel(accessibleTabIds) : accessibleTabIds.has(id));
   const allTabs = [
     // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,
@@ -1014,13 +1011,13 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     { id: 'counter', icon: Coffee, label: 'Balcão', permission: 'counter' },
     // Loja com local de preparo próprio (ex.: Pizzaria): um item "Produção" com abas por local.
     // Loja sem setores continua com Cozinha e Bar separados, como sempre foi.
-    ...(modoProdMenu.tipo === 'abas'
+    ...(modoProd.tipo === 'abas'
       ? [{ id: 'producao', icon: ChefHat, label: 'Produção', permission: 'kitchen', count: somaContagens(abasProducao(locaisDoUsuario, notif.porLocal)) }]
-      : modoProdMenu.tipo === 'unico' && modoProdMenu.tabId === 'producao'
-        ? [{ id: 'producao', icon: ChefHat, label: modoProdMenu.nome, permission: 'kitchen', count: somaContagens(abasProducao(locaisDoUsuario, notif.porLocal)) }]
+      : modoProd.tipo === 'unico' && modoProd.tabId === 'producao'
+        ? [{ id: 'producao', icon: ChefHat, label: modoProd.nome, permission: 'kitchen', count: somaContagens(abasProducao(locaisDoUsuario, notif.porLocal)) }]
         : [
-            ...(modoProdMenu.tipo === 'unico' && modoProdMenu.tabId === 'kitchen' ? [{ id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen }] : []),
-            ...(modoProdMenu.tipo === 'unico' && modoProdMenu.tabId === 'bar' ? [{ id: 'bar', icon: Wine, label: 'Bar (KDS)', permission: 'bar', count: notifications.bar }] : []),
+            ...(accessibleTabIds.has('kitchen') && modoProd.tipo === 'unico' && modoProd.tabId === 'kitchen' ? [{ id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen }] : []),
+            ...(accessibleTabIds.has('bar') && modoProd.tipo === 'unico' && modoProd.tabId === 'bar' ? [{ id: 'bar', icon: Wine, label: 'Bar (KDS)', permission: 'bar', count: notifications.bar }] : []),
           ]),
     { id: 'menu', icon: UtensilsCrossed, label: 'Cardápio', permission: 'menu' },
     { id: 'admin', icon: BarChart3, label: 'Administração', permission: 'admin' }
@@ -1037,18 +1034,10 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // Modo Aberto (30/09): o computador do salão mostra as outras áreas da loja com
   // cadeado ("só com login") em vez de sumir com elas.
   const isAberto = user.role === 'open';
-  // Regra do dono (04/10): quem não tem permissão de uma área a vê com CADEADO (visível e bloqueada), nunca escondida.
-  const visibleTabs = allTabs
-    .filter(tab => { const k = TAB_MODULE_KEY[tab.id]; return tabAcessivel(tab.id) || !k || storeModules[k]; })
-    .map(tab => tabAcessivel(tab.id) ? tab : { ...tab, count: 0 });
-  const bottomNavTabs = visibleTabs.filter(item => ['caixa', 'tables', 'counter', 'kitchen', 'bar', 'producao'].includes(item.id));
-  // Clique numa área bloqueada: só avisa (sem abrir a tela nem carregar dados dela). O modo Aberto mantém o painel "Só com login".
-  const irParaAba = (id: string): boolean => {
-    if (tabAcessivel(id) || isAberto) { onTabChange(id); return true; }
-    toast.info('Sem permissão para esta área. Peça ao gerente.');
-    return false;
-  };
-  const rotuloCadeado = isAberto ? 'Só com login' : 'Sem permissão';
+  const visibleTabs = isAberto
+    ? allTabs.filter(tab => { const k = TAB_MODULE_KEY[tab.id]; return !k || storeModules[k]; }).map(tab => tabAcessivel(tab.id) ? tab : { ...tab, count: 0 })
+    : allTabs.filter(tab => tabAcessivel(tab.id));
+  const bottomNavTabs = visibleTabs.filter(item => tabAcessivel(item.id) && ['caixa', 'tables', 'counter', 'kitchen', 'bar', 'producao'].includes(item.id));
 
   // Loja ganhou/perdeu abas de KDS com a aba aberta: leva para a aba equivalente.
   const abaProdutoAlvo = abaCorretaDeProducao(modoProd, currentTab);
@@ -1114,7 +1103,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                     {visibleTabs.map((item) => (
                         <button
                           key={item.id}
-                          onClick={() => { if (irParaAba(item.id)) setIsMobileMenuOpen(false); }}
+                          onClick={() => { onTabChange(item.id); setIsMobileMenuOpen(false); }}
                           className={`relative isolate flex items-center w-full px-3 min-h-[44px] rounded-[10px] text-[15px] u-motion u-press gap-3
                             ${currentTab === item.id ? 'text-white font-semibold' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
                           `}
@@ -1132,7 +1121,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                           </div>
                           <div className="flex-1 flex items-center justify-between truncate">
                               <span className="truncate">{item.label}</span>
-                              {!tabAcessivel(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label={rotuloCadeado} />}
+                              {!tabAcessivel(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
                               {!!item.count && item.count > 0 && (
                                  <span className="bg-[var(--err-fill)] text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-full num ml-2 shrink-0">
                                     <AnimatedNumber value={item.count} format={(n) => String(Math.round(n))} />
@@ -1216,7 +1205,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           {visibleTabs.map((item) => (
             <button
               key={item.id}
-              onClick={() => irParaAba(item.id)}
+              onClick={() => onTabChange(item.id)}
               className={`flex items-center w-full px-3 h-10 rounded-[10px] text-[14px] u-motion u-press group relative isolate
                 ${currentTab === item.id ? 'text-white font-semibold' : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'}
                 ${isCollapsed ? 'justify-center' : 'gap-3'}
@@ -1238,7 +1227,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               {!isCollapsed && (
                   <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">{item.label}</span>
-                      {!tabAcessivel(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label={rotuloCadeado} />}
+                      {!tabAcessivel(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
                       {!!item.count && item.count > 0 && (
                           <span className="bg-[var(--err-fill)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-2 shrink-0 num">
                               <AnimatedNumber value={item.count} format={(n) => String(Math.round(n))} />
@@ -1250,7 +1239,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               {/* Tooltip para estado colapsado */}
               {isCollapsed && (
                 <div className="absolute left-full ml-2 px-2.5 py-1.5 bg-[var(--text)] text-[var(--bg)] text-[12px] font-medium rounded-[var(--r-sm)] opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-                  {item.label}{!tabAcessivel(item.id) ? ` (${rotuloCadeado.toLowerCase()})` : ''}{!!item.count && ` (${item.count})`}
+                  {item.label}{!!item.count && ` (${item.count})`}
                 </div>
               )}
             </button>
@@ -1340,13 +1329,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     {bottomNavTabs.length > 0 && (
         <div className="fixed bottom-0 left-0 w-full bg-[var(--surface)]/85 backdrop-blur-xl border-t border-[var(--border)] flex justify-around px-2 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-40">
            {bottomNavTabs.map(item => (
-            <button key={item.id} onClick={() => irParaAba(item.id)} aria-disabled={!tabAcessivel(item.id)} className={`relative isolate flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[64px] text-[11px] px-3 py-1 rounded-[var(--r-md)] u-motion u-press ${currentTab === item.id ? 'text-[var(--brand)] font-semibold' : 'text-[var(--text-muted)] font-medium'}`}>
+            <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative isolate flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[64px] text-[11px] px-3 py-1 rounded-[var(--r-md)] u-motion u-press ${currentTab === item.id ? 'text-[var(--brand)] font-semibold' : 'text-[var(--text-muted)] font-medium'}`}>
               {currentTab === item.id && (
                 <motion.div layoutId="nav-ativo-barra" transition={SPRING_UI} className="absolute inset-0 -z-10 rounded-[var(--r-md)] bg-[var(--brand-soft)]" />
               )}
               <div className="relative">
-                  <item.icon size={20} className={tabAcessivel(item.id) ? '' : 'opacity-60'} />
-                  {!tabAcessivel(item.id) && <Lock size={11} className="absolute -top-1 -right-2 text-[var(--text-muted)]" aria-label={rotuloCadeado} />}
+                  <item.icon size={20} />
                   {!!item.count && item.count > 0 && (
                        <div className="absolute -top-1.5 -right-2 bg-[var(--err-fill)] text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-0.5 num">
                           {item.count > 9 ? '9+' : item.count}
