@@ -62,8 +62,12 @@ let nomesLocais = [];
 // "Impressora invalida: IMPBAR" no PC que acabava de reabrir após atualizar.
 let inicioMotor = Date.now();
 
+// Teto de tempo em TODA chamada ao servidor: sem ele, um request pendurado (Wi-Fi do salão engasgando) segurava o
+// `tickRunning` para sempre e a fila de impressão inteira parava até reiniciar o app (Sertão, 04/10 18:06).
+const REST_TIMEOUT_MS = 15000;
 async function rest(pathAndQuery, init = {}) {
   const res = await fetch(`${cfg.baseUrl}/rest/v1/${pathAndQuery}`, {
+    signal: AbortSignal.timeout(REST_TIMEOUT_MS),
     ...init,
     headers: {
       apikey: cfg.anonKey,
@@ -678,15 +682,41 @@ function start(storeId, options) {
 
   const minhaGeracao = geracao;
   let tickRunning = false;
+  let tickIniciouEm = 0;
+  let ultimaVarreduraTravados = 0;
+  // Job que ficou em "printing" (o app caiu ou o spooler travou no meio) nunca é reimpresso sozinho, para não dobrar o
+  // pedido; mas também não pode ficar invisível para sempre: vira "erro" e aparece, reenviável, na aba Impressão.
+  const varrerTravados = async () => {
+    if (Date.now() - ultimaVarreduraTravados < 60000) return;
+    ultimaVarreduraTravados = Date.now();
+    try {
+      const limite = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      await rest(`print_jobs?store_id=eq.${storeId}&status=eq.printing&created_at=lt.${limite}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'error', error_message: 'Travou durante a impressão. Confira o papel e reenvie pela aba Impressão.' }),
+      });
+      // Job que ninguém pegou dentro da janela de idade nunca será impresso (o ciclo ignora): em vez de ficar
+      // "pendente" para sempre sem alarme, vira erro visível e reenviável.
+      const limitePendente = new Date(Date.now() - IDADE_MAXIMA_JOB_MS - 60 * 1000).toISOString();
+      await rest(`print_jobs?store_id=eq.${storeId}&status=eq.pending&created_at=lt.${limitePendente}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'error', error_message: 'Ninguém imprimiu a tempo (impressora fora do ar ou computador dela desligado). Reenvie pela aba Impressão se ainda precisar.' }),
+      });
+    } catch (e) { log(`WARN varredura de jobs travados falhou: ${e.message}`); }
+  };
   const tick = async () => {
     // Garante no máximo 1 tick por vez: dois Out-Printer simultâneos logo
     // depois de reconfigurar impressora derrubam os dois no Windows (achado
     // ao vivo do agente original, 2026-08-28). A checagem de geração impede
     // o outro caso do mesmo problema: um ciclo da loja ANTERIOR (logout /
     // troca de loja) continuar rodando junto com o da loja nova.
+    // Ciclo preso há mais de 3 min (algo pendurou apesar dos tetos): solta a trava, senão a impressão para de vez.
+    if (tickRunning && Date.now() - tickIniciouEm > 180000) { log('WARN ciclo de impressão preso há mais de 3 min — liberando'); tickRunning = false; }
     if (tickRunning || printersById.size === 0 || minhaGeracao !== geracao) return;
     tickRunning = true;
+    tickIniciouEm = Date.now();
     try {
+      await varrerTravados();
       const ids = Array.from(printersById.keys()).join(',');
       const limiteIdade = new Date(Date.now() - IDADE_MAXIMA_JOB_MS).toISOString();
       const jobs = await rest(

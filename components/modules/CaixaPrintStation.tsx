@@ -753,9 +753,12 @@ async function reconcileDestination(
     // (rede fora, tabela sem linha) não pode interromper nem marcar
     // falha no caminho window.print() já testado, que segue seu próprio
     // rastreamento de erro logo abaixo.
+    // Resultado de cada envio à fila: antes o item era marcado como impresso SEM esperar o INSERT, e uma falha de rede
+    // fazia o pedido sumir da fila de candidatos para sempre (nunca saía no papel, nem reaparecia).
+    let envios: Promise<{ success: boolean; message?: string }>[] = [];
     if (printersForItem.length > 0) {
       const ids = itens.map((it) => it.id).sort();
-      printersForItem.forEach((printer) => {
+      envios = printersForItem.map((printer) => {
         // Largura do papel DESTA impressora (80 mm = 48 colunas, 58 mm = 32): o layout em colunas depende dela.
         const content = buildKitchenTicketText({ ...dadosTicket, paperWidthMm: printer.paper_width_mm, modoDireto: printer.print_mode === 'raw', titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined });
         // `dedupeKey` (migration 073): o dedupe desta tela é `printedIds` no
@@ -768,8 +771,8 @@ async function reconcileDestination(
         const dedupeKey = ids.length === 1
           ? `item:${ids[0]}:${destination}:${printer.id}`
           : `grupo:${destination}:${printer.id}:${ids.join(',')}`;
-        enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content, dedupeKey })
-          .catch((e) => console.error('enqueuePrintJob (auto) falhou:', e));
+        return enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content, dedupeKey })
+          .catch((e) => { console.error('enqueuePrintJob (auto) falhou:', e); return { success: false, message: String(e?.message ?? e) }; });
       });
     }
 
@@ -791,7 +794,14 @@ async function reconcileDestination(
     // real esperando por ele — a fila sendo real substitui o caminho antigo
     // pra este destino, não some ADITIVA a ele.
     // eslint-disable-next-line no-await-in-loop -- impressão sequencial de propósito: dois print() quase simultâneos empilhariam diálogos nativos no mesmo instante.
-    const ok = printersForItem.length > 0 ? true : await doPrint();
+    let ok: boolean;
+    if (printersForItem.length > 0) {
+      const resultados = await Promise.all(envios);
+      // "Impressões desativadas" é decisão da loja, não falha: não fica tentando de novo.
+      ok = !resultados.some((r) => !r.success && !/desativadas/i.test(r.message || ''));
+    } else {
+      ok = await doPrint();
+    }
 
     if (ok) {
       itens.forEach((it) => printedIds.add(it.id));

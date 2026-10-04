@@ -40,7 +40,7 @@ import { subtituloHistorico, nomeArquivoHistorico, type FiltrosHistorico } from 
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
-import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -194,12 +194,19 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 setIsUniversalChange(false);
             } else {
                 await guardarConta({ email: emailUsado, name: result.user.name, roleLabel: rotuloDoPapel(result.user.role, result.user.permissions), photoUrl: (result.user as any).photo_url ?? null }, senhaUsada, lembrar);
+                await registrarSenhaConferida(result.user.store_id, senhaUsada, { id: result.user.id, name: result.user.name, role: result.user.role });
                 onLogin(result.user);
             }
             setIsLoading(false);
-            return;
+            return 'ok' as const;
         }
 
+        // Rede fora ou conta bloqueada: não adianta tentar a conta universal, e a mensagem tem que dizer a verdade.
+        if (result.reason === 'network' || result.reason === 'locked' || result.reason === 'store_inactive') {
+            setError(result.message || 'Erro ao entrar.');
+            setIsLoading(false);
+            return result.reason;
+        }
         // Não bateu em nenhum store_user: tenta a conta universal antes de
         // mostrar erro (tabelas separadas, sem custo extra de segurança em
         // tentar as duas em sequência).
@@ -214,10 +221,18 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 setUniversalUser(universalResult.user);
             }
         } else {
-            setError(contaEscolhida ? 'Senha incorreta.' : (result.message || 'Erro ao entrar.'));
-            setTremerSenha(n => n + 1);
+            const motivoUniv = universalResult.reason;
+            if (motivoUniv === 'network' || motivoUniv === 'locked') {
+                setError(universalResult.message || 'Erro ao entrar.');
+            } else {
+                setError(contaEscolhida ? 'Senha incorreta.' : (result.message || 'Erro ao entrar.'));
+                setTremerSenha(n => n + 1);
+            }
+            setIsLoading(false);
+            return (motivoUniv === 'network' || motivoUniv === 'locked') ? motivoUniv : ('wrong' as const);
         }
         setIsLoading(false);
+        return 'ok' as const;
     };
 
     const handleChangePassword = async () => {
@@ -360,8 +375,18 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         if (conta.senhaCifrada && window.electronApp?.decryptSecret) {
             setEntrandoEmail(conta.email);
             const senha = await window.electronApp.decryptSecret(conta.senhaCifrada).catch(() => null);
-            if (senha) { await handleLogin(conta.email, senha, true); setEntrandoEmail(null); return; }
-            setEntrandoEmail(null);
+            if (senha) {
+                const motivo = await handleLogin(conta.email, senha, true);
+                setEntrandoEmail(null);
+                // Entrou, ou o problema é rede/bloqueio (mensagem já na tela): não reenviar a senha, cada tentativa conta no bloqueio.
+                if (motivo !== 'wrong') return;
+                // Senha guardada ficou velha (alguém trocou): esquece a salva e pede a nova, sem martelar o servidor.
+                salvarConta({ ...conta, senhaCifrada: null, ultimoUso: Date.now() });
+                conta = { ...conta, senhaCifrada: null };
+                setError('A senha salva neste aparelho não vale mais. Digite a senha atual.');
+            } else {
+                setEntrandoEmail(null);
+            }
         }
         setContaEscolhida(conta);
         setEmail(conta.email);
@@ -3521,6 +3546,9 @@ END $$;
 
 NOTIFY pgrst, 'reload schema';`;
 
+    const loadDataSeq = useRef(0);
+    const tablesBoasRef = useRef<Table[]>([]);
+    const ordersBoasRef = useRef<Order[]>([]);
     const loadData = async () => {
         if(!storeId) return;
         // Nao rebusca `stores` aqui (achado de performance #9): os eventos
@@ -3529,11 +3557,19 @@ NOTIFY pgrst, 'reload schema';`;
         // atualizada via prop `store` (StoreModule mantem `user.store` em
         // sincronia sempre que algo em `stores` muda de fato, ex.:
         // MenuManagementView.handleToggleServiceFee → onStoreUpdate).
-        const [t, o, pendingOrders] = await Promise.all([
+        const seq = ++loadDataSeq.current;
+        const [t0, o0, pendingOrders] = await Promise.all([
             fetchTables(storeId),
             fetchActiveOrdersForTables(storeId),
             buildPendingOrdersForStore(storeId),
         ]);
+        // Resposta mais velha chegando depois de uma mais nova (polling + realtime em rede lenta): descarta.
+        if (seq !== loadDataSeq.current) return;
+        // Leitura que falhou (rede lenta, timeout) nunca troca uma lista boa por cache velho ou vazio: mesas não somem.
+        const t = leituraFalhou(t0) && tablesBoasRef.current.length > 0 ? tablesBoasRef.current : t0;
+        const o = leituraFalhou(o0) && ordersBoasRef.current.length > 0 ? ordersBoasRef.current : o0;
+        if (!leituraFalhou(t0)) tablesBoasRef.current = t0;
+        if (!leituraFalhou(o0)) ordersBoasRef.current = o0;
         setTables(t);
         publicarMesas(storeId, t);
         // Mescla pedidos ainda só na fila offline (nunca sincronizados) —
@@ -3711,7 +3747,7 @@ NOTIFY pgrst, 'reload schema';`;
             // faltava o mesmo enfileiramento pra impressora USB/rede do
             // caixa que handleFinishPayment já tem, então só o comprovante
             // PÓS-pagamento saía na impressora física; este nunca saía.
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? chavePreConta(tableId, activeOrders) : undefined, 'pre_conta', automatica)
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? chavePreConta(tableId, activeOrders) : `manual:${tableId}:${Math.floor(Date.now() / 45000)}`, 'pre_conta', automatica)
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             // Achado ao vivo na loja Sertão (2026-09-15): com uma impressora
             // USB/rede cadastrada pro destino 'receipt' (ex.: CAIXA), o

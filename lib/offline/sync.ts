@@ -1,5 +1,5 @@
 import { getPendingActions, markDone, markFailed, getFailedActions, resetActionAttempts, discardAction } from './queue';
-import { checkRealConnectivity } from './network';
+import { checkRealConnectivity, isNetworkError } from './network';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
 import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal } from '../api';
@@ -249,8 +249,8 @@ export async function runSync(): Promise<void> {
   try {
     const online = await checkRealConnectivity();
     if (!online) {
-      const pending = (await getPendingActions()).length;
-      notify({ syncing: false, pending, failed: 0 });
+      const pendentes = await getPendingActions();
+      notify({ syncing: false, pending: pendentes.length, failed: pendentes.filter((a) => a.attempts >= MAX_ATTEMPTS).length });
       return;
     }
 
@@ -267,6 +267,14 @@ export async function runSync(): Promise<void> {
         return;
       }
     } catch { /* sem histórico local: segue */ }
+
+    // Ações que pararam só por falta de rede (o 1.2.85 gastava tentativa com erro de conexão e estacionava o pedido
+    // para sempre): rearma. Erro de regra de negócio (esgotado, inválido) continua parado para o operador decidir.
+    try {
+      for (const a of await getFailedActions(MAX_ATTEMPTS)) {
+        if (a.lastError && isNetworkError({ message: a.lastError })) await resetActionAttempts(a.id);
+      }
+    } catch { /* sem rearmar: segue */ }
 
     const idMap = new Map<string, string>();
     const actions = await getPendingActions(); // já vem ordenado por createdAt

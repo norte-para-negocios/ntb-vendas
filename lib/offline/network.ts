@@ -1,4 +1,4 @@
-import { supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '../supabaseClient';
+import { supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck, OFFLINE_FLAG_MS } from '../supabaseClient';
 
 // Global Constraint do plano: `navigator.onLine` sozinho NUNCA decide se
 // uma ação é offline — só decide se vale tentar a chamada de rede
@@ -39,30 +39,33 @@ export function isNetworkError(error: unknown): boolean {
 // arbitrários) — confirmado ao vivo, mesmo fetch que falhava na raiz
 // funciona normal aqui, de dentro do `app://bundle` real.
 let ultimoOkAt = 0;
-export async function checkRealConnectivity(): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
-  // Resultado recente vale por alguns segundos: evita pagar o ping (ou os 4s de
-  // timeout sem internet) a cada toque do garçom.
-  const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
-  if (off && Date.now() - off < 30000) return false;
-  if (Date.now() - ultimoOkAt < 3000) return true;
+// Uma tentativa do ping. Qualquer resposta HTTP (até 5xx do gateway) prova que a rede chegou ao servidor.
+async function pingUmaVez(timeoutMs: number): Promise<boolean> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${supabaseUrlForConnectivityCheck}/rest/v1/`, {
+    await fetch(`${supabaseUrlForConnectivityCheck}/rest/v1/`, {
       method: 'HEAD',
       signal: controller.signal,
       cache: 'no-store',
       headers: { apikey: supabaseKeyForConnectivityCheck },
     });
-    const ok = res.ok || res.status < 500;
-    if (ok) { delete (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt; ultimoOkAt = Date.now(); }
-    else (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
-    return ok;
+    return true;
   } catch {
-    (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
     return false;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function checkRealConnectivity(): Promise<boolean> {
+  // Resultado recente vale por alguns segundos: evita pagar o ping (ou o timeout sem internet) a cada toque do garçom.
+  const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
+  if (off && Date.now() - off < OFFLINE_FLAG_MS) return false;
+  if (Date.now() - ultimoOkAt < 3000) return true;
+  // Duas tentativas antes de declarar offline: um engasgo isolado do Wi-Fi do salão não pode derrubar o app.
+  const ok = (await pingUmaVez(5000)) || (await pingUmaVez(5000));
+  if (ok) { delete (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt; ultimoOkAt = Date.now(); }
+  else (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
+  return ok;
 }

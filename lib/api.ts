@@ -163,23 +163,27 @@ export const updateStoreCoverUrl = async (storeId: string, coverUrl: string | nu
 // fazia antes via join. Por não distinguir "não encontrado" de "senha errada"
 // (a function devolve success:false pros dois, de propósito, pra não vazar se o
 // e-mail existe), as duas mensagens antigas viram uma só, genérica.
-export const authenticateStoreUser = async (email: string, password: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string }> => {
+export type MotivoFalhaLogin = 'network' | 'locked' | 'wrong' | 'store_inactive';
+export const authenticateStoreUser = async (email: string, password: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string; reason?: MotivoFalhaLogin }> => {
   try {
     const { data, error } = await supabase.rpc('authenticate_store_user_secure', {
       p_email: email,
       p_password: password,
     });
 
-    if (error) return { success: false, message: 'Erro de conexão.' };
+    if (error) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
     if (!data?.success) {
       return {
         success: false,
-        message: data?.locked ? 'Muitas tentativas incorretas. Tente novamente em alguns minutos.' : 'Usuário ou senha incorretos.',
+        reason: data?.locked ? 'locked' : 'wrong',
+        message: data?.locked ? 'Muitas tentativas incorretas. Aguarde 5 minutos.' : 'Usuário ou senha incorretos.',
       };
     }
 
     const store = await fetchStoreById(data.user.store_id);
-    if (!store || !store.is_active) return { success: false, message: 'Esta loja está inativa ou bloqueada.' };
+    // fetchStoreById devolve null também quando a rede falha e não há cache: não é loja inativa, é falta de conexão.
+    if (!store) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    if (!store.is_active) return { success: false, reason: 'store_inactive', message: 'Esta loja está inativa ou bloqueada.' };
 
     const user: StoreUser & { store: Store } = {
       ...data.user,
@@ -190,7 +194,7 @@ export const authenticateStoreUser = async (email: string, password: string): Pr
     return { success: true, user };
   } catch (error: any) {
     console.error('Auth Store User Error:', error);
-    return { success: false, message: 'Erro de conexão.' };
+    return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
   }
 };
 
@@ -973,13 +977,17 @@ export const deleteProduct = async (id: string, storeId: string) => {
   if (error) throw error;
 };
 
+// Resposta de leitura que FALHOU (cache ou vazio): marcada para a tela não trocar uma lista boa por uma lista velha/vazia.
+export const leituraFalhou = (lista: unknown): boolean => !!(lista as { __falhou?: boolean } | null)?.__falhou;
+const marcarFalha = <T extends unknown[]>(lista: T): T => { Object.defineProperty(lista, '__falhou', { value: true, enumerable: false }); return lista; };
+
 export const fetchTables = async (storeId: string): Promise<Table[]> => {
   const { data, error } = await supabase.rpc('get_tables_secure', { p_store_id: storeId });
   if (error) {
     console.error(error);
     const cached = await getCachedTables(storeId);
-    if (cached) return cached.tables as Table[];
-    return [];
+    if (cached) return marcarFalha([...(cached.tables as Table[])]);
+    return marcarFalha([] as Table[]);
   }
   const tables = (data as any) || [];
   setCachedTables(storeId, { tables }).catch(() => {});
@@ -1111,8 +1119,8 @@ export const fetchActiveOrdersForTables = async (storeId: string): Promise<Order
   if (error) {
     console.error('Fetch Active Table Orders Error', error);
     const cached = await getCachedTables(storeId);
-    if (cached) return cached.activeOrders as Order[];
-    return [];
+    if (cached) return marcarFalha([...((cached.activeOrders ?? []) as Order[])]);
+    return marcarFalha([] as Order[]);
   }
 
   const orders = (data as any) || [];
@@ -3388,20 +3396,21 @@ export const retryPrintJob = async (id: string): Promise<{ success: boolean; mes
 // (como store_users), escolhe qual loja acessar a cada entrada. Tabela
 // própria (universal_users), nunca acessada direto pelo client (mesmo
 // padrão write-only via RPC do resto da autenticação).
-export const authenticateUniversalUser = async (email: string, password: string): Promise<{ success: boolean; user?: UniversalUser; mustChangePass?: boolean; message?: string }> => {
+export const authenticateUniversalUser = async (email: string, password: string): Promise<{ success: boolean; user?: UniversalUser; mustChangePass?: boolean; message?: string; reason?: MotivoFalhaLogin }> => {
   try {
     const { data, error } = await supabase.rpc('authenticate_universal_user_secure', { p_email: email, p_password: password });
-    if (error) return { success: false, message: 'Erro de conexão.' };
+    if (error) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
     if (!data?.success) {
       return {
         success: false,
+        reason: data?.locked ? 'locked' : 'wrong',
         message: data?.locked ? 'Muitas tentativas incorretas. Tente novamente em alguns minutos.' : 'Usuário ou senha incorretos.',
       };
     }
     return { success: true, user: data.user, mustChangePass: data.mustChangePass };
   } catch (error: any) {
     console.error('Auth Universal User Error:', error);
-    return { success: false, message: 'Erro de conexão.' };
+    return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
   }
 };
 
@@ -3459,10 +3468,37 @@ export type ResultadoSenhaEquipe =
   | { success: true; user_id: string; name: string; role: string }
   | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline'; seconds?: number };
 
+// Cache local das senhas JÁ conferidas neste aparelho (só o hash salgado, nunca a senha): sem internet o pedido não pode
+// travar na conferência. Só vale para quem já passou pela conferência online aqui; senha nova offline continua recusada.
+const CHAVE_SENHAS_OFFLINE = 'ntb-senhas-conferidas';
+async function hashSenhaLocal(storeId: string, senha: string): Promise<string | null> {
+  try {
+    const dados = new TextEncoder().encode(`ntb|${storeId}|${senha}`);
+    const h = await crypto.subtle.digest('SHA-256', dados);
+    return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch { return null; }
+}
+function lerSenhasConferidas(): Record<string, { user_id: string; name: string; role: string }> {
+  try { return JSON.parse(localStorage.getItem(CHAVE_SENHAS_OFFLINE) || '{}'); } catch { return {}; }
+}
+// Quem entrou com login online também deixa a própria senha conferida neste aparelho (pedido offline logo depois do login).
+export const registrarSenhaConferida = async (storeId: string, senha: string, user: { id: string; name: string; role: string }) => {
+  const h = await hashSenhaLocal(storeId, senha);
+  if (!h) return;
+  try { const m = lerSenhasConferidas(); m[h] = { user_id: user.id, name: user.name, role: user.role }; localStorage.setItem(CHAVE_SENHAS_OFFLINE, JSON.stringify(m)); } catch { /* sem cache, segue */ }
+};
 export const verificarSenhaEquipe = async (storeId: string, senha: string): Promise<ResultadoSenhaEquipe> => {
   const { data, error } = await supabase.rpc('verify_store_staff_password_secure', { p_store_id: storeId, p_password: senha });
-  if (error || !data) return { success: false, error: isNetworkError(error) ? 'offline' : 'invalid' };
-  return data as ResultadoSenhaEquipe;
+  if (error || !data) {
+    if (!isNetworkError(error)) return { success: false, error: 'invalid' };
+    const h = await hashSenhaLocal(storeId, senha);
+    const achado = h ? lerSenhasConferidas()[h] : undefined;
+    if (achado) return { success: true, user_id: achado.user_id, name: achado.name, role: achado.role };
+    return { success: false, error: 'offline' };
+  }
+  const r = data as ResultadoSenhaEquipe;
+  if (r.success) await registrarSenhaConferida(storeId, senha, { id: r.user_id, name: r.name, role: r.role });
+  return r;
 };
 
 // --- Cupons de desconto (migration 142/143/144) ---
