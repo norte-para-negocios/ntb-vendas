@@ -4872,11 +4872,20 @@ NOTIFY pgrst, 'reload schema';`;
                         table.waiter_requested ? 'var(--err)' :
                         table.status === 'waiting_bill' ? 'var(--warn)' :
                         occ ? 'var(--brand)' : 'var(--ok)';
+                    // Tempo de ocupação = idade do item mais antigo da mesa (mesma aproximação dos cartões da lista).
+                    const itens = occ ? getTableSummary(table.id).allItems : [];
+                    const minutes = itens.length > 0 ? Math.floor((nowTick - new Date(itens[itens.length - 1].created_at).getTime()) / 60000) : null;
+                    const alerta: 'warn' | 'err' | null =
+                        minutes === null || tableAlertOccupiedMin <= 0 ? null :
+                        minutes >= tableAlertOccupiedMin * 2 ? 'err' :
+                        minutes >= tableAlertOccupiedMin ? 'warn' : null;
                     return {
                         dotColor,
                         statusLabel: getTableStatusLabel(blocked ? 'blocked' : occ ? table.status : 'available'),
                         inJurisdiction: isTableInJurisdiction(loggedUser, table.id),
                         blocked,
+                        minutes,
+                        alerta,
                     };
                 };
                 const podeEditarPlanta = loggedUser.role === 'owner' || loggedUser.role === 'manager' || loggedUser.role === 'universal';

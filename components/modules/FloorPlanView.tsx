@@ -11,6 +11,10 @@ export interface FloorPlanTableInfo {
   statusLabel: string;
   inJurisdiction: boolean;
   blocked: boolean;
+  /** Há quantos minutos a mesa está ocupada (null = livre/sem itens). */
+  minutes?: number | null;
+  /** Passou do limite configurado da loja? */
+  alerta?: 'warn' | 'err' | null;
 }
 
 interface Props {
@@ -93,6 +97,11 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
         title={`Mesa ${t.number} · ${i.statusLabel}`}
       >
         <span className="leading-none">{t.number}</span>
+        {i.minutes != null ? (
+          <span className="mt-0.5 text-[10px] leading-none font-medium num" style={{ color: i.alerta === 'err' ? 'var(--err)' : i.alerta === 'warn' ? 'var(--warn)' : 'var(--text-muted)' }}>
+            {i.minutes >= 60 ? `${Math.floor(i.minutes / 60)}h${String(i.minutes % 60).padStart(2, '0')}` : `${i.minutes}m`}
+          </span>
+        ) : null}
         <span className="mt-1 h-1.5 w-1.5 rounded-full" style={{ background: i.dotColor }} />
       </button>
     );
