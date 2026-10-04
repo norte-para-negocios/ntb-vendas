@@ -4979,6 +4979,8 @@ NOTIFY pgrst, 'reload schema';`;
                 );
             })()}
 
+            {/* Janelas de Mover/Cancelar item abrem POR CIMA da janela da Mesa (mesmo z-50, ordem do DOM as deixava por baixo): o wrapper cria um contexto de empilhamento mais alto. */}
+            <div className="relative z-[60]">
             <Modal isOpen={!!moveItemDlg} onClose={() => !moveItemDlg?.enviando && setMoveItemDlg(null)} title="Mover item para outra mesa" size="sm">
                 {moveItemDlg && (
                     <div className="space-y-4">
@@ -5027,6 +5029,8 @@ NOTIFY pgrst, 'reload schema';`;
             </Modal>
 
             {/* MODAL DA MESA */}
+            </div>
+
             {/* 2026-09-22: "Adicionar Pedido" (showMenuMode) saiu deste modal
                 pequeno pra virar tela cheia própria (ver bloco logo abaixo do
                 fechamento deste Modal) — pedido explícito do dono: cardápio
