@@ -5,6 +5,19 @@ pelo que o Sertão realmente precisa (restaurante de praia, ~200 mesas, vários 
 cozinha, NFC-e direta, Omie). Descartados pelo dono: Pix na mesa, iFood, fidelidade, ranking de garçom, fila de espera.
 Pesquisa de PDVs brasileiros (Saipos, Consumer, Linx Degust, Colibri, Goomer, Cardápio Web, Anota AI) incorporada em 04/10.
 
+## Status (04/10, tudo commitado, aguardando migrations 147–153 + deploy após o fechamento)
+
+| # | Feature | Estado |
+|---|---|---|
+| 1 | Exceções + motivo no cancelamento | feito (migration 150, aba Administração → Exceções) |
+| 2 | Esgotado em tempo real | feito (151; botão no menu do garçom, selo no cliente, trava no servidor) |
+| 3 | Transferir item entre mesas | feito (152) |
+| 4 | Alergênicos | feito (etiquetas `alergia_*` + destaque na comanda) |
+| 5 | Preço por horário | feito (153, aba Loja → Preço por horário) |
+| 6 | Tempo de ocupação na planta | feito |
+| 7 | Permissões granulares | não aplicável: o app não tem desconto manual, item aberto nem alteração de preço pelo operador |
+| 8–9 | Compras e CMV real | projeto próprio, não iniciado |
+
 ## Ordem de execução
 
 | # | Feature | Esforço | Por quê | Depende de |
