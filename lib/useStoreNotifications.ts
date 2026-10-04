@@ -113,7 +113,6 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
   }, []);
 
   const carregarRapido = useCallback(async (idadeProprio = IDADE_MAX_MS) => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) { setPausado(true); return; }
     setPausado(false);
     const detectados: Detectado[] = [];
     const vistos: TipoNotificacao[] = [];
@@ -158,7 +157,6 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
   const carregarLento = useCallback(async () => {
     const { publicos: pu } = ctxRef.current;
     if (!pu.includes('gerencia') && !pu.includes('caixa')) return;
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     const detectados: Detectado[] = [];
     const vistos: TipoNotificacao[] = [];
     const agora = Date.now();

@@ -26,6 +26,8 @@ export interface QueuedAction {
   createdAt: number;
   attempts: number;
   lastError?: string;
+  // Quantas vezes a ação foi rearmada sozinha depois de parar por falta de rede (limite: 1, ver sync.ts).
+  rearmes?: number;
 }
 
 export interface CachedMenu {

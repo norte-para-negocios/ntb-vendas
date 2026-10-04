@@ -690,7 +690,7 @@ function start(storeId, options) {
     if (Date.now() - ultimaVarreduraTravados < 60000) return;
     ultimaVarreduraTravados = Date.now();
     try {
-      const limite = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const limite = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       await rest(`print_jobs?store_id=eq.${storeId}&status=eq.printing&created_at=lt.${limite}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'error', error_message: 'Travou durante a impressão. Confira o papel e reenvie pela aba Impressão.' }),
@@ -698,7 +698,9 @@ function start(storeId, options) {
       // Job que ninguém pegou dentro da janela de idade nunca será impresso (o ciclo ignora): em vez de ficar
       // "pendente" para sempre sem alarme, vira erro visível e reenviável.
       const limitePendente = new Date(Date.now() - IDADE_MAXIMA_JOB_MS - 60 * 1000).toISOString();
-      await rest(`print_jobs?store_id=eq.${storeId}&status=eq.pending&created_at=lt.${limitePendente}`, {
+      // Só as últimas 6 h: o acumulado de uma noite inteira não vira uma rajada de alarmes na manhã seguinte.
+      const pisoPendente = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+      await rest(`print_jobs?store_id=eq.${storeId}&status=eq.pending&created_at=lt.${limitePendente}&created_at=gt.${pisoPendente}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'error', error_message: 'Ninguém imprimiu a tempo (impressora fora do ar ou computador dela desligado). Reenvie pela aba Impressão se ainda precisar.' }),
       });

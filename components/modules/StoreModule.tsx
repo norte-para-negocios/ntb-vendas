@@ -3547,8 +3547,11 @@ END $$;
 NOTIFY pgrst, 'reload schema';`;
 
     const loadDataSeq = useRef(0);
+    const loadDataAplicado = useRef(0);
     const tablesBoasRef = useRef<Table[]>([]);
     const ordersBoasRef = useRef<Order[]>([]);
+    // Troca de loja: a última lista boa é da loja anterior, nunca pode aparecer na nova.
+    useEffect(() => { tablesBoasRef.current = []; ordersBoasRef.current = []; loadDataAplicado.current = loadDataSeq.current; }, [storeId]);
     const loadData = async () => {
         if(!storeId) return;
         // Nao rebusca `stores` aqui (achado de performance #9): os eventos
@@ -3563,8 +3566,10 @@ NOTIFY pgrst, 'reload schema';`;
             fetchActiveOrdersForTables(storeId),
             buildPendingOrdersForStore(storeId),
         ]);
-        // Resposta mais velha chegando depois de uma mais nova (polling + realtime em rede lenta): descarta.
-        if (seq !== loadDataSeq.current) return;
+        // Resposta mais velha que a última já aplicada (polling + realtime em rede lenta): descarta. Nunca descarta só
+        // porque outra leitura começou depois, senão em horário de pico (rajada de pings) a lista nunca atualizaria.
+        if (seq < loadDataAplicado.current) return;
+        loadDataAplicado.current = seq;
         // Leitura que falhou (rede lenta, timeout) nunca troca uma lista boa por cache velho ou vazio: mesas não somem.
         const t = leituraFalhou(t0) && tablesBoasRef.current.length > 0 ? tablesBoasRef.current : t0;
         const o = leituraFalhou(o0) && ordersBoasRef.current.length > 0 ? ordersBoasRef.current : o0;
@@ -3747,7 +3752,7 @@ NOTIFY pgrst, 'reload schema';`;
             // faltava o mesmo enfileiramento pra impressora USB/rede do
             // caixa que handleFinishPayment já tem, então só o comprovante
             // PÓS-pagamento saía na impressora física; este nunca saía.
-            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? chavePreConta(tableId, activeOrders) : `manual:${tableId}:${Math.floor(Date.now() / 45000)}`, 'pre_conta', automatica)
+            enqueueReceiptPrintJobs(store.id, `Conferência - ${receiptOpts.label}`, (mm) => buildBillReceiptText({ ...receiptOpts, paperWidthMm: mm ?? receiptOpts.paperWidthMm }), automatica ? chavePreConta(tableId, activeOrders) : `manual:${tableId}:${receiptOpts.items.length}:${Math.round(Number(receiptOpts.total) * 100)}:${Math.floor(Date.now() / 45000)}`, 'pre_conta', automatica)
                 .catch((e) => console.error('enqueueReceiptPrintJobs (conferência) falhou:', e));
             // Achado ao vivo na loja Sertão (2026-09-15): com uma impressora
             // USB/rede cadastrada pro destino 'receipt' (ex.: CAIXA), o

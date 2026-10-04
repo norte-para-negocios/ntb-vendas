@@ -56,12 +56,13 @@ export async function getFailedActions(maxAttempts: number): Promise<QueuedActio
 // Zera o contador pra ação voltar a ser elegível na próxima drenagem. NÃO
 // tenta sincronizar aqui — quem chama decide (ver retryFailedAction em
 // sync.ts, que dispara o runSync logo em seguida).
-export async function resetActionAttempts(id: string): Promise<void> {
+export async function resetActionAttempts(id: string, rearmeAutomatico = false): Promise<void> {
   const db = await getOfflineDb();
   const action = await db.get('queue', id);
   if (!action) return;
   action.attempts = 0;
   action.lastError = undefined;
+  if (rearmeAutomatico) action.rearmes = (action.rearmes ?? 0) + 1;
   await db.put('queue', action);
 }
 

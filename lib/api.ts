@@ -171,12 +171,12 @@ export const authenticateStoreUser = async (email: string, password: string): Pr
       p_password: password,
     });
 
-    if (error) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
-    if (!data?.success) {
+    if (error || data == null) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    if (!data.success) {
       return {
         success: false,
-        reason: data?.locked ? 'locked' : 'wrong',
-        message: data?.locked ? 'Muitas tentativas incorretas. Aguarde 5 minutos.' : 'Usuário ou senha incorretos.',
+        reason: data.locked ? 'locked' : 'wrong',
+        message: data.locked ? 'Muitas tentativas incorretas. Aguarde 5 minutos.' : 'Usuário ou senha incorretos.',
       };
     }
 
@@ -3387,7 +3387,7 @@ export const fetchRecentPrintJobs = async (storeId: string, limit: number = 30):
 // created_at (mesmo id, timeline continua no mesmo card) pro agente
 // local pegar de novo na próxima consulta.
 export const retryPrintJob = async (id: string): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.from('print_jobs').update({ status: 'pending', error_message: null, printed_at: null }).eq('id', id);
+  const { error } = await supabase.from('print_jobs').update({ status: 'pending', error_message: null, printed_at: null, created_at: new Date().toISOString() }).eq('id', id);
   if (error) { console.error('Error retrying print job:', error); return { success: false, message: error.message }; }
   return { success: true };
 };
@@ -3468,32 +3468,45 @@ export type ResultadoSenhaEquipe =
   | { success: true; user_id: string; name: string; role: string }
   | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline'; seconds?: number };
 
-// Cache local das senhas JÁ conferidas neste aparelho (só o hash salgado, nunca a senha): sem internet o pedido não pode
-// travar na conferência. Só vale para quem já passou pela conferência online aqui; senha nova offline continua recusada.
-const CHAVE_SENHAS_OFFLINE = 'ntb-senhas-conferidas';
-async function hashSenhaLocal(storeId: string, senha: string): Promise<string | null> {
+// Cache local das senhas JÁ conferidas neste aparelho (nunca a senha: PBKDF2 com salt aleatório por entrada): sem
+// internet o pedido não pode travar na conferência. Vale 12 h e só para quem já passou pela conferência online aqui;
+// ao conferir online, a senha antiga da mesma pessoa deixa de valer. Senha nova offline continua recusada.
+const CHAVE_SENHAS_OFFLINE = 'ntb-senhas-conferidas-v2';
+const VALIDADE_SENHA_OFFLINE_MS = 12 * 60 * 60 * 1000;
+type SenhaConferida = { salt: string; hash: string; storeId: string; user_id: string; name: string; role: string; em: number };
+const hex = (b: ArrayBuffer | Uint8Array) => Array.from(b instanceof Uint8Array ? b : new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
+async function derivarSenha(senha: string, saltHex: string): Promise<string | null> {
   try {
-    const dados = new TextEncoder().encode(`ntb|${storeId}|${senha}`);
-    const h = await crypto.subtle.digest('SHA-256', dados);
-    return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const salt = new Uint8Array((saltHex.match(/../g) || []).map((h) => parseInt(h, 16)));
+    const chave = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveBits']);
+    return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 60000, hash: 'SHA-256' }, chave, 256));
   } catch { return null; }
 }
-function lerSenhasConferidas(): Record<string, { user_id: string; name: string; role: string }> {
-  try { return JSON.parse(localStorage.getItem(CHAVE_SENHAS_OFFLINE) || '{}'); } catch { return {}; }
+function lerSenhasConferidas(): SenhaConferida[] {
+  try {
+    const lista = JSON.parse(localStorage.getItem(CHAVE_SENHAS_OFFLINE) || '[]');
+    return Array.isArray(lista) ? lista.filter((x: SenhaConferida) => Date.now() - x.em < VALIDADE_SENHA_OFFLINE_MS) : [];
+  } catch { return []; }
 }
 // Quem entrou com login online também deixa a própria senha conferida neste aparelho (pedido offline logo depois do login).
 export const registrarSenhaConferida = async (storeId: string, senha: string, user: { id: string; name: string; role: string }) => {
-  const h = await hashSenhaLocal(storeId, senha);
-  if (!h) return;
-  try { const m = lerSenhasConferidas(); m[h] = { user_id: user.id, name: user.name, role: user.role }; localStorage.setItem(CHAVE_SENHAS_OFFLINE, JSON.stringify(m)); } catch { /* sem cache, segue */ }
+  try {
+    const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+    const hash = await derivarSenha(senha, salt);
+    if (!hash) return;
+    const outras = lerSenhasConferidas().filter((x) => !(x.storeId === storeId && x.user_id === user.id));
+    localStorage.setItem(CHAVE_SENHAS_OFFLINE, JSON.stringify([...outras, { salt, hash, storeId, user_id: user.id, name: user.name, role: user.role, em: Date.now() }]));
+    localStorage.removeItem('ntb-senhas-conferidas'); // formato antigo (sem salt), nunca mais usado
+  } catch { /* sem cache, segue */ }
 };
 export const verificarSenhaEquipe = async (storeId: string, senha: string): Promise<ResultadoSenhaEquipe> => {
   const { data, error } = await supabase.rpc('verify_store_staff_password_secure', { p_store_id: storeId, p_password: senha });
   if (error || !data) {
-    if (!isNetworkError(error)) return { success: false, error: 'invalid' };
-    const h = await hashSenhaLocal(storeId, senha);
-    const achado = h ? lerSenhasConferidas()[h] : undefined;
-    if (achado) return { success: true, user_id: achado.user_id, name: achado.name, role: achado.role };
+    if (error && !isNetworkError(error)) return { success: false, error: 'invalid' };
+    for (const x of lerSenhasConferidas().filter((c) => c.storeId === storeId)) {
+      // eslint-disable-next-line no-await-in-loop -- poucas pessoas por aparelho
+      if ((await derivarSenha(senha, x.salt)) === x.hash) return { success: true, user_id: x.user_id, name: x.name, role: x.role };
+    }
     return { success: false, error: 'offline' };
   }
   const r = data as ResultadoSenhaEquipe;

@@ -272,7 +272,9 @@ export async function runSync(): Promise<void> {
     // para sempre): rearma. Erro de regra de negócio (esgotado, inválido) continua parado para o operador decidir.
     try {
       for (const a of await getFailedActions(MAX_ATTEMPTS)) {
-        if (a.lastError && isNetworkError({ message: a.lastError })) await resetActionAttempts(a.id);
+        // No máximo 1 rearme por ação: create_order não é idempotente no servidor, então reenviar sem limite poderia
+        // duplicar um pedido que chegou mas cuja resposta se perdeu.
+        if ((a.rearmes ?? 0) < 1 && a.lastError && isNetworkError({ message: a.lastError })) await resetActionAttempts(a.id, true);
       }
     } catch { /* sem rearmar: segue */ }
 
@@ -294,6 +296,8 @@ export async function runSync(): Promise<void> {
         await processAction(action, idMap);
         await markDone(action.id);
       } catch (e) {
+        // Falta de rede não é falha da ação: não gasta tentativa, encerra a rodada e tenta de novo no próximo ciclo.
+        if (isNetworkError(e)) break;
         await markFailed(action.id, (e as Error).message || 'Erro desconhecido');
         // Continua pra próxima ação da fila mesmo com esta falhando —
         // Global Constraint: uma falha nunca trava as ações seguintes.

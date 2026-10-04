@@ -22,7 +22,10 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   // Só LEITURAS falham na hora por esse aviso. Escrita e login sempre tentam a rede de verdade: a fila offline já
   // trata o erro de rede, e bloquear o login/pedido por um ping ruim foi o que travou o Sertão em 04/10.
   const method = (init?.method || (typeof input === 'object' && 'method' in input ? input.method : 'GET')).toUpperCase();
-  const ehLeitura = method === 'GET' || method === 'HEAD' || url.includes('/rest/v1/rpc/fetch_');
+  // Leituras: GET/HEAD e RPCs de consulta (fetch_*, get_*, count_*), inclusive get_tables_secure, que é POST.
+  const ehLeitura = method === 'GET' || method === 'HEAD' || /\/rest\/v1\/rpc\/(fetch_|get_|count_)/.test(url);
+  // Relatórios de período longo podem passar de 15 s com a internet boa: teto próprio, para não "falhar como rede".
+  const ehRelatorio = /\/rest\/v1\/rpc\/fetch_(sales_history|exceptions_report|cash_shifts_history)/.test(url);
   const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
   if (ehLeitura && off && Date.now() - off < OFFLINE_FLAG_MS && url.includes('/rest/v1/') && !url.endsWith('/rest/v1/')) {
     return Promise.reject(new TypeError('Failed to fetch (offline detectado)'));
@@ -35,8 +38,9 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   // Escrita que já chegou no servidor não pode ser abortada: a fila offline reenviaria e duplicaria o pedido.
   if (!ehLeitura && !ehLogin) return fetch(input, init).then(limpaAviso);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ehLogin ? LOGIN_TIMEOUT_MS : REST_TIMEOUT_MS);
-  init?.signal?.addEventListener('abort', () => controller.abort());
+  const timer = setTimeout(() => controller.abort(), ehLogin ? LOGIN_TIMEOUT_MS : ehRelatorio ? 60000 : REST_TIMEOUT_MS);
+  if (init?.signal?.aborted) controller.abort();
+  init?.signal?.addEventListener('abort', () => controller.abort(), { once: true });
   return fetch(input, { ...init, signal: controller.signal }).then(limpaAviso).finally(() => clearTimeout(timer));
 };
 

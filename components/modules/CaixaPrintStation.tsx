@@ -755,10 +755,12 @@ async function reconcileDestination(
     // rastreamento de erro logo abaixo.
     // Resultado de cada envio à fila: antes o item era marcado como impresso SEM esperar o INSERT, e uma falha de rede
     // fazia o pedido sumir da fila de candidatos para sempre (nunca saía no papel, nem reaparecia).
-    let envios: Promise<{ success: boolean; message?: string }>[] = [];
+    type Envio = { success: boolean; message?: string };
+    let envios: Promise<Envio>[] = [];
+    let enfileirar: (() => Promise<Envio>[]) | null = null;
     if (printersForItem.length > 0) {
       const ids = itens.map((it) => it.id).sort();
-      envios = printersForItem.map((printer) => {
+      enfileirar = () => printersForItem.map((printer) => {
         // Largura do papel DESTA impressora (80 mm = 48 colunas, 58 mm = 32): o layout em colunas depende dela.
         const content = buildKitchenTicketText({ ...dadosTicket, paperWidthMm: printer.paper_width_mm, modoDireto: printer.print_mode === 'raw', titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined });
         // `dedupeKey` (migration 073): o dedupe desta tela é `printedIds` no
@@ -774,7 +776,15 @@ async function reconcileDestination(
         return enqueuePrintJob({ storeId, printerConfigId: printer.id, destination, title: description, content, dedupeKey })
           .catch((e) => { console.error('enqueuePrintJob (auto) falhou:', e); return { success: false, message: String(e?.message ?? e) }; });
       });
+      envios = enfileirar();
     }
+    // Teto de 20 s para o INSERT da fila: escrita não tem timeout no cliente, e um envio pendurado seguraria a trava do
+    // reconcile, parando a impressão automática inteira. Estourou = falha; o próximo ciclo reenvia (dedupe no banco).
+    const comTeto = (ps: Promise<Envio>[]) => Promise.race([
+      Promise.all(ps),
+      new Promise<Envio[]>((res) => setTimeout(() => res([{ success: false, message: 'tempo esgotado ao enfileirar' }]), 20000)),
+    ]);
+    const enviosOk = (rs: Envio[]) => !rs.some((r) => !r.success && !/desativadas/i.test(r.message || ''));
 
     const doPrint = async (manual = false) => {
       // try/catch: printKitchenTicket é Promise<boolean>, não um contrato
@@ -796,9 +806,8 @@ async function reconcileDestination(
     // eslint-disable-next-line no-await-in-loop -- impressão sequencial de propósito: dois print() quase simultâneos empilhariam diálogos nativos no mesmo instante.
     let ok: boolean;
     if (printersForItem.length > 0) {
-      const resultados = await Promise.all(envios);
       // "Impressões desativadas" é decisão da loja, não falha: não fica tentando de novo.
-      ok = !resultados.some((r) => !r.success && !/desativadas/i.test(r.message || ''));
+      ok = enviosOk(await comTeto(envios));
     } else {
       ok = await doPrint();
     }
@@ -812,7 +821,10 @@ async function reconcileDestination(
       }
     } else {
       const attempts = (fail?.attempts || 0) + 1;
-      failedRef.current.set(key, { key, description, attempts, retry: doPrint, itemIds: itens.map((it) => it.id) });
+      // Com impressora cadastrada, "Tentar de novo" reenfileira para ELA (nunca window.print na impressora padrão).
+      const refazer = enfileirar;
+      const retry = refazer ? async () => enviosOk(await comTeto(refazer())) : doPrint;
+      failedRef.current.set(key, { key, description, attempts, retry, itemIds: itens.map((it) => it.id) });
       setFailedItems(new Map(failedRef.current));
     }
   }
@@ -1068,9 +1080,10 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
 
   useEffect(() => {
     if (!isBrowser()) return;
-    setOnline(navigator.onLine);
+    // navigator.onLine fica false no Windows com a rede funcionando: não decide nada (o alarme dispara pela falha real).
+    setOnline(true);
     const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
+    const goOffline = () => { /* ignorado: ver acima */ };
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
     return () => {
