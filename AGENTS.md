@@ -2630,3 +2630,11 @@ node scripts/e2e/fluxo-completo.mjs --limpar    # desfaz o que uma execução in
   `scripts/e2e/.estado-portao.json` (ignorado pelo git); capturas de falha e relatório em `scripts/e2e/.out/` (ignorado).
 - **Ao mudar telas/seletores**: o fluxo usa rótulos da interface (`Gestão de Mesas`, `Adicionar Pedido`, `Ver Comanda`, `Pedir conta`, `Receber pagamento`,
   `Fechar caixa`...). Renomear um deles exige atualizar o fluxo no mesmo commit.
+- **Achados reais que o portão já pega (04/10/2026, contra o código da `main` de então)** — viram FALHOU/ESPERADO até alguém corrigir: (1) as funções antigas
+  `cancel_order_item_secure`/`move_table_secure`/`transfer_items_secure`/`cancel_pending_table_items_secure` continuam executáveis pela chave anônima (o garçom
+  contorna a regra chamando direto; falta a migration que revoga o `execute`, ver fim da 159) [ESPERADO]; (2) a tela de Impressão ainda diz "Pré-conta (comanda)" e
+  "Comanda (pedidos)" [ESPERADO, vocabulário PEDIDO x COMANDA]; (3) o Histórico mostra "4 itens" e lista, sem riscar, o item que o gerente cancelou, e o Excel (aba
+  Vendas, "Total do pedido") soma esse item cancelado (131,60 contra 111,70 dos itens e 122,87 recebidos) [FALHOU]; (4) o detalhe da venda no Histórico não mostra quem
+  lançou cada item [ESPERADO]. Observado e fora do portão: `create_order_secure` REAPROVEITA qualquer pedido `pending` da mesa, mesmo de 3 dias atrás, e aí a venda
+  de hoje fica com `created_at` antigo (Histórico/Excel filtram por `orders.created_at`, então a venda cai no dia errado); sem impressora cadastrada, TODO aparelho
+  logado imprime o mesmo pedido na própria janela de impressão (só a fila `print_jobs` barra duplicata entre aparelhos).
