@@ -1,7 +1,7 @@
 // rodar com: npx tsx scripts/testes/fechamentoXlsx.test.ts
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import { buildFechamentoWorkbook, fechamentoFileName, safeCell, type FechamentoData } from '../../lib/reports/fechamentoXlsx';
+import { buildFechamentoWorkbook, fechamentoFileName, safeCell, horaBahia, type FechamentoData } from '../../lib/reports/fechamentoXlsx';
 
 assert.equal(fechamentoFileName('sertao', '2026-10-03'), 'fechamento_2026-10-03_sertao.xlsx');
 assert.equal(safeCell('=1+1'), "'=1+1");
@@ -63,6 +63,11 @@ const base: FechamentoData = {
   await vrt.xlsx.load(vbuf as ArrayBuffer);
   assert.equal(vrt.getWorksheet('Vendas')!.getRow(1).getCell(1).value, 'Data');
   assert.equal(vrt.getWorksheet('Caixa')!.getRow(1).getCell(1).value, 'Operador');
+
+  // Fuso: 22:00Z é 19:00 em Bahia; a célula tem que mostrar 19h, não 22h
+  assert.equal(horaBahia('2026-10-03T22:00:00Z').getUTCHours(), 19);
+  assert.equal((vendas.getRow(2).getCell(1).value as Date).getUTCHours(), 19, 'data da venda no relógio de Bahia');
+  assert.equal(vendas.getRow(2).getCell(6).value, 'Visa', 'bandeira com rótulo, não o código');
 
   // Review Focus 3: mesma conta (mesa) com 2 pedidos e o MESMO pagamento: recebido só uma vez
   const dupla: FechamentoData = { ...base, vendas: [

@@ -4,13 +4,17 @@ import type { Order } from '@/types';
 import type { CashShiftSummary } from '../api';
 import type { ExceptionEvent } from '../excecoes';
 import { completarFormas, completarCartoes, ticketMedio } from '../caixaResumo';
-import { getPaymentMethodLabel, getCardTotalLabel } from '../labels';
+import { getPaymentMethodLabel, getCardTotalLabel, getCardBrandLabel } from '../labels';
 
 export interface FechamentoTurno { operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
 export interface FechamentoData { loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
 
 const BRL = '"R$" #,##0.00';
 const HEAD_FILL = 'FF2B2E83';
+
+// O Excel não guarda fuso: grava o instante como relógio de parede. Desloca -3h (Bahia, sem horário de verão)
+// pra célula mostrar a hora que o restaurante viveu (22h16 continua 22h16, não 01h16 do dia seguinte).
+export const horaBahia = (d: Date | string): Date => new Date(new Date(d).getTime() - 3 * 3600 * 1000);
 
 export const fechamentoFileName = (lojaSlug: string, dia: string): string => `fechamento_${dia}_${lojaSlug}.xlsx`;
 
@@ -92,14 +96,14 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
     { header: 'Fundo', width: 14, fmt: BRL }, { header: 'Esperado em dinheiro', width: 20, fmt: BRL }, { header: 'Contado', width: 14, fmt: BRL }, { header: 'Diferença', width: 14, fmt: BRL },
   ]);
   d.turnos.forEach((t, i) => {
-    const r = cx.addRow([safeCell(t.operador), new Date(t.abertoEm), t.fechadoEm ? new Date(t.fechadoEm) : null, t.fundo, t.resumo.expected_cash, t.contado, null]);
+    const r = cx.addRow([safeCell(t.operador), horaBahia(t.abertoEm), t.fechadoEm ? horaBahia(t.fechadoEm) : null, t.fundo, t.resumo.expected_cash, t.contado, null]);
     if (t.contado != null) r.getCell(7).value = { formula: `F${i + 2}-E${i + 2}`, result: t.contado - t.resumo.expected_cash };
   });
 
   // 5. Vendas (um pedido por linha; o recebido da conta fica na linha do 1º pedido pra não somar em dobro)
   const vd = wb.addWorksheet('Vendas');
   headerRow(vd, [
-    { header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Mesa/Balcão', width: 12 }, { header: 'Cliente', width: 24 }, { header: 'Operador', width: 18 },
+    { header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Mesa/Balcão', width: 12 }, { header: 'Cliente / lançado por', width: 24 }, { header: 'Operador', width: 18 },
     { header: 'Forma', width: 20 }, { header: 'Bandeira', width: 14 }, { header: 'Total do pedido', width: 16, fmt: BRL }, { header: 'Recebido da conta', width: 18, fmt: BRL }, { header: 'Status', width: 12 },
   ]);
   const contasVistas = new Set<string>();
@@ -110,8 +114,8 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
     const recebidoConta = !contasVistas.has(chave) ? methods.reduce((s, m) => s + Number(m.amount), 0) : 0;
     contasVistas.add(chave);
     vd.addRow([
-      new Date(o.created_at), o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as any).tables?.number ?? ''}`, safeCell(o.customer_name ?? ''), safeCell(pd.operador_nome ?? ''),
-      methods.map((m) => getPaymentMethodLabel(m.method)).join(' + '), methods.map((m) => m.brand ?? '').filter(Boolean).join(' + '),
+      horaBahia(o.created_at), o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as any).tables?.number ?? ''}`, safeCell(o.customer_name ?? ''), safeCell(pd.operador_nome ?? ''),
+      methods.map((m) => getPaymentMethodLabel(m.method)).join(' + '), methods.map((m) => (m.brand ? getCardBrandLabel(m.brand) : '')).filter(Boolean).join(' + '),
       Number(o.total), recebidoConta, o.status === 'canceled' ? 'Cancelada' : 'Entregue',
     ]);
   });
@@ -122,7 +126,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   headerRow(it, [{ header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Mesa/Balcão', width: 12 }, { header: 'Produto', width: 36 }, { header: 'Qtd', width: 8 }, { header: 'Unitário', width: 14, fmt: BRL }, { header: 'Subtotal', width: 14, fmt: BRL }]);
   let linhaItem = 2;
   d.vendas.forEach((o) => (o.order_items ?? []).filter((i) => i.status !== ('canceled' as any)).forEach((i) => {
-    it.addRow([new Date(o.created_at), o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as any).tables?.number ?? ''}`, safeCell(i.product?.name ?? 'Produto'), i.quantity, Number(i.price_at_time), { formula: `D${linhaItem}*E${linhaItem}`, result: i.quantity * Number(i.price_at_time) }]);
+    it.addRow([horaBahia(o.created_at), o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as any).tables?.number ?? ''}`, safeCell(i.product?.name ?? 'Produto'), i.quantity, Number(i.price_at_time), { formula: `D${linhaItem}*E${linhaItem}`, result: i.quantity * Number(i.price_at_time) }]);
     linhaItem += 1;
   }));
   if (linhaItem > 2) it.autoFilter = { from: 'A1', to: `F${linhaItem - 1}` };
@@ -132,7 +136,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   headerRow(ex, [{ header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Operador', width: 20 }, { header: 'Tipo', width: 24 }, { header: 'Produto/Detalhe', width: 30 }, { header: 'Valor', width: 14, fmt: BRL }, { header: 'Motivo', width: 30 }]);
   d.excecoes.forEach((e) => {
     const det = e.details as Record<string, unknown>;
-    ex.addRow([new Date(e.created_at), safeCell(e.operator_name), e.event_type, safeCell(String(det.produto ?? '')), Number(det.valor ?? 0), safeCell(String(det.motivo ?? ''))]);
+    ex.addRow([horaBahia(e.created_at), safeCell(e.operator_name), e.event_type, safeCell(String(det.produto ?? '')), Number(det.valor ?? 0), safeCell(String(det.motivo ?? ''))]);
   });
 
   // Rodapé de impressão
