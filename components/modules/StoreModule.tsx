@@ -21,6 +21,8 @@ import { ProductThumb } from '@/components/ProductThumb';
 import { formatAppVersion } from '@/lib/appVersion';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { FloorPlanView } from './FloorPlanView';
+import { ExceptionsReportView } from './ExceptionsReportView';
+import { resolveCancelReasons } from '@/lib/excecoes';
 import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
@@ -2996,6 +2998,7 @@ const TablesView: React.FC<{
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
     const [showMoveTableModal, setShowMoveTableModal] = useState(false);
+    const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; enviando: boolean } | null>(null);
     // Planta de mesas (floor plan): alterna Lista/Mapa; a escolha fica no aparelho.
     const [tablesViewMode, setTablesViewMode] = useState<'lista' | 'mapa'>(() => {
         try { return localStorage.getItem('tables_view_mode') === 'mapa' ? 'mapa' : 'lista'; } catch { return 'lista'; }
@@ -4447,15 +4450,25 @@ NOTIFY pgrst, 'reload schema';`;
         if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
         const nomeItem = itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item';
-        if(await confirm(`Cancelar ${nomeItem} da comanda?`)) {
-            try {
-                const ok = await cancelSpecificOrderItem(itemId, loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name);
-                if (!ok) { toast.error("Erro ao cancelar item."); return; }
-                if (itemAlvo && selectedTable) await imprimirCancelamento([itemAlvo], selectedTable.number);
-                // Realtime will update the list
-            } catch(e) {
-                toast.error("Erro ao cancelar item.");
-            }
+        // Motivo obrigatório (migration 150): abre o diálogo de motivo; o cancelamento sai em confirmarCancelamentoItem.
+        setCancelItemDlg({ itemId, nome: nomeItem, motivo: '', outro: '', enviando: false });
+    };
+
+    const confirmarCancelamentoItem = async () => {
+        const dlg = cancelItemDlg;
+        if (!dlg || dlg.enviando) return;
+        const motivoFinal = (dlg.motivo === 'Outro' ? dlg.outro.trim() : dlg.motivo).trim();
+        if (!motivoFinal) { toast.error('Escolha o motivo do cancelamento.'); return; }
+        setCancelItemDlg({ ...dlg, enviando: true });
+        const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === dlg.itemId) : undefined;
+        try {
+            const ok = await cancelSpecificOrderItem(dlg.itemId, loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name, motivoFinal);
+            if (!ok) { toast.error("Erro ao cancelar item."); setCancelItemDlg(null); return; }
+            if (itemAlvo && selectedTable) await imprimirCancelamento([itemAlvo], selectedTable.number, motivoFinal);
+            setCancelItemDlg(null);
+        } catch (e) {
+            toast.error("Erro ao cancelar item.");
+            setCancelItemDlg(null);
         }
     };
 
@@ -4483,7 +4496,7 @@ NOTIFY pgrst, 'reload schema';`;
             const cancelados: OrderItem[] = [];
             for (const it of itens) {
                 // eslint-disable-next-line no-await-in-loop -- um por vez: ordem e falha parcial ficam claras
-                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name)) cancelados.push(it);
+                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name, cancelarMotivo.trim() || 'Pedido cancelado pelo gerente')) cancelados.push(it);
             }
             if (cancelados.length > 0) await imprimirCancelamento(cancelados, selectedTable.number, cancelarMotivo.trim() || undefined);
             if (cancelados.length === itens.length) toast.success('Pedido cancelado.');
@@ -4866,6 +4879,29 @@ NOTIFY pgrst, 'reload schema';`;
                     </>
                 );
             })()}
+
+            <Modal isOpen={!!cancelItemDlg} onClose={() => !cancelItemDlg?.enviando && setCancelItemDlg(null)} title="Cancelar item" size="sm">
+                {cancelItemDlg && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-[var(--text)]">Cancelar <b>{cancelItemDlg.nome}</b> da comanda? Escolha o motivo:</p>
+                        <div className="space-y-2" role="radiogroup" aria-label="Motivo do cancelamento">
+                            {resolveCancelReasons(store.config as any).map((r) => (
+                                <label key={r} className={`flex items-center gap-2 min-h-11 px-3 rounded-xl border cursor-pointer text-[15px] ${cancelItemDlg.motivo === r ? 'border-[var(--brand)] bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}>
+                                    <input type="radio" name="motivo-cancelamento" checked={cancelItemDlg.motivo === r} onChange={() => setCancelItemDlg({ ...cancelItemDlg, motivo: r })} />
+                                    {r}
+                                </label>
+                            ))}
+                        </div>
+                        {cancelItemDlg.motivo === 'Outro' && (
+                            <Input placeholder="Descreva o motivo" value={cancelItemDlg.outro} onChange={(e) => setCancelItemDlg({ ...cancelItemDlg, outro: e.target.value })} maxLength={120} />
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button variant="secondary" onClick={() => setCancelItemDlg(null)} disabled={cancelItemDlg.enviando}>Voltar</Button>
+                            <Button variant="danger" onClick={confirmarCancelamentoItem} isLoading={cancelItemDlg.enviando}>Cancelar item</Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             {/* MODAL DA MESA */}
             {/* 2026-09-22: "Adicionar Pedido" (showMenuMode) saiu deste modal
@@ -11134,7 +11170,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'settings' | 'cupons'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'settings' | 'cupons' | 'excecoes'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -11532,6 +11568,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         ]},
         { label: 'Operação', icon: <Wallet size={14} />, tabs: [
             { id: 'shifts', label: 'Turnos' },
+            ...(podeVerCaixasDaEquipe(loggedUser) ? [{ id: 'excecoes', label: 'Exceções' }] : []),
             { id: 'impressao', label: 'Impressão' },
         ]},
         { label: 'Time', icon: <Users size={14} />, tabs: [
@@ -12012,6 +12049,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
+            {activeTab === 'excecoes' && podeVerCaixasDaEquipe(loggedUser) && <ExceptionsReportView storeId={storeId} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">

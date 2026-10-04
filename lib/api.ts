@@ -1572,13 +1572,22 @@ export const updateOrderItemStatus = async (itemId: string, status: OrderStatus)
   }
 };
 
-export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string): Promise<boolean> => {
+export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: string | null, operatorName?: string, reason?: string | null): Promise<boolean> => {
   const { error } = await supabase.rpc('cancel_order_item_secure', {
     p_item_id: itemId,
     p_operator_user_id: operatorUserId ?? null,
     p_operator_name: operatorName ?? null,
+    p_reason: reason ?? null,
   });
   return !error;
+};
+
+// Relatório de exceções do período (migration 150). Vazio se a RPC ainda não existe (app novo, banco antigo).
+export const fetchExceptionsReport = async (storeId: string, from: Date, to: Date): Promise<import('@/lib/excecoes').ExceptionsReport> => {
+  const vazio = { by_operator: [], events: [], notas_canceladas: { count: 0, valor: 0 } };
+  const { data, error } = await supabase.rpc('fetch_exceptions_report_secure', { p_store_id: storeId, p_from: from.toISOString(), p_to: to.toISOString() });
+  if (error || !data) { if (error) console.error('fetchExceptionsReport falhou:', error); return vazio; }
+  return data as import('@/lib/excecoes').ExceptionsReport;
 };
 
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
