@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/planta.test.ts
 import assert from 'node:assert/strict';
-import { autoLayout, resolverPosicoes, colunasIdeais, larguraMinimaPx, snap, soltar, rotulosDeArea, areasDe, mesasNoIntervalo, dividirEmLotes, MARGEM, ASPECTO, type MesaPlanta, type Pos } from '../../lib/planta';
+import { colunasSalvas, autoLayout, resolverPosicoes, colunasIdeais, larguraMinimaPx, snap, soltar, rotulosDeArea, areasDe, mesasNoIntervalo, dividirEmLotes, MARGEM, ASPECTO, type MesaPlanta, type Pos } from '../../lib/planta';
 
 const mk = (n: number, extra: Partial<MesaPlanta> = {}): MesaPlanta => ({ id: `m${n}`, number: n, ...extra });
 const lista = (q: number) => Array.from({ length: q }, (_, i) => mk(i + 1));
@@ -101,4 +101,14 @@ assert.deepEqual(mesasNoIntervalo(lista(10), 20, 30), []);
 // Lotes
 assert.deepEqual(dividirEmLotes(Array.from({ length: 250 }, (_, i) => i), 100).map((l) => l.length), [100, 100, 50]);
 assert.deepEqual(dividirEmLotes([], 100), []);
+// Grade salva ao organizar com áreas (mais colunas que a ideal) continua sendo a grade do encaixe
+const org = lista(25).map((m) => ({ ...m, area: m.number >= 23 ? 'Varanda' : 'Salão' }));
+const orgPos = autoLayout(org, { soFaltantes: false });
+const orgSalvas = org.map((m) => { const p = orgPos.pos.find((q) => q.id === m.id)!; return { ...m, floor_x: p.x, floor_y: p.y }; });
+assert.equal(colunasSalvas(orgSalvas), orgPos.cols, 'infere as colunas da grade salva');
+assert.equal(resolverPosicoes(orgSalvas).cols, orgPos.cols, 'resolver usa a grade salva');
+assert.equal(colunasSalvas(lista(5)), null, 'sem posição salva: sem inferência');
+assert.equal(colunasSalvas([mk(1, { floor_x: 37.3, floor_y: 14.1 })]), null, 'posição fora de grade: sem inferência');
+const comSolta = orgSalvas.map((m, i) => (i === 0 ? { ...m, floor_x: 36.86, floor_y: 14.51 } : m));
+assert.equal(colunasSalvas(comSolta), orgPos.cols, 'uma mesa solta não derruba a inferência');
 console.log('planta: ok');

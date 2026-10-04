@@ -50,12 +50,29 @@ function tentar(faltam: MesaPlanta[], fixas: { x: number; y: number }[], cols: n
   return out;
 }
 
+// Descobre em quantas colunas a grade salva foi desenhada: o menor nº de colunas em que TODAS as posições salvas
+// caem no centro de uma célula (x e y). Sem posições salvas, ou sem grade que explique (arrasto antigo, livre), devolve null.
+// Sem isso, o encaixe usava a grade "ideal" pelo nº de mesas, que difere da grade usada ao organizar com áreas.
+export function colunasSalvas(mesas: MesaPlanta[]): number | null {
+  const salvas = mesas.filter(temPos);
+  if (salvas.length === 0) return null;
+  const alinha = (v: number, ini: number, step: number) => { const k = (v - ini) / step - 0.5; return Math.abs(k - Math.round(k)) * step < 0.02; };
+  // Vale a grade que explica a MAIORIA das posições (uma mesa solta fora de grade não pode derrubar a inferência).
+  let melhor: { cols: number; n: number } | null = null;
+  for (let cols = 6; cols <= 80; cols += 1) {
+    const { stepX, stepY } = passos(cols);
+    const n = salvas.filter((m) => alinha(Number(m.floor_x), MARGEM, stepX) && alinha(Number(m.floor_y), MARGEM, stepY)).length;
+    if (n > (melhor?.n ?? 0)) melhor = { cols, n };
+  }
+  return melhor && melhor.n * 2 > salvas.length ? melhor.cols : null;
+}
+
 export function autoLayout(mesas: MesaPlanta[], opts: { soFaltantes?: boolean } = {}): { pos: Pos[]; cols: number } {
   const soFaltantes = opts.soFaltantes ?? true;
   const ordenadas = [...mesas].sort((a, b) => (a.area ?? '').localeCompare(b.area ?? '', 'pt-BR') || a.number - b.number);
   const fixas = soFaltantes ? ordenadas.filter(temPos).map((m) => ({ x: Number(m.floor_x), y: Number(m.floor_y) })) : [];
   const faltam = soFaltantes ? ordenadas.filter((m) => !temPos(m)) : ordenadas;
-  const base = colunasIdeais(mesas.length);
+  const base = (soFaltantes ? colunasSalvas(mesas) : null) ?? colunasIdeais(mesas.length);
   if (faltam.length === 0) return { pos: [], cols: base };
   for (let cols = base; cols <= 200; cols += 1) {
     const pos = tentar(faltam, fixas, cols);
