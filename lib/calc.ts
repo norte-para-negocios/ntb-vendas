@@ -329,3 +329,16 @@ export function compareProductQuantities(current: ProductQty[], previous: Produc
   const down = all.filter(m => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, limit);
   return { up, down };
 }
+
+// Média de várias estatísticas de dia (comparação "mesmo dia da semana"): total, pedidos, ticket e pedidos de mesa.
+// Ignora lista vazia (devolve null). O ticket médio é recalculado do total/pedidos médios, não média de tickets.
+export interface DayStats { total: number; count: number; ticket: number; tableOrders: number }
+export function averageStats(list: DayStats[]): (DayStats & { days: number }) | null {
+  if (list.length === 0) return null;
+  const n = list.length;
+  const total = Math.round((list.reduce((s, x) => s + x.total, 0) / n) * 100) / 100;
+  const count = list.reduce((s, x) => s + x.count, 0) / n;
+  const tableOrders = list.reduce((s, x) => s + x.tableOrders, 0) / n;
+  const ticket = count > 0 ? Math.round((total / count) * 100) / 100 : 0;
+  return { total, count, ticket, tableOrders, days: n };
+}

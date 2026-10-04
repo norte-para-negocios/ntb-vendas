@@ -10,7 +10,7 @@ import {
 import { subDays, subMonths, isAfter, isBefore, isSameDay, isSameWeek, isSameMonth, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
-import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts, compareProductQuantities } from '@/lib/calc';
+import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts, compareProductQuantities, averageStats } from '@/lib/calc';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { formatDuration } from '@/lib/formatDuration';
 import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, fetchLowStockAlerts, LowStockAlert, CashShift } from '@/lib/api';
@@ -263,6 +263,21 @@ export const StoreDashboardView: React.FC<{
     }, [sales, periodType, periodDays, now]);
 
     const previousPeriodStats = calcStats(previousPeriodSales);
+
+    // Comparação "mesmo dia da semana" (só no filtro Hoje): média dos últimos 4 mesmos dias (sábado x sábados),
+    // que não distorce como "ontem" em restaurante. Dia sem nenhuma venda não entra na média.
+    const [compareMode, setCompareMode] = useState<'previous' | 'weekday'>('previous');
+    const weekdayBaseline = useMemo(() => averageStats(
+        [1, 2, 3, 4]
+            .map((k) => calcStats(sales.filter((o) => isSameDay(new Date(o.created_at), subDays(now, 7 * k)))))
+            .filter((st) => st.count > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    ), [sales, now]);
+    const usandoDiaSemana = periodType === 'today' && compareMode === 'weekday' && weekdayBaseline !== null;
+    const comparisonStats = usandoDiaSemana ? weekdayBaseline! : previousPeriodStats;
+    const comparisonLabel = usandoDiaSemana
+        ? `vs. média dos últimos ${weekdayBaseline!.days} ${format(now, 'EEEE', { locale: ptBR })}s`
+        : 'vs. período anterior';
 
     // undefined = sem base de comparação (período anterior sem nenhuma venda),
     // não mostra a variação em vez de dividir por zero.
@@ -656,6 +671,19 @@ export const StoreDashboardView: React.FC<{
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h2 className="text-[22px] font-bold tracking-[-0.015em] text-[var(--text)]">Por período</h2>
                     <div className="flex flex-wrap items-center gap-2">
+                        {periodType === 'today' && (
+                            <div className="flex items-center gap-1 p-1 rounded-full bg-[var(--surface-2)]" role="tablist" aria-label="Comparar com">
+                                {([['previous', 'Dia anterior'], ['weekday', 'Mesmo dia da semana']] as ['previous' | 'weekday', string][]).map(([id, label]) => (
+                                    <button
+                                        key={id}
+                                        role="tab"
+                                        aria-selected={compareMode === id}
+                                        onClick={() => setCompareMode(id)}
+                                        className={`h-8 max-sm:h-11 px-3 rounded-full text-[13px] font-semibold u-press ${compareMode === id ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
+                                    >{label}</button>
+                                ))}
+                            </div>
+                        )}
                         <select
                             className="h-[38px] max-sm:h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] shadow-[var(--shadow-sm)] text-[var(--text)] focus:ring-2 focus:ring-[var(--brand)]/40 outline-none transition-all text-[15px] max-sm:text-base"
                             value={periodType}
@@ -681,8 +709,8 @@ export const StoreDashboardView: React.FC<{
                     <div>
                         <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={18} className="text-[var(--text-muted)]" /> Faturamento</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Total no período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, previousPeriodStats.total)} />} icon={Receipt} accentColor="var(--brand)" />
-                            <StatCard title="Ticket médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, previousPeriodStats.ticket)} />} icon={TrendingUp} accentColor="var(--info)" />
+                            <StatCard title="Total no período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, comparisonStats.total)} label={comparisonLabel} />} icon={Receipt} accentColor="var(--brand)" />
+                            <StatCard title="Ticket médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, comparisonStats.ticket)} label={comparisonLabel} />} icon={TrendingUp} accentColor="var(--info)" />
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className={`${cardCls} lg:col-span-2`}>
@@ -724,7 +752,7 @@ export const StoreDashboardView: React.FC<{
                     <div>
                         <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={18} className="text-[var(--text-muted)]" /> Pedidos</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Número de pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, previousPeriodStats.count)} />} icon={CheckCircle} accentColor="var(--ok)" />
+                            <StatCard title="Número de pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, comparisonStats.count)} label={comparisonLabel} />} icon={CheckCircle} accentColor="var(--ok)" />
                             <StatCard
                                 title="Tempo médio de atendimento"
                                 value={`${avgDeliveryTime.avg} min`}
