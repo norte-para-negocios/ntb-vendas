@@ -2527,3 +2527,23 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
 - `integracoes` = `IntegracoesView`: Integração com o NTB Estoque (saiu da tela do Cardápio; trava `editar_cardapio`) e Integração direta
   com a Omie (saiu do Emissor fiscal). O sino de avisos (`NotificationBell`) não tem deep link para abas hoje: se ganhar um, "nota
   rejeitada/contingência" abre `notas` e "certificado/CSC" abre `fiscal`.
+
+## Baixa de estoque com outbox e integração honesta (04/10/2026, migrations 156 e 157)
+
+- **Outbox** `integracao_baixas` (156, aditiva, RLS fechada, só RPCs `security definer`): a rota `app/api/integracao/ordem-producao` grava UMA linha por pedido
+  ANTES de chamar o Estoque, guarda o resultado POR ITEM e só marca `op_enviada_em` quando todos deram ok. Status: pending|ok|parcial|erro|incerto.
+  Regras puras em `lib/baixaEstoque.ts` (testes), servidor em `lib/baixaEstoqueServidor.ts`, job em `lib/baixaEstoqueRetry.ts`
+  (agendado em `instrumentation.ts`, 2 min, backoff 2..60 min, máx. 6 tentativas; desligado por `DISABLE_BAIXA_RETRY=1` ou `DISABLE_FISCAL_RETRANSMISSAO=1`;
+  `BAIXA_RETRY_SO_LOJA` restringe a uma loja para teste).
+- **A OP do Estoque NÃO é idempotente** (`cCodIntOP = NTBV+Date.now()`, saída em `movimentos` sem dedupe por pedido). Por isso só reenvia sozinho item com
+  erro comprovadamente não gravado (`pulada`, conexão recusada, 4xx). Timeout, 5xx, OP criada sem saída, servidor caído em voo = `incerto`: nunca reenvia;
+  o gerente confere no Estoque e usa "Já conferi" (Administração > Configurações > Integrações > Baixas de estoque).
+- **Varredura**: pedidos `delivered` depois de `integracao_baixas_marco.desde` sem linha (navegador fechou/sem rede) entram sozinhos. **No deploy, rodar
+  `update integracao_baixas_marco set desde = now()`** para não reprocessar nada anterior (o dono decidiu não reprocessar as mesas antigas do Sertão).
+- **Testar conexão** (`/api/integracao/testar-conexao`, `lib/estoqueConexao.ts`): GET locais-estoque (chave) + GET `/api/integracao/status` do Estoque novo
+  (loja de teste/simulada -> selo "MODO TESTE"; Estoque antigo 404 -> "versão antiga, não sei se é teste"). Cardápio com Estoque ligado e 0 produtos com código
+  Omie vira alerta alto ("Estoque ligado, 0 vinculados"), não "em ordem".
+- **NFC-e -> Omie** (157): resultado do envio gravado em `fiscal_notas.omie_status/omie_erro` (`lib/omieEnvioServidor.ts`) e mostrado em Notas fiscais.
+- **Taxa de serviço**: percentual editável (0-30%) em Configurações > Geral > Atendimento; todos os cálculos leem via `resolveServiceFeeRate` (`lib/calc.ts`).
+  `use_pin` e `allow_client_open` removidos (nunca eram lidos).
+- Testes: `scripts/testes/*.test.ts`; E2E contra o mock do Estoque (`scripts/testes/mock-estoque.mjs`) na loja ZZ: `baixaEstoque.e2e.ts`, `omieEnvioNfce.e2e.ts`.

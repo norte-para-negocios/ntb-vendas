@@ -181,6 +181,23 @@ async function main() {
   const l4c = await linha(s4);
   passo('S12 "Já conferi" fecha a baixa incerta (registra quem)', rConf.success === true && l4c.status === 'ok' && /Gerente Teste/.test(JSON.stringify(l4c.resultado)) && (await enviada(s4)), l4c);
 
+  // ---------- S13: o job agendado por instrumentation.register() (setInterval) pega e reenvia sozinho
+  // O register() também agenda o job fiscal (primeira execução só em 2 min); este script termina muito antes disso.
+  await regra('T-NOREG', 'pulada', 1);
+  const s13 = await pedido(['T-OK', 'T-NOREG']);
+  await rota(s13);
+  await adiantar(s13);
+  const antesS13 = (await chamadas()).filter((c) => c.pedidoRef === s13).length;
+  process.env.NEXT_RUNTIME = 'nodejs';
+  process.env.BAIXA_RETRY_INTERVALO_MS = '1500';
+  process.env.BAIXA_RETRY_SO_LOJA = ZZ;
+  delete process.env.DISABLE_BAIXA_RETRY; delete process.env.DISABLE_FISCAL_RETRANSMISSAO;
+  const { register } = await import('../../instrumentation');
+  await register();
+  await new Promise((r) => setTimeout(r, 5000));
+  const cs13 = (await chamadas()).filter((c) => c.pedidoRef === s13);
+  passo('S13 job agendado pelo instrumentation reenviou só T-NOREG e fechou ok', antesS13 === 1 && cs13.length === 2 && cs13[1].itens.join() === 'T-NOREG' && (await linha(s13)).status === 'ok', { cs13, l: await linha(s13) });
+
   // ---------- RPC de leitura da tela
   const { data: resumo } = await admin.rpc('fetch_integracao_baixas_secure', { p_store_id: ZZ });
   passo('RPC de leitura devolve contadores e lista só do que não está ok', typeof resumo.pendentes === 'number' && typeof resumo.com_erro === 'number' && resumo.itens.every((i: any) => i.status !== 'ok'), resumo);
