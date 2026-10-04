@@ -44,6 +44,7 @@ import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
+import { NotificationBell } from '@/components/NotificationBell';
 import { ProducaoView } from '@/components/modules/ProducaoView';
 import { usaMenuProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
@@ -1050,6 +1051,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           </div>
           <CaixaPrintStationIndicator status={caixaPrintStatus} storeName={storeName} />
           <SyncStatusBadge status={syncStatus} />
+          {!isAberto && <NotificationBell variant="header" />}
           <ThemeToggle />
       </header>
 
@@ -1226,6 +1228,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
           ))}
         </nav>
 
+        {!isAberto && <div className="px-3 pb-1"><NotificationBell variant="sidebar" collapsed={isCollapsed} /></div>}
         <div className="px-3 pb-1">
           <button
             onClick={handleToggleCheckin}

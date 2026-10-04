@@ -17,6 +17,7 @@ import { updateStoreConfig, updateStoreAccentColor, uploadStoreCover, updateStor
 import { THEME_PRESETS, resolveThemePreset, ThemePreset } from '@/lib/theme';
 import { SERVICE_FEE_RATE, formatServiceFeeRate } from '@/lib/calc';
 import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
+import { TIPOS, resolverPrefs, tiposAplicaveis, type TipoNotificacao } from '@/lib/notificacoes';
 
 // ACCENT_COLOR_DEFAULT não é exportado por `lib/colorContrast.ts` (só
 // `MENU_DARK_BG_HEX` é) — em StoreModule.tsx era uma const local não
@@ -245,6 +246,28 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
         }
     };
 
+    // Central de notificações (04/10/2026): preferências em stores.config.notifications (ausente = tudo ligado).
+    const prefsNotif = resolverPrefs(currentStoreConfig);
+    const aplicaveisNotif = tiposAplicaveis({ config: currentStoreConfig });
+    const salvarNotif = async (patch: { som?: boolean; tipo?: [TipoNotificacao, boolean] }) => {
+        const anterior = currentStoreConfig;
+        const atual = resolverPrefs(anterior);
+        const proximo = {
+            som: patch.som ?? atual.som,
+            tipos: patch.tipo ? { ...atual.tipos, [patch.tipo[0]]: patch.tipo[1] } : atual.tipos,
+        };
+        const newConfig = { ...anterior, notifications: proximo };
+        setCurrentStoreConfig(newConfig);
+        try {
+            await updateStoreConfig(store.id, newConfig);
+            if (onStoreUpdate) onStoreUpdate({ ...store, config: newConfig });
+        } catch (e) {
+            console.error('Error updating notifications config', e);
+            setCurrentStoreConfig(anterior);
+            toast.error('Erro ao atualizar as notificações.');
+        }
+    };
+
     const handleToggleBestsellers = async () => {
         const newValue = !showBestsellersEnabled;
         setShowBestsellersEnabled(newValue); // otimista, mesmo padrão do toggle de taxa de serviço acima
@@ -470,6 +493,45 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pedidoPedeSenha ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
+            </div>
+
+            {/* Notificações (04/10/2026): o sino do painel mostra só o que pede ação; aqui a loja liga/desliga cada tipo. */}
+            <div className="mb-4 p-4 bg-[var(--surface-2)] rounded-[14px]">
+                <h4 className="font-semibold text-[15px] text-[var(--text)]">Notificações</h4>
+                <p className="text-[13px] text-[var(--text-muted)] mt-0.5 mb-2">Cada pessoa vê só os avisos da sua função. Desligue aqui o que a loja não quer receber.</p>
+                <div className="divide-y divide-[var(--border)]">
+                    <div className="flex items-center justify-between gap-4 py-3">
+                        <div>
+                            <p className="text-[14px] font-medium text-[var(--text)]">Tocar som nos avisos</p>
+                        </div>
+                <button
+                    onClick={() => salvarNotif({ som: !prefsNotif.som })}
+                    role="switch"
+                    aria-checked={prefsNotif.som}
+                    aria-label="Tocar som nos avisos"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${prefsNotif.som ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${prefsNotif.som ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                    </div>
+                    {TIPOS.filter((t) => aplicaveisNotif.has(t.tipo)).map((t) => (
+                        <div key={t.tipo} className="flex items-center justify-between gap-4 py-3">
+                            <div>
+                                <p className="text-[14px] font-medium text-[var(--text)]">{t.label}</p>
+                                <p className="text-[13px] text-[var(--text-muted)]">{t.desc}</p>
+                            </div>
+                            <button
+                                onClick={() => salvarNotif({ tipo: [t.tipo, !prefsNotif.tipos[t.tipo]] })}
+                                role="switch"
+                                aria-checked={prefsNotif.tipos[t.tipo]}
+                                aria-label={t.label}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${prefsNotif.tipos[t.tipo] ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${prefsNotif.tipos[t.tipo] ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[14px]">
