@@ -42,6 +42,8 @@ import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
 import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
+import { useStoreNotifications } from '@/lib/useStoreNotifications';
+import { NotificacoesProvider } from '@/components/NotificacoesContext';
 import { confirm } from '@/components/ConfirmDialog';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -586,126 +588,6 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     );
 };
 
-const useStoreNotifications = (storeId: string | undefined) => {
-    const [counts, setCounts] = useState({ tables: 0, kitchen: 0, bar: 0 });
-    // Baseline pra so' tocar som quando o total AUMENTA (pedido novo chegando),
-    // nunca ao abrir a tela nem quando o total cai (item concluido/entregue).
-    const prevTotalRef = useRef<number | null>(null);
-
-    // Rastreado separado de prevTotalRef (kitchen+bar) porque "mesa" precisa
-    // de um alerta com texto diferente ("chamada de mesa" vs "pedido novo") —
-    // ver achado real, reuniao 2026-08-19: chamada de garcom so mudava um
-    // numero no badge, sem som, porque só kitchen+bar disparavam alerta.
-    //
-    // Rastreado como CONJUNTO de table_id (nao so o numero agregado) --
-    // achado na revisao final: um numero liquido pode esconder uma chamada
-    // nova. Se, no mesmo poll, uma mesa e' dispensada (-1) e outra chama o
-    // garcom (+1) no mesmo tick, o numero liquido fica igual e nenhum alerta
-    // dispara -- exatamente o "miss silencioso" que esta feature existe pra
-    // evitar. Comparando os IDs (nao so a contagem), qualquer mesa NOVA no
-    // conjunto dispara o alerta, independente do que aconteceu com as outras.
-    const prevTableIdsRef = useRef<Set<string>>(new Set());
-    // Mesmo papel do "prevTotal !== null" abaixo (nao disparar no primeiro
-    // loadCounts() apos o mount) -- Set vazio por si so nao diferencia
-    // "nunca calculado" de "calculado e vazio", entao precisa de um flag
-    // proprio em vez de inferir isso do tamanho do Set.
-    const hasLoadedTableIdsRef = useRef(false);
-
-    useEffect(() => {
-        if (!storeId) return;
-
-        let isMounted = true;
-
-        const loadCounts = async () => {
-            try {
-                // Fetch tables and active orders
-                const tablesData = await fetchTables(storeId);
-                const activeOrdersData = await fetchActiveOrdersForTables(storeId);
-                
-                let tableCount = 0;
-                const tableIdsNeedingAttention = new Set<string>();
-                tablesData.forEach(t => {
-                    const isOccupied = t.status === 'occupied' || t.status === 'waiting_bill';
-                    if (!isOccupied) return;
-
-                    if (t.waiter_requested || t.status === 'waiting_bill') {
-                        tableCount++;
-                        tableIdsNeedingAttention.add(t.id);
-                    } else if (t.status === 'occupied') {
-                         // Check if new client entered (no active orders)
-                         let hasActiveItems = false;
-                         activeOrdersData.filter(o => o.table_id === t.id).forEach(o => {
-                             if (o.order_items && o.order_items.some(i => i.status !== 'canceled')) {
-                                 hasActiveItems = true;
-                             }
-                         });
-                         // No items ordered yet = new customer waiting to be acknowledged / waiting for menu / just entered
-                         if (!hasActiveItems && t.current_host_name) {
-                             tableCount++;
-                             tableIdsNeedingAttention.add(t.id);
-                         }
-                    }
-                });
-
-                // Fetch kitchen & bar orders via RPC segura (fetch_kitchen_orders_secure) --
-                // antes usava supabase.from('order_items') direto, que desde a correcao de
-                // seguranca 021/022 (RLS sem select publico) sempre voltava vazio: o badge
-                // de notificacao da Cozinha/Bar nunca acendia, mesmo com pedido esperando.
-                const needsAction = (item: any) =>
-                    item.status === 'pending' || (item.order?.order_type === 'counter' && item.status === 'accepted');
-
-                const [kitchenItems, barItems] = await Promise.all([
-                    fetchKitchenOrders(storeId, 'kitchen'),
-                    fetchKitchenOrders(storeId, 'bar'),
-                ]);
-
-                const kitchenCount = kitchenItems.filter(needsAction).length;
-                const barCount = barItems.filter(needsAction).length;
-
-                const total = kitchenCount + barCount;
-                const prevTotal = prevTotalRef.current;
-                prevTotalRef.current = total;
-                if (prevTotal !== null && total > prevTotal) {
-                    playNewOrderAlert();
-                    vibrateAlert([100, 60, 100]);
-                    toast.info('Novo pedido chegou! 🔔');
-                }
-
-                const prevTableIds = prevTableIdsRef.current;
-                const hasNewTableAttention = [...tableIdsNeedingAttention].some(id => !prevTableIds.has(id));
-                prevTableIdsRef.current = tableIdsNeedingAttention;
-                if (hasLoadedTableIdsRef.current && hasNewTableAttention) {
-                    playNewOrderAlert();
-                    // Padrao distinto do kitchen/bar (acima: 2 pulsos curtos) --
-                    // 3 pulsos mais longos, pra dar pra reconhecer "mesa/garcom"
-                    // vs "cozinha/bar" só pela vibracao, sem olhar o toast.
-                    vibrateAlert([200, 100, 200, 100, 200]);
-                    toast.info('Atenção na mesa! 🔔');
-                }
-                hasLoadedTableIdsRef.current = true;
-
-                if (isMounted) setCounts({ tables: tableCount, kitchen: kitchenCount, bar: barCount });
-            } catch (err) {
-                console.error("Erro ao carregar notificações", err);
-            }
-        };
-
-        loadCounts();
-        
-        const channel = supabase.channel(`notifications_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, loadCounts)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, loadCounts)
-            .subscribe();
-
-        return () => {
-            isMounted = false;
-            supabase.removeChannel(channel);
-        };
-    }, [storeId]);
-
-    return counts;
-};
-
 // Lê o canal de Presence que o cliente na mesa usa (ClientModule,
 // useWatchingPresence) pra sinalizar "painel de acompanhamento aberto" --
 // nenhum dado gravado no banco, só estado efêmero da conexão websocket.
@@ -1007,7 +889,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // "Meu Perfil" (migration 078, 2026-09-22: "um local de meu login pra
   // trocar, colocar seu nome, ver seu histórico, colocar sua fotinha").
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const notifications = useStoreNotifications(user.store.id);
+  // Módulos/permissões antes do hook de avisos: ele filtra locais e avisos pelo que o usuário acessa.
+  const storeModules = resolveStoreModules(user.store);
+  const hasPermission = (tabId: string) => hasTabPermission(user, tabId, user.store);
+  const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
+  const notif = useStoreNotifications({ store: user.store, user, acessiveis: accessibleTabIds, abaAtual: currentTab });
+  const notifications = notif.counts;
 
   // "Procurar atualização" (2026-09-13, cobrança direta do dono: "nem
   // aparece o botão de atualizar"). A checagem automática só roda ao abrir
@@ -1115,9 +1002,6 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // (lib/storeModules.ts) em vez de repetir a checagem de módulo aqui — ela
   // garante que 'admin' nunca fica fora do alcance de todo mundo ao mesmo
   // tempo (ver comentário lá pro porquê).
-  const storeModules = resolveStoreModules(user.store);
-  const hasPermission = (tabId: string) => hasTabPermission(user, tabId, user.store);
-  const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
   // Modo Aberto (30/09): o computador do salão mostra as outras áreas da loja com
   // cadeado ("só com login") em vez de sumir com elas.
   const isAberto = user.role === 'open';
@@ -1127,7 +1011,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   const bottomNavTabs = visibleTabs.filter(item => accessibleTabIds.has(item.id) && ['caixa', 'tables', 'counter', 'kitchen', 'bar'].includes(item.id));
 
   return (
-    <>
+    <NotificacoesProvider value={notif}>
     <div className={`min-h-screen supports-[height:100dvh]:min-h-dvh bg-[var(--bg)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
       <StaffOfflineBanner />
       <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
@@ -1463,7 +1347,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     </main>
   </div>
   <MyProfileModal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)} user={user} onUserUpdate={onUserUpdate} />
-  </>
+  </NotificacoesProvider>
 );
 };
 
