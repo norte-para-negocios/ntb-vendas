@@ -942,7 +942,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                 <h1 className="text-2xl font-bold text-[var(--text)] tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
                 <p className="text-sm" style={{ color: store?.config?.accent_color || 'var(--brand)' }}>Identifique-se para continuar seu pedido</p>
             </div>
-            <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)' }}>
+            <Card className={`u-grow-in relative w-full p-6 space-y-5 ${onClose ? 'pt-14' : ''}`} style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)' }}>
                 {onClose && (
                     <button
                         onClick={onClose}
@@ -3609,7 +3609,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         <MotionConfig reducedMotion="user">
             <div className="bg-[var(--bg)] min-h-screen pb-32">
             {!isOnline && (
-                <div className="fixed top-0 left-0 right-0 z-[200] bg-[var(--warn)] text-white text-center text-[13px] font-medium py-1.5 px-4">
+                <div className="sticky top-0 left-0 right-0 z-[200] bg-[var(--warn)] text-white text-center text-[13px] font-medium py-1.5 px-4" role="status">
                     Sem conexão — pedidos podem não chegar até a cozinha
                 </div>
             )}
