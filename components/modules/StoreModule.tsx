@@ -1722,7 +1722,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                 />
             )}
         </div>
-        <div className="relative grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
+        <div className="relative grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start">
             {/* Lista viva (Task 10 Step 6): chave estável por item — a cada
                 poll/realtime só o que entra/sai anima; o resto se reorganiza. */}
             <AnimatePresence mode="popLayout">
@@ -1738,30 +1738,28 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                         {...LIST_ITEM_MOTION}
                     >
                     <Card className={`p-4 flex flex-col ${item.priority ? 'ring-2 ring-[var(--err)]' : late ? 'ring-2 ring-[var(--err)]/40' : ''}`} style={(late || item.priority) ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
-                        {/* 1) Quem e quando: mesa/cliente, status em Badge, hora e tempo */}
-                        <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-2">
-                            <div className="min-w-0 flex-1 basis-[120px]">
-                                <p className="text-[17px] font-semibold text-[var(--text)] tracking-[-0.01em] break-words">
-                                    {item.order?.order_type === 'counter'
-                                        ? (item.order?.customer_name || 'Balcão')
-                                        : `Mesa ${item.order?.tables?.number || '?'}`}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                    <Badge variant={item.status === OrderStatus.READY ? 'success' : item.status === OrderStatus.PREPARING ? 'default' : 'warning'} dot>
-                                        {getStatusInfo(item.status).label}
-                                    </Badge>
-                                    {item.order?.order_type === 'counter' && item.order?.customer_name && <Badge>Balcão</Badge>}
-                                    {late && <Badge variant="critical"><AlertCircle size={12}/> Atrasado</Badge>}
-                                    {item.priority && <Badge variant="critical">Prioridade</Badge>}
-                                </div>
+                        {/* 1) Quem e quando: mesa/cliente + hora e tempo na primeira linha; status em Badge logo abaixo */}
+                        <div>
+                            <p className="text-[17px] font-semibold text-[var(--text)] tracking-[-0.01em] break-words">
+                                {item.order?.order_type === 'counter'
+                                    ? (item.order?.customer_name || 'Balcão')
+                                    : `Mesa ${item.order?.tables?.number || '?'}`}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <Badge variant={item.status === OrderStatus.READY ? 'success' : item.status === OrderStatus.PREPARING ? 'default' : 'warning'} dot>
+                                    {getStatusInfo(item.status).label}
+                                </Badge>
+                                {item.order?.order_type === 'counter' && item.order?.customer_name && <Badge>Balcão</Badge>}
+                                {late && <Badge variant="critical"><AlertCircle size={12}/> Atrasado</Badge>}
+                                {item.priority && <Badge variant="critical">Prioridade</Badge>}
+                                <span
+                                    className={`ml-auto inline-flex items-center gap-1 text-[12px] num px-2 h-6 rounded-full bg-[var(--surface-2)] whitespace-nowrap ${timerColorClass}`}
+                                    title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}`}
+                                >
+                                    <Clock size={12}/>
+                                    {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})} · {formatDuration(Math.floor(elapsedMinutes))}
+                                </span>
                             </div>
-                            <span
-                                className={`inline-flex items-center gap-1 text-[13px] num px-2 h-8 rounded-full bg-[var(--surface-2)] shrink-0 ${timerColorClass}`}
-                                title={`Pedido às ${new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
-                            >
-                                <Clock size={12}/>
-                                {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · {formatDuration(Math.floor(elapsedMinutes))}
-                            </span>
                         </div>
 
                         {/* 2) O que fazer: item com nome completo, cliente e observação em destaque */}
@@ -6899,13 +6897,13 @@ const CounterView: React.FC<{
                              })}
                          </div>
 
-                         <div className="mt-auto pt-3 border-t border-[var(--border)] flex justify-between items-center gap-2">
-                             <div>
+                         <div className="mt-auto pt-3 border-t border-[var(--border)] flex flex-wrap justify-between items-center gap-2">
+                             <div className="whitespace-nowrap">
                                  <p className="text-[13px] text-[var(--text-muted)]">Total</p>
                                  <p className="text-[22px] font-semibold text-[var(--text)] num leading-tight">R$ <AnimatedNumber value={total} format={formatBRL} /></p>
                              </div>
-                             <Button size="sm" variant="ghost" className="shrink-0 max-sm:!h-11" onClick={() => printCounterReceipt(order)} title="Imprimir comprovante">
-                                 <Printer size={14} /> Comprovante
+                             <Button size="sm" variant="secondary" className="shrink-0 !px-0 w-8 max-sm:!h-11 max-sm:w-11" onClick={() => printCounterReceipt(order)} title="Imprimir comprovante" aria-label="Imprimir comprovante">
+                                 <Printer size={15} />
                              </Button>
                              {/* Achado ao vivo (2026-09-10): loja `direct_print` (sem tela de
                                  acompanhamento/KDS) forçava o mesmo "Enviar p/ Cozinha" das
