@@ -5,7 +5,7 @@ export type AbaId =
   | 'shifts' | 'regras_caixa'
   | 'saude' | 'precos' | 'cupons' | 'link'
   | 'users' | 'permissoes'
-  | 'settings' | 'impressao' | 'locais' | 'fiscal';
+  | 'settings' | 'impressao' | 'locais' | 'fiscal' | 'integracoes' | 'notas';
 export type SecaoId = 'atendimento' | 'pedido_cliente' | 'notificacoes' | 'impressao' | 'aparencia' | 'aplicativo' | 'regras';
 
 export interface AbaDef { id: AbaId; label: string; sensitive?: boolean }
@@ -15,6 +15,7 @@ export const AREAS: AreaDef[] = [
   { id: 'vendas', label: 'Vendas', descricao: 'O que a loja vendeu', abas: [
     { id: 'dashboard', label: 'Resumo' },
     { id: 'sales', label: 'Histórico' },
+    { id: 'notas', label: 'Notas fiscais' },
     { id: 'relatorios', label: 'Relatórios' },
     { id: 'excecoes', label: 'Exceções' },
   ] },
@@ -32,11 +33,12 @@ export const AREAS: AreaDef[] = [
     { id: 'users', label: 'Pessoas' },
     { id: 'permissoes', label: 'Permissões' },
   ] },
-  { id: 'config', label: 'Configurações', descricao: 'Atendimento, impressão e notas', abas: [
+  { id: 'config', label: 'Configurações', descricao: 'Atendimento, impressão, emissor fiscal e integrações', abas: [
     { id: 'settings', label: 'Geral' },
     { id: 'impressao', label: 'Impressão' },
     { id: 'locais', label: 'Locais de preparo' },
-    { id: 'fiscal', label: 'Notas fiscais', sensitive: true },
+    { id: 'fiscal', label: 'Emissor fiscal', sensitive: true },
+    { id: 'integracoes', label: 'Integrações' },
   ] },
 ];
 
@@ -111,7 +113,9 @@ const PALAVRAS_ABA: Record<AbaId, string[]> = {
   saude: ['saude', 'cardapio', 'problemas'], precos: ['preco', 'horario', 'happy hour', 'promocao'], cupons: ['cupom', 'cupons', 'desconto', 'promocao'], link: ['link', 'qr', 'qr code', 'cardapio'],
   users: ['pessoas', 'equipe', 'usuario', 'funcionario', 'garcom', 'senha'], permissoes: ['permissao', 'permissoes', 'funcao', 'gerente', 'garcom', 'caixa'],
   settings: ['geral', 'ajustes', 'configuracoes'], impressao: ['impressao', 'impressora', 'imprimir'], locais: ['locais', 'preparo', 'cozinha', 'bar', 'pizzaria', 'producao', 'setor'],
-  fiscal: ['nota', 'notas', 'fiscal', 'nfce', 'nfe', 'certificado', 'sefaz'],
+  notas: ['nota', 'notas', 'nota fiscal', 'fiscal', 'nfce', 'nfe', 'danfe', 'cupom', 'cancelar nota', 'retransmitir', 'reemitir', 'xml', 'zip', 'sefaz'],
+  fiscal: ['emissor', 'fiscal', 'certificado', 'csc', 'cscid', 'serie', 'ambiente', 'homologacao', 'producao', 'imposto', 'cst', 'csosn', 'sefaz', 'nfce', 'nfe'],
+  integracoes: ['integracao', 'integracoes', 'estoque', 'ntb estoque', 'ordem de producao', 'omie', 'api', 'chave'],
 };
 export const ABAS_BUSCAVEIS: Ajuste[] = AREAS.flatMap((a) => a.abas.map((b): Ajuste => ({
   id: `aba_${b.id}`, titulo: b.label, descricao: `Aba de ${a.label}: ${a.descricao.toLowerCase()}.`, secao: 'aba', aba: b.id, palavras: PALAVRAS_ABA[b.id] ?? [],
