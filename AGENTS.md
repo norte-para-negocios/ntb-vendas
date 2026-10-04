@@ -2410,6 +2410,28 @@ completo abrir→ver no dashboard→fechar confirmado na tela de Caixa real.
   "cliente sentou". Contadores de Cozinha/Bar/Produção contam sempre; avisos de KDS só em loja com KDS (não `direct_print`).
 - Sem migration nova.
 
+## Planta de mesas (04/10/2026, migration 154)
+
+- Aba "Mapa" de Gestão de Mesas (`FloorPlanView`, lógica pura em `lib/planta.ts`, testes em `scripts/testes/planta.test.ts`).
+  Posições em % do mapa (16:10, margem 4%), mapa com largura mínima em px (rolagem) quando há muitas mesas.
+- **O mapa nunca abre vazio**: mesa sem posição salva aparece em posição automática (grade) e **não é gravada** até alguém
+  tocar em "Salvar as N mesas sem posição", "Organizar automaticamente" ou arrastar. Mesa nova não mexe nas já salvas.
+- Encaixe/troca: arrastar encaixa na grade; soltar em cima de outra mesa troca as duas; soltar fora do mapa cancela.
+  A grade do encaixe é INFERIDA das posições salvas (`colunasSalvas`, vale a maioria): a grade de "Organizar" com áreas
+  pode ter mais colunas que a "ideal" por nº de mesas, e sem a inferência o encaixe saía fora da grade (achado em QA).
+- Áreas = coluna nova `tables.area text` (nullable), não prefixo no número (número é inteiro usado em impressão, KDS, PIN e
+  relatórios). Atribuída por faixa ("mesas 4 a 6 -> Varanda"); `row_to_json` de `get_tables_secure` já a entrega.
+- Gravação em lote: RPC `update_tables_positions_secure(p_store_id, p_items jsonb)` (security definer, valida o lote inteiro antes,
+  máx. 200, ignora mesa de outra loja). `updateTablesPositions` (`lib/api.ts`) divide em lotes de 200 e cai na RPC antiga
+  (`update_table_position_secure`, uma mesa por vez) se o banco não tem a 154 (`PGRST202`); áreas exigem a 154.
+- Lista continua sendo o padrão; Mapa abre com "Só ocupadas" ligado quando a loja tem mais de 60 mesas.
+- Só dono, gerente e universal editam (`podeEditarPlanta`). QA só em loja de teste: salvar `floor_x/floor_y/area` antes e restaurar.
+- **Migration 154 já aplicada** no banco compartilhado (04/10/2026, aditiva). Backup da tabela antes:
+  `/root/backups/tables-pre-154.dump` (Contabo). **Rollback**: app = voltar ao commit anterior e rodar `deploy.sh` (o app antigo ignora
+  a coluna); banco, só se necessário: `DROP FUNCTION public.update_tables_positions_secure(uuid, jsonb); ALTER TABLE public.tables DROP COLUMN area;`
+  seguido de `NOTIFY pgrst, 'reload schema';`.
+- Deploy do app (deploy.sh, manual, só com a loja fechada) ainda pendente.
+
 ## Dívidas técnicas conhecidas (não escondidas — registradas de propósito)
 
 - **Senha em texto puro** em `system_admins`/`store_users`/`universal_users`
