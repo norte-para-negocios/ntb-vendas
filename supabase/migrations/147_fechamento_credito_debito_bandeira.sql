@@ -44,6 +44,7 @@ begin
     from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details, x.store_id
        from orders x
       where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+        and jsonb_typeof(x.payment_details->'methods') = 'array'
       order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) o, jsonb_array_elements(o.payment_details->'methods') m
     where o.store_id = v_shift.store_id
       and o.payment_details->>'cash_shift_id' = p_shift_id::text
@@ -56,6 +57,7 @@ begin
     from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details, x.store_id
        from orders x
       where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+        and jsonb_typeof(x.payment_details->'methods') = 'array'
       order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) o, jsonb_array_elements(o.payment_details->'methods') m
     where o.store_id = v_shift.store_id
       and o.payment_details->>'cash_shift_id' = p_shift_id::text
@@ -70,6 +72,7 @@ begin
     from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details, x.store_id
        from orders x
       where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+        and jsonb_typeof(x.payment_details->'methods') = 'array'
       order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) o, jsonb_array_elements(o.payment_details->'methods') m
     where o.store_id = v_shift.store_id
       and o.payment_details->>'cash_shift_id' = p_shift_id::text

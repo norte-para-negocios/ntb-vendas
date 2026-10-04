@@ -66,6 +66,17 @@ create or replace function public.save_price_schedule_secure(p_store_id uuid, p_
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
+  -- A regra só pode apontar pra produto/categoria da própria loja e cada loja tem até 200 regras
+  -- (create_order_secure percorre as regras a cada item).
+  if nullif(p_data->>'product_id', '') is not null and not exists (select 1 from products where id = (p_data->>'product_id')::uuid and store_id = p_store_id) then
+    raise exception 'Produto inválido para esta loja.';
+  end if;
+  if nullif(p_data->>'category_id', '') is not null and not exists (select 1 from categories where id = (p_data->>'category_id')::uuid and store_id = p_store_id) then
+    raise exception 'Categoria inválida para esta loja.';
+  end if;
+  if p_id is null and (select count(*) from price_schedules where store_id = p_store_id) >= 200 then
+    raise exception 'Limite de 200 regras de preço por loja.';
+  end if;
   if p_id is null then
     insert into price_schedules (store_id, name, product_id, category_id, price, discount_percent, days, time_from, time_until, active)
     values (p_store_id, left(p_data->>'name', 80), nullif(p_data->>'product_id', '')::uuid, nullif(p_data->>'category_id', '')::uuid,
@@ -148,6 +159,15 @@ begin
   if p_order_type = 'table' and p_table_id is not null then
     if not exists (select 1 from tables t where t.id = p_table_id and t.store_id = p_store_id) then
       return jsonb_build_object('success', false, 'message', 'Mesa inválida para esta loja.');
+    end if;
+    -- Mesa livre que recebe pedido do GARÇOM volta a ficar ocupada (incidente 02/10, mesas 108 e 216: sessão fechada
+    -- e itens lançados depois, mesa "sumia"). Só garçom: cliente do QR continua entrando pelo PIN. Sem lock prévio.
+    if p_added_by_role = 'garcom' then
+      update tables set status = 'occupied', current_host_name = coalesce(current_host_name, nullif(p_added_by_name, ''))
+       where id = p_table_id and status = 'available';
+      if found and not exists (select 1 from table_sessions where table_id = p_table_id and closed_at is null) then
+        insert into table_sessions (table_id, store_id, host_name) values (p_table_id, p_store_id, nullif(p_added_by_name, ''));
+      end if;
     end if;
     select id into v_order_id from orders
     where table_id = p_table_id and status = 'pending'

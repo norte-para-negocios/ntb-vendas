@@ -18,7 +18,9 @@ declare
   v_name text;
   v_sold boolean;
 begin
-  if NEW.product_id is null then return NEW; end if;
+  -- Só pedido de CLIENTE é barrado aqui. Venda do garçom/caixa (inclusive a fila offline que sincroniza depois)
+  -- já foi servida e impressa: barrar na sincronização faria a venda sumir da conta. O app do garçom já avisa na tela.
+  if NEW.product_id is null or NEW.added_by_role is distinct from 'cliente' then return NEW; end if;
   select name, sold_out into v_name, v_sold from products where id = NEW.product_id;
   if coalesce(v_sold, false) then
     raise exception 'Produto esgotado: %', v_name using errcode = 'P0001';

@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
     ]);
     if (!produtos?.length || !segredo?.ativo) return NextResponse.json({ alerts: [] });
 
+    // Só https: a URL vem de configuração gravável pela chave pública, não pode apontar pra rede interna.
+    if (!/^https:\/\//i.test(String(segredo.ntb_estoque_url))) return NextResponse.json({ alerts: [] });
+
     const codigos = Array.from(new Set(produtos.map((p) => String(p.omie_codigo))));
     const res = await fetch(`${String(segredo.ntb_estoque_url).replace(/\/$/, '')}/api/integracao/saldo?codigos=${encodeURIComponent(codigos.join(','))}`, {
       headers: { Authorization: `Bearer ${segredo.ntb_estoque_api_key}` },

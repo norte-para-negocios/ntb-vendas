@@ -28,12 +28,13 @@ begin
     from order_items oi left join products p on p.id = oi.product_id
    where oi.id = p_item_id;
 
-  update order_items set status = 'canceled' where id = p_item_id
+  -- Cancelar duas vezes não grava duas ocorrências nem infla o relatório.
+  update order_items set status = 'canceled' where id = p_item_id and status <> 'canceled'
   returning store_id into v_store_id;
 
-  if v_store_id is not null and p_operator_name is not null then
+  if v_store_id is not null then
     insert into cash_shift_audit_events (store_id, operator_user_id, operator_name, event_type, details)
-    values (v_store_id, p_operator_user_id, p_operator_name, 'item_cancelado',
+    values (v_store_id, (select id from store_users where id = p_operator_user_id), coalesce(p_operator_name, 'Operador'), 'item_cancelado',
             jsonb_build_object('produto', coalesce(v_product_name, 'Produto indisponível'),
                                'quantidade', v_qty, 'valor', coalesce(v_price, 0) * coalesce(v_qty, 1),
                                'status_anterior', v_prev_status,
@@ -169,7 +170,7 @@ begin
       end if;
       update tables set service_fee_removed = true where id = p_table_id;
       insert into cash_shift_audit_events (store_id, operator_user_id, operator_name, event_type, details)
-      values (p_store_id, p_operator_user_id, coalesce(p_operator_name, 'Operador'), 'taxa_removida',
+      values (p_store_id, (select id from store_users where id = p_operator_user_id), coalesce(p_operator_name, 'Operador'), 'taxa_removida',
               jsonb_build_object('produto', v_product.name, 'valor', coalesce(v_exist_price, 0)));
       return jsonb_build_object('success', true, 'item_id', null, 'price', 0, 'updated', v_exist_id is not null, 'removed', true);
     end if;
@@ -184,7 +185,7 @@ begin
       update tables set service_fee_removed = true where id = p_table_id;
       if v_manual then
         insert into cash_shift_audit_events (store_id, operator_user_id, operator_name, event_type, details)
-        values (p_store_id, p_operator_user_id, coalesce(p_operator_name, 'Operador'), 'taxa_editada',
+        values (p_store_id, (select id from store_users where id = p_operator_user_id), coalesce(p_operator_name, 'Operador'), 'taxa_editada',
                 jsonb_build_object('produto', v_product.name, 'de', v_exist_price, 'para', v_price, 'valor', abs(v_exist_price - v_price)));
       end if;
       return jsonb_build_object('success', true, 'item_id', v_exist_id, 'price', v_price, 'updated', true);
@@ -235,7 +236,7 @@ begin
 
   if v_manual then
     insert into cash_shift_audit_events (store_id, operator_user_id, operator_name, event_type, details)
-    values (p_store_id, p_operator_user_id, coalesce(p_operator_name, 'Operador'), 'taxa_editada',
+    values (p_store_id, (select id from store_users where id = p_operator_user_id), coalesce(p_operator_name, 'Operador'), 'taxa_editada',
             jsonb_build_object('produto', v_product.name, 'de', coalesce(v_product.promo_price, v_product.price), 'para', v_price, 'valor', abs(coalesce(v_product.promo_price, v_product.price) - v_price)));
   end if;
 

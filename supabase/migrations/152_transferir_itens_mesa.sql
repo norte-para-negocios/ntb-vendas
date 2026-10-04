@@ -38,6 +38,7 @@ begin
       join orders o on o.id = oi.order_id
       left join products p on p.id = oi.product_id
      where oi.id = any(p_item_ids) and o.store_id = p_store_id and o.order_type = 'table'
+       and o.status not in ('delivered', 'canceled')  -- conta já paga/cancelada não se mexe
      order by oi.created_at
   loop
     if v_item.status = 'canceled' or v_item.fee_type is not null or v_item.src_table = p_target_table_id then continue; end if;
@@ -61,7 +62,7 @@ begin
 
     select number into v_src_num from tables where id = v_item.src_table;
     insert into cash_shift_audit_events (store_id, operator_user_id, operator_name, event_type, details)
-    values (p_store_id, p_operator_user_id, coalesce(p_operator_name, 'Operador'), 'item_transferido',
+    values (p_store_id, (select id from store_users where id = p_operator_user_id), coalesce(p_operator_name, 'Operador'), 'item_transferido',
             jsonb_build_object('produto', coalesce(v_item.pname, 'Produto'), 'quantidade', v_item.quantity,
                                'valor', v_item.price_at_time * v_item.quantity, 'de_mesa', v_src_num, 'para_mesa', v_target.number));
     v_src_orders := v_src_orders || v_item.order_id;

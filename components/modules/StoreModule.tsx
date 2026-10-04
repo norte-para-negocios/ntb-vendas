@@ -4099,6 +4099,9 @@ NOTIFY pgrst, 'reload schema';`;
                 total: summary.total,
                 methods: getPaymentMethodsForRecord(methods, summary.total),
                 operador_nome: loggedUser.name,
+                // Id único do pagamento: o fechamento de caixa junta os pedidos de UMA conta por ele e não confunde
+                // duas contas diferentes com valor, forma e operador iguais.
+                payment_id: crypto.randomUUID(),
                 operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal && vendaTemCobranca({ total: summary.total }) } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
@@ -6720,6 +6723,9 @@ const CounterView: React.FC<{
                 total,
                 methods: getPaymentMethodsForRecord(methods, total),
                 operador_nome: loggedUser.name,
+                // Id único do pagamento: o fechamento de caixa junta os pedidos de UMA conta por ele e não confunde
+                // duas contas diferentes com valor, forma e operador iguais.
+                payment_id: crypto.randomUUID(),
                 operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
