@@ -31,12 +31,13 @@ import { DOCS_IMPRESSAO, impressoraRecebe } from '@/lib/printDocs';
 import React, { useEffect, useState, useCallback } from 'react';
 import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
+import { preContaAutomaticaLigada } from '@/lib/preConta';
 import { toast } from '@/components/Toast';
 import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
   fetchPrintSectors, createPrintSector, deletePrintSector,
   enqueuePrintJob, fetchRecentPrintJobs, retryPrintJob, fetchDiscoveredPrinters, fetchPrintAgentStatus, updateStoreConfig,
-  fetchImpressaoPausada, setImpressaoPausada,
+  fetchImpressaoPausada, setImpressaoPausada, setPreContaAutomatica, fetchStoreById,
   fetchLocaisEstoque, salvarLocalEstoque, LocaisEstoqueStatus,
 } from '@/lib/api';
 import { printGenericTestTicket, buildGenericTestTicketText } from '@/lib/print';
@@ -104,6 +105,22 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [pausada, setPausada] = useState(false);
   const [trocandoPausa, setTrocandoPausa] = useState(false);
   useEffect(() => { fetchImpressaoPausada(store.id).then(setPausada); }, [store.id]);
+  // "Imprimir pré-conta (comanda) automaticamente": ligada por padrão; desligada, só o botão manual Imprimir da mesa imprime.
+  const [preContaAuto, setPreContaAuto] = useState(true);
+  const [trocandoPreConta, setTrocandoPreConta] = useState(false);
+  useEffect(() => { fetchStoreById(store.id).then((s) => setPreContaAuto(preContaAutomaticaLigada(s?.config))).catch(() => {}); }, [store.id]);
+  const alternarPreConta = async () => {
+    setTrocandoPreConta(true);
+    try {
+      await setPreContaAutomatica(store.id, !preContaAuto);
+      setPreContaAuto(!preContaAuto);
+      toast.success(!preContaAuto ? 'Pré-conta automática ligada.' : 'Pré-conta automática desligada.');
+    } catch {
+      toast.error('Não foi possível mudar agora. Tente de novo.');
+    } finally {
+      setTrocandoPreConta(false);
+    }
+  };
   const alternarPausa = async () => {
     setTrocandoPausa(true);
     try {
@@ -329,6 +346,24 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         <Button size="sm" variant={pausada ? 'primary' : 'secondary'} onClick={alternarPausa} disabled={trocandoPausa}>
           {trocandoPausa ? <Loader2 size={14} className="animate-spin" /> : null}
           {pausada ? 'Ligar impressões' : 'Desativar impressões por agora'}
+        </Button>
+      </Card>
+
+      <Card className="p-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold text-[var(--text)] flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${preContaAuto ? 'bg-[var(--ok)]' : 'bg-[var(--text-muted)]'}`} />
+            {preContaAuto ? 'Pré-conta (comanda) automática ligada' : 'Pré-conta (comanda) automática desligada'}
+          </p>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+            {preContaAuto
+              ? 'Quando uma mesa pede a conta, a pré-conta com preços sai sozinha nas impressoras marcadas com "Pré-conta" (edite a impressora para escolher qual). Mesa que já estava aberta não reimprime sozinha.'
+              : 'A pré-conta não sai sozinha. Só o botão Imprimir da mesa imprime. Os pedidos da cozinha e do bar não mudam.'}
+          </p>
+        </div>
+        <Button size="sm" variant={preContaAuto ? 'secondary' : 'primary'} onClick={alternarPreConta} disabled={trocandoPreConta}>
+          {trocandoPreConta ? <Loader2 size={14} className="animate-spin" /> : null}
+          {preContaAuto ? 'Desligar pré-conta automática' : 'Ligar pré-conta automática'}
         </Button>
       </Card>
 

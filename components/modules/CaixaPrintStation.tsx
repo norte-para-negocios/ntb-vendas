@@ -102,8 +102,8 @@ import { Wifi, WifiOff, XCircle, RotateCcw, CheckCircle2, AlertTriangle, X } fro
 import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { impressoraRecebe } from '@/lib/printDocs';
-import { montarPreConta, chavePreConta } from '@/lib/preConta';
-import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada } from '@/lib/api';
+import { montarPreConta, chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
+import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from '@/lib/print';
 import { particionarPorIdade, MAX_IDADE_AUTOIMPRESSAO_MIN } from '@/lib/impressaoIdade';
 import { PrinterConfig } from '@/types';
@@ -1029,6 +1029,9 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
         const novas = pedindoConta ? [...agora].filter((id) => !pedindoConta!.has(id)) : [];
         pedindoConta = agora;
         if (novas.length === 0) return;
+        // Interruptor da loja (Configurações > Impressão): desligado, a pré-conta não sai sozinha.
+        const lojaAtual = await fetchStoreById(loja.id).catch(() => null);
+        if (!preContaAutomaticaLigada((lojaAtual ?? loja).config)) return;
         const pedidos = await fetchActiveOrdersForTables(loja.id);
         for (const id of novas) {
           const mesa = mesas.find((t) => t.id === id);

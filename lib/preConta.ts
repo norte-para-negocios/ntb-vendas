@@ -55,3 +55,10 @@ export function montarPreConta(
     total: calculateOrderTotal(subtotal, charged, rate),
   };
 }
+
+// Interruptor da pré-conta (comanda com preços) AUTOMÁTICA, em Configurações > Impressão. Ligado por padrão (comportamento de
+// sempre); `config.auto_pre_conta === false` desliga: nem o "Pedir conta" do garçom nem o PC do caixa mandam a pré-conta sozinhos.
+// O botão manual Imprimir da mesa não é afetado. Em qual impressora sai: marcar "Pré-conta" na impressora (aba Impressão).
+export function preContaAutomaticaLigada(config: object | null | undefined): boolean {
+  return (config as { auto_pre_conta?: boolean } | null | undefined)?.auto_pre_conta !== false;
+}

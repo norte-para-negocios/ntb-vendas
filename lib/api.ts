@@ -2926,6 +2926,14 @@ export const fetchImpressaoPausada = async (storeId: string): Promise<boolean> =
   gravarImpressaoPausadaCache(storeId, pausada);
   return pausada;
 };
+// Interruptor "Imprimir pré-conta (comanda) automaticamente": stores.config.auto_pre_conta (ausente = ligado).
+export const setPreContaAutomatica = async (storeId: string, ligada: boolean): Promise<void> => {
+  const { data, error } = await supabase.from('stores').select('config').eq('id', storeId).single();
+  if (error) throw error;
+  const config = { ...((data?.config as Record<string, unknown>) || {}) };
+  if (ligada) delete config.auto_pre_conta; else config.auto_pre_conta = false;
+  await updateStoreConfig(storeId, config);
+};
 export const setImpressaoPausada = async (storeId: string, pausada: boolean): Promise<void> => {
   const { data, error } = await supabase.from('stores').select('config').eq('id', storeId).single();
   if (error) throw error;
