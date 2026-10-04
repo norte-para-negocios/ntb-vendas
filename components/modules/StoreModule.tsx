@@ -23,7 +23,7 @@ import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { FloorPlanView } from './FloorPlanView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { resolveCancelReasons } from '@/lib/excecoes';
-import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, setProductSoldOut, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -3035,6 +3035,7 @@ const TablesView: React.FC<{
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
     const [showMoveTableModal, setShowMoveTableModal] = useState(false);
+    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; enviando: boolean } | null>(null);
     const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; enviando: boolean } | null>(null);
     // Planta de mesas (floor plan): alterna Lista/Mapa; a escolha fica no aparelho.
     const [tablesViewMode, setTablesViewMode] = useState<'lista' | 'mapa'>(() => {
@@ -4480,6 +4481,24 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
+    const abrirMoverItem = (itemId: string) => {
+        if (isAberto) { avisarSoComLogin(); return; }
+        if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para mover item.'); return; }
+        const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
+        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', enviando: false });
+    };
+
+    const confirmarMoverItem = async () => {
+        const dlg = moveItemDlg;
+        if (!dlg || dlg.enviando) return;
+        if (!dlg.targetId) { toast.error('Escolha a mesa de destino.'); return; }
+        setMoveItemDlg({ ...dlg, enviando: true });
+        const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name);
+        setMoveItemDlg(null);
+        if (r.success) { toast.success('Item movido para a outra mesa.'); loadData(); }
+        else toast.error(r.message || 'Não consegui mover o item.');
+    };
+
     const handleDeleteItem = async (itemId: string) => {
         if (isAberto) { avisarSoComLogin(); return; }
         if (!podeTrocarOuExcluir(loggedUser)) { toast.error('Você não tem permissão para excluir item.'); return; }
@@ -4917,6 +4936,30 @@ NOTIFY pgrst, 'reload schema';`;
                 );
             })()}
 
+            <Modal isOpen={!!moveItemDlg} onClose={() => !moveItemDlg?.enviando && setMoveItemDlg(null)} title="Mover item para outra mesa" size="sm">
+                {moveItemDlg && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-[var(--text)]">Mover <b>{moveItemDlg.nome}</b> da Mesa {selectedTable?.number} para:</p>
+                        <select
+                            className="w-full h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-[15px] text-[var(--text)]"
+                            value={moveItemDlg.targetId}
+                            onChange={(e) => setMoveItemDlg({ ...moveItemDlg, targetId: e.target.value })}
+                            aria-label="Mesa de destino"
+                        >
+                            <option value="">Escolha a mesa…</option>
+                            {tables.filter((t) => t.id !== selectedTable?.id && t.status !== 'blocked').map((t) => (
+                                <option key={t.id} value={t.id}>Mesa {t.number}{t.status === 'available' ? ' (livre)' : ''}</option>
+                            ))}
+                        </select>
+                        <p className="text-[12px] text-[var(--text-muted)]">O item não é impresso de novo na cozinha. Fica registrado quem moveu.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button variant="secondary" onClick={() => setMoveItemDlg(null)} disabled={moveItemDlg.enviando}>Voltar</Button>
+                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando}>Mover item</Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
             <Modal isOpen={!!cancelItemDlg} onClose={() => !cancelItemDlg?.enviando && setCancelItemDlg(null)} title="Cancelar item" size="sm">
                 {cancelItemDlg && (
                     <div className="space-y-4">
@@ -5168,6 +5211,16 @@ NOTIFY pgrst, 'reload schema';`;
                                                             <span className="num text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                                             {podeTrocarOuExcluir(loggedUser) && (
                                                             <button
+                                                                onClick={() => abrirMoverItem(item.id)}
+                                                                className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--brand)] p-1 u-motion u-press"
+                                                                title="Mover para outra mesa"
+                                                                aria-label="Mover item para outra mesa"
+                                                            >
+                                                                <ArrowRightLeft size={16} />
+                                                            </button>
+                                                            )}
+                                                            {podeTrocarOuExcluir(loggedUser) && (
+                                                            <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press"
                                                                 title="Cancelar Item"
@@ -5376,6 +5429,17 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
                                                 )}
                                             </div>
+                                            {podeTrocarOuExcluir(loggedUser) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => abrirMoverItem(item.id)}
+                                                className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)]/70 hover:text-[var(--brand)] hover:bg-[var(--surface-2)] u-motion u-press flex-shrink-0"
+                                                title="Mover para outra mesa"
+                                                aria-label="Mover item para outra mesa"
+                                            >
+                                                <ArrowRightLeft size={15} />
+                                            </button>
+                                            )}
                                             {podeTrocarOuExcluir(loggedUser) && (
                                             <button
                                                 type="button"
