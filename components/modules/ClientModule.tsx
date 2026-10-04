@@ -684,9 +684,9 @@ function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: (
             type="button"
             onClick={onClick}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-[var(--r-lg)] border text-left transition-transform active:scale-[0.98] ${
-                isReady ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 animate-pulse' : 'border-white/10 text-white'
+                isReady ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 animate-pulse' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'
             }`}
-            style={isReady ? undefined : { background: 'var(--ink)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
+            style={isReady ? undefined : { boxShadow: 'var(--shadow-md)' }}
         >
             <div
                 className={`p-2 rounded-full shrink-0 ${isReady ? 'bg-[var(--ok)]/15 text-[var(--ok)]' : ''}`}
@@ -695,10 +695,10 @@ function OrderStatusPill({ order, onClick }: { order: MesaOrderState; onClick: (
                 <Icon size={18} />
             </div>
             <div className="flex-1 min-w-0">
-                <p className={`text-[13px] font-bold truncate ${isReady ? 'text-[var(--ok)]' : 'text-white'}`}>{c.label}</p>
-                <p className={`text-[11px] ${isReady ? 'text-[var(--ok)]/70' : 'text-white/50'}`}>Toque pra ver detalhes</p>
+                <p className={`text-[13px] font-bold truncate ${isReady ? 'text-[var(--ok)]' : 'text-[var(--text)]'}`}>{c.label}</p>
+                <p className={`text-[11px] ${isReady ? 'text-[var(--ok)]/70' : 'text-[var(--text-muted)]'}`}>Toque pra ver detalhes</p>
             </div>
-            <ChevronRight size={16} className={isReady ? 'text-[var(--ok)]' : 'text-white/50'} />
+            <ChevronRight size={16} className={isReady ? 'text-[var(--ok)]' : 'text-[var(--text-muted)]'} />
         </button>
     );
 }
@@ -911,24 +911,18 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
         }
     };
 
-    // Overlay escuro coerente com a identidade do cardápio (--ink + dourado)
-    // em vez do AuthBackdrop azul institucional: desde que o login virou um
-    // modal disparado no meio do fluxo de compra (requestAccessThen), o azul
-    // com nuvens quebrava completamente a atmosfera da carta de vinhos.
+    // Overlay que segue o tema da pessoa (claro por padrão): desde que o login
+    // virou um modal disparado no meio do fluxo de compra (requestAccessThen),
+    // o azul com nuvens do AuthBackdrop não cabe aqui.
     if (isLoading) return (
-        <div className="min-h-full flex items-center justify-center p-4" style={{ background: 'rgba(10,13,19,0.8)' }}>
-            <span className="text-white/80 text-sm animate-pulse">Carregando...</span>
+        <div className="min-h-full flex items-center justify-center p-4 bg-[var(--bg)]/85 backdrop-blur-md">
+            <span className="text-[var(--text-muted)] text-sm animate-pulse">Carregando...</span>
         </div>
     );
 
     return (
-        // .u-glass-modal (achado M1 da revisão final de 2026-08-16, mesmo bug já
-        // corrigido em outras superfícies de vidro nesta branch): backdrop-filter
-        // inline nunca respeita o fallback de prefers-reduced-transparency (só
-        // uma classe CSS consegue, via @media), e duplicar manualmente o prefixo
-        // -webkit- é exatamente o padrão que a Task 7 eliminou em todo o resto do
-        // cardápio — faltava só este overlay.
-        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out] u-glass-modal">
+        // Fundo claro/escuro conforme o tema da pessoa; só o desfoque é "vidro".
+        <div className="min-h-full flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out] bg-[var(--bg)]/85 backdrop-blur-md">
           <div className="w-full max-w-sm flex flex-col items-center">
             <div className="mb-6 text-center u-grow-in">
                 {store?.logo_url ? (
@@ -945,7 +939,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                         <UtensilsCrossed size={26} style={{ color: store?.config?.accent_color || 'var(--brand)' }} />
                     </div>
                 )}
-                <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
+                <h1 className="text-2xl font-bold text-[var(--text)] tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
                 <p className="text-sm" style={{ color: store?.config?.accent_color || 'var(--brand)' }}>Identifique-se para continuar seu pedido</p>
             </div>
             <Card className="u-grow-in relative w-full p-6 space-y-5" style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)' }}>
@@ -1826,7 +1820,7 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md', title }
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm"
                     style={{ background: 'rgba(10,13,19,0.6)' }}
                     onClick={() => { if (!justDraggedRef.current) onClose(); }}
                 >
@@ -1859,8 +1853,8 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md', title }
                                 onClose();
                             }
                         }}
-                        className={`w-full ${maxWidth} rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)] overflow-hidden flex flex-col max-h-[90vh] u-glass-modal on-glass`}
-                        style={{ border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }}
+                        className={`w-full ${maxWidth} rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)] overflow-hidden flex flex-col max-h-[90vh] bg-[var(--surface)]`}
+                        style={{ border: '1px solid var(--border)', boxShadow: 'var(--shadow-modal)' }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Alça visual — sinaliza que dá pra arrastar (achado da
@@ -1868,7 +1862,7 @@ function BottomSheet({ isOpen, onClose, children, maxWidth = 'max-w-md', title }
                             affordance"). Só decorativo, o gesto funciona na folha
                             inteira, não só na alça. */}
                         <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
-                            <div className="w-10 h-1 rounded-full bg-white/20" />
+                            <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
                         </div>
                         {children}
                     </motion.div>
@@ -1994,7 +1988,7 @@ const CartModal: React.FC<{
                                     <button
                                         onClick={handleApplyCoupon}
                                         disabled={isApplyingCoupon || !couponCode.trim()}
-                                        className="h-10 px-4 rounded-[var(--r-md)] bg-[var(--brand)] text-white text-[13px] font-semibold disabled:opacity-40 u-motion u-press-sm"
+                                        className="h-10 px-4 rounded-[var(--r-md)] bg-[var(--brand-fill)] text-white text-[13px] font-semibold disabled:opacity-40 u-motion u-press-sm"
                                     >
                                         {isApplyingCoupon ? '...' : 'Aplicar'}
                                     </button>
@@ -2476,12 +2470,12 @@ const BillSplitter: React.FC<{ isOpen: boolean, onClose: () => void, tableId: st
                         {/* FOOTER ACTIONS */}
                         <div className="pt-2 border-t border-[var(--border)] space-y-3">
                             {tab === 'calculator' ? (
-                                <div className="flex flex-col bg-[var(--ink)] text-white p-4 rounded-[var(--r-lg)]">
+                                <div className="flex flex-col bg-[var(--surface-2)] text-[var(--text)] p-4 rounded-[var(--r-lg)] border border-[var(--border)]">
                                     <div className="flex justify-between items-center">
                                         <span className="font-bold">Total Selecionado</span>
                                         <span className="font-black text-xl num">R$ {formatBRL(calculatorTotal)}</span>
                                     </div>
-                                    <div className="text-xs text-white/50 mt-1 text-right">
+                                    <div className="text-xs text-[var(--text-muted)] mt-1 text-right">
                                         {isServiceFeeEnabled
                                             ? `Inclui R$ ${formatBRL(calculatorServiceFee)} de taxa de serviço (${formatServiceFeeRate(serviceFeeRate)} opcional)`
                                             : serviceFeeOffText}
@@ -4051,14 +4045,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 (`tableOrdersUnknown`/`isWaitingBill`) -- exatamente quando o
                 cliente mais precisa de um jeito óbvio de pedir a conta. */}
             {hasAccess && hasOpenTableOrders && (
-                <div className="w-full bg-[var(--ink)] px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="w-full bg-[var(--surface)] border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-white truncate">
+                        <p className="text-[13px] font-semibold text-[var(--text)] truncate">
                             {mesaItemCount > 0
                                 ? `Comanda aberta • ${mesaItemCount} ${mesaItemCount === 1 ? 'item' : 'itens'}`
                                 : 'Comanda aberta'}
                         </p>
-                        <p className="text-[11px] text-white/50">
+                        <p className="text-[11px] text-[var(--text-muted)]">
                             {isWaitingBill ? 'Conta pedida — o garçom está a caminho' : 'Quando terminar, peça a conta aqui'}
                         </p>
                     </div>
@@ -4070,7 +4064,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                     <button
                         type="button"
                         onClick={() => { setBillRequestIntent(true); setShowBill(true); }}
-                        className="shrink-0 h-11 px-4 rounded-full bg-white text-[var(--ink)] text-[14px] font-bold flex items-center gap-2 u-motion u-press-sm"
+                        className="shrink-0 h-11 px-4 rounded-full bg-[var(--brand-fill)] text-white text-[14px] font-bold flex items-center gap-2 u-motion u-press-sm"
                     >
                         <Receipt size={16} />
                         {isWaitingBill ? 'Ver conta' : 'Pedir a conta'}
@@ -4483,8 +4477,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: 40, opacity: 0 }}
                                 transition={SPRING_SHEET}
-                                className="text-white px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border u-glass-cart on-glass"
-                                style={{ borderColor: 'color-mix(in srgb, var(--brand) 30%, transparent)', boxShadow: '0 12px 34px -8px rgba(0,0,0,0.45)' }}
+                                className="px-4 pt-3 pb-4 rounded-[var(--r-lg)] flex flex-col gap-3 border bg-[var(--surface)] text-[var(--text)]"
+                                style={{ borderColor: 'var(--border)', boxShadow: 'var(--shadow-md)' }}
                             >
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2.5">
@@ -4492,17 +4486,13 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                             <ShoppingBag size={16} style={{ color: 'var(--brand)' }} />
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[13px] font-medium text-white/80">Sua Comanda</span>
-                                            <span className="text-[11px] text-white/50">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
+                                            <span className="text-[13px] font-medium text-[var(--text)]">Sua Comanda</span>
+                                            <span className="text-[11px] text-[var(--text-muted)]">{cart.reduce((a,b) => a + b.quantity, 0)} {cart.reduce((a,b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}</span>
                                         </div>
                                     </div>
-                                    {/* Correção 2026-08-21: tirado do --brand azul (regra "preço sem
-                                        promoção não é colorido" também vale pra este total). Não vira
-                                        var(--text) aqui porque esta barra é um cartão de vidro ESCURO
-                                        (text-white/80 nos rótulos ao lado) — var(--text) é escuro no
-                                        tema claro e ficaria ilegível sobre este fundo; branco simples
-                                        é o equivalente correto de "não colorido" neste contexto. */}
-                                    <span className="text-[18px] font-bold text-white">R$ {formatBRL(cartTotal)}</span>
+                                    {/* Total não colorido (regra "preço sem promoção não é colorido"):
+                                        usa --text, que acompanha o tema da pessoa. */}
+                                    <span className="text-[18px] font-bold text-[var(--text)]">R$ {formatBRL(cartTotal)}</span>
                                 </div>
                                 <Button
                                     className="w-full"
@@ -4532,16 +4522,16 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
 
             {/* Locked State Footer */}
             {clientOrdering && isWaitingBill && (
-                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--ink)] text-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]" style={{boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'}}>
+                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--surface)] text-[var(--text)] border-t border-[var(--border)] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]" style={{boxShadow:'var(--shadow-md)'}}>
                     <div className="flex justify-between items-center max-w-lg mx-auto">
                         <div className="flex items-center gap-3">
                             <Lock className="text-[var(--warn)]" size={18}/>
                             <div>
                                 <p className="font-medium text-sm">Conta Solicitada</p>
-                                <p className="text-[11px] text-white/50">Aguarde o garçom para finalizar.</p>
+                                <p className="text-[11px] text-[var(--text-muted)]">Aguarde o garçom para finalizar.</p>
                             </div>
                         </div>
-                        <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10" onClick={() => setShowBill(true)}>
+                        <Button variant="outline" size="sm" onClick={() => setShowBill(true)}>
                             Ver Detalhes
                         </Button>
                     </div>

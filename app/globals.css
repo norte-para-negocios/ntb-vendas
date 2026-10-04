@@ -167,33 +167,6 @@
   --scrollbar-thumb-hover: #aeaeb2;
 }
 
-/* Conteúdo dentro do vidro (sheets, barras) sempre lê os tokens do tema
-   escuro, independente do tema ambiente do usuário — o material de vidro
-   em si é sempre escuro (ecoa --ink, ver .u-glass-bar/.u-glass-cart/
-   .u-glass-modal abaixo), então o texto/superfícies dentro precisam ser
-   sempre claros pra manter contraste, mesmo com o app inteiro em tema
-   claro (achado C1 da revisão final de 2026-08-16: texto escuro do tema
-   claro sobre vidro quase preto ficava em ~1:1 de contraste, confirmado
-   nos prints de QA da Task 7). Mesmos valores literais do bloco .dark
-   acima — não reinventados. */
-.on-glass {
-  --text: #e6e8ec;
-  --text-muted: #8b93a1;
-  --surface: #15171d;
-  --surface-2: #1c1f27;
-  --border: rgba(255, 255, 255, 0.12);
-  /* Destaques como TEXTO sobre o vidro escuro (chips "Pizzaria"/"Bar",
-     aba ativa) — os valores claros (#484DB5 etc.) sumiam no vidro. Os
-     preenchimentos (-fill) continuam os mesmos. */
-  --brand: #8b90ea;
-  --brand-soft: rgba(139, 144, 234, 0.18);
-  --ok: #30d158;
-  --warn: #ffb340;
-  --err: #ff6961;
-  --info: #409cff;
-  --promo: #d17ae6;
-}
-
 /* Dark mode: ativado por classe .dark no <html> */
 .dark {
   --bg: #0a0a0c;
@@ -508,11 +481,6 @@ html {
   backdrop-filter: blur(14px) saturate(160%);
 }
 
-.u-glass-cart {
-  background: rgba(10, 13, 19, 0.72);
-  backdrop-filter: blur(16px) saturate(160%);
-}
-
 /* Vidro dos 4 bottom sheets do cardápio (Modal variant="sheet" em ui.tsx —
    ProductModal/BillSplitter — e o BottomSheet local de ClientModule.tsx —
    CartModal/OrderStatusModal) — via classe (não mais style inline)
@@ -529,7 +497,6 @@ html {
     backdrop-filter: none;
   }
   .u-glass-bar,
-  .u-glass-cart,
   .u-glass-modal {
     background: rgba(20, 23, 31, 0.95);
     backdrop-filter: none;
