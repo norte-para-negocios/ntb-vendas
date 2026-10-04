@@ -370,6 +370,12 @@ async function main() {
   // "configurações inválidas" mesmo as duas estando certas. `tickRunning`
   // garante no máximo 1 tick por vez: uma impressão sempre espera a
   // anterior terminar, não importa a impressora.
+  // Comanda antiga não pode sair (incidente 04/10/2026, mesmo teto do motor do
+  // app desktop: desktop/electron/print-engine.js IDADE_MAXIMA_JOB_MS). A fila é
+  // do servidor e continua enchendo com este agente desligado; ao ligar, job
+  // pendente mais velho que isso é ignorado (fica "pending" na aba Impressão,
+  // reenviável à mão), nunca impresso sozinho.
+  const IDADE_MAXIMA_JOB_MS = 30 * 60 * 1000;
   let tickRunning = false;
   const tick = async () => {
     if (tickRunning) return;
@@ -381,6 +387,7 @@ async function main() {
         .select('*')
         .eq('store_id', store.id)
         .eq('status', 'pending')
+        .gte('created_at', new Date(Date.now() - IDADE_MAXIMA_JOB_MS).toISOString())
         .in('printer_config_id', Array.from(printersById.keys()))
         .order('created_at', { ascending: true })
         .limit(20);

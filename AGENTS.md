@@ -2547,3 +2547,20 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
 - **Taxa de serviço**: percentual editável (0-30%) em Configurações > Geral > Atendimento; todos os cálculos leem via `resolveServiceFeeRate` (`lib/calc.ts`).
   `use_pin` e `allow_client_open` removidos (nunca eram lidos).
 - Testes: `scripts/testes/*.test.ts`; E2E contra o mock do Estoque (`scripts/testes/mock-estoque.mjs`) na loja ZZ: `baixaEstoque.e2e.ts`, `omieEnvioNfce.e2e.ts`.
+
+## Teto de idade da impressão automática (04/10/2026)
+
+- **Incidente**: a impressão de itens da Pizzaria (Sertão) ficou parada um dia; depois do conserto a Estação (`CaixaPrintStation.tsx`) viu todos os itens
+  não impressos desde o corte de ativação salvo no `localStorage` (retomado por `loadOrCreateActivationCutoff`, que só descarta após ociosidade)
+  e imprimiu o backlog de ONTEM na cozinha, horas depois. Perigoso: a cozinha pode preparar pedido de ontem.
+- **Regra**: `lib/impressaoIdade.ts` (`MAX_IDADE_AUTOIMPRESSAO_MIN = 60`, `podeImprimirAuto`, `avaliarIdadeAutoImpressao`, `particionarPorIdade`, testes em
+  `scripts/testes/impressaoIdade*.test.ts`). Item cujo `created_at` (relógio do servidor) é MAIS velho que 60 min (60 exatos ainda imprime) NUNCA sai
+  sozinho, mesmo depois do corte e fora do dedupe. `created_at` inválido também não imprime sozinho. Futuro (aparelho atrasado) imprime.
+- **Onde vale**: `reconcileDestination` (Cozinha, Bar e locais/setores, window.print e fila `print_jobs` rede/USB: um ponto só, antes de agrupar e antes de
+  `jaImpressoOffline`). Motor do app desktop (`desktop/electron/print-engine.js`, 30 min sobre o `created_at` do JOB) e `print-agent/agent.js` (30 min) já/ agora
+  ignoram job pendente velho. Não existe backlog do Caixa: comprovante/pré-conta saem por gesto ou por mudança de estado (a pré-conta automática não olha pra trás).
+- **O que o operador vê**: item velho fica "Sem registro" em Pedidos do Dia / KDS, com Reimprimir manual (funciona pra qualquer idade). A Estação loga
+  `console.warn` (uma vez por item) e mostra contador discreto no indicador "Impressão" + frase nos detalhes. Sem toast.
+- **Limites conhecidos**: `offsetServidorMs` existe na função, mas a Estação ainda passa 0 (não há fonte de hora do servidor sem migration); relógio de aparelho
+  muito adiantado faz item recente parecer velho (mesma classe do corte de ativação, margem de 5 min). Sem timestamp de "enviado pra cozinha", item
+  criado há mais de 1 h e liberado só agora (ex.: balcão "paga primeiro") não imprime sozinho: Reimprimir.
