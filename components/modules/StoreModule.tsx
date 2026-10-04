@@ -12026,7 +12026,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
             {activeTab === 'precos' && <PriceSchedulesView storeId={storeId} />}
             {activeTab === 'relatorios' && <ReportsView storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} />}
-            {activeTab === 'excecoes' && podeVerCaixasDaEquipe(loggedUser) && <ExceptionsReportView storeId={storeId} />}
+            {activeTab === 'excecoes' && podeVerCaixasDaEquipe(loggedUser) && <ExceptionsReportView storeId={storeId} storeName={store.name} userName={loggedUser.name} />}
 
             {activeTab === 'sales' && (
                 <div className="space-y-6">

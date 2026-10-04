@@ -2,7 +2,7 @@
 'use client';
 import React, { useState } from 'react';
 import { Download, FileSpreadsheet, BarChart3, ListChecks, Printer } from 'lucide-react';
-import { printRelatorioDia } from '@/lib/print';
+import { printRelatorioDia, printTabela } from '@/lib/print';
 import { montarPainel } from '@/lib/reports/painelDia';
 import { Button, Card, Input } from '@/components/ui';
 import { toast } from '@/components/Toast';
@@ -92,6 +92,51 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
     }
   };
 
+  const metaDoDia = () => ({ loja: storeName, periodoLabel: new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('pt-BR'), geradoEm: new Date(), geradoPor: userName });
+
+  const imprimirAnalise = async () => {
+    if (!linhas || linhas.length === 0) return;
+    const rotuloCol = agrupar === 'hour' ? 'Hora' : agrupar === 'operator' ? 'Operador' : agrupar === 'method' ? 'Forma' : 'Categoria';
+    const comContas = agrupar !== 'category';
+    try {
+      const ok = await printTabela({
+        titulo: `Análise de vendas por ${rotuloCol.toLowerCase()}`,
+        colunas: [{ rotulo: rotuloCol }, { rotulo: 'Total', direita: true }, ...(comContas ? [{ rotulo: 'Vendas', direita: true }, { rotulo: 'Ticket médio', direita: true }] : [])],
+        linhas: linhas.map((r) => [r.label, `R$ ${formatBRL(r.total)}`, ...(comContas ? [String(r.orders), `R$ ${formatBRL(r.ticket)}`] : [])]),
+        rodapeLinha: ['TOTAL', `R$ ${formatBRL(linhas.reduce((s, r) => s + r.total, 0))}`, ...(comContas ? [String(linhas.reduce((s, r) => s + r.orders, 0)), ''] : [])],
+      }, metaDoDia());
+      if (!ok) toast.error('Não consegui abrir a impressão.');
+    } catch (e) {
+      console.error('imprimirAnalise falhou:', e);
+      toast.error('Não consegui abrir a impressão.');
+    }
+  };
+
+  const imprimirTurno = async () => {
+    if (!turnoAberto) return;
+    const r = turnoAberto.resumo;
+    const operador = turnos?.find((t) => t.id === turnoAberto.id)?.operator_name ?? 'Equipe';
+    const ticket = ticketMedio(r.payments_total, r.payments_count);
+    const brl = (n: number) => `R$ ${formatBRL(n)}`;
+    try {
+      const ok = await printTabela({
+        titulo: `Turno de ${operador}`,
+        colunas: [{ rotulo: 'Item' }, { rotulo: 'Total', direita: true }],
+        linhas: [
+          ['Contas pagas', String(r.payments_count ?? 0)],
+          ['Ticket médio', ticket != null ? brl(ticket) : '—'],
+          ...completarFormas(r.totals_by_method).map((f) => [f.label, brl(f.total)]),
+          ...completarCartoes(r.totals_by_card ?? {}).map((c) => [c.label, brl(c.total)]),
+        ],
+        rodapeLinha: ['TOTAL RECEBIDO', brl(Number(r.payments_total) || 0)],
+      }, metaDoDia());
+      if (!ok) toast.error('Não consegui abrir a impressão.');
+    } catch (e) {
+      console.error('imprimirTurno falhou:', e);
+      toast.error('Não consegui abrir a impressão.');
+    }
+  };
+
   const [imprimindo, setImprimindo] = useState(false);
   const imprimirFechamento = async () => {
     setImprimindo(true);
@@ -148,6 +193,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
             </select>
           </label>
           <Button onClick={verAnalise} isLoading={carregandoAnalise} disabled={!dia}>Ver análise</Button>
+          {linhas && linhas.length > 0 && <Button variant="secondary" onClick={imprimirAnalise}><Printer size={16} /> Imprimir</Button>}
         </div>
         {linhas && (linhas.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">Nenhuma venda nesse dia.</p>
@@ -183,7 +229,10 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
             <p className="text-[13px] text-[var(--text-muted)]">Abra um turno do dia, veja cada forma de pagamento e toque nela para listar as vendas que formam o valor.</p>
           </div>
         </div>
-        <Button variant="secondary" onClick={carregarTurnos} isLoading={carregandoTurnos} disabled={!dia}>Carregar turnos do dia</Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" onClick={carregarTurnos} isLoading={carregandoTurnos} disabled={!dia}>Carregar turnos do dia</Button>
+          {turnoAberto && <Button variant="secondary" onClick={imprimirTurno}><Printer size={16} /> Imprimir turno</Button>}
+        </div>
         {turnos && (turnos.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">Nenhum turno de caixa nesse dia.</p>
         ) : (

@@ -2,8 +2,10 @@
 // Relatório de exceções por operador (2026-10-04, migration 150): cancelamentos, taxa editada/removida,
 // estornos, sangrias grandes, diferença de caixa e notas canceladas — por operador e período.
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
-import { Card } from '@/components/ui';
+import { AlertTriangle, ShieldCheck, Printer } from 'lucide-react';
+import { Button, Card } from '@/components/ui';
+import { toast } from '@/components/Toast';
+import { printTabela } from '@/lib/print';
 import { fetchExceptionsReport } from '@/lib/api';
 import { formatBRL } from '@/lib/calc';
 import {
@@ -27,7 +29,7 @@ const STATUS_ANTERIOR: Record<string, string> = { pending: 'aguardando', accepte
 
 const hora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: number }> = ({ storeId, threshold = DEFAULT_EXCEPTION_THRESHOLD }) => {
+export const ExceptionsReportView: React.FC<{ storeId: string; storeName: string; userName: string; threshold?: number }> = ({ storeId, storeName, userName, threshold = DEFAULT_EXCEPTION_THRESHOLD }) => {
   const [periodo, setPeriodo] = useState<Periodo>('hoje');
   const [report, setReport] = useState<ExceptionsReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +48,22 @@ export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: numbe
   const eventos = (report?.events ?? []).filter((e) => !filtroOperador || e.operator_name === filtroOperador);
   const tipos = Array.from(new Set(rows.flatMap((r) => Object.keys(r.counts))));
 
+  const imprimir = async () => {
+    try {
+      const periodoTxt = periodo === 'hoje' ? 'Hoje' : periodo === '7d' ? 'Últimos 7 dias' : 'Últimos 30 dias';
+      const ok = await printTabela({
+        titulo: 'Exceções por operador',
+        subtitulo: filtroOperador ? `${periodoTxt} · ${filtroOperador}` : periodoTxt,
+        colunas: [{ rotulo: 'Data' }, { rotulo: 'Operador' }, { rotulo: 'Tipo' }, { rotulo: 'Detalhe' }, { rotulo: 'Valor', direita: true }],
+        linhas: eventos.map((e) => { const d = e.details as Record<string, unknown>; return [hora(e.created_at), e.operator_name, EXCEPTION_LABELS[e.event_type] ?? e.event_type, `${String(d.produto ?? '')}${d.motivo ? ` — ${String(d.motivo)}` : ''}`, `R$ ${formatBRL(Number(d.valor ?? 0))}`]; }),
+      }, { loja: storeName, periodoLabel: new Date().toLocaleDateString('pt-BR'), geradoEm: new Date(), geradoPor: userName });
+      if (!ok) toast.error('Não consegui abrir a impressão.');
+    } catch (e) {
+      console.error('imprimir exceções falhou:', e);
+      toast.error('Não consegui abrir a impressão.');
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -53,6 +71,11 @@ export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: numbe
           <h3 className="text-[17px] font-semibold text-[var(--text)]">Exceções por operador</h3>
           <p className="text-[13px] text-[var(--text-muted)]">Cancelamentos, taxa editada ou removida, estornos, sangrias grandes e notas canceladas.</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" size="sm" className="max-sm:!h-11" onClick={imprimir} disabled={loading || eventos.length === 0} title="Imprimir exceções">
+          <Printer size={15} />
+          Imprimir
+        </Button>
         <div className="flex items-center gap-1 p-1 rounded-full bg-[var(--surface-2)]" role="tablist" aria-label="Período">
           {([['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias']] as [Periodo, string][]).map(([id, label]) => (
             <button
@@ -63,6 +86,7 @@ export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: numbe
               className={`h-8 max-sm:h-11 px-4 rounded-full text-[13px] font-semibold u-press ${periodo === id ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-sm)]' : 'text-[var(--text-muted)]'}`}
             >{label}</button>
           ))}
+        </div>
         </div>
       </div>
 
