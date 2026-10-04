@@ -52,7 +52,7 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
 
   // Refs: o poll e os eventos de realtime sempre leem o estado mais novo sem reassinar o canal.
   const ctxRef = useRef({ prefs, aplicaveis, publicos, locaisPermitidos, abaAtual, setores, modulos });
-  ctxRef.current = { prefs, aplicaveis, publicos, locaisPermitidos, abaAtual, setores, modulos };
+  useEffect(() => { ctxRef.current = { prefs, aplicaveis, publicos, locaisPermitidos, abaAtual, setores, modulos }; });
   const eventosRef = useRef(eventos);
   const rodou = useRef<Record<string, boolean>>({});
 

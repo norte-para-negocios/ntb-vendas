@@ -818,14 +818,23 @@ export const fetchPrintSectors = async (storeId: string): Promise<PrintSector[]>
   try { localStorage.setItem(`ntb-sectors-cache:${storeId}`, JSON.stringify(data || [])); } catch { /* sem cache */ }
   return data || [];
 };
+// Avisa o hook de notificações e o menu "Produção" (mesma aba ou outra) que os locais mudaram.
+const avisarSetoresMudaram = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('ntb-setores-changed')); };
 export const createPrintSector = async (storeId: string, name: string, base: 'kitchen' | 'bar'): Promise<{ id: string } | null> => {
   const { data, error } = await supabase.from('print_sectors').insert({ store_id: storeId, name, base }).select('id').maybeSingle();
   if (error) throw error;
+  avisarSetoresMudaram();
   return data as { id: string } | null;
+};
+export const updatePrintSector = async (id: string, patch: { name?: string; base?: 'kitchen' | 'bar' }) => {
+  const { error } = await supabase.from('print_sectors').update(patch).eq('id', id);
+  if (error) throw error;
+  avisarSetoresMudaram();
 };
 export const deletePrintSector = async (id: string) => {
   const { error } = await supabase.from('print_sectors').delete().eq('id', id);
   if (error) throw error;
+  avisarSetoresMudaram();
 };
 // Mapa categoria -> local de preparo (pra telas que só têm o produto).
 export const fetchCategorySectors = async (storeId: string): Promise<Record<string, string | null>> => {

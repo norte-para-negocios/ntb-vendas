@@ -153,7 +153,6 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
 
   const load = useCallback(async () => {
     fetchPrintSectors(store.id).then(setSetores).catch(() => {});
-    fetchLocaisEstoque(store.id).then(setEstoque).catch(() => {});
     const [printerList, jobList, discovered, agent] = await Promise.all([
       fetchPrinterConfigs(store.id),
       fetchRecentPrintJobs(store.id, 30),
@@ -522,114 +521,9 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         </Card>
       )}
 
-      <Card className="p-4 space-y-3">
-        <div>
-          <p className="text-[15px] font-semibold text-[var(--text)]">Locais de preparo</p>
-          <p className="text-xs text-[var(--text-muted)]">Cozinha e Bar já existem. Crie outros (ex.: Pizzaria), escolha em Cardápio → Gerenciar categorias o local de cada categoria, e aqui embaixo qual impressora é de cada local.</p>
-        </div>
-        {estoque?.configurado && estoque.erro && (
-          <p className="text-xs text-[var(--warn)] bg-[var(--warn)]/10 rounded-[var(--r-md)] p-3">Não consegui ler os locais do Omie agora ({estoque.erro}). A escolha já salva continua valendo.</p>
-        )}
-        {comOmie ? (
-          <div className="divide-y divide-[var(--border)] rounded-[var(--r-md)] border border-[var(--border)]">
-            {([{ chave: 'kitchen', nome: 'Cozinha' }, { chave: 'bar', nome: 'Bar' }, ...setores.map((st) => ({ chave: `setor:${st.id}`, nome: st.name, setor: st }))] as { chave: string; nome: string; setor?: PrintSector }[]).map((d) => {
-              const escolhido = estoque!.mapa[d.chave];
-              return (
-                <div key={d.chave} className="flex flex-wrap items-center gap-3 px-3 py-2.5 max-sm:flex-col max-sm:items-stretch">
-                  <div className="flex items-center gap-1.5 min-w-[120px] flex-1">
-                    <span className="text-sm font-semibold text-[var(--text)]">{d.nome}</span>
-                    {d.setor && (
-                      <button
-                        type="button"
-                        aria-label={`Excluir setor ${d.nome}`}
-                        className="relative hit-44 p-1 rounded-full hover:bg-[var(--err)]/10 text-[var(--err)]"
-                        onClick={async () => {
-                          if (!window.confirm(`Excluir o setor "${d.nome}"? As categorias e produtos dele voltam pra Cozinha/Bar.`)) return;
-                          try { await deletePrintSector(d.setor!.id); await salvarLocalEstoque(store.id, d.chave, null); toast.success('Local excluído.'); load(); } catch (e: any) { toast.error(e?.message || 'Erro ao excluir.'); }
-                        }}
-                      ><X size={12} /></button>
-                    )}
-                  </div>
-                  <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] max-sm:flex-col max-sm:items-stretch">
-                    Baixa no estoque (Omie)
-                    <select
-                      value={escolhido ? String(escolhido) : ''}
-                      onChange={async (e) => {
-                        const codigo = Number(e.target.value) || null;
-                        const local = codigo ? estoque!.locais.find((l) => l.codigo === codigo) ?? null : null;
-                        const r = await salvarLocalEstoque(store.id, d.chave, local);
-                        if (!r.success) { toast.error(r.message || 'Erro ao salvar.'); return; }
-                        setEstoque((atual) => {
-                          if (!atual) return atual;
-                          const mapa = { ...atual.mapa };
-                          if (codigo) mapa[d.chave] = codigo; else delete mapa[d.chave];
-                          return { ...atual, mapa };
-                        });
-                        toast.success(local ? `${d.nome} baixa no local ${local.nome}.` : `${d.nome} sem local escolhido.`);
-                      }}
-                      className={`min-w-[190px] rounded-[var(--r-md)] border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base ${escolhido ? 'border-[var(--border)]' : 'border-[var(--warn)]'}`}
-                    >
-                      <option value="">Escolha o local...</option>
-                      {estoque!.locais.map((l) => <option key={l.codigo} value={l.codigo}>{l.nome}</option>)}
-                    </select>
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]">Cozinha</span>
-            <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]">Bar</span>
-            {setores.map((st) => (
-              <span key={st.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-xs font-semibold bg-[var(--brand)]/10 text-[var(--brand)] border border-[var(--brand)]/30">
-                {st.name}
-                <button
-                  type="button"
-                  aria-label={`Excluir setor ${st.name}`}
-                  className="relative hit-44 p-1 rounded-full hover:bg-[var(--err)]/10 text-[var(--err)]"
-                  onClick={async () => {
-                    if (!window.confirm(`Excluir o setor "${st.name}"? As categorias e produtos dele voltam pra Cozinha/Bar.`)) return;
-                    try { await deletePrintSector(st.id); toast.success('Local excluído.'); load(); } catch (e: any) { toast.error(e?.message || 'Erro ao excluir.'); }
-                  }}
-                ><X size={12} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[160px]">
-            <Input label="Novo local" placeholder="Ex: Pizzaria" value={novoSetorNome} onChange={(e) => setNovoSetorNome(e.target.value)} maxLength={30} />
-          </div>
-          {comOmie && (
-            <div className="flex flex-col gap-1 min-w-[190px] max-sm:w-full">
-              <label className="text-[13px] font-medium text-[var(--text-muted)]">Baixa no estoque (Omie)</label>
-              <select
-                value={novoSetorLocal}
-                onChange={(e) => setNovoSetorLocal(e.target.value)}
-                className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
-              >
-                <option value="">Escolha o local...</option>
-                {estoque!.locais.map((l) => <option key={l.codigo} value={l.codigo}>{l.nome}</option>)}
-              </select>
-            </div>
-          )}
-          <Button
-            onClick={async () => {
-              const nome = novoSetorNome.trim();
-              if (!nome) { toast.error('Digite o nome do setor.'); return; }
-              const local = comOmie ? estoque!.locais.find((l) => String(l.codigo) === novoSetorLocal) ?? null : null;
-              if (comOmie && !local) { toast.error('Escolha de qual local do Omie esse setor baixa o estoque.'); return; }
-              try {
-                const criado = await createPrintSector(store.id, nome, 'kitchen');
-                if (local && criado?.id) await salvarLocalEstoque(store.id, `setor:${criado.id}`, local);
-                setNovoSetorNome(''); setNovoSetorLocal('');
-                toast.success(`Local "${nome}" criado.`); load();
-              } catch (e: any) { toast.error(e?.message || 'Erro ao criar.'); }
-            }}
-          >Criar local</Button>
-        </div>
-      </Card>
+      <p className="text-xs text-[var(--text-muted)]">
+        Locais de preparo (Cozinha, Bar, Pizzaria...) e a baixa de estoque de cada um agora ficam em Administração → Locais de preparo. Aqui você escolhe o que cada impressora imprime.
+      </p>
 
       {printers.length === 0 && !showAddForm ? (
         <p className="text-sm text-[var(--text-muted)] text-center py-6">Nenhuma impressora cadastrada ainda.</p>

@@ -44,6 +44,7 @@ import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
+import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ProducaoView } from '@/components/modules/ProducaoView';
 import { usaMenuProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
@@ -8786,7 +8787,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
     const [printSectors, setPrintSectors] = useState<PrintSector[]>([]);
-    const [newSectorName, setNewSectorName] = useState('');
     // Grupos da lista lateral começam fechados (sanfona); o grupo da categoria ativa abre sozinho.
     const [openSidebarGroups, setOpenSidebarGroups] = useState<Set<string>>(new Set());
     const [activeMenuCategoryId, setActiveMenuCategoryId] = useState<string | null>(null);
@@ -9599,71 +9599,12 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         return recommendableProducts.filter(p => p.name.toLowerCase().includes(term));
     }, [recommendableProducts, pRecommendationSearch]);
 
-    const criarLocalCardapio = async () => {
-        const nome = newSectorName.trim();
-        if (!nome) return;
-        try { await createPrintSector(storeId, nome, 'kitchen'); setNewSectorName(''); toast.success(`Local "${nome}" criado.`); loadMenu(); }
-        catch (e: any) { toast.error('Erro ao criar local: ' + (e.message || '')); }
-    };
-
     return (
         <div className="space-y-8">
-            {/* LOCAIS DE PREPARO — criar local (ex.: Pizzaria) e escolher o local de cada categoria, direto no Cardápio */}
-            <Card className="p-5 space-y-4">
-                <div>
-                    <h3 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">Locais de preparo</h3>
-                    <p className="text-[13px] leading-snug text-[var(--text-muted)] mt-0.5">Pra onde cada pedido vai (impressora e tela de acompanhamento). Cozinha e Bar já existem; crie outros e escolha o local de cada categoria aqui embaixo. A impressora de cada local se escolhe em Administração → Impressão.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    {[{ id: 'kitchen', nome: 'Cozinha' }, { id: 'bar', nome: 'Bar' }].map(l => (
-                        <span key={l.id} className="px-3 py-1.5 rounded-full text-[13px] font-semibold bg-[var(--surface-2)] text-[var(--text)]">{l.nome}</span>
-                    ))}
-                    {printSectors.map(st => {
-                        const qtd = categories.filter(c => c.sector_id === st.id).length;
-                        return (
-                            <span key={st.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-semibold bg-[var(--brand-soft)] text-[var(--brand)]">
-                                {st.name} <span className="font-normal opacity-70">({qtd} {qtd === 1 ? 'categoria' : 'categorias'})</span>
-                                <button
-                                    type="button"
-                                    aria-label={`Excluir local ${st.name}`}
-                                    onClick={async () => {
-                                        if (!(await confirm({ message: `Excluir o local "${st.name}"? As categorias e produtos dele voltam pra Cozinha/Bar.`, variant: 'danger' }))) return;
-                                        try { await deletePrintSector(st.id); toast.success('Local excluído.'); loadMenu(); }
-                                        catch (e: any) { toast.error('Erro ao excluir: ' + (e.message || '')); }
-                                    }}
-                                    className="relative hit-44 p-1 rounded-full text-[var(--err)] hover:bg-[var(--err)]/10"
-                                ><X size={12} /></button>
-                            </span>
-                        );
-                    })}
-                </div>
-                <div className="flex gap-2 items-end">
-                    <div className="flex-1">
-                        <Input label="Novo local" placeholder="Ex: Pizzaria" value={newSectorName} maxLength={30} onChange={e => setNewSectorName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') criarLocalCardapio(); }} />
-                    </div>
-                    <Button onClick={criarLocalCardapio}>Criar local</Button>
-                </div>
-                {printSectors.length > 0 && categories.length > 0 && (
-                    <details className="rounded-[var(--r-md)] bg-[var(--surface-2)]/60 p-3">
-                        <summary className="text-sm font-semibold text-[var(--text)] cursor-pointer select-none">Escolher o local de cada categoria ({categories.length})</summary>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
-                            {categories.map(cat => (
-                                <label key={cat.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-[var(--r-md)] bg-[var(--surface)]">
-                                    <span className="text-sm font-medium text-[var(--text)] truncate">{cat.name}</span>
-                                    <select
-                                        value={cat.sector_id || ''}
-                                        onChange={e => handleChangeCategorySector(cat.id, e.target.value || null)}
-                                        className={`text-[13px] rounded-[8px] border-0 px-2 py-1 max-sm:text-base shrink-0 ${cat.sector_id ? 'bg-[var(--brand-soft)] text-[var(--brand)] font-semibold' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}
-                                    >
-                                        <option value="">Cozinha/Bar</option>
-                                        {printSectors.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-                                    </select>
-                                </label>
-                            ))}
-                        </div>
-                    </details>
-                )}
-            </Card>
+            {/* Locais de preparo saíram do Cardápio (04/10/2026): cadastro único em Administração → Locais de preparo. */}
+            <p className="text-[13px] text-[var(--text-muted)] -mb-4">
+                Locais de preparo (Cozinha, Bar, Pizzaria...) agora ficam em Administração → Locais de preparo.
+            </p>
 
             {/* INTEGRAÇÃO COM O NTB ESTOQUE (Ordem de Produção automática) */}
             <Collapsible
@@ -9947,37 +9888,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         )}
                     </div>
 
-                    <div>
-                        <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-1">Locais de preparo</p>
-                        <p className="text-[11px] text-[var(--text-muted)] mb-2">Pra onde os pedidos vão ser impressos. Cozinha e Bar já existem; crie outros (ex.: Pizzaria) e escolha o local de cada categoria abaixo. A impressora de cada local se escolhe em Administração → Impressão.</p>
-                        <div className="flex gap-2 mb-2">
-                            <Input placeholder="Novo local (ex.: Pizzaria)" value={newSectorName} onChange={e => setNewSectorName(e.target.value)} maxLength={30} />
-                            <Button onClick={async () => {
-                                const nome = newSectorName.trim();
-                                if (!nome) return;
-                                try { await createPrintSector(storeId, nome, 'kitchen'); setNewSectorName(''); toast.success(`Local "${nome}" criado.`); loadMenu(); }
-                                catch (e: any) { toast.error('Erro ao criar local: ' + (e.message || '')); }
-                            }}><Plus size={20}/></Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <span className="bg-[var(--surface-2)] px-3 py-1.5 rounded-lg font-bold text-[var(--text)]">Cozinha</span>
-                            <span className="bg-[var(--surface-2)] px-3 py-1.5 rounded-lg font-bold text-[var(--text)]">Bar</span>
-                            {printSectors.map(st => (
-                                <div key={st.id} className="bg-[var(--brand)]/10 px-3 py-1.5 rounded-lg flex items-center gap-2">
-                                    <span className="font-bold text-[var(--brand)]">{st.name}</span>
-                                    <button
-                                        aria-label={`Excluir local ${st.name}`}
-                                        onClick={async () => {
-                                            if (!(await confirm({ message: `Excluir o local "${st.name}"? As categorias e produtos dele voltam pra Cozinha/Bar.`, variant: 'danger' }))) return;
-                                            try { await deletePrintSector(st.id); toast.success('Local excluído.'); loadMenu(); }
-                                            catch (e: any) { toast.error('Erro ao excluir: ' + (e.message || '')); }
-                                        }}
-                                        className="relative hit-44 text-[var(--text-muted)] hover:text-[var(--err)]"
-                                    ><X size={14}/></button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)]">Locais de preparo (ex.: Pizzaria) agora ficam em Administração → Locais de preparo.</p>
 
                     <div>
                         <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Categorias</p>
@@ -11162,7 +11073,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'settings' | 'cupons' | 'excecoes' | 'precos' | 'relatorios'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'locais' | 'settings' | 'cupons' | 'excecoes' | 'precos' | 'relatorios'>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -11579,6 +11490,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             { id: 'relatorios', label: 'Relatórios' },
             ...(podeVerCaixasDaEquipe(loggedUser) ? [{ id: 'excecoes', label: 'Exceções' }] : []),
             { id: 'impressao', label: 'Impressão' },
+            { id: 'locais', label: 'Locais de preparo' },
         ]},
         { label: 'Time', icon: <Users size={14} />, tabs: [
             { id: 'users', label: 'Gestão de usuários' },
@@ -12057,6 +11969,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             )}
 
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
+            {activeTab === 'locais' && <LocaisPreparoView store={store} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
             {activeTab === 'precos' && <PriceSchedulesView storeId={storeId} />}
