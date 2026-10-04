@@ -40,7 +40,11 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
   const storeId = store.id;
   const chave = `ntb-notif:${storeId}:${user.id ?? 'universal'}`;
   const [eventos, setEventos] = useState<EventoNotificacao[]>(() => { try { return restaurarEventos(localStorage.getItem(chave)); } catch { return []; } });
-  const [setores, setSetores] = useState<SetorLike[]>([]);
+  // Locais de preparo do último acesso: o menu já nasce como "Produção" (sem piscar Cozinha/Bar até a rede responder).
+  const chaveSetores = `ntb-setores:${storeId}`;
+  const [setores, setSetores] = useState<SetorLike[]>(() => {
+    try { const j = JSON.parse(localStorage.getItem(chaveSetores) ?? '[]'); return Array.isArray(j) ? j.filter((x) => x && typeof x.id === 'string' && typeof x.name === 'string') : []; } catch { return []; }
+  });
   const [counts, setCounts] = useState({ tables: 0, kitchen: 0, bar: 0 });
   const [porLocal, setPorLocal] = useState<Record<string, number>>({});
   const [pausado, setPausado] = useState(false);
@@ -89,7 +93,13 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
     if (meus.some((e) => e.tipo === 'chamada_garcom' || e.tipo === 'pedido_conta')) toast.info('Atenção na mesa! 🔔');
   }, [chave]);
 
-  const carregarSetores = useCallback(() => { fetchPrintSectors(storeId).then((l) => setSetores(l.map((s) => ({ id: s.id, name: s.name, base: s.base })))).catch(() => {}); }, [storeId]);
+  const carregarSetores = useCallback(() => {
+    fetchPrintSectors(storeId).then((l) => {
+      const novos = l.map((s) => ({ id: s.id, name: s.name, base: s.base }));
+      setSetores(novos);
+      try { localStorage.setItem(`ntb-setores:${storeId}`, JSON.stringify(novos)); } catch { /* sem persistência */ }
+    }).catch(() => {});
+  }, [storeId]);
 
   // Última leitura feita pelo próprio sino (por fonte), para não repetir a consulta quando só uma tela publicou dado de outra fonte.
   const proprio = useRef<Record<string, { em: number; dados: any }>>({});

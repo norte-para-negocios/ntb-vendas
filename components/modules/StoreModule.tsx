@@ -1574,7 +1574,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
 
   const isItemLate = (item: OrderItem) => {
       const prepMinutes = item.product?.prep_time_minutes;
-      if (!prepMinutes) return false;
+      if (!prepMinutes || item.status === OrderStatus.READY) return false; // pronto não está mais atrasado
       const elapsedMinutes = (now - new Date(item.created_at).getTime()) / 60000;
       return elapsedMinutes > prepMinutes;
   };
@@ -1586,7 +1586,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
   const getPrepProgress = (item: OrderItem) => {
       const prepMinutes = item.product?.prep_time_minutes;
       const elapsedMinutes = (now - new Date(item.created_at).getTime()) / 60000;
-      const ratio = prepMinutes ? elapsedMinutes / prepMinutes : null;
+      const ratio = prepMinutes && item.status !== OrderStatus.READY ? elapsedMinutes / prepMinutes : null;
       return { elapsedMinutes, ratio };
   };
 
@@ -1729,9 +1729,9 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                         {...LIST_ITEM_MOTION}
                     >
                     <Card className={`p-4 ${item.priority ? 'ring-2 ring-[var(--err)]' : late ? 'ring-2 ring-[var(--err)]/40' : ''}`} style={(late || item.priority) ? { animation: 'u-late-pulse 2s ease-in-out infinite' } : undefined}>
-                        <div className="flex justify-between items-start gap-2 mb-2">
-                            <div className="min-w-0">
-                                <p className="text-[17px] font-semibold text-[var(--text)] tracking-[-0.01em] truncate">
+                        <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-2 mb-2">
+                            <div className="min-w-0 flex-1 basis-[120px]">
+                                <p className="text-[17px] font-semibold text-[var(--text)] tracking-[-0.01em] break-words">
                                     {item.order?.order_type === 'counter'
                                         ? (item.order?.customer_name || 'Balcão')
                                         : `Mesa ${item.order?.tables?.number || '?'}`}
@@ -3592,9 +3592,12 @@ NOTIFY pgrst, 'reload schema';`;
         const tableOrders = activeOrders.filter(o => o.table_id === tableId);
         let subtotal = 0;
         let items: OrderItem[] = [];
+        // Inclui os cancelados: a lista "Pedidos da mesa" mostra riscado (fora do total).
+        const itensComCancelados: OrderItem[] = [];
         tableOrders.forEach(o => {
             if(o.order_items) {
                 o.order_items.forEach(i => {
+                    itensComCancelados.push(i);
                     if(i.status !== 'canceled') {
                         subtotal += (i.price_at_time * i.quantity);
                         items.push(i);
@@ -3604,6 +3607,7 @@ NOTIFY pgrst, 'reload schema';`;
         });
         // Sort by newest
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        itensComCancelados.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
         const table = tables.find(t => t.id === tableId);
         const hasFeeItem = contaTemTaxaPercentual(items);
@@ -3612,7 +3616,7 @@ NOTIFY pgrst, 'reload schema';`;
         const serviceFee = isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
         const total = calculateOrderTotal(subtotal, isServiceFeeEnabled, serviceFeeRate);
 
-        return { subtotal, serviceFee, total, count: items.length, items: items.slice(0, 3), allItems: items, isServiceFeeEnabled, isServiceFeeRemovedForTable }; // Show top 3
+        return { subtotal, serviceFee, total, count: items.length, items: items.slice(0, 3), allItems: items, todosItens: itensComCancelados, isServiceFeeEnabled, isServiceFeeRemovedForTable }; // Show top 3
     };
 
     // Totais da aba de Pagamento: quanto falta pagar e, quando o dinheiro
@@ -4993,7 +4997,7 @@ NOTIFY pgrst, 'reload schema';`;
                                      {(() => {
                                          // Pedidos à vista ao tocar na mesa (plano mesa-cardapio-permissoes, Task 1).
                                          const resumoMesa = selectedTable ? getTableSummary(selectedTable.id) : null;
-                                         const { linhas } = resumirPedidosDaMesa(resumoMesa?.allItems ?? []);
+                                         const { linhas } = resumirPedidosDaMesa(resumoMesa?.todosItens ?? []);
                                          return (
                                              <div className="bg-[var(--surface-2)] rounded-[14px] overflow-hidden" aria-label="Pedidos da mesa">
                                                  <p className="eyebrow px-4 pt-3 pb-1">Pedidos da mesa</p>
@@ -5007,7 +5011,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                      <span className="flex-1 min-w-0">
                                                                          <span className="text-[var(--text-muted)] num">{l.qtd}× </span>
                                                                          <span className="font-medium">{l.nome}</span>
-                                                                         {l.quem ? <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-muted)] no-underline">{l.quem}</span> : null}
+                                                                         {l.quem ? <span className="ml-2 inline-block whitespace-nowrap text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-muted)] no-underline">{l.quem}</span> : null}
                                                                      </span>
                                                                      <span className="num shrink-0">R$ {formatBRL(l.valor)}</span>
                                                                  </li>
@@ -5210,6 +5214,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 {orderFlow !== 'direct_print' && (
                                                                     item.status === 'delivered' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Entregue</span> :
                                                                     item.status === 'preparing' ? <span className="text-[var(--info)] flex items-center gap-1"><ChefHat size={10}/> Preparando</span> :
+                                                                    item.status === 'ready' ? <span className="text-[var(--ok)] flex items-center gap-1"><CheckCircle size={10}/> Pronto</span> :
                                                                     <span className="text-[var(--warn)] flex items-center gap-1"><Clock size={10}/> Aguardando</span>
                                                                 )}
                                                                 <span>{orderFlow !== 'direct_print' && '• '}R$ {formatBRL(item.price_at_time)} un.</span>
@@ -5431,7 +5436,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <div className="text-[13px] text-[var(--text-muted)] mt-0.5 num">
                                                     R$ {formatBRL(item.price_at_time * item.quantity)}
                                                     {orderFlow !== 'direct_print' && (
-                                                        <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : 'Aguardando'}</>
+                                                        <> · {item.status === 'delivered' ? 'Entregue' : item.status === 'preparing' ? 'Preparando' : item.status === 'ready' ? 'Pronto' : 'Aguardando'}</>
                                                     )}
                                                     <HoraDoPedido criadoEm={item.created_at} />
                                                 </div>
