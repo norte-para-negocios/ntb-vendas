@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BarChart3, Wallet, UtensilsCrossed, Users, SlidersHorizontal, Lock, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { areasVisiveis, areaDaAba, abaInicial, corrigirAba, buscarAjustes, type AbaId, type AreaId, type NavCtx } from '@/lib/adminNav';
+import { areasVisiveis, areaDaAba, abaInicial, corrigirAba, buscarAjustes, BUSCAVEIS, type AbaId, type AreaId, type NavCtx } from '@/lib/adminNav';
 import { TOM_COR, type Status } from '@/lib/adminStatus';
 import { SETTINGS_SECOES, podeBaixarApp } from '../StoreSettingsView';
 
@@ -43,12 +43,12 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
     useEffect(() => { setMobileArea((m) => (m === null ? m : areaDaAba(corrigida))); }, [corrigida]);
 
     const [q, setQ] = useState('');
-    const achados = buscarAjustes(q).filter((a) => a.id !== 'baixar_app' || podeBaixarApp()).filter((a) => areas.some((x) => x.abas.some((b) => b.id === a.aba))).slice(0, 6);
+    const achados = buscarAjustes(q, BUSCAVEIS).filter((a) => a.id !== 'baixar_app' || podeBaixarApp()).filter((a) => areas.some((x) => x.abas.some((b) => b.id === a.aba))).slice(0, 6);
     const escolherAjuste = (aba: AbaId, id: string) => { setQ(''); setMobileArea(areaDaAba(aba)); onTab(aba, `aj-${id}`); };
 
     const caminho = (aba: AbaId, secao: string) => {
         const nomeAba = areas.flatMap((x) => x.abas).find((b) => b.id === aba)?.label;
-        const nomeSecao = ROTULO_SECAO[secao] ?? secao;
+        const nomeSecao = secao === 'aba' ? undefined : (ROTULO_SECAO[secao] ?? secao);
         return [rotuloArea(areaDaAba(aba)), nomeAba, nomeSecao].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' › ');
     };
 

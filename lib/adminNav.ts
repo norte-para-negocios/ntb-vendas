@@ -84,7 +84,7 @@ export function corrigirAba(atual: AbaId, ctx: NavCtx): AbaId {
   return areasVisiveis(ctx)[0]?.abas[0]?.id ?? 'dashboard';
 }
 
-export interface Ajuste { id: string; titulo: string; descricao: string; secao: SecaoId; aba: AbaId; palavras: string[] }
+export interface Ajuste { id: string; titulo: string; descricao: string; secao: SecaoId | 'aba'; aba: AbaId; palavras: string[] }
 
 export const AJUSTES: Ajuste[] = [
   { id: 'client_ordering', titulo: 'Clientes podem fazer pedido pelo celular', descricao: 'Liga ou desliga o pedido pelo QR da mesa; desligado, o cardápio vira só consulta.', secao: 'pedido_cliente', aba: 'settings', palavras: ['qr', 'cardapio', 'vitrine', 'cliente', 'pin'] },
@@ -103,6 +103,20 @@ export const AJUSTES: Ajuste[] = [
   { id: 'capa_cardapio', titulo: 'Imagem de capa do cardápio', descricao: 'Foto do topo do cardápio do cliente (paisagem, ideal 1200x600).', secao: 'aparencia', aba: 'settings', palavras: ['foto', 'banner', 'hero'] },
   { id: 'baixar_app', titulo: 'Baixar o aplicativo', descricao: 'Instaladores do Norte Vendas para o computador e o celular.', secao: 'aplicativo', aba: 'settings', palavras: ['download', 'desktop', 'apk', 'instalar'] },
 ];
+
+// A busca também acha as ABAS pelo nome ou por palavras que a pessoa usaria ("cupom", "permissão", "nota fiscal"...).
+const PALAVRAS_ABA: Record<AbaId, string[]> = {
+  dashboard: ['resumo', 'painel', 'hoje', 'vendas'], sales: ['historico', 'vendas', 'csv', 'filtro'], relatorios: ['relatorio', 'excel', 'pdf', 'fechamento', 'cartao', 'cartoes', 'imprimir'],
+  excecoes: ['excecoes', 'cancelamento', 'estorno', 'operador'], shifts: ['turno', 'caixa', 'abrir', 'fechar'], regras_caixa: ['caixa', 'regras', 'sangria'],
+  saude: ['saude', 'cardapio', 'problemas'], precos: ['preco', 'horario', 'happy hour', 'promocao'], cupons: ['cupom', 'cupons', 'desconto', 'promocao'], link: ['link', 'qr', 'qr code', 'cardapio'],
+  users: ['pessoas', 'equipe', 'usuario', 'funcionario', 'garcom', 'senha'], permissoes: ['permissao', 'permissoes', 'funcao', 'gerente', 'garcom', 'caixa'],
+  settings: ['geral', 'ajustes', 'configuracoes'], impressao: ['impressao', 'impressora', 'imprimir'], locais: ['locais', 'preparo', 'cozinha', 'bar', 'pizzaria', 'producao', 'setor'],
+  fiscal: ['nota', 'notas', 'fiscal', 'nfce', 'nfe', 'certificado', 'sefaz'],
+};
+export const ABAS_BUSCAVEIS: Ajuste[] = AREAS.flatMap((a) => a.abas.map((b): Ajuste => ({
+  id: `aba_${b.id}`, titulo: b.label, descricao: `Aba de ${a.label}: ${a.descricao.toLowerCase()}.`, secao: 'aba', aba: b.id, palavras: PALAVRAS_ABA[b.id] ?? [],
+})));
+export const BUSCAVEIS: Ajuste[] = [...AJUSTES, ...ABAS_BUSCAVEIS];
 
 export const norm = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
