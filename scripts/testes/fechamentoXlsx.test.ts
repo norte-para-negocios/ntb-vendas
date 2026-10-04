@@ -64,7 +64,25 @@ const textos = (ws: ExcelJS.Worksheet) => { const out: string[] = []; ws.eachRow
   ] as any };
   const rb = await ler(await buildFechamentoWorkbook(dupla));
   const vd = rb.getWorksheet('Vendas')!;
-  assert.equal(Number(vd.getRow(2).getCell(8).value) + Number(vd.getRow(3).getCell(8).value), 487.08, 'recebido da conta aparece uma vez');
+  assert.equal(Number(vd.getRow(2).getCell(9).value) + Number(vd.getRow(3).getCell(9).value), 487.08, 'recebido da conta aparece uma vez');
+
+  // Item CANCELADO não entra no total (achado do portão 04/10: 131,60 contra 111,70 dos itens e 122,87 recebidos).
+  // orders.total do banco NÃO desconta o item cancelado; o Excel recalcula pelos itens ativos.
+  const item = (id: string, q: number, p: number, status = 'delivered') => ({ id, quantity: q, price_at_time: p, status, product: { name: id } });
+  const cancelada: FechamentoData = { ...base, turnos: [], excecoes: [], vendas: [
+    { id: 'c1', table_id: 'tc', status: 'delivered', order_type: 'table', total: 131.6, created_at: '2026-10-04T22:00:00Z', tables: { number: 12 },
+      payment_details: { total: 122.87, operador_nome: 'Ana', methods: [{ method: 'CREDIT', brand: 'visa', amount: 122.87 }] },
+      order_items: [item('Pizza', 1, 60), item('Suco', 2, 15.85), item('Burger', 1, 20), item('Extra', 1, 19.9, 'canceled')] },
+  ] as any };
+  const rc = await ler(await buildFechamentoWorkbook(cancelada));
+  const vc = rc.getWorksheet('Vendas')!;
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((c) => vc.getRow(1).getCell(c).value).slice(6), ['Total dos itens', 'Taxa de serviço', 'Recebido da conta', 'Status'], 'cabeçalho deixa claro itens, taxa e recebido');
+  assert.equal(Number(vc.getRow(2).getCell(7).value), 111.7, 'Total dos itens = só itens ativos (60 + 31,70 + 20), sem o cancelado');
+  assert.equal(Number(vc.getRow(2).getCell(8).value), 11.17, 'taxa = recebido - itens ativos');
+  assert.equal(Number(vc.getRow(2).getCell(9).value), 122.87, 'recebido da conta');
+  const ic = rc.getWorksheet('Itens')!;
+  let somaItens = 0; ic.eachRow((row, n) => { if (n > 1) somaItens += Number((row.getCell(6).value as any)?.result ?? row.getCell(6).value); });
+  assert.equal(Math.round(somaItens * 100) / 100, 111.7, 'aba Itens soma o mesmo total e não lista o cancelado');
 
   // Exceções só existe com dados
   const comExc = await ler(await buildFechamentoWorkbook({ ...base, turnos: [], vendas: [], excecoes: [{ operator_name: 'Claudia', event_type: 'item_cancelado', created_at: '2026-10-03T23:00:00Z', details: { produto: 'Água', valor: 5, motivo: 'Erro' } }] }));
