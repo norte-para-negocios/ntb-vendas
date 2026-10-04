@@ -79,3 +79,31 @@ export function roleCanOr(user: UserLike, store: StoreLike, action: ActionKey, l
   }
   return legado;
 }
+
+// ---- Matriz exibida e gravada na tela de Permissões ----
+// Estas três, sem valor salvo, seguem a permissão de aba de cada pessoa (quem tem a aba Cardápio edita).
+// Na matriz aparecem ligadas, que é o que acontece na prática para quem tem a aba.
+export const SEGUE_ABA: ActionKey[] = ['esgotar', 'editar_cardapio', 'editar_precos_horario'];
+
+const padraoEfetivo = (role: RoleKey, action: ActionKey): boolean => (SEGUE_ABA.includes(action) ? true : DEFAULT_ROLE_PERMS[role][action]);
+
+export function matrizEfetiva(raw: unknown): Record<RoleKey, Record<ActionKey, boolean>> {
+  const out = { manager: {} as Record<ActionKey, boolean>, cashier: {} as Record<ActionKey, boolean>, waiter: {} as Record<ActionKey, boolean> };
+  ROLE_KEYS.forEach((r) => ACTIONS.forEach((a) => { out[r][a.key] = valorSalvo(raw, r, a.key) ?? padraoEfetivo(r, a.key); }));
+  return out;
+}
+
+// Novo valor de stores.config.role_permissions depois de mudar UMA permissão.
+// Grava só o que difere do efetivo; devolve undefined quando não sobra nada (a chave deve ser removida da config).
+export function alterarPermissaoEsparso(raw: unknown, role: RoleKey, action: ActionKey, valor: boolean): Record<string, Record<string, boolean>> | undefined {
+  const out: Record<string, Record<string, boolean>> = {};
+  ROLE_KEYS.forEach((r) => {
+    const linha: Record<string, boolean> = {};
+    ACTIONS.forEach((a) => { const v = valorSalvo(raw, r, a.key); if (v !== undefined) linha[a.key] = v; });
+    if (Object.keys(linha).length > 0) out[r] = linha;
+  });
+  const linha = { ...(out[role] ?? {}) };
+  if (valor === padraoEfetivo(role, action)) delete linha[action]; else linha[action] = valor;
+  if (Object.keys(linha).length > 0) out[role] = linha; else delete out[role];
+  return Object.keys(out).length > 0 ? out : undefined;
+}

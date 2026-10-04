@@ -11,7 +11,7 @@ import { Button } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import type { Store } from '@/types';
 import { updateStoreConfig } from '@/lib/api';
-import { ACTIONS, ROLE_KEYS, ROLE_TITLES, normalizarMatriz, DEFAULT_ROLE_PERMS, type ActionKey, type RoleKey } from '@/lib/rolePermissions';
+import { ACTIONS, ROLE_KEYS, ROLE_TITLES, matrizEfetiva, alterarPermissaoEsparso, SEGUE_ABA, type ActionKey, type RoleKey } from '@/lib/rolePermissions';
 
 const RolePermissionsView: React.FC<{
     store: Store;
@@ -20,20 +20,23 @@ const RolePermissionsView: React.FC<{
 }> = ({ store, loggedUser, onStoreUpdate }) => {
     // Só dono e conta universal editam; o gerente vê, desabilitado.
     const podeEditar = loggedUser.role === 'owner' || loggedUser.role === 'universal';
-    const [matriz, setMatriz] = useState(() => normalizarMatriz(store.config?.role_permissions));
+    const [matriz, setMatriz] = useState(() => matrizEfetiva(store.config?.role_permissions));
     const [salvando, setSalvando] = useState(false);
     const configRef = useRef(store.config);
 
     useEffect(() => {
         configRef.current = store.config;
-        setMatriz(normalizarMatriz(store.config?.role_permissions));
+        setMatriz(matrizEfetiva(store.config?.role_permissions));
     }, [store.config]);
 
-    const salvar = async (proxima: Record<RoleKey, Record<ActionKey, boolean>>, mensagemErro: string) => {
+    // `salvo` = o que vai em stores.config.role_permissions (undefined = remove a chave e volta ao padrão).
+    const salvar = async (salvo: ReturnType<typeof alterarPermissaoEsparso>, mensagemErro: string) => {
         const anterior = matriz;
-        setMatriz(proxima);
+        const proximaMatriz = matrizEfetiva(salvo);
+        setMatriz(proximaMatriz);
         setSalvando(true);
-        const novaConfig = { ...configRef.current, role_permissions: proxima };
+        const { role_permissions: _antiga, ...resto } = (configRef.current ?? {}) as any;
+        const novaConfig = (salvo ? { ...resto, role_permissions: salvo } : resto) as Store['config'];
         try {
             await updateStoreConfig(store.id, novaConfig);
             configRef.current = novaConfig;
@@ -49,14 +52,12 @@ const RolePermissionsView: React.FC<{
 
     const alternar = (role: RoleKey, action: ActionKey) => {
         if (!podeEditar || salvando) return;
-        const proxima = { ...matriz, [role]: { ...matriz[role], [action]: !matriz[role][action] } };
-        void salvar(proxima, 'Não foi possível salvar a permissão.');
+        void salvar(alterarPermissaoEsparso(configRef.current?.role_permissions, role, action, !matriz[role][action]), 'Não foi possível salvar a permissão.');
     };
 
     const voltarAoPadrao = () => {
         if (!podeEditar || salvando) return;
-        const padrao = { manager: { ...DEFAULT_ROLE_PERMS.manager }, cashier: { ...DEFAULT_ROLE_PERMS.cashier }, waiter: { ...DEFAULT_ROLE_PERMS.waiter } };
-        void salvar(padrao, 'Não foi possível voltar ao padrão.');
+        void salvar(undefined, 'Não foi possível voltar ao padrão.');
     };
 
     return (
@@ -89,7 +90,7 @@ const RolePermissionsView: React.FC<{
                         <li key={a.key} className="px-4 py-3 md:grid md:grid-cols-[1fr_repeat(3,88px)] md:items-center md:gap-2">
                             <div className="min-w-0">
                                 <p className="text-[15px] font-medium text-[var(--text)]">{a.label}</p>
-                                <p className="text-[13px] text-[var(--text-muted)]">{a.desc}</p>
+                                <p className="text-[13px] text-[var(--text-muted)]">{a.desc}{SEGUE_ABA.includes(a.key) ? ' Sem ajuste, segue a aba Cardápio de cada pessoa.' : ''}</p>
                             </div>
                             <div className="mt-2 grid grid-cols-3 gap-2 md:contents">
                                 {ROLE_KEYS.map((r) => {

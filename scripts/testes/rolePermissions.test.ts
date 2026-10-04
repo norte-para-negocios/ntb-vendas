@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/rolePermissions.test.ts
 import assert from 'node:assert/strict';
-import { roleCan, roleCanOr, normalizarMatriz, DEFAULT_ROLE_PERMS, ACTIONS } from '../../lib/rolePermissions';
+import { roleCan, roleCanOr, normalizarMatriz, DEFAULT_ROLE_PERMS, ACTIONS, matrizEfetiva, alterarPermissaoEsparso, SEGUE_ABA } from '../../lib/rolePermissions';
 import { podeTrocarOuExcluir } from '../../lib/storeModules';
 
 const loja = (rp?: unknown) => ({ config: { role_permissions: rp } });
@@ -47,4 +47,26 @@ assert.equal(podeTrocarOuExcluir({ role: 'waiter', permissions: { trocas: true }
 assert.equal(podeTrocarOuExcluir({ role: 'owner' }), true);
 assert.equal(podeTrocarOuExcluir({ role: 'open' }), false);
 assert.equal(podeTrocarOuExcluir(gerente, loja({ manager: { cancelar_item: false } })), false);
+
+// Matriz mostra o efetivo REAL: as 3 ações que seguem a aba de cardápio aparecem ligadas quando nada foi salvo
+assert.deepEqual([...SEGUE_ABA].sort(), ['editar_cardapio', 'editar_precos_horario', 'esgotar']);
+const ef = matrizEfetiva(undefined);
+assert.equal(ef.cashier.editar_cardapio, true, 'sem config: quem tem a aba edita, então a matriz mostra ligado');
+assert.equal(ef.waiter.esgotar, true);
+assert.equal(ef.cashier.cancelar_item, false);
+assert.equal(ef.manager.cancelar_item, true);
+assert.equal(matrizEfetiva({ waiter: { esgotar: false } }).waiter.esgotar, false, 'valor salvo vence');
+
+// Gravação esparsa: só o que difere do efetivo
+let cfg = alterarPermissaoEsparso(undefined, 'cashier', 'cancelar_item', true);
+assert.deepEqual(cfg, { cashier: { cancelar_item: true } }, 'ligar uma chave grava só ela');
+cfg = alterarPermissaoEsparso(cfg, 'cashier', 'cancelar_item', false);
+assert.equal(cfg, undefined, 'voltar ao efetivo apaga a chave e, vazio, remove role_permissions');
+cfg = alterarPermissaoEsparso(undefined, 'waiter', 'editar_cardapio', false);
+assert.deepEqual(cfg, { waiter: { editar_cardapio: false } }, 'desligar uma das 3 dependentes da aba grava false explícito');
+assert.equal(roleCanOr(garcom, loja(cfg), 'esgotar', true), true, 'as outras dependentes seguem a aba (não foram tocadas)');
+cfg = alterarPermissaoEsparso(cfg, 'waiter', 'editar_cardapio', true);
+assert.equal(cfg, undefined, 'religar = efetivo = apaga');
+cfg = alterarPermissaoEsparso({ manager: { trocar_mesa: false }, cashier: { esgotar: false }, lixo: 1 }, 'cashier', 'esgotar', true);
+assert.deepEqual(cfg, { manager: { trocar_mesa: false } }, 'mantém o resto, limpa lixo e linhas vazias');
 console.log('rolePermissions: ok');
