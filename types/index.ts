@@ -113,6 +113,8 @@ export interface Store {
     // igual ou maior que isso gera evento em cash_shift_audit_events.
     // 0/undefined = alerta desligado.
     cash_shift_sangria_alert_threshold?: number;
+    // Central de notificações (04/10/2026) — ausente = tudo ligado, com som. Ver lib/notificacoes.ts.
+    notifications?: { som?: boolean; tipos?: Partial<Record<import('@/lib/notificacoes').TipoNotificacao, boolean>> };
   };
 }
 
