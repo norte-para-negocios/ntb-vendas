@@ -124,6 +124,11 @@ async function main() {
   assert.ok(sm.includes('if (seq < loadDataAplicado.current) return;'), 'lista de mesas não congela em horário de pico');
   assert.ok(/manual:\$\{tableId\}:\$\{receiptOpts\.items\.length\}/.test(sm), 'comanda manual não duplica em toque repetido');
 
+  // 9) O app nunca pode apontar para o Supabase Cloud antigo (causa real do "Sem internet" de 04/10 na 1.2.84/1.0.20).
+  for (const f of ['lib/supabaseClient.ts', 'lib/supabaseAdmin.ts']) assert.ok(!readFileSync(f, 'utf8').includes('giiwtnddasminjxweohr'), `${f} sem o Supabase antigo como reserva`);
+  assert.ok(readFileSync('desktop/package.json', 'utf8').includes('conferir-bundle.mjs'), 'build do Windows confere o servidor embutido');
+  assert.ok(readFileSync('mobile/package.json', 'utf8').includes('conferir-bundle.mjs'), 'build do Android confere o servidor embutido');
+
   console.log('offlineSertao0410: todos os casos passaram');
 }
 main().catch((e) => { console.error(e); process.exit(1); });

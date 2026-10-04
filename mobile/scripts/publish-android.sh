@@ -14,6 +14,7 @@ REMOTE_PATH="/home/ntb/web/updates.norteparanegocios.com.br/public_html/$SUB"
 APK="android/app/build/outputs/apk/debug/app-debug.apk"
 
 [ -f "$APK" ] || { echo "APK não encontrado em $APK — rode o assembleDebug primeiro."; exit 1; }
+node ../scripts/conferir-bundle.mjs "$APK" || { echo "APK aponta para o servidor errado: NÃO publicado."; exit 1; }
 VC="$(sed -n 's/^ *versionCode \([0-9][0-9]*\) *$/\1/p' android/app/build.gradle | head -1)"
 VN="$(sed -n 's/^ *versionName "\(.*\)" *$/\1/p' android/app/build.gradle | head -1)"
 [ -n "$VC" ] && [ -n "$VN" ] || { echo "Não li versionCode/versionName do build.gradle."; exit 1; }

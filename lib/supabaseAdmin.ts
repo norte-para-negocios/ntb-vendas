@@ -23,7 +23,7 @@ export function getSupabaseAdmin(): SupabaseClient {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada nas env vars do servidor.');
   }
   cached = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://giiwtnddasminjxweohr.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://testvendase.norteparanegocios.com.br',
     key,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );

@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://giiwtnddasminjxweohr.supabase.co';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_7iLDkCZ5Fp3KQWW0aQer2w_eN84SfST';
+// Reserva = o servidor de PRODUÇÃO (Contabo). Até 04/10/2026 a reserva era o Supabase Cloud antigo (já apagado): builds do
+// app feitos sem desktop/webapp/.env.local (worktree) saíram apontando para ele e os PCs/celulares ficaram "Sem internet"
+// (1.2.84/1.2.85 e 1.0.20/1.0.21). scripts/conferir-bundle.mjs barra o build se isso voltar.
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://testvendase.norteparanegocios.com.br';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg0ODQ3MjYwLCJleHAiOjE5NDI1MjcyNjB9.YmlPFysJDamnhjkRwwNDOqNhzPIVtmrIjlucfDKPOv4';
 
 // Sem isto, Wi-Fi conectado sem internet deixa cada chamada REST/RPC pendurada
 // até o timeout do navegador (dezenas de segundos) antes de cair no cache

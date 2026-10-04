@@ -1,9 +1,9 @@
 {
   "name": "ntb-vendas-mobile",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "private": true,
   "scripts": {
-    "build:web": "cd .. && npx next build mobile/webapp",
+    "build:web": "cd .. && npx next build mobile/webapp && node scripts/conferir-bundle.mjs mobile/webapp/out",
     "dev": "npm run build:web && npx cap sync android",
     "android": "npx cap open android"
   },

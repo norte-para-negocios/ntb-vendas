@@ -1,13 +1,13 @@
 {
   "name": "ntb-vendas-desktop",
-  "version": "1.2.86",
+  "version": "1.2.87",
   "private": true,
   "description": "Norte Vendas — app desktop (Windows)",
   "main": "electron/main.js",
   "scripts": {
     "build:web": "cd .. && npx next build desktop/webapp",
     "dev": "npm run build:web && electron .",
-    "dist": "npm run build:web && electron-builder --win --x64"
+    "dist": "npm run build:web && node ../scripts/conferir-bundle.mjs webapp/out && electron-builder --win --x64"
   },
   "devDependencies": {
     "electron": "^33.0.0",
