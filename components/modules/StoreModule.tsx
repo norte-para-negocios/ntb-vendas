@@ -44,6 +44,8 @@ import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
+import { ProducaoView } from '@/components/modules/ProducaoView';
+import { usaMenuProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -982,14 +984,22 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     return unsubscribe;
   }, []);
 
+  const menuProducao = usaMenuProducao(notif.locais) && producaoAcessivel(accessibleTabIds);
+  const tabAcessivel = (id: string) => (id === 'producao' ? producaoAcessivel(accessibleTabIds) : accessibleTabIds.has(id));
   const allTabs = [
     // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,
     // mesmo raciocínio do TAB_IDS em lib/storeModules.ts.
     { id: 'caixa', icon: Wallet, label: 'Caixa', permission: 'caixa' },
     { id: 'tables', icon: LayoutDashboard, label: 'Gestão de Mesas', permission: 'tables', count: notifications.tables },
     { id: 'counter', icon: Coffee, label: 'Balcão', permission: 'counter' },
-    { id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen },
-    { id: 'bar', icon: Wine, label: 'Bar (KDS)', permission: 'bar', count: notifications.bar },
+    // Loja com local de preparo próprio (ex.: Pizzaria): um item "Produção" com abas por local.
+    // Loja sem setores continua com Cozinha e Bar separados, como sempre foi.
+    ...(menuProducao
+      ? [{ id: 'producao', icon: ChefHat, label: 'Produção', permission: 'kitchen', count: somaContagens(abasProducao(locaisAcessiveis(notif.locais, accessibleTabIds), notif.porLocal)) }]
+      : [
+          { id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen },
+          { id: 'bar', icon: Wine, label: 'Bar (KDS)', permission: 'bar', count: notifications.bar },
+        ]),
     { id: 'menu', icon: UtensilsCrossed, label: 'Cardápio', permission: 'menu' },
     { id: 'admin', icon: BarChart3, label: 'Administração', permission: 'admin' }
   ];
@@ -1006,9 +1016,16 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   // cadeado ("só com login") em vez de sumir com elas.
   const isAberto = user.role === 'open';
   const visibleTabs = isAberto
-    ? allTabs.filter(tab => { const k = TAB_MODULE_KEY[tab.id]; return !k || storeModules[k]; }).map(tab => accessibleTabIds.has(tab.id) ? tab : { ...tab, count: 0 })
-    : allTabs.filter(tab => accessibleTabIds.has(tab.id));
-  const bottomNavTabs = visibleTabs.filter(item => accessibleTabIds.has(item.id) && ['caixa', 'tables', 'counter', 'kitchen', 'bar'].includes(item.id));
+    ? allTabs.filter(tab => { const k = TAB_MODULE_KEY[tab.id]; return !k || storeModules[k]; }).map(tab => tabAcessivel(tab.id) ? tab : { ...tab, count: 0 })
+    : allTabs.filter(tab => tabAcessivel(tab.id));
+  const bottomNavTabs = visibleTabs.filter(item => tabAcessivel(item.id) && ['caixa', 'tables', 'counter', 'kitchen', 'bar', 'producao'].includes(item.id));
+
+  // Loja ganhou/perdeu o primeiro setor com a aba aberta: leva para a aba equivalente.
+  useEffect(() => {
+    if (menuProducao && (currentTab === 'kitchen' || currentTab === 'bar')) onTabChange('producao');
+    if (!menuProducao && currentTab === 'producao') onTabChange(accessibleTabIds.has('kitchen') ? 'kitchen' : 'bar');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuProducao, currentTab]);
 
   return (
     <NotificacoesProvider value={notif}>
@@ -1084,10 +1101,10 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                           </div>
                           <div className="flex-1 flex items-center justify-between truncate">
                               <span className="truncate">{item.label}</span>
-                              {!accessibleTabIds.has(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
+                              {!tabAcessivel(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
                               {!!item.count && item.count > 0 && (
                                  <span className="bg-[var(--err-fill)] text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-full num ml-2 shrink-0">
-                                    {item.count}
+                                    <AnimatedNumber value={item.count} format={(n) => String(Math.round(n))} />
                                  </span>
                               )}
                           </div>
@@ -1190,10 +1207,10 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
               {!isCollapsed && (
                   <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">{item.label}</span>
-                      {!accessibleTabIds.has(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
+                      {!tabAcessivel(item.id) && <Lock size={14} className="opacity-70 shrink-0 ml-2" aria-label="Só com login" />}
                       {!!item.count && item.count > 0 && (
                           <span className="bg-[var(--err-fill)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-2 shrink-0 num">
-                              {item.count}
+                              <AnimatedNumber value={item.count} format={(n) => String(Math.round(n))} />
                           </span>
                       )}
                   </div>
@@ -1307,6 +1324,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                   {item.id === 'caixa' ? 'Caixa' :
                    item.id === 'tables' ? 'Mesas' :
                    item.id === 'kitchen' ? 'Cozinha' :
+                   item.id === 'producao' ? 'Produção' :
                    item.id === 'bar' ? 'Bar' :
                    item.label.split(' ')[0]}
               </span>
@@ -1475,7 +1493,7 @@ const MyProfileModal: React.FC<{
 };
 
 // --- SUB-MODULE: KDS (Kitchen / Bar) ---
-const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ destination, store }) => {
+const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLocal?: string }> = ({ destination, store, fixedLocal }) => {
   const storeId = store.id;
   const storeName = store.name;
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -1660,13 +1678,13 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store }> = ({ d
 
   const pertenceAoLocal = (item: OrderItem, local: string) =>
       local === 'todos' ? true : local === 'padrao' ? !item.sector_id : item.sector_id === local;
-  const localAtivo = localKds === 'todos' || localKds === 'padrao' || locaisKds.some(x => x.id === localKds) ? localKds : 'todos';
+  const localAtivo = fixedLocal ?? (localKds === 'todos' || localKds === 'padrao' || locaisKds.some(x => x.id === localKds) ? localKds : 'todos');
   const visibleOrders = sortKitchenItems(orders.filter(item => pertenceAoLocal(item, localAtivo)));
   const nomeLocalAtivo = localAtivo === 'todos' || localAtivo === 'padrao' ? null : locaisKds.find(x => x.id === localAtivo)?.name;
 
   return (
     <div>
-        {locaisKds.length > 0 && (
+        {locaisKds.length > 0 && !fixedLocal && (
             <div className="overflow-x-auto no-scrollbar mb-4 -mx-1 px-1">
                 <SegmentedControl
                     value={localAtivo}
@@ -13261,7 +13279,7 @@ export const StoreModule: React.FC = () => {
                     const modules = resolveStoreModules(restoredUser.store);
                     const hasPermission = (t: string) => hasTabPermission(restoredUser, t, restoredUser.store);
                     const accessible = computeAccessibleTabIds(modules, hasPermission);
-                    setTab(savedTab && accessible.has(savedTab) ? savedTab : pickInitialStoreTab(restoredUser));
+                    setTab(savedTab && (savedTab === 'producao' ? producaoAcessivel(accessible) : accessible.has(savedTab)) ? savedTab : pickInitialStoreTab(restoredUser));
                 } else {
                     // Fix round final (C4, ver task-12-report.md): fetchStoreUserById/
                     // fetchUniversalUserById/fetchStoreById (lib/api.ts) já caem pro
@@ -13391,7 +13409,7 @@ export const StoreModule: React.FC = () => {
     const storeModules = resolveStoreModules(user.store);
     const hasPermission = (t: string) => hasTabPermission(user, t, user.store);
     const accessibleTabIds = computeAccessibleTabIds(storeModules, hasPermission);
-    const canAccess = (t: string) => accessibleTabIds.has(t);
+    const canAccess = (t: string) => (t === 'producao' ? producaoAcessivel(accessibleTabIds) : accessibleTabIds.has(t));
 
     // Terceiro wrap de MotionConfig (view autenticada) — ver comentário
     // acima dos dois primeiros (loading/login) pro porquê de precisar de um
@@ -13403,6 +13421,7 @@ export const StoreModule: React.FC = () => {
                 tab === 'caixa' ? 'Caixa' :
                 tab === 'tables' ? 'Mesas & Comandas' :
                 tab === 'counter' ? 'Pedidos Balcão' :
+                tab === 'producao' ? 'Produção' :
                 tab === 'kitchen' ? 'Monitor de Cozinha (KDS)' :
                 tab === 'bar' ? 'Monitor do Bar (KDS)' :
                 tab === 'menu' ? 'Gestão de Cardápio' :
@@ -13439,6 +13458,10 @@ export const StoreModule: React.FC = () => {
                     autoOpenOrderId={caixaFocusOrderId}
                     onAutoOpenOrderHandled={() => setCaixaFocusOrderId(undefined)}
                 />
+            )}
+            {tab === 'producao' && canAccess('producao') && (
+                <ProducaoView store={user.store} acessiveis={accessibleTabIds}
+                    renderKds={(l) => <KdsView key={l.chave} destination={l.base} store={user.store} fixedLocal={l.setorId ?? 'padrao'} />} />
             )}
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} />}
