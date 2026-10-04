@@ -44,7 +44,7 @@ export class Dispositivo {
   static ultimo = null;
   constructor(browser, nome, { viewport = { width: 1280, height: 900 }, tema = 'light', nativo = false, baseUrl, storageState } = {}) {
     this.browser = browser; this.nome = nome; this.viewport = viewport; this.tema = tema; this.nativo = nativo; this.baseUrl = baseUrl; this.storageState = storageState;
-    this.docs = []; this.erros = [];
+    this.docs = []; this.erros = []; this.silencio = false; // silencio: janela em que erros de rede são esperados (internet derrubada de propósito)
   }
   async iniciar() {
     this.ctx = await this.browser.newContext({ viewport: this.viewport, colorScheme: this.tema, storageState: this.storageState, acceptDownloads: true, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
@@ -56,7 +56,7 @@ export class Dispositivo {
     return this;
   }
   _ouvir(page) {
-    const guarda = (tipo, texto, extra) => { const e = { nome: this.nome, tipo, texto: String(texto).slice(0, 300), url: page.url(), t: Date.now(), ...extra }; this.erros.push(e); Dispositivo.errosTodos.push(e); };
+    const guarda = (tipo, texto, extra) => { if (this.silencio) return; const e = { nome: this.nome, tipo, texto: String(texto).slice(0, 300), url: page.url(), t: Date.now(), ...extra }; this.erros.push(e); Dispositivo.errosTodos.push(e); };
     page.on('console', (m) => { if (m.type() === 'error') guarda('console', m.text()); });
     page.on('pageerror', (e) => guarda('pageerror', e.message));
     page.on('requestfailed', (r) => { const f = r.failure()?.errorText || ''; if (!/ERR_ABORTED|NS_BINDING_ABORTED/.test(f)) guarda('requestfailed', `${r.method()} ${r.url().slice(0, 140)} ${f}`); });
@@ -98,11 +98,13 @@ export class Dispositivo {
   // Celular: botão da barra de baixo; áreas que não estão lá ficam no menu (hambúrguer).
   async irAreaMobile(nome) {
     Dispositivo.ultimo = this;
-    const alvo = nome === 'Mesas' ? /^(Mesas|Gestão de Mesas)/ : new RegExp(`^${nome}`);
-    let b = this.page.locator('button:visible').filter({ hasText: alvo });
-    if (!(await b.count())) { await this.page.getByRole('button', { name: 'Abrir menu' }).click(); await sleep(700); b = this.page.locator('button:visible').filter({ hasText: alvo }); }
-    await b.first().click();
+    const re = nome === 'Mesas' ? /Mesas/ : new RegExp(nome);
+    const cand = () => this.page.locator('button:visible').filter({ hasText: re });
+    // o botão da barra de baixo pode vir com selo de contagem ("9+Produção11"): por isso o texto não é ancorado no início
+    if (!(await cand().count())) { await this.page.getByRole('button', { name: 'Abrir menu' }).click(); await sleep(700); }
+    await cand().first().click();
     await sleep(1200);
+    if (await this.page.getByText('Menu Lojista').isVisible().catch(() => false)) { await this.page.keyboard.press('Escape'); await sleep(500); }
   }
   // Título da tela: h2 grande no desktop, h1 do cabeçalho no celular.
   async titulo() { return ((await this.page.locator('h2:visible, header h1:visible').first().textContent().catch(() => '')) || '').trim(); }

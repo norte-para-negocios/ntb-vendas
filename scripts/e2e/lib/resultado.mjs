@@ -16,10 +16,10 @@ export class Relatorio {
   }
   entrar(secao) { this.secao = secao; console.log(`\n== ${secao}`); }
   registrar(nome, status, detalhe) {
-    const item = { secao: this.secao, nome, status, detalhe: detalhe ? String(detalhe).slice(0, 900) : undefined };
+    const item = { secao: this.secao, nome, status, detalhe: detalhe ? String(detalhe).slice(0, 2500) : undefined };
     this.itens.push(item);
     const marca = status === PASSOU ? 'PASSOU ' : status === FALHOU ? 'FALHOU ' : status === PULADO ? 'PULADO ' : 'PENDENTE';
-    console.log(`  [${marca}] ${nome}${detalhe && status !== PASSOU ? `\n            -> ${String(detalhe).split('\n').join('\n               ').slice(0, 900)}` : ''}`);
+    console.log(`  [${marca}] ${nome}${detalhe && status !== PASSOU ? `\n            -> ${String(detalhe).split('\n').join('\n               ').slice(0, 2500)}` : ''}`);
     return item;
   }
   // Executa uma verificação. `pendente`: motivo (string) quando o comportamento ESPERADO ainda não existe no código

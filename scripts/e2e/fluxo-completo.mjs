@@ -237,6 +237,13 @@ async function secCadeados(C) {
     } finally { g.page.off('request', ouvir); }
     ok(vistas.length === 0, `dados de área bloqueada foram pedidos ao servidor: ${vistas.join(' | ')}`);
   });
+  await rel.passo('controle da checagem acima: o gerente abrindo o Caixa e o Balcão DISPARA pedidos de dados dessas áreas (a lista de endpoints proibidos não é vazia de sentido)', async () => {
+    const m = C.devs.gerente; const vistas = [];
+    const ouvir = (r) => { if (PROIBIDOS.test(r.url())) vistas.push(r.url()); };
+    m.page.on('request', ouvir);
+    try { await m.irArea('Caixa'); await sleep(2500); await m.irArea('Balcão'); await sleep(2500); } finally { m.page.off('request', ouvir); }
+    ok(vistas.length > 0, 'nenhum pedido de dados de área foi visto: a checagem do garçom não prova nada');
+  });
   await rel.passo('caixa (com trocas): Cardápio, Administração e Produção com cadeado; Caixa, Mesas e Balcão livres', async () => {
     for (const a of ['Cardápio', 'Administração', 'Produção']) ok(await cx.areaTrancada(a), `caixa sem cadeado em ${a}`);
     for (const a of ['Caixa', 'Gestão de Mesas', 'Balcão']) ok(!(await cx.areaTrancada(a)), `caixa com cadeado em ${a}`);
@@ -674,9 +681,11 @@ async function secPagamento(C) {
 
 // ---------- navegação da Administração (área à esquerda, aba em cima)
 async function abrirAdmin(dev, area, aba) {
+  await fecharJanelas(dev);
   await dev.irArea('Administração');
   const main = dev.page.locator('main');
-  const alvo = (t) => main.locator('button, [role=tab], a').filter({ hasText: new RegExp(`^${t}$`) }).first();
+  // o botão "Impressão" do cabeçalho (estado da impressão automática) tem o mesmo texto da aba: fica de fora
+  const alvo = (t) => main.locator('button:not([title*="Impressão automática"]), [role=tab], a').filter({ hasText: new RegExp(`^${t}$`) }).first();
   if (area) { await main.getByText(area, { exact: true }).first().click(); await sleep(900); }
   if (aba) { await alvo(aba).click(); await sleep(1500); }
 }
@@ -729,6 +738,7 @@ async function secFechamentoCaixa(C) {
     await cx.page.getByRole('button', { name: /Fechar caixa/ }).first().click();
     const dlg = cx.page.getByRole('dialog').filter({ hasText: 'Fechar caixa de' }).last();
     await dlg.waitFor({ timeout: 10000 });
+    await esperar(async () => /Total por forma de pagamento/.test(await dlg.innerText()), { timeout: 20000, motivo: 'resumo do turno carregado no fechamento' });
     const t = await dlg.innerText();
     ok(/Dinheiro[\s\S]{0,30}40,00/.test(t), `Dinheiro líquido R$ 40,00 não aparece no fechamento: ${t.replace(/\n/g, ' ').slice(0, 400)}`);
     ok(/Visa[\s\S]{0,30}${(C.totalConta - 60).toFixed(2).replace('.', ',')}/.test(t), `Visa não bate no fechamento`);
@@ -776,6 +786,16 @@ async function secRelatorios(C) {
     await abrirAdmin(m, 'Vendas', 'Histórico');
     const t = await m.page.locator('main').innerText();
     ok(new RegExp(`Mesa ${mesa.number}[\\s\\S]{0,80}${totalTxt.replace('$', '\\$')}`).test(t), `venda da mesa ${mesa.number} (${totalTxt}) não aparece no Histórico`);
+  });
+  await rel.passo('Histórico: abrir a venda mostra os itens com o nome de quem os lançou (garçom)', async () => {
+    const linha = m.page.locator('main tr, main [role=row]').filter({ hasText: new RegExp(`Mesa ${mesa.number}\\b`) }).first();
+    await linha.click();
+    await sleep(1500);
+    const dlg = m.page.getByRole('dialog').last();
+    ok(await dlg.count(), 'a venda não abriu em uma janela de detalhes');
+    const t = await dlg.innerText();
+    ok(t.includes(amb.usuarios.garcom.nome), `o detalhe da venda não mostra o garçom "${amb.usuarios.garcom.nome}": ${t.replace(/\s+/g, ' ').slice(0, 300)}`);
+    await fecharJanelas(m);
   });
   await abrirAdmin(m, 'Vendas', 'Relatórios');
   let arquivoXlsx = null;
@@ -853,8 +873,8 @@ async function secTemaEMobile(C) {
     { nome: 'Produção', ir: async (d) => d.irAreaMobile('Produção') },
     { nome: 'Cardápio', ir: async (d) => d.irAreaMobile('Cardápio') },
     { nome: 'Administração', ir: async (d) => d.irAreaMobile('Administração') },
-    { nome: 'Administração > Relatórios', ir: async (d) => { await d.irAreaMobile('Administração'); await d.page.locator('main').getByText('Relatórios', { exact: true }).first().click().catch(async () => { await d.page.getByText('Vendas', { exact: true }).first().click(); await sleep(600); await d.page.getByText('Relatórios', { exact: true }).first().click(); }); await sleep(1200); } },
-    { nome: 'Administração > Configurações > Impressão', ir: async (d) => { await d.irAreaMobile('Administração'); await d.page.getByText('Configurações', { exact: true }).first().click(); await sleep(900); await d.page.getByText('Impressão', { exact: true }).last().click(); await sleep(1500); } },
+    { nome: 'Administração > Vendas > Relatórios', ir: async (d) => { await d.irAreaMobile('Administração'); await d.page.locator('main button:visible').filter({ hasText: /^Vendas/ }).first().click(); await sleep(900); await d.page.locator('main button:visible, main [role=tab]:visible').filter({ hasText: /^Relatórios$/ }).first().click(); await sleep(1200); } },
+    { nome: 'Administração > Configurações > Impressão', ir: async (d) => { await d.irAreaMobile('Administração'); await d.page.locator('main button:visible').filter({ hasText: /^Configurações/ }).first().click(); await sleep(900); await d.page.locator('main button:not([title*="Impressão automática"]):visible, main [role=tab]:visible').filter({ hasText: /^Impressão$/ }).first().click(); await sleep(1200); } },
   ];
   for (const tema of ['light', 'dark']) {
     const d = await new Dispositivo(C.browser, `mobile-${tema}`, { baseUrl: C.BASE_URL, viewport: { width: 390, height: 844 }, tema, storageState: estado }).iniciar();
@@ -897,9 +917,12 @@ async function secRegressaoImpressao(C) {
     await cx.page.reload({ waitUntil: 'domcontentloaded' }); await sleep(3000);
   }, {});
   await orcamento(C, 'cair a internet e voltar (reconexão) = nenhum documento novo', async () => {
+    cx.silencio = true; // erros de rede DURANTE a queda são o esperado
     await cx.ctx.setOffline(true); await sleep(6000);
     await cx.ctx.setOffline(false); await sleep(3000);
     await cx.page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await sleep(4000);
+    cx.silencio = false;
   }, {});
   await orcamento(C, 'trocar de aba do navegador e voltar = nenhum documento novo', async () => {
     const outra = await cx.ctx.newPage();
@@ -961,7 +984,22 @@ async function secRegressaoImpressao(C) {
     await fecharJanelas(m);
   });
 
-  // ---- caminho da JANELA do navegador (loja sem impressora cadastrada): prova positiva e depois as mesmas proteções
+  // controle positivo (prova que o teste acima não passa "por não ter olhado"): com o MESMO corte antigo, um item de 30 min atrás (dentro do teto) imprime 1 vez
+  const trinta = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  await amb.admin.from('order_items').insert({ order_id: o.id, store_id: LOJA, product_id: amb.produtos.cozinha.id, quantity: 1, price_at_time: amb.produtos.cozinha.price, status: 'pending', added_by_role: 'garcom', added_by_name: 'QA Portao 30min', created_at: trinta });
+  await orcamento(C, 'FILA (controle positivo): com o MESMO corte antigo, um item de 30 minutos atrás (dentro do teto de 60 min) imprime exatamente 1 pedido', async () => {
+    const d = await aparelhoComCorteAntigo('corte-antigo-fila-2');
+    await d.ir('/loja');
+    await d.page.locator('h2:visible, header h1:visible').first().waitFor({ timeout: 30000 });
+    await sleep(15000);
+    await d.fechar(); delete C.devs['corte-antigo-fila-2'];
+  }, { pedido: { Cozinha: 1 } });
+  await amb.admin.from('order_items').delete().eq('order_id', o.id).eq('added_by_name', 'QA Portao 30min');
+
+  // ---- caminho da JANELA do navegador (loja sem impressora cadastrada): prova positiva e depois as mesmas proteções.
+  // Sem impressora cadastrada CADA aparelho logado imprime na própria impressora padrão (não há fila para barrar a duplicata entre aparelhos),
+  // então aqui só pode haver UM aparelho aberto: fecha os outros.
+  for (const nome of ['garcom', 'caixa', 'gerente']) { await C.devs[nome]?.fechar(); delete C.devs[nome]; }
   await amb.removerImpressoras();
   await orcamento(C, 'JANELA (sem impressora cadastrada): aparelho com corte antigo e itens de 3 horas atrás = NADA sai na janela de impressão', async () => {
     const d = await aparelhoComCorteAntigo('corte-antigo-janela');
@@ -993,10 +1031,12 @@ async function secErrosDeConsole(C) {
   const lista = [...Dispositivo.errosTodos]; // inclui aparelhos que já foram fechados
   // 409 no print_jobs é a fila barrando a duplicata de propósito (índice único do dedupe); aparece no console do navegador, não é falha.
   const esperado = (e) => (e.tipo === 'http' || e.tipo === 'console') && /print_jobs/.test(e.texto) && /409/.test(e.texto) || (e.tipo === 'console' && /status of 409/.test(e.texto)) || (e.tipo === 'http' && e.status === 409 && /print_jobs/.test(e.texto));
-  const reais = lista.filter((e) => !esperado(e));
+  const ruidoDoNavegador = (e) => /Blocked call to navigator\.vibrate/.test(e.texto); // intervenção do Chrome (vibração sem toque na tela), não é erro do app
+  const reais = lista.filter((e) => !esperado(e) && !ruidoDoNavegador(e));
+  try { fs.writeFileSync(path.join(SAIDA, 'erros-console.txt'), lista.map((e) => `${e.nome} | ${e.tipo} | ${e.texto} | ${e.url}`).join('\n')); } catch { /* sem arquivo */ }
   const resumo = (arr) => { const c = {}; arr.forEach((e) => { const k = `${e.tipo}: ${e.texto.slice(0, 140)}`; c[k] = (c[k] ?? 0) + 1; }); return Object.entries(c).map(([k, v]) => `${v}x ${k}`).join('\n   '); };
   await rel.passo(`nenhum erro de console, de script (pageerror) nem de rede (HTTP >= 400, requisição falha) em todos os aparelhos do teste`, async () => {
-    ok(reais.length === 0, `${reais.length} erro(s):\n   ${resumo(reais).slice(0, 1500)}`);
+    ok(reais.length === 0, `${reais.length} erro(s) (lista completa em scripts/e2e/.out/erros-console.txt):\n   ${resumo(reais).slice(0, 2200)}`);
   });
   const dup = lista.filter(esperado).length;
   if (dup) console.log(`  (informativo: ${dup} resposta(s) 409 da fila de impressão = duplicata barrada pelo índice único, esperado)`);

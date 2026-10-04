@@ -192,13 +192,20 @@ export class Ambiente {
 
   // ---------- produtos do teste (um por local). Guarda sector/omie originais.
   async escolherProdutos() {
-    const q = async (cat, nome) => (await this.admin.from('products').select('id,name,price,sector_id,omie_codigo,category_id,destination,ignore_category_sector').eq('store_id', this.lojaId).eq('name', nome).limit(1)).data?.[0];
-    const cozinha = await q('Pastéis', 'Pastel de Queijo');
-    const bar = await q('Cervejas', 'Heineken 330ml');
-    const pizza = await q('Monte sua Pizza', 'Pizza Meio a Meio (qualquer sabor)');
-    const extra = await q('Pastéis', 'Pastel de Carne');
-    const extra2 = await q('Pastéis', 'Pastel de Camarão');
-    for (const [n, p] of Object.entries({ cozinha, bar, pizza, extra, extra2 })) if (!p) throw new Error(`produto de teste "${n}" não existe na loja (o cardápio da ZZ mudou?)`);
+    // Produtos simples (sem grupos de opção, sem taxa, disponíveis, com preço) do cardápio da loja de teste. Na ZZ prefere os de sempre.
+    const { data: todos } = await this.admin.from('products').select('id,name,price,promo_price,sector_id,omie_codigo,category_id,destination,ignore_category_sector,fee_type,available').eq('store_id', this.lojaId).eq('available', true).gt('price', 0).is('fee_type', null).order('name');
+    const { data: comGrupo } = await this.admin.from('product_option_groups').select('product_id').in('product_id', (todos ?? []).map((p) => p.id));
+    const grupos = new Set((comGrupo ?? []).map((g) => g.product_id));
+    const simples = (todos ?? []).filter((p) => !grupos.has(p.id) && !p.promo_price && !/teste|taxa|embalagem/i.test(p.name));
+    const porNome = (n) => simples.find((p) => p.name === n);
+    const usados = new Set();
+    const pegar = (preferido, filtro) => { const p = (preferido && porNome(preferido) && !usados.has(porNome(preferido).id) ? porNome(preferido) : simples.find((x) => filtro(x) && !usados.has(x.id))); if (p) usados.add(p.id); return p; };
+    const cozinha = pegar('Pastel de Queijo', (p) => p.destination !== 'bar');
+    const bar = pegar('Heineken 330ml', (p) => p.destination === 'bar');
+    const pizza = pegar('Pizza Meio a Meio (qualquer sabor)', (p) => p.destination !== 'bar');
+    const extra = pegar('Pastel de Carne', (p) => p.destination !== 'bar');
+    const extra2 = pegar('Pastel de Camarão', (p) => p.destination !== 'bar');
+    for (const [n, p] of Object.entries({ cozinha, bar, pizza, extra, extra2 })) if (!p) throw new Error(`não achei um produto simples de teste para "${n}" no cardápio da loja`);
     this.produtos = { cozinha, bar, pizza, extra, extra2 };
     Object.values(this.produtos).forEach((p) => this.estado.produtos.push({ id: p.id, sector_id: p.sector_id, omie_codigo: p.omie_codigo }));
     this.salvar();
