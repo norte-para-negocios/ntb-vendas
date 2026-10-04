@@ -7,8 +7,9 @@ import { montarPainel, type PainelDia } from './painelDia';
 import { getPaymentMethodLabel, getCardBrandLabel } from '../labels';
 
 export interface FechamentoTurno { operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
-export interface FechamentoData { nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
+export interface FechamentoData { painel?: PainelDia; nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
 
+const FONT = 'Calibri';
 const BRL = '"R$" #,##0.00';
 const HEAD_FILL = 'FF484DB5';      // azul Norte (--brand)
 const HEAD_DARK = 'FF2B2E83';
@@ -28,7 +29,7 @@ export const safeCell = (v: string): string => (/^[=+\-@]/.test(v) ? `'${v}` : v
 function headerRow(ws: Worksheet, cols: { header: string; width: number; fmt?: string }[]) {
   ws.columns = cols.map((c) => ({ header: c.header, width: c.width, style: c.fmt ? { numFmt: c.fmt } : {} }));
   const r = ws.getRow(1);
-  r.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  r.font = { name: FONT, bold: true, color: { argb: 'FFFFFFFF' } };
   r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEAD_FILL } };
   r.alignment = { vertical: 'middle' };
   r.height = 22;
@@ -42,10 +43,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   wb.creator = d.geradoPor;
   wb.created = d.geradoEm;
 
-  const painel = montarPainel(d, d.nomeCategoria);
-  const { kpis } = painel;
-  const { recebido, sangria, suprimento } = { recebido: kpis.recebido, sangria: kpis.sangria, suprimento: kpis.suprimento };
-  void recebido; void sangria; void suprimento;
+  const painel = d.painel ?? montarPainel(d, d.nomeCategoria);
   montarPainelSheet(wb, d, painel);
 
   // 2. Formas de pagamento (sempre os 4 meios) com total em fórmula
@@ -69,6 +67,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   ct.getCell(2).numFmt = BRL;
 
   // 4. Caixa (um turno por linha)
+  if (d.turnos.length > 0) {
   const cx = wb.addWorksheet('Caixa');
   headerRow(cx, [
     { header: 'Operador', width: 22 }, { header: 'Abertura', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Fechamento', width: 18, fmt: 'dd/mm/yyyy hh:mm' },
@@ -78,6 +77,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
     const r = cx.addRow([safeCell(t.operador), horaBahia(t.abertoEm), t.fechadoEm ? horaBahia(t.fechadoEm) : null, t.fundo, t.resumo.expected_cash, t.contado, null]);
     if (t.contado != null) r.getCell(7).value = { formula: `F${i + 2}-E${i + 2}`, result: t.contado - t.resumo.expected_cash };
   });
+  }
 
   // 5. Vendas (um pedido por linha; o recebido da conta fica na linha do 1º pedido pra não somar em dobro)
   const vd = wb.addWorksheet('Vendas');
@@ -111,18 +111,22 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   if (linhaItem > 2) it.autoFilter = { from: 'A1', to: `F${linhaItem - 1}` };
 
   // 7. Exceções
+  if (d.excecoes.length > 0) {
   const ex = wb.addWorksheet('Exceções');
   headerRow(ex, [{ header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Operador', width: 20 }, { header: 'Tipo', width: 24 }, { header: 'Produto/Detalhe', width: 30 }, { header: 'Valor', width: 14, fmt: BRL }, { header: 'Motivo', width: 30 }]);
   d.excecoes.forEach((e) => {
     const det = e.details as Record<string, unknown>;
     ex.addRow([horaBahia(e.created_at), safeCell(e.operator_name), e.event_type, safeCell(String(det.produto ?? '')), Number(det.valor ?? 0), safeCell(String(det.motivo ?? ''))]);
   });
+  }
 
   // Rodapé de impressão
   wb.worksheets.forEach((w) => {
-    w.pageSetup = { orientation: w.name === 'Painel' ? 'portrait' : 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9, margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } };
-    w.headerFooter = { oddHeader: `&L&B${d.loja}&R${d.periodoLabel}`, oddFooter: `&L${NORTE_RODAPE}&RPágina &P de &N` };
+    w.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9, margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } };
+    w.headerFooter = { oddHeader: `&L&B${d.loja}&R${d.periodoLabel}`, oddFooter: `&LNorte Vendas&RPágina &P de &N` };
   });
+  // Fonte única (Calibri) em todas as abas.
+  wb.worksheets.forEach((ws) => ws.eachRow({ includeEmpty: true }, (row) => row.eachCell({ includeEmpty: true }, (c) => { c.font = { name: FONT, size: 11, ...(c.font ?? {}) }; })));
   return wb;
 }
 
@@ -131,7 +135,8 @@ const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as 
 function montarPainelSheet(wb: Workbook, d: FechamentoData, p: PainelDia) {
   const ws = wb.addWorksheet('Painel', { views: [{ showGridLines: false }] });
   ws.properties.tabColor = { argb: HEAD_DARK };
-  ws.columns = [{ width: 30 }, { width: 18 }, { width: 12 }, { width: 16 }, { width: 12 }, { width: 18 }, { width: 18 }, { width: 18 }];
+  // 4 cartões de 40 de largura (A+B, C+D, E+F, G+H); as tabelas usam A=rótulo B=total C=contas D=ticket E:H=participação.
+  ws.columns = [{ width: 26 }, { width: 14 }, { width: 14 }, { width: 26 }, { width: 20 }, { width: 20 }, { width: 20 }, { width: 20 }];
 
   // Faixa de título
   ws.mergeCells('A1:H1');
@@ -178,44 +183,70 @@ function montarPainelSheet(wb: Workbook, d: FechamentoData, p: PainelDia) {
     ws.addRow([]);
   });
 
-  const secao = (titulo: string, cols: string[]) => {
+  const COLS = 8;
+  interface Linha { rotulo: string; total: number; contas?: number | null; ticket?: number | null; pct: number }
+  const banda = (titulo: string) => {
     const r = ws.addRow([titulo]);
-    r.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-    for (let c = 1; c <= 5; c += 1) r.getCell(c).fill = fill(HEAD_FILL);
-    r.height = 22; r.alignment = { vertical: 'middle', indent: 1 };
-    const h = ws.addRow(cols);
-    h.font = { bold: true, size: 9, color: { argb: HEAD_DARK } };
-    for (let c = 1; c <= 5; c += 1) { h.getCell(c).fill = fill(SOFT_FILL); if (c > 1) h.getCell(c).alignment = { horizontal: 'right' }; }
-    return ws.rowCount;
+    ws.mergeCells(r.number, 1, r.number, COLS);
+    const c = r.getCell(1);
+    c.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    c.fill = fill(HEAD_FILL);
+    c.alignment = { vertical: 'middle', indent: 1 };
+    r.height = 22;
   };
-  const barras = (de: number, ate: number) => {
-    if (ate < de) return;
-    ws.addConditionalFormatting({ ref: `B${de}:B${ate}`, rules: [{ type: 'dataBar', priority: 1, gradient: false, border: false, minLength: 0, maxLength: 100, cfvo: [{ type: 'num', value: 0 }, { type: 'max' }], color: { argb: BAR } } as any] });
+  const cabecalho = (cols: [string, string, string, string, string]) => {
+    const r = ws.addRow(cols);
+    ws.mergeCells(r.number, 5, r.number, COLS);
+    for (let c = 1; c <= COLS; c += 1) r.getCell(c).fill = fill(SOFT_FILL);
+    r.font = { bold: true, size: 9, color: { argb: HEAD_DARK } };
+    [2, 3, 4].forEach((c) => { r.getCell(c).alignment = { horizontal: 'right' }; });
+    r.getCell(1).alignment = { indent: 1 };
+    r.getCell(5).alignment = { indent: 1 };
   };
-  const bloco = (titulo: string, cols: string[], linhas: (string | number | null)[][], fmts: (string | undefined)[], totalLinha?: (string | number | null)[]) => {
-    const h = secao(titulo, cols);
-    linhas.forEach((l) => { const r = ws.addRow(l); fmts.forEach((f, i) => { if (f) r.getCell(i + 1).numFmt = f; }); r.getCell(1).alignment = { indent: 1 }; });
-    if (totalLinha) { const r = ws.addRow(totalLinha); r.font = { bold: true }; r.getCell(1).alignment = { indent: 1 }; fmts.forEach((f, i) => { if (f) r.getCell(i + 1).numFmt = f; }); r.eachCell((c) => { c.border = { top: { style: 'thin', color: { argb: HEAD_FILL } } }; }); }
-    barras(h + 1, h + linhas.length);
+  const bloco = (titulo: string, cols: [string, string, string, string, string], linhas: Linha[], total?: { rotulo: string; valor: number }) => {
+    banda(titulo);
+    cabecalho(cols);
+    const de = ws.rowCount + 1;
+    linhas.forEach((l) => {
+      const r = ws.addRow([l.rotulo, l.total, l.contas ?? null, l.ticket ?? null, l.pct]);
+      ws.mergeCells(r.number, 5, r.number, COLS);
+      r.getCell(1).alignment = { indent: 1 };
+      r.getCell(2).numFmt = BRL; r.getCell(3).numFmt = '0'; r.getCell(4).numFmt = BRL;
+      r.getCell(5).numFmt = '0.0%'; r.getCell(5).alignment = { horizontal: 'left', indent: 1 };
+    });
+    const ate = ws.rowCount;
+    if (linhas.length > 0) {
+      ws.addConditionalFormatting({ ref: `E${de}:E${ate}`, rules: [{ type: 'dataBar', priority: 1, gradient: false, border: false, minLength: 0, maxLength: 100, cfvo: [{ type: 'num', value: 0 }, { type: 'max' }], color: { argb: BAR } } as any] });
+    }
+    if (total) {
+      const r = ws.addRow([total.rotulo, total.valor]);
+      ws.mergeCells(r.number, 3, r.number, COLS);
+      r.font = { bold: true };
+      r.getCell(1).alignment = { indent: 1 };
+      r.getCell(2).numFmt = BRL;
+      for (let c = 1; c <= COLS; c += 1) r.getCell(c).border = { top: { style: 'thin', color: { argb: HEAD_FILL } } };
+    }
     ws.addRow([]);
   };
   const soma = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+  const pct = (parte: number, todo: number) => (todo > 0 ? parte / todo : 0);
+  const totalHora = soma(p.porHora.map((r) => r.total));
+  const totalOper = soma(p.porOperador.map((r) => r.total));
+  const totalCat = soma(p.porCategoria.map((r) => r.total));
+  const totalProd = soma(p.topProdutos.map((r) => r.total));
 
-  bloco('Formas de pagamento', ['Forma', 'Total', '', '', '% do total'], p.formas.map((f) => [f.label, f.total, null, null, p.kpis.recebido > 0 ? f.total / p.kpis.recebido : 0]), [undefined, BRL, undefined, undefined, '0.0%'], ['TOTAL', soma(p.formas.map((f) => f.total)), null, null, null]);
-  bloco('Cartões por bandeira (crédito e débito separados)', ['Bandeira', 'Total', '', '', '% do total'], p.cartoes.map((c) => [c.label, c.total, null, null, p.kpis.recebido > 0 ? c.total / p.kpis.recebido : 0]), [undefined, BRL, undefined, undefined, '0.0%'], ['TOTAL EM CARTÕES', soma(p.cartoes.map((c) => c.total)), null, null, null]);
-  bloco('Vendas por hora', ['Hora', 'Total', 'Contas', 'Ticket médio', '% do total'], p.porHora.map((r) => [r.label, r.total, r.orders, r.ticket, p.kpis.recebido > 0 ? r.total / p.kpis.recebido : 0]), [undefined, BRL, '0', BRL, '0.0%']);
-  bloco('Vendas por operador', ['Operador', 'Total', 'Contas', 'Ticket médio', '% do total'], p.porOperador.map((r) => [safeCell(r.label), r.total, r.orders, r.ticket, p.kpis.recebido > 0 ? r.total / p.kpis.recebido : 0]), [undefined, BRL, '0', BRL, '0.0%']);
-  bloco('Vendas por categoria', ['Categoria', 'Total', '', '', ''], p.porCategoria.map((r) => [safeCell(r.label), r.total, null, null, null]), [undefined, BRL]);
-  bloco('Produtos mais vendidos', ['Produto', 'Total', 'Qtd', '', ''], p.topProdutos.map((r) => [safeCell(r.nome), r.total, r.qtd, null, null]), [undefined, BRL, '0']);
+  bloco('Formas de pagamento', ['Forma', 'Total', '', '', 'Participação'], p.formas.map((f) => ({ rotulo: f.label, total: f.total, pct: pct(f.total, p.kpis.recebido) })), { rotulo: 'TOTAL', valor: soma(p.formas.map((f) => f.total)) });
+  bloco('Cartões por bandeira (crédito e débito separados)', ['Bandeira', 'Total', '', '', 'Participação'], p.cartoes.map((c) => ({ rotulo: c.label, total: c.total, pct: pct(c.total, p.kpis.recebido) })), { rotulo: 'TOTAL EM CARTÕES', valor: soma(p.cartoes.map((c) => c.total)) });
+  bloco('Vendas por hora', ['Hora', 'Total', 'Contas', 'Ticket médio', 'Participação'], p.porHora.map((r) => ({ rotulo: r.label, total: r.total, contas: r.orders, ticket: r.ticket, pct: pct(r.total, totalHora) })));
+  bloco('Vendas por operador', ['Operador', 'Total', 'Contas', 'Ticket médio', 'Participação'], p.porOperador.map((r) => ({ rotulo: safeCell(r.label), total: r.total, contas: r.orders, ticket: r.ticket, pct: pct(r.total, totalOper) })));
+  bloco('Vendas por categoria', ['Categoria', 'Total', '', '', 'Participação'], p.porCategoria.map((r) => ({ rotulo: safeCell(r.label), total: r.total, pct: pct(r.total, totalCat) })));
+  bloco('Produtos mais vendidos', ['Produto', 'Total', 'Qtd', '', 'Participação'], p.topProdutos.map((r) => ({ rotulo: safeCell(r.nome), total: r.total, contas: r.qtd, pct: pct(r.total, totalProd) })));
+  if (p.porHora.length === 0) { const r = ws.addRow(['Nenhuma venda neste período.']); ws.mergeCells(r.number, 1, r.number, COLS); r.getCell(1).font = { italic: true, color: { argb: 'FF666A75' } }; r.getCell(1).alignment = { indent: 1 }; ws.addRow([]); }
 
-  ws.mergeCells(`A${ws.rowCount + 1}:H${ws.rowCount + 1}`);
-  const rod = ws.getCell(`A${ws.rowCount}`);
+  const nl = ws.rowCount + 1;
+  ws.mergeCells(`A${nl}:H${nl}`);
+  const rod = ws.getCell(`A${nl}`);
   rod.value = NORTE_RODAPE;
   rod.font = { size: 8, italic: true, color: { argb: 'FF8A8EA0' } };
   rod.alignment = { horizontal: 'center' };
-
-  // O painel é a primeira aba
-  wb.views = [{ x: 0, y: 0, width: 10000, height: 20000, firstSheet: 0, activeTab: 0, visibility: 'visible' }];
-  const idx = wb.worksheets.indexOf(ws);
-  if (idx > 0) { wb.worksheets.splice(idx, 1); wb.worksheets.unshift(ws); }
 }
