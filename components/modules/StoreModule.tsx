@@ -1,4 +1,5 @@
 'use client';
+import { normalizarNcm } from '@/lib/fiscal/ncm';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
 import Image from 'next/image';
@@ -9404,7 +9405,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 promo_price: promoPriceNum,
                 featured: pFeatured,
                 tags: pTags,
-                ncm: pNcm.trim() || null,
+                ncm: pNcm.trim() ? (normalizarNcm(pNcm) ?? pNcm.trim()) : null,
                 cost_price: pCostPrice ? Number(pCostPrice) : null,
                 stock_alert_threshold: pStockThreshold ? Number(pStockThreshold) : null,
             };

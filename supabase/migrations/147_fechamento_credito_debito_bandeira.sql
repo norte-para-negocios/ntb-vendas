@@ -1,4 +1,5 @@
--- 147: fechamento do turno separa CRÉDITO e DÉBITO por bandeira (totals_by_card).
+-- 147: fechamento do turno separa CRÉDITO e DÉBITO por bandeira (totals_by_card) e traz contas/total/ticket médio
+-- (payments_count, payments_total — pedido do Ramon 03/10: "o ticket médio não aparece no fechamento do caixa").
 -- Pedido do Ramon: o resumo de cartões somava crédito+débito da mesma bandeira e
 -- ignorava cartão sem bandeira. Mantém totals_by_brand (apps antigos). Base: 139.
 -- Fechamento do turno (137) + taxas como item.
@@ -19,6 +20,8 @@ declare
   v_totals_by_method jsonb;
   v_totals_by_brand jsonb;
   v_totals_by_card jsonb;
+  v_pay_count int;
+  v_pay_total numeric;
   v_sangria numeric;
   v_suprimento numeric;
   v_expected numeric;
@@ -60,6 +63,17 @@ begin
       and m->>'method' in ('CREDIT', 'DEBIT')
     group by m->>'method', coalesce(m->>'brand', '')
   ) t;
+
+  -- Contas pagas no turno (mesa com vários pedidos = 1 conta; cada pedido de balcão = 1 conta) e total recebido.
+  select count(*), coalesce(sum(pago), 0) into v_pay_count, v_pay_total
+  from (
+    select (o.payment_details->>'total')::numeric as pago
+    from orders o
+    where o.store_id = v_shift.store_id
+      and o.payment_details->>'cash_shift_id' = p_shift_id::text
+      and (o.payment_details->>'total') is not null
+    group by coalesce(o.table_id::text, o.id::text), o.payment_details->>'total', o.payment_details->'methods', o.payment_details->>'operador_id'
+  ) g;
 
   select coalesce(sum(amount), 0) into v_sangria from cash_movements where shift_id = p_shift_id and type = 'sangria';
   select coalesce(sum(amount), 0) into v_suprimento from cash_movements where shift_id = p_shift_id and type = 'suprimento';
@@ -109,6 +123,8 @@ begin
     'totals_by_method', v_totals_by_method,
     'totals_by_brand', v_totals_by_brand,
     'totals_by_card', v_totals_by_card,
+    'payments_count', v_pay_count,
+    'payments_total', round(v_pay_total, 2),
     'total_sangria', v_sangria,
     'total_suprimento', v_suprimento,
     'expected_cash', v_expected,

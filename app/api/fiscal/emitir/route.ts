@@ -1,3 +1,4 @@
+import { normalizarNcm } from '@/lib/fiscal/ncm';
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createHash } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
@@ -523,7 +524,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ skipped: true, reason: 'Nenhum item pendente de faturamento' });
   }
 
-  const itemSemNcm = itensValidos.find((i) => !(i as any).product?.ncm);
+  const itemSemNcm = itensValidos.find((i) => !normalizarNcm((i as any).product?.ncm));
   const valorTotal = itensValidos.reduce((soma, i) => soma + i.quantity * Number(i.price_at_time), 0);
 
   const notaBase = {
@@ -734,7 +735,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
           ((i as any).selected_options as { omie_codigo?: string | null }[] | null | undefined)?.find((o) => o.omie_codigo)?.omie_codigo ||
           String(produto?.id ?? '').slice(0, 8),
         xProd: nomeComVariacao,
-        ncm: produto?.ncm,
+        ncm: normalizarNcm(produto?.ncm) ?? produto?.ncm,
         qCom: i.quantity,
         vUnCom: Number(i.price_at_time),
       };
@@ -759,7 +760,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     // 8. Monta e assina o XML.
     const paramsXml: MontarXmlParams = {
       taxaServico: produtoTaxa?.omie_codigo
-        ? { cProd: String(produtoTaxa.omie_codigo), xProd: produtoTaxa.name, ncm: produtoTaxa.ncm }
+        ? { cProd: String(produtoTaxa.omie_codigo), xProd: produtoTaxa.name, ncm: normalizarNcm(produtoTaxa.ncm) ?? produtoTaxa.ncm }
         : undefined,
       modelo,
       ambiente: config.ambiente,
