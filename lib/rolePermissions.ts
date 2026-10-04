@@ -51,7 +51,7 @@ type StoreLike = { config?: any } | null | undefined;
 
 // Permissões por usuário que já existiam e continuam valendo para as ações que cobrem.
 const COBERTAS: Record<string, ActionKey[]> = {
-  trocas: ['cancelar_item', 'trocar_mesa', 'mover_item'],
+  trocas: ['cancelar_item', 'trocar_mesa', 'mover_item', 'cancelar_pedido'],
   supervisiona_caixa: ['cancelar_pedido', 'ver_excecoes'],
 };
 

@@ -2564,3 +2564,23 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
 - **Limites conhecidos**: `offsetServidorMs` existe na função, mas a Estação ainda passa 0 (não há fonte de hora do servidor sem migration); relógio de aparelho
   muito adiantado faz item recente parecer velho (mesma classe do corte de ativação, margem de 5 min). Sem timestamp de "enviado pra cozinha", item
   criado há mais de 1 h e liberado só agora (ex.: balcão "paga primeiro") não imprime sozinho: Reimprimir.
+
+## Regras de garçom/gerente, cadeados e senha única (04/10/2026, migrations 158 e 159)
+
+- **R1 (só gerente, ou caixa com a permissão individual `trocas`, troca mesa, move item, cancela item e cancela pedido; garçom nunca)**:
+  tela por `roleCan` (`lib/rolePermissions.ts`; `trocas` cobre `cancelar_pedido` também) e, desde a 159, **servidor**: `operator_can_secure`
+  + `cancel_order_item_v2`, `move_table_v2`, `transfer_items_v2` (o app só chama as v2). O KDS também só mostra "cancelar item" a quem pode.
+  **Limite honesto**: não há sessão no servidor; o operador chega como uuid. O servidor barra chamada sem operador, garçom com o próprio id,
+  usuário de outra loja e `permissions {}`, mas NÃO barra quem forja o uuid de um gerente (a equipe é listável por `fetch_store_team_members_secure`).
+  Fechar de vez exige token de sessão/Supabase Auth. As funções antigas (`*_secure`) seguem abertas para apps antigos: depois do deploy,
+  revogar o `execute` delas (SQL no fim da 159).
+- **R2 (cadeado, nunca escondido)**: `StoreLayout` mostra todas as áreas que a loja tem ligadas; sem permissão = cadeado + aviso curto, sem abrir a
+  tela nem carregar dado (menu lateral, gaveta/barra do celular e abas da Administração via `abasBloqueadas`). Garçom/caixa: chave ausente em
+  `permissions` NÃO libera aba (`hasTabPermission`); `computeAccessibleTabIds` só cai na Administração para quem tem `admin`.
+  O gerente (e dono/universal) edita tudo em Equipe > Pessoas (9 chaves) e Equipe > Permissões (por função).
+- **R3/R4**: com `pedido_pede_senha` (ou modo Aberto) o pedido pede a senha; logado como pessoa, tem que ser a PRÓPRIA senha; no modo Aberto vale a
+  de qualquer pessoa da loja. O item grava `added_by_name`/`role='garcom'` e `[Nome]` nas notas (comanda, ticket, Pedidos do Dia). Não existe
+  `added_by_user_id` (identidade é o nome). Rate-limit é por loja (10 erros = 1 min).
+- **Senha única por loja (158)**: nenhuma senha repete na mesma loja, sem diferenciar maiúscula/minúscula nem espaços nas pontas, também no cadastro,
+  na troca do primeiro acesso, na edição e ao mudar de loja. Senha inicial igual à de outra senha inicial ainda é permitida (ninguém se identifica
+  com ela); contra a senha de quem já escolheu a sua, não.

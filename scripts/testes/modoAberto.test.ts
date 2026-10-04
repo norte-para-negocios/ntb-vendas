@@ -15,6 +15,8 @@ assert.equal(canFinalizeBill(aberto, loja), false);
 assert.equal(isTableInJurisdiction(aberto, 'qualquer'), true);
 // Garçom continua como antes.
 assert.equal(canFinalizeBill({ role: 'waiter', permissions: {} }, loja), true);
-assert.equal(hasTabPermission({ role: 'waiter', permissions: {} }, 'menu', loja), true);
+// (04/10) garçom com permissions {} NÃO ganha mais as abas por omissão: só o que está marcado.
+assert.equal(hasTabPermission({ role: 'waiter', permissions: {} }, 'menu', loja), false);
+assert.equal(hasTabPermission({ role: 'waiter', permissions: { menu: true } }, 'menu', loja), true);
 
 console.log('modoAberto: ok');

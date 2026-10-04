@@ -68,6 +68,19 @@ export function abasVisiveis(ctx: NavCtx): Set<AbaId> {
   return out;
 }
 
+// Abas que a pessoa NÃO pode abrir mas que aparecem com cadeado (regra do dono, 04/10: nada some, fica bloqueado).
+export function abasBloqueadas(ctx: NavCtx): Set<AbaId> {
+  const v = abasVisiveis(ctx);
+  const out = new Set<AbaId>();
+  AREAS.forEach((a) => a.abas.forEach((b) => { if (!ABAS_EM_BREVE.has(b.id) && !v.has(b.id)) out.add(b.id); }));
+  return out;
+}
+
+// Todas as áreas com todas as suas abas (as bloqueadas aparecem com cadeado na tela).
+export function areasComBloqueadas(): AreaDef[] {
+  return AREAS.map((a) => ({ ...a, abas: a.abas.filter((b) => !ABAS_EM_BREVE.has(b.id)) })).filter((a) => a.abas.length > 0);
+}
+
 export function areasVisiveis(ctx: NavCtx): AreaDef[] {
   const v = abasVisiveis(ctx);
   return AREAS.map((a) => ({ ...a, abas: a.abas.filter((b) => v.has(b.id)) })).filter((a) => a.abas.length > 0);

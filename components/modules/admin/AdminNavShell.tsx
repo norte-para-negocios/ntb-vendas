@@ -7,7 +7,8 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BarChart3, Wallet, UtensilsCrossed, Users, SlidersHorizontal, Lock, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { areasVisiveis, areaDaAba, abaInicial, corrigirAba, buscarAjustes, BUSCAVEIS, type AbaId, type AreaId, type NavCtx } from '@/lib/adminNav';
+import { toast } from '@/components/Toast';
+import { areasVisiveis, abasBloqueadas, areasComBloqueadas, areaDaAba, abaInicial, corrigirAba, buscarAjustes, BUSCAVEIS, type AbaId, type AreaId, type NavCtx } from '@/lib/adminNav';
 import { TOM_COR, type Status } from '@/lib/adminStatus';
 import { SETTINGS_SECOES, podeBaixarApp } from '../StoreSettingsView';
 
@@ -28,7 +29,10 @@ interface Props {
 }
 
 export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, children }) => {
-    const areas = areasVisiveis(ctx);
+    const areas = areasComBloqueadas();
+    const bloqueadas = abasBloqueadas(ctx);
+    const visiveis = areasVisiveis(ctx);
+    const avisarSemPermissao = () => toast.info('Sem permissão para esta área. Peça ao gerente.');
     // Se a aba ativa deixou de ser permitida, cai na primeira visível (nunca fica em branco).
     const corrigida = corrigirAba(activeTab, ctx);
     useEffect(() => { if (corrigida !== activeTab) onTab(corrigida); }, [corrigida, activeTab, onTab]);
@@ -43,7 +47,7 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
     useEffect(() => { setMobileArea((m) => (m === null ? m : areaDaAba(corrigida))); }, [corrigida]);
 
     const [q, setQ] = useState('');
-    const achados = buscarAjustes(q, BUSCAVEIS).filter((a) => a.id !== 'baixar_app' || podeBaixarApp()).filter((a) => areas.some((x) => x.abas.some((b) => b.id === a.aba))).slice(0, 6);
+    const achados = buscarAjustes(q, BUSCAVEIS).filter((a) => a.id !== 'baixar_app' || podeBaixarApp()).filter((a) => visiveis.some((x) => x.abas.some((b) => b.id === a.aba))).slice(0, 6);
     const escolherAjuste = (aba: AbaId, id: string) => { setQ(''); setMobileArea(areaDaAba(aba)); onTab(aba, `aj-${id}`); };
 
     const caminho = (aba: AbaId, secao: string) => {
@@ -78,9 +82,9 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
     const Pilulas = (alturaCls: string) => abas.length > 1 && (
         <div role="tablist" aria-label={rotuloArea(areaAtiva)} className="mb-5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-md:-mx-4 max-md:px-4">
             {abas.map((b) => (
-                <button key={b.id} role="tab" aria-selected={b.id === corrigida} onClick={() => onTab(b.id)}
+                <button key={b.id} role="tab" aria-selected={b.id === corrigida} aria-disabled={bloqueadas.has(b.id)} onClick={() => (bloqueadas.has(b.id) ? avisarSemPermissao() : onTab(b.id))}
                     className={`shrink-0 ${alturaCls} px-4 rounded-full text-[15px] font-medium whitespace-nowrap flex items-center gap-1.5 u-motion ${b.id === corrigida ? 'bg-[var(--brand-fill)] text-white font-semibold' : 'text-[var(--text)] bg-[var(--surface)] shadow-[var(--shadow-sm)]'}`}>
-                    {b.sensitive && <Lock size={12} />}{b.label}
+                    {(b.sensitive || bloqueadas.has(b.id)) && <Lock size={12} aria-label={bloqueadas.has(b.id) ? 'Sem permissão' : undefined} />}{b.label}
                 </button>
             ))}
         </div>
@@ -98,12 +102,12 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
                         const ativa = a.id === areaAtiva;
                         const st = status[a.id];
                         return (
-                            <button key={a.id} type="button" aria-current={ativa ? 'page' : undefined} onClick={() => { if (!ativa) onTab(abaInicial(a.id, ctx) ?? corrigida); }}
+                            <button key={a.id} type="button" aria-current={ativa ? 'page' : undefined} onClick={() => { if (ativa) return; const alvo = abaInicial(a.id, ctx); if (alvo) onTab(alvo); else avisarSemPermissao(); }}
                                 className={`relative isolate w-full text-left px-3 py-2 rounded-[10px] u-motion u-press-sm flex items-start gap-2.5 ${ativa ? 'text-[var(--brand)]' : 'text-[var(--text)] hover:bg-[var(--surface-2)]'}`}>
                                 {ativa && <motion.div layoutId="admin-area-ativa" className="absolute inset-0 rounded-[10px] bg-[var(--brand-soft)] -z-10" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
                                 <span className="mt-0.5">{ICONE[a.id](18)}</span>
                                 <span className="min-w-0">
-                                    <span className="block text-[15px] font-semibold">{a.label}</span>
+                                    <span className="flex items-center gap-1.5 text-[15px] font-semibold">{a.label}{a.abas.every((b) => bloqueadas.has(b.id)) && <Lock size={12} aria-label="Sem permissão" />}</span>
                                     <span className="block text-[12px] truncate" style={{ color: st ? TOM_COR[st.tom] : 'var(--text-muted)' }}>{st ? st.texto : a.descricao}</span>
                                 </span>
                             </button>
@@ -123,11 +127,11 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
                                     const st = status[a.id];
                                     return (
                                         <li key={a.id}>
-                                            <button type="button" onClick={() => { setMobileArea(a.id); onTab(abaInicial(a.id, ctx) ?? corrigida); }}
+                                            <button type="button" onClick={() => { const alvo = abaInicial(a.id, ctx); if (!alvo) { avisarSemPermissao(); return; } setMobileArea(a.id); onTab(alvo); }}
                                                 className="w-full min-h-14 px-4 py-3 rounded-[16px] bg-[var(--surface)] shadow-[var(--shadow-sm)] flex items-center gap-3 text-left u-motion u-press">
                                                 <span className="text-[var(--brand)]">{ICONE[a.id](22)}</span>
                                                 <span className="flex-1 min-w-0">
-                                                    <span className="block text-[17px] font-semibold text-[var(--text)]">{a.label}</span>
+                                                    <span className="flex items-center gap-1.5 text-[17px] font-semibold text-[var(--text)]">{a.label}{a.abas.every((b) => bloqueadas.has(b.id)) && <Lock size={14} aria-label="Sem permissão" />}</span>
                                                     <span className="block text-[13px] truncate" style={{ color: st ? TOM_COR[st.tom] : 'var(--text-muted)' }}>{st ? st.texto : a.descricao}</span>
                                                 </span>
                                                 <ChevronRight size={18} className="text-[var(--text-muted)]" />
