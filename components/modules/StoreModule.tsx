@@ -8926,44 +8926,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pPreview, setPPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Integração ntb-vendas -> ntb-estoque (Ordem de Produção automática,
-    // migration 042) — URL/chave nunca voltam do banco (write-only), só o
-    // toggle `ativo` e se já está configurada.
-    const [ntbEstoqueStatus, setNtbEstoqueStatus] = useState<NtbEstoqueIntegracaoStatus>({ configurado: false, ativo: false });
-    const [ntbEstoqueUrlInput, setNtbEstoqueUrlInput] = useState('');
-    const [ntbEstoqueApiKeyInput, setNtbEstoqueApiKeyInput] = useState('');
-    const [isSavingNtbEstoque, setIsSavingNtbEstoque] = useState(false);
-
-    useEffect(() => { fetchNtbEstoqueIntegracaoStatus(storeId).then(setNtbEstoqueStatus); }, [storeId]);
-
-    const handleSaveNtbEstoqueIntegracao = async () => {
-        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
-        if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
-            return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
-        }
-        setIsSavingNtbEstoque(true);
-        try {
-            const result = await saveNtbEstoqueIntegracaoConfig(storeId, { url: ntbEstoqueUrlInput, apiKey: ntbEstoqueApiKeyInput, ativo: true });
-            if (!result.success) throw new Error(result.message);
-            toast.success('Integração com o NTB Estoque configurada!');
-            setNtbEstoqueUrlInput('');
-            setNtbEstoqueApiKeyInput('');
-            setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(storeId));
-        } catch (e: any) {
-            toast.error('Erro ao configurar integração: ' + e.message);
-        } finally {
-            setIsSavingNtbEstoque(false);
-        }
-    };
-
-    const handleToggleNtbEstoqueAtivo = async (ativo: boolean) => {
-        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
-        const result = await saveNtbEstoqueIntegracaoConfig(storeId, { ativo });
-        if (!result.success) return toast.error('Erro ao atualizar: ' + result.message);
-        setNtbEstoqueStatus((prev) => ({ ...prev, ativo }));
-        toast.success(ativo ? 'Ordem de Produção automática ativada.' : 'Ordem de Produção automática desativada.');
-    };
-
     // Cardapio que vende (migration 019) — preco promocional, destaque e
     // etiquetas, tudo configuravel pelo lojista aqui mesmo (requisito
     // explicito do dono do projeto, ver Task B1 do plano 2026-07-06).
@@ -9698,58 +9660,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             <p className="text-[13px] text-[var(--text-muted)] -mb-4">
                 Locais de preparo (Cozinha, Bar, Pizzaria...) agora ficam em Administração → Locais de preparo.
             </p>
-
-            {/* INTEGRAÇÃO COM O NTB ESTOQUE (Ordem de Produção automática) */}
-            <Collapsible
-                title="Integração com o NTB Estoque"
-                defaultOpen={false}
-                badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
-            >
-                <div className="space-y-4">
-                    <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
-
-                    <div className="flex items-center justify-between gap-3 p-4 bg-[var(--surface-2)] rounded-[var(--r-md)]">
-                        <div>
-                            <h4 className="text-[15px] font-semibold text-[var(--text)]">Ordem de produção automática</h4>
-                            <p className="text-sm text-[var(--text-muted)]">
-                                {ntbEstoqueStatus.configurado
-                                    ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
-                                    : 'Ainda não configurada — preencha a URL e a chave de API abaixo.'}
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
-                            disabled={!ntbEstoqueStatus.configurado || !podeEditar}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
-                        >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Input
-                            label="URL do NTB Estoque"
-                            placeholder="https://app-estoque.norteparanegocios.com.br"
-                            value={ntbEstoqueUrlInput}
-                            disabled={!podeEditar}
-                            onChange={e => setNtbEstoqueUrlInput(e.target.value)}
-                        />
-                        <Input
-                            label="Chave de API"
-                            type="password"
-                            placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
-                            value={ntbEstoqueApiKeyInput}
-                            disabled={!podeEditar}
-                            onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
-                        />
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
-
-                    <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque} disabled={!podeEditar}>
-                        Salvar integração com o NTB Estoque
-                    </Button>
-                </div>
-            </Collapsible>
 
             {/* CARDÁPIO — navegação por abas + busca global (redesign 2026-09-04).
                 Gestão de categoria (criar/reordenar/horário/apagar) mora só no
@@ -10919,12 +10829,6 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     const [certStatus, setCertStatus] = useState<StoreFiscalCertificateStatus | null>(null);
     const [isSavingCert, setIsSavingCert] = useState(false);
 
-    // Integração direta com a Omie (2026-09-05) State
-    const [omieDiretoConfigurado, setOmieDiretoConfigurado] = useState(false);
-    const [omieAppKeyInput, setOmieAppKeyInput] = useState('');
-    const [omieAppSecretInput, setOmieAppSecretInput] = useState('');
-    const [isSavingOmieDireto, setIsSavingOmieDireto] = useState(false);
-
     // Configuração do Emissor Fiscal State (store_fiscal_config, migration
     // 024 + 025) — campos numéricos ficam como string pra bind de <input>
     // controlado, convertidos com Number(...) só na hora de montar o
@@ -11028,9 +10932,6 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             setFiscalCscProducao('');
             setFiscalCscidProducao('');
         }
-
-        const omieStatus = await fetchOmieDiretoStatus(storeId);
-        setOmieDiretoConfigurado(omieStatus.configurado);
     };
 
     useEffect(() => { loadFiscalData(); }, [storeId]);
@@ -11038,25 +10939,6 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     const handleCertFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) setCertFile(file);
-    };
-
-    const handleSaveOmieDireto = async () => {
-        if (!omieAppKeyInput || !omieAppSecretInput) {
-            return toast.error('Preencha App Key e App Secret da Omie.');
-        }
-        setIsSavingOmieDireto(true);
-        try {
-            const result = await saveOmieDiretoConfig(storeId, { omieAppKey: omieAppKeyInput, omieAppSecret: omieAppSecretInput });
-            if (!result.success) throw new Error(result.message);
-            toast.success('Integração direta com a Omie salva!');
-            setOmieAppKeyInput('');
-            setOmieAppSecretInput('');
-            setOmieDiretoConfigurado(true);
-        } catch (e: any) {
-            toast.error('Erro ao salvar integração Omie: ' + e.message);
-        } finally {
-            setIsSavingOmieDireto(false);
-        }
     };
 
     const handleSaveCertificate = async () => {
@@ -11704,9 +11586,12 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 </div>
             )}
 
+            {activeTab === 'notas' && <FiscalNotasView storeId={storeId} onConfigurarEmissor={() => irPara('fiscal')} />}
+
+            {activeTab === 'integracoes' && <IntegracoesView storeId={storeId} podeEditarEstoque={roleCan(loggedUser, store, 'editar_cardapio')} />}
+
             {activeTab === 'fiscal' && (
                 <>
-                    <FiscalNotasView storeId={storeId} />
             {/* CERTIFICADO E CONFIGURAÇÃO FISCAL — mesma tela do Master Admin
                 (AdminModule.tsx), aberta pro lojista também (2026-07-07). Só
                 armazenamento/configuração, nenhuma lógica de emissão de NFC-e
@@ -11732,41 +11617,6 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                         </div>
                         <Button variant="secondary" className="w-full" onClick={handleSaveCertificate} isLoading={isSavingCert}>
                             Salvar Certificado
-                        </Button>
-                    </div>
-                </Collapsible>
-
-                {/* Integração direta com a Omie (2026-09-05) — só pra loja que NÃO usa
-                    ntb-estoque; se a loja tiver ntb-estoque configurado E ativo, esse
-                    caminho nunca é usado (ver app/api/fiscal/emitir/route.ts). */}
-                <Collapsible
-                    title="Integração direta com a Omie"
-                    defaultOpen={false}
-                    badge={omieDiretoConfigurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
-                >
-                    <div className="space-y-3">
-                        <p className="text-sm text-[var(--text-muted)]">
-                            Pra lojas que não usam o NTB Estoque: registra a NFC-e autorizada direto na Omie, sem passar por outra integração.
-                            Se a loja tiver integração com o NTB Estoque ativa, ela sempre tem prioridade sobre esta.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Input
-                                label="App Key da Omie"
-                                placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Key da conta Omie da loja'}
-                                value={omieAppKeyInput}
-                                onChange={e => setOmieAppKeyInput(e.target.value)}
-                            />
-                            <Input
-                                label="App Secret da Omie"
-                                type="password"
-                                placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Secret da conta Omie da loja'}
-                                value={omieAppSecretInput}
-                                onChange={e => setOmieAppSecretInput(e.target.value)}
-                            />
-                        </div>
-                        <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
-                        <Button variant="secondary" className="w-full" onClick={handleSaveOmieDireto} isLoading={isSavingOmieDireto}>
-                            Salvar Integração Direta com a Omie
                         </Button>
                     </div>
                 </Collapsible>
@@ -12553,7 +12403,163 @@ const fiscalStatusBadgeColor = (status: string): string => {
 // lojista preencha o documento (Task 16, esta tela) e tente de novo.
 const RETRYABLE_FISCAL_STATUSES = ['erro', 'rejeitada', 'pendente'];
 
-const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
+// Administração → Configurações → Integrações. Antes: "Integração com o NTB Estoque" morava na tela de
+// Cardápio e "Integração direta com a Omie" dentro do Emissor fiscal; ambas são configuração, não operação.
+// URL/chave nunca voltam do banco (write-only), só o toggle `ativo` e se já está configurada.
+const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean }> = ({ storeId, podeEditarEstoque }) => {
+    const [ntbEstoqueStatus, setNtbEstoqueStatus] = useState<NtbEstoqueIntegracaoStatus>({ configurado: false, ativo: false });
+    const [ntbEstoqueUrlInput, setNtbEstoqueUrlInput] = useState('');
+    const [ntbEstoqueApiKeyInput, setNtbEstoqueApiKeyInput] = useState('');
+    const [isSavingNtbEstoque, setIsSavingNtbEstoque] = useState(false);
+
+    useEffect(() => { fetchNtbEstoqueIntegracaoStatus(storeId).then(setNtbEstoqueStatus); }, [storeId]);
+
+    const handleSaveNtbEstoqueIntegracao = async () => {
+        if (!podeEditarEstoque) { toast.error('Seu perfil não pode alterar esta integração.'); return; }
+        if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
+            return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
+        }
+        setIsSavingNtbEstoque(true);
+        try {
+            const result = await saveNtbEstoqueIntegracaoConfig(storeId, { url: ntbEstoqueUrlInput, apiKey: ntbEstoqueApiKeyInput, ativo: true });
+            if (!result.success) throw new Error(result.message);
+            toast.success('Integração com o NTB Estoque configurada!');
+            setNtbEstoqueUrlInput('');
+            setNtbEstoqueApiKeyInput('');
+            setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(storeId));
+        } catch (e: any) {
+            toast.error('Erro ao configurar integração: ' + e.message);
+        } finally {
+            setIsSavingNtbEstoque(false);
+        }
+    };
+
+    const handleToggleNtbEstoqueAtivo = async (ativo: boolean) => {
+        if (!podeEditarEstoque) { toast.error('Seu perfil não pode alterar esta integração.'); return; }
+        const result = await saveNtbEstoqueIntegracaoConfig(storeId, { ativo });
+        if (!result.success) return toast.error('Erro ao atualizar: ' + result.message);
+        setNtbEstoqueStatus((prev) => ({ ...prev, ativo }));
+        toast.success(ativo ? 'Ordem de Produção automática ativada.' : 'Ordem de Produção automática desativada.');
+    };
+
+    // Integração direta com a Omie (2026-09-05): só pra loja que NÃO usa ntb-estoque.
+    const [omieDiretoConfigurado, setOmieDiretoConfigurado] = useState(false);
+    const [omieAppKeyInput, setOmieAppKeyInput] = useState('');
+    const [omieAppSecretInput, setOmieAppSecretInput] = useState('');
+    const [isSavingOmieDireto, setIsSavingOmieDireto] = useState(false);
+    useEffect(() => { fetchOmieDiretoStatus(storeId).then((r) => setOmieDiretoConfigurado(r.configurado)); }, [storeId]);
+
+    const handleSaveOmieDireto = async () => {
+        if (!omieAppKeyInput || !omieAppSecretInput) {
+            return toast.error('Preencha App Key e App Secret da Omie.');
+        }
+        setIsSavingOmieDireto(true);
+        try {
+            const result = await saveOmieDiretoConfig(storeId, { omieAppKey: omieAppKeyInput, omieAppSecret: omieAppSecretInput });
+            if (!result.success) throw new Error(result.message);
+            toast.success('Integração direta com a Omie salva!');
+            setOmieAppKeyInput('');
+            setOmieAppSecretInput('');
+            setOmieDiretoConfigurado(true);
+        } catch (e: any) {
+            toast.error('Erro ao salvar integração Omie: ' + e.message);
+        } finally {
+            setIsSavingOmieDireto(false);
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+            <Collapsible
+                title="Integração com o NTB Estoque"
+                defaultOpen={true}
+                badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
+
+                    <div className="flex items-center justify-between gap-3 p-4 bg-[var(--surface-2)] rounded-[var(--r-md)]">
+                        <div>
+                            <h4 className="text-[15px] font-semibold text-[var(--text)]">Ordem de produção automática</h4>
+                            <p className="text-sm text-[var(--text-muted)]">
+                                {ntbEstoqueStatus.configurado
+                                    ? (ntbEstoqueStatus.ativo ? 'Ativa — toda venda dispara uma ordem de produção.' : 'Configurada, mas desativada — nenhuma ordem é disparada.')
+                                    : 'Ainda não configurada — preencha a URL e a chave de API abaixo.'}
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
+                            disabled={!ntbEstoqueStatus.configurado || !podeEditarEstoque}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Input
+                            label="URL do NTB Estoque"
+                            placeholder="https://app-estoque.norteparanegocios.com.br"
+                            value={ntbEstoqueUrlInput}
+                            disabled={!podeEditarEstoque}
+                            onChange={e => setNtbEstoqueUrlInput(e.target.value)}
+                        />
+                        <Input
+                            label="Chave de API"
+                            type="password"
+                            placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
+                            value={ntbEstoqueApiKeyInput}
+                            disabled={!podeEditarEstoque}
+                            onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
+                        />
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
+
+                    <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque} disabled={!podeEditarEstoque}>
+                        Salvar integração com o NTB Estoque
+                    </Button>
+                </div>
+            </Collapsible>
+
+            {/* Integração direta com a Omie (2026-09-05) — só pra loja que NÃO usa
+                ntb-estoque; se a loja tiver ntb-estoque configurado E ativo, esse
+                caminho nunca é usado (ver app/api/fiscal/emitir/route.ts). */}
+            <Collapsible
+                title="Integração direta com a Omie"
+                defaultOpen={false}
+                badge={omieDiretoConfigurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
+            >
+                <div className="space-y-3">
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Pra lojas que não usam o NTB Estoque: registra a NFC-e autorizada direto na Omie, sem passar por outra integração.
+                        Se a loja tiver integração com o NTB Estoque ativa, ela sempre tem prioridade sobre esta.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Input
+                            label="App Key da Omie"
+                            placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Key da conta Omie da loja'}
+                            value={omieAppKeyInput}
+                            onChange={e => setOmieAppKeyInput(e.target.value)}
+                        />
+                        <Input
+                            label="App Secret da Omie"
+                            type="password"
+                            placeholder={omieDiretoConfigurado ? '••••••••  (preencher só pra trocar)' : 'App Secret da conta Omie da loja'}
+                            value={omieAppSecretInput}
+                            onChange={e => setOmieAppSecretInput(e.target.value)}
+                        />
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
+                    <Button variant="secondary" className="w-full" onClick={handleSaveOmieDireto} isLoading={isSavingOmieDireto}>
+                        Salvar Integração Direta com a Omie
+                    </Button>
+                </div>
+            </Collapsible>
+        </div>
+    );
+};
+
+const FiscalNotasView: React.FC<{ storeId: string; onConfigurarEmissor?: () => void }> = ({ storeId, onConfigurarEmissor }) => {
     const [notas, setNotas] = useState<FiscalNota[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -12820,7 +12826,14 @@ const FiscalNotasView: React.FC<{ storeId: string }> = ({ storeId }) => {
             <Card className="overflow-hidden">
                 <div className="p-4 sm:px-5 border-b border-[var(--border)] flex flex-col gap-3">
                     <div className="flex justify-between items-center flex-wrap gap-2">
-                        <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Notas fiscais</h3>
+                        <div className="flex items-center gap-x-3 flex-wrap">
+                            <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Notas fiscais</h3>
+                            {onConfigurarEmissor && (
+                                <button type="button" onClick={onConfigurarEmissor} className="inline-flex items-center text-[13px] font-medium text-[var(--brand)] hover:underline underline-offset-2 max-sm:min-h-11">
+                                    Configurar emissor
+                                </button>
+                            )}
+                        </div>
                         <div className="flex items-center gap-2 flex-wrap">
                             <select
                                 className="h-8 max-sm:h-11 px-3 text-[13px] font-medium rounded-full bg-[var(--surface-2)] text-[var(--text)] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
