@@ -11991,7 +11991,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 </>
             )}
 
-            {activeTab === 'permissoes' && <RolePermissionsView store={store} loggedUser={loggedUser} onStoreUpdate={onStoreUpdate} />}
+            {activeTab === 'permissoes' && navCtx.can?.('ver_permissoes') && <RolePermissionsView store={store} loggedUser={loggedUser} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'saude' && roleCan(loggedUser, store, 'editar_cardapio') && <CardapioSaudeView storeId={storeId} />}
             {activeTab === 'regras_caixa' && <RegrasCaixaView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}

@@ -12,7 +12,7 @@ import { useSettingsConfig } from './SettingsConfigContext';
 const ACCENT_COLOR_DEFAULT = '#484DB5';
 
 export const SecaoAparencia: React.FC<{ store: Store; onStoreUpdate?: (s: Store) => void }> = ({ store, onStoreUpdate }) => {
-    const { config, salvar, aplicarConfig } = useSettingsConfig();
+    const { config, salvar, gravarNaFila } = useSettingsConfig();
 
     // Capa: coluna própria (stores.cover_url), com botão "Salvar capa" explícito.
     const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -51,8 +51,7 @@ export const SecaoAparencia: React.FC<{ store: Store; onStoreUpdate?: (s: Store)
         setErroCor(null);
         setSalvandoCor(true);
         try {
-            const novo = await updateStoreAccentColor(store.id, config as never, hex);
-            aplicarConfig(novo as never);
+            await gravarNaFila((atual) => updateStoreAccentColor(store.id, atual as never, hex) as Promise<Record<string, unknown>>);
             setCor(hex || ACCENT_COLOR_DEFAULT);
             toast.success(hex ? 'Cor de destaque atualizada!' : 'Cor de destaque restaurada para o padrão.');
         } catch (e: any) {

@@ -9,14 +9,18 @@ export const SecaoNotificacoes: React.FC = () => {
     const { config, salvar } = useSettingsConfig();
     const prefs = resolverPrefs(config as never);
     const aplicaveis = tiposAplicaveis({ config: config as never });
-    const gravar = (patch: { som?: boolean; tipo?: [TipoNotificacao, boolean] }) => {
-        const atual = resolverPrefs(config as never);
-        const proximo = {
-            som: patch.som ?? atual.som,
-            tipos: patch.tipo ? { ...atual.tipos, [patch.tipo[0]]: patch.tipo[1] } : atual.tipos,
-        };
-        return salvar({ notifications: proximo }, 'Notificações');
-    };
+    // O patch é calculado só quando a gravação chega na vez da fila, com o config já atualizado:
+    // dois toques seguidos em tipos diferentes não se apagam.
+    const gravar = (patch: { som?: boolean; tipo?: [TipoNotificacao, boolean] }) =>
+        salvar((atualCfg) => {
+            const atual = resolverPrefs(atualCfg as never);
+            return {
+                notifications: {
+                    som: patch.som ?? atual.som,
+                    tipos: patch.tipo ? { ...atual.tipos, [patch.tipo[0]]: patch.tipo[1] } : atual.tipos,
+                },
+            };
+        }, 'Notificações');
     return (
         <section id="sec-notificacoes" className="space-y-3 scroll-mt-24">
             <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Notificações</h3>

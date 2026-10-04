@@ -22,6 +22,9 @@ export const SETTINGS_SECOES = [
     { id: 'aplicativo', label: 'Aplicativo' },
 ] as const;
 
+// Fora do Electron/Capacitor (mesma regra da SecaoAplicativo).
+export const podeBaixarApp = () => typeof window !== 'undefined' && !window.navigator.userAgent.includes('Electron') && !(window as any).Capacitor;
+
 const irPara = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -31,7 +34,7 @@ const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store)
     <SettingsConfigProvider store={store} onStoreUpdate={onStoreUpdate}>
         <div className="2xl:grid 2xl:grid-cols-[180px_1fr] 2xl:gap-6">
             <nav aria-label="Seções de configurações" className="max-2xl:mb-3 max-2xl:flex max-2xl:gap-1 max-2xl:overflow-x-auto max-2xl:[scrollbar-width:none] 2xl:sticky 2xl:top-4 2xl:self-start 2xl:space-y-0.5">
-                {SETTINGS_SECOES.map((s) => (
+                {SETTINGS_SECOES.filter((s) => s.id !== 'aplicativo' || podeBaixarApp()).map((s) => (
                     <a key={s.id} href={`#sec-${s.id}`} onClick={(e) => irPara(e, s.id)} className="block shrink-0 whitespace-nowrap px-3 h-9 max-sm:h-11 leading-9 max-sm:leading-[44px] rounded-[10px] text-[15px] text-[var(--text)] hover:bg-[var(--surface-2)] u-motion">{s.label}</a>
                 ))}
             </nav>

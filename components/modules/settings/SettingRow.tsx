@@ -30,6 +30,7 @@ export const NumberField: React.FC<{ valor: number; onChange: (n: number) => voi
   useEffect(() => { ultimo.current = valor; setRascunho(String(valor)); }, [valor]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const confirmar = (texto: string) => {
+    if (texto.trim() === '') setRascunho(String(ultimo.current));
     const n = Math.max(0, Number(texto) || 0);
     if (n !== ultimo.current) { ultimo.current = n; onChange(n); }
   };
