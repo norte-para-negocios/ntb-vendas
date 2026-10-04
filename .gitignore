@@ -87,3 +87,9 @@ scripts/.pooler-host
 /mobile/android/app/build/
 /mobile/android/build/
 /mobile/android/.gradle/
+
+# Portao de deploy (scripts/e2e): estado de execucao e capturas de falha
+/scripts/e2e/.estado-portao.json
+/scripts/e2e/.out/
+/.next-portao/
+/scripts/e2e/.portao.lock/

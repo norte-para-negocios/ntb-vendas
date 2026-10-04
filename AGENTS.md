@@ -2584,3 +2584,57 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
 - **Senha única por loja (158)**: nenhuma senha repete na mesma loja, sem diferenciar maiúscula/minúscula nem espaços nas pontas, também no cadastro,
   na troca do primeiro acesso, na edição e ao mudar de loja. Senha inicial igual à de outra senha inicial ainda é permitida (ninguém se identifica
   com ela); contra a senha de quem já escolheu a sua, não.
+
+## Portão de deploy (04/10/2026)
+
+**Regra do dono: nenhum deploy sobe sem o portão passar.** Contexto: mudanças novas escaparam sem verificar o fluxo inteiro (impressão velha saiu em massa
+no Sertão, regras de garçom, baixa de estoque perdida em silêncio). O `deploy.sh` do servidor continua IGUAL (git pull + build + restart) e NÃO roda o
+portão: **quem faz push roda `scripts/e2e/portao-deploy.sh` antes**, no commit que vai subir. O rodapé do script repete esse lembrete e avisa se há mudança
+não commitada (o portão testa a pasta, o push leva só o commit).
+
+```bash
+scripts/e2e/portao-deploy.sh                    # tsc + todos os scripts/testes/*.test.ts + next build + fluxo completo; PASSOU/FALHOU por item; sai 1 se falhar
+PORTAO_RAPIDO=1 scripts/e2e/portao-deploy.sh    # `next dev` no lugar do build (para depurar; NÃO vale como portão)
+PORTAO_SO=tsc|testes|fluxo scripts/e2e/portao-deploy.sh   # uma etapa só (NÃO vale como portão)
+BASE_URL=http://localhost:3777 node scripts/e2e/fluxo-completo.mjs [--ate=N] [--manter]   # só o fluxo, contra um servidor que você já subiu
+node scripts/e2e/fluxo-completo.mjs --limpar    # desfaz o que uma execução interrompida deixou (usa scripts/e2e/.estado-portao.json)
+```
+
+- **Servidor de teste** (o script sobe sozinho, em porta livre, e para pelo PID): sempre com `DISABLE_FISCAL_RETRANSMISSAO=1 DISABLE_BAIXA_RETRY=1
+  NTB_FRIO_API_URL=`. Se for subir o seu, use os mesmos três. **O app local fala com o banco de PRODUÇÃO** (`.env.local`); por isso o fluxo só usa a ZZ
+  Laboratório (ou `--loja=donana`, sem a parte de baixa de estoque porque a Donana tem o Estoque REAL ligado) e **aborta** se a loja, o slug ou o BASE_URL
+  lembrarem o Sertão. Outras sessões também usam a ZZ (viu-se pedido "QA seed" na mesa 902): o teste sorteia 3 mesas livres 10-24, mede a fila só pelas
+  suas mesas e nunca apaga o que não é dele.
+- **O que o fluxo cobre** (`scripts/e2e/fluxo-completo.mjs`, Playwright com `playwright-core` do Depsys): usuários QA temporários (`create_store_team_member_secure` por
+  ssh + `docker exec psql`, senhas aleatórias nunca impressas, primeiro login troca a senha) · login por perfil (garçom `{tables:true}`, caixa com
+  `trocas`, gerente) · cadeado nas áreas sem permissão sem carregar dados · garçom lança pedido com a PRÓPRIA senha (errada e de outro usuário falham;
+  pedido sai no nome dele em Comanda, Pedidos do Dia, Produção e Histórico) · pedido chega só ao local certo (Cozinha, Bar, local criado) · garçom NÃO troca
+  mesa/move item/cancela item/cancela pedido (UI e RPCs v2 direto), gerente e caixa com `trocas` conseguem · Pedir conta e COMANDA · pagamento com troco e
+  cartões · fechamento de caixa · NFC-e desligada/homologação (nenhuma nota é criada) · baixa de estoque com o Estoque MOCKADO
+  (`scripts/testes/mock-estoque.mjs`, porta livre; linha em `integracao_baixas`, erro visível em Integrações) · Histórico e Excel (parseado com `exceljs`) /
+  PDF · tema claro e escuro e celular 390 px sem rolagem horizontal · console/rede sem erro.
+- **Orçamento de impressão** (`orcamento(...)` no fluxo): para cada ação conta quantos documentos de cada tipo saíram e compara com o esperado declarado no
+  teste, na fila `print_jobs` (impressoras de rede temporárias "QA Portao *", sem agente: nada imprime de verdade) E no navegador (`iframe.print`,
+  `window.print`, `ntbPrinter` interceptados); depois da ação espera uma janela de silêncio maior que o ciclo de 10 s da Estação. Esperado hoje: lançar 3
+  itens de 3 locais = 3 **pedidos**; pedir conta = 1 **comanda**; Imprimir manual = +1; pagar = 1 **comprovante**; fechar caixa = 1 fechamento; abrir/fechar
+  tela, F5, cair/voltar internet, trocar de aba, tempo real, trocar mesa, mover item e aparelho novo = 0. Regressão do incidente de 04/10: aparelho com corte
+  de ativação de 2 dias e itens de 3 h no servidor não imprime nada (fila e janela), e um item novo imprime exatamente 1 vez e não repete ao recarregar.
+- **Vocabulário** (não misturar): **PEDIDO** = papel que imprime no local de preparo (Cozinha/Bar/Pizzaria); **COMANDA** = a conta com preços entregue ao
+  cliente ANTES da nota fiscal (pré-conta/comprovante); **NOTA FISCAL** = a última etapa.
+- **ESPERADO-AINDA-NÃO-IMPLEMENTADO**: item que descreve o comportamento correto de uma frente ainda em andamento e que hoje falha. Aparece como tal no
+  relatório, NÃO derruba o portão, e vira PASSOU sozinho quando for implementado (o relatório avisa "remova a marca": tire o `{ pendente: ... }` do passo).
+  Use só para frente de outro agente em andamento; qualquer outra falha é FALHOU.
+- **Limpeza**: tudo o que o teste cria na ZZ (pedidos, itens, sessões, turnos de caixa, usuários, locais, impressoras, jobs, `integracao_baixas`, secret do
+  Estoque, cópias em `ntb_vendas_frio` por `su - postgres -c "psql -d ntb_vendas_frio"`) é apagado no fim; só as chaves de `stores.config` que ele alterou
+  são restauradas (não pisa em mudança de outra sessão); mesas voltam ao estado original; no fim confere por ids antes x depois. O estado fica em
+  `scripts/e2e/.estado-portao.json` (ignorado pelo git); capturas de falha e relatório em `scripts/e2e/.out/` (ignorado).
+- **Ao mudar telas/seletores**: o fluxo usa rótulos da interface (`Gestão de Mesas`, `Adicionar Pedido`, `Ver Comanda`, `Pedir conta`, `Receber pagamento`,
+  `Fechar caixa`...). Renomear um deles exige atualizar o fluxo no mesmo commit.
+- **Achados reais que o portão já pega (04/10/2026, contra o código da `main` de então)** — viram FALHOU/ESPERADO até alguém corrigir: (1) as funções antigas
+  `cancel_order_item_secure`/`move_table_secure`/`transfer_items_secure`/`cancel_pending_table_items_secure` continuam executáveis pela chave anônima (o garçom
+  contorna a regra chamando direto; falta a migration que revoga o `execute`, ver fim da 159) [ESPERADO]; (2) a tela de Impressão ainda diz "Pré-conta (comanda)" e
+  "Comanda (pedidos)" [ESPERADO, vocabulário PEDIDO x COMANDA]; (3) o Histórico mostra "4 itens" e lista, sem riscar, o item que o gerente cancelou, e o Excel (aba
+  Vendas, "Total do pedido") soma esse item cancelado (131,60 contra 111,70 dos itens e 122,87 recebidos) [FALHOU]; (4) o detalhe da venda no Histórico não mostra quem
+  lançou cada item [ESPERADO]. Observado e fora do portão: `create_order_secure` REAPROVEITA qualquer pedido `pending` da mesa, mesmo de 3 dias atrás, e aí a venda
+  de hoje fica com `created_at` antigo (Histórico/Excel filtram por `orders.created_at`, então a venda cai no dia errado); sem impressora cadastrada, TODO aparelho
+  logado imprime o mesmo pedido na própria janela de impressão (só a fila `print_jobs` barra duplicata entre aparelhos).
