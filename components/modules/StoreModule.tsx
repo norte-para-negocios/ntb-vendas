@@ -13,6 +13,7 @@ import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOffl
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
 import { AdminNavShell } from '@/components/modules/admin/AdminNavShell';
+import { useAdminStatus } from '@/components/modules/admin/useAdminStatus';
 import RegrasCaixaView from '@/components/modules/admin/RegrasCaixaView';
 import type { AbaId, NavCtx } from '@/lib/adminNav';
 import CouponManagementView from '@/components/modules/CouponManagementView';
@@ -11151,6 +11152,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
 
     const [activeTab, setActiveTab] = useState<AbaId>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
+    const [salesLoaded, setSalesLoaded] = useState(false);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
     const [checkins, setCheckins] = useState<OperatorCheckin[]>([]);
@@ -11207,6 +11209,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             fetchOrderRatings(storeId),
         ]);
         setSales(data);
+        setSalesLoaded(!wasNetworkError);
         setTableSessions(sessions);
         setRatings(ratingsData);
         setSalesDataUnavailableOffline(wasNetworkError);
@@ -11561,7 +11564,8 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             : acao === 'editar_precos_horario' ? podeEditarPrecosHorario
             : loggedUser.role === 'owner' || loggedUser.role === 'universal' || loggedUser.role === 'manager', // ver_permissoes: gerente vê (só leitura), dono edita
     };
-    const adminStatus = {};
+    // `sales` só chega depois que Resumo/Histórico carregam; antes disso o cartão de Vendas mostra só a descrição.
+    const adminStatus = useAdminStatus({ storeId, sales: salesLoaded ? sales : null, incluirCardapio: navCtx.can?.('editar_cardapio') === true });
     const [secaoAlvo, setSecaoAlvo] = useState<string | null>(null);
     const irPara = React.useCallback((id: AbaId, alvo?: string) => { setActiveTab(id); setSecaoAlvo(alvo ?? null); }, []);
     // Depois da troca de aba (crossfade de 120 ms), rola até o ajuste achado na busca e o destaca.

@@ -38,3 +38,17 @@ export function statusConfig(impressoras: { is_active: boolean }[] | null, fisca
   if (partes.length === 0) return null;
   return { texto: partes.join(' · '), tom };
 }
+
+// Contas fechadas hoje (dia local de Salvador). Mesma regra de conta de lib/reports/groupSales.ts:
+// mesa/pedido + mesmo pagamento conta uma vez; cancelada não conta.
+export function contarContasDeHoje(orders: { id: string; created_at: string; status: string; table_id?: string | null; payment_details?: unknown }[], agora: Date = new Date()): number {
+  const dia = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Bahia' });
+  const hoje = dia(agora);
+  const vistas = new Set<string>();
+  orders.forEach((o) => {
+    if (o.status === 'canceled' || dia(new Date(o.created_at)) !== hoje) return;
+    const metodos = (o.payment_details as { methods?: unknown } | null | undefined)?.methods ?? [];
+    vistas.add(`${o.table_id ?? o.id}|${JSON.stringify(metodos)}`);
+  });
+  return vistas.size;
+}

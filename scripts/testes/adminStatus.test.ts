@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/adminStatus.test.ts
 import assert from 'node:assert/strict';
-import { statusVendas, statusCaixa, statusCardapio, statusEquipe, statusConfig, TOM_COR } from '../../lib/adminStatus';
+import { contarContasDeHoje, statusVendas, statusCaixa, statusCardapio, statusEquipe, statusConfig, TOM_COR } from '../../lib/adminStatus';
 
 assert.equal(statusVendas(null), null);
 assert.equal(statusCaixa(null), null);
@@ -29,6 +29,16 @@ assert.deepEqual(statusConfig([{ is_active: false }], ok, 'producao'), { texto: 
 assert.equal(statusConfig([{ is_active: true }], { ...ok, certificadoValido: false }, 'producao')!.tom, 'erro');
 assert.equal(statusConfig([{ is_active: true }], { ...ok, cscProducao: false }, 'producao')!.tom, 'erro');
 assert.equal(statusConfig([{ is_active: true }], null, null)!.texto, '1 impressora ativa');
+
+// contas de hoje: dia local de Salvador, uma conta (mesa + mesmo pagamento) conta uma vez, cancelada não conta
+const agora = new Date('2026-10-04T15:00:00Z');
+const o = (id: string, iso: string, extra: object = {}) => ({ id, created_at: iso, status: 'delivered', table_id: null, payment_details: { methods: [{ method: 'pix', amount: 10 }] }, ...extra });
+assert.equal(contarContasDeHoje([], agora), 0);
+assert.equal(contarContasDeHoje([o('a', '2026-10-04T14:00:00Z'), o('b', '2026-10-04T14:10:00Z')] as never, agora), 2);
+assert.equal(contarContasDeHoje([o('a', '2026-10-04T14:00:00Z', { table_id: 't1' }), o('b', '2026-10-04T14:01:00Z', { table_id: 't1' })] as never, agora), 1, 'mesma mesa e pagamento = 1 conta');
+assert.equal(contarContasDeHoje([o('a', '2026-10-03T14:00:00Z')] as never, agora), 0, 'ontem não conta');
+assert.equal(contarContasDeHoje([o('a', '2026-10-04T14:00:00Z', { status: 'canceled' })] as never, agora), 0);
+assert.equal(contarContasDeHoje([o('a', '2026-10-04T01:00:00Z')] as never, agora), 0, '01:00 UTC = 22:00 de ontem em Salvador');
 
 Object.values(TOM_COR).forEach((c) => assert.match(c, /^var\(--/));
 console.log('adminStatus: ok');
