@@ -94,6 +94,35 @@ export class Ambiente {
     return { extras, faltando };
   }
 
+  // Linhas novas que apareceram na loja depois da limpeza: o que é do teste (nossas) falha o portão; o resto (outra sessão usando a ZZ) só avisa.
+  async classificarExtras(extras) {
+    const e = this.estado; const mesaIds = new Set((e.mesas ?? []).map((m) => m.id));
+    const nossas = {}; const alheias = {};
+    const add = (alvo, t, id) => { (alvo[t] = alvo[t] ?? []).push(id); };
+    for (const [t, ids] of Object.entries(extras)) {
+      let linhas = [];
+      if (t === 'order_items') linhas = (await this.admin.from('order_items').select('id,added_by_name,order_id,orders(table_id)').in('id', ids)).data ?? [];
+      else if (t === 'orders') linhas = (await this.admin.from('orders').select('id,customer_name,table_id').in('id', ids)).data ?? [];
+      else if (t === 'table_sessions') linhas = (await this.admin.from('table_sessions').select('id,table_id').in('id', ids)).data ?? [];
+      else if (t === 'print_jobs') linhas = (await this.admin.from('print_jobs').select('id,title,printer_config_id').in('id', ids)).data ?? [];
+      else linhas = ids.map((id) => ({ id }));
+      for (const l of linhas) {
+        let meu = false;
+        if (t === 'order_items') meu = /^QA Portao/.test(l.added_by_name ?? '') || mesaIds.has(l.orders?.table_id);
+        else if (t === 'orders') meu = /^QA Portao/.test(l.customer_name ?? '') || mesaIds.has(l.table_id);
+        else if (t === 'table_sessions') meu = mesaIds.has(l.table_id);
+        else if (t === 'print_jobs') meu = /QA Portao/i.test(l.title ?? '') || (e.printerIds ?? []).includes(l.printer_config_id);
+        else if (t === 'store_users') meu = (e.usuarios ?? []).includes(l.id);
+        else if (t === 'printer_configs') meu = (e.printerIds ?? []).includes(l.id);
+        else if (t === 'print_sectors') meu = (e.sectorIds ?? []).includes(l.id);
+        else if (t === 'store_ntb_estoque_secrets') meu = !!e.estoqueSecretCriado;
+        else if (t === 'integracao_baixas' || t === 'fiscal_notas' || t === 'cash_shifts' || t === 'cash_movements' || t === 'cash_shift_audit_events') meu = true; // só existem por causa de pedidos/usuários do teste
+        add(meu ? nossas : alheias, t, l.id);
+      }
+    }
+    return { nossas, alheias };
+  }
+
   // ---------- usuários QA (create_store_team_member_secure via ssh + docker exec psql). Senhas aleatórias, nunca impressas.
   async criarUsuarios(perfis) {
     for (const [chave, p] of Object.entries(perfis)) {
@@ -112,12 +141,16 @@ export class Ambiente {
   async reservarMesas(n) {
     const { data: todas } = await this.admin.from('tables').select('*').eq('store_id', this.lojaId).order('number');
     const ocupadas = new Set(((await this.admin.from('table_sessions').select('table_id').eq('store_id', this.lojaId).is('closed_at', null)).data ?? []).map((s) => s.table_id));
-    const livres = (todas ?? []).filter((t) => t.status === 'available' && !ocupadas.has(t.id) && t.number >= 10 && t.number <= 24 && !t.waiter_requested);
-    if (livres.length < n) throw new Error(`a loja de teste não tem ${n} mesas livres (10-24)`);
+    // create_order_secure REAPROVEITA qualquer pedido "pending" da mesa (mesmo velho): mesa com pedido pendente fica de fora, para o teste
+    // nunca misturar itens num pedido que não é dele.
+    const comPedidoAberto = new Set(((await this.admin.from('orders').select('table_id').eq('store_id', this.lojaId).in('status', ['pending', 'accepted', 'preparing', 'ready'])).data ?? []).map((o) => o.table_id));
+    const livres = (todas ?? []).filter((t) => t.status === 'available' && !ocupadas.has(t.id) && !comPedidoAberto.has(t.id) && t.number >= 10 && t.number <= 24 && !t.waiter_requested);
+    if (livres.length < n) throw new Error(`a loja de teste não tem ${n} mesas livres (10-24) e sem pedido pendente`);
     // sorteio: reduz a chance de colidir com outra sessão que esteja usando a ZZ ao mesmo tempo
     const sorteadas = livres.sort(() => Math.random() - 0.5).slice(0, n);
     this.mesas = sorteadas.map((t) => ({ id: t.id, number: t.number }));
-    this.estado.mesas = sorteadas; this.salvar();
+    const { data: antes } = await this.admin.from('orders').select('id,table_id,status,total,payment_details,payment_method,updated_at,customer_name,coupon_id,coupon_discount').in('table_id', sorteadas.map((t) => t.id));
+    this.estado.mesas = sorteadas; this.estado.ordensAntes = antes ?? []; this.salvar();
     return this.mesas;
   }
 
@@ -164,8 +197,9 @@ export class Ambiente {
     const bar = await q('Cervejas', 'Heineken 330ml');
     const pizza = await q('Monte sua Pizza', 'Pizza Meio a Meio (qualquer sabor)');
     const extra = await q('Pastéis', 'Pastel de Carne');
-    for (const [n, p] of Object.entries({ cozinha, bar, pizza, extra })) if (!p) throw new Error(`produto de teste "${n}" não existe na loja (o cardápio da ZZ mudou?)`);
-    this.produtos = { cozinha, bar, pizza, extra };
+    const extra2 = await q('Pastéis', 'Pastel de Camarão');
+    for (const [n, p] of Object.entries({ cozinha, bar, pizza, extra, extra2 })) if (!p) throw new Error(`produto de teste "${n}" não existe na loja (o cardápio da ZZ mudou?)`);
+    this.produtos = { cozinha, bar, pizza, extra, extra2 };
     Object.values(this.produtos).forEach((p) => this.estado.produtos.push({ id: p.id, sector_id: p.sector_id, omie_codigo: p.omie_codigo }));
     this.salvar();
     return this.produtos;
@@ -174,7 +208,7 @@ export class Ambiente {
     await this.admin.from('products').update({ sector_id: this.setor.id }).eq('id', this.produtos.pizza.id);
   }
   async vincularCodigosOmie() {
-    const cod = { cozinha: 'QA-PORTAO-K', bar: 'QA-PORTAO-B', pizza: 'QA-PORTAO-P', extra: 'QA-PORTAO-X' };
+    const cod = { cozinha: 'QA-PORTAO-K', bar: 'QA-PORTAO-B', pizza: 'QA-PORTAO-P', extra: 'QA-PORTAO-X', extra2: 'QA-PORTAO-Y' };
     this.codigos = cod;
     for (const [k, p] of Object.entries(this.produtos)) await this.admin.from('products').update({ omie_codigo: cod[k] }).eq('id', p.id);
   }
@@ -221,12 +255,16 @@ export class Ambiente {
   }
 
   // ---------- conferência das ordens do teste
+  // Pedidos das mesas do teste com SÓ os itens criados nesta execução (um pedido pode ser reaproveitado de antes pelo servidor).
   async pedidosDasMesas() {
     const ids = this.mesas.map((m) => m.id);
-    const { data } = await this.admin.from('orders').select('*, order_items(*)').eq('store_id', this.lojaId).in('table_id', ids).gte('created_at', this.t0).order('created_at');
-    return data ?? [];
+    const { data, error } = await this.admin.from('orders').select('*, order_items(*)').eq('store_id', this.lojaId).in('table_id', ids).order('created_at');
+    if (error) throw new Error(`pedidos das mesas: ${error.message}`);
+    return (data ?? []).map((o) => ({ ...o, order_items: (o.order_items ?? []).filter((i) => i.created_at >= this.t0) })).filter((o) => o.order_items.length > 0 || o.created_at >= this.t0);
   }
   async baixaDoPedido(orderId) { return (await this.admin.from('integracao_baixas').select('*').eq('order_id', orderId).maybeSingle()).data; }
+
+  async sql(texto) { return psql(texto); }
 
   // ---------- LIMPEZA (idempotente). Retorna lista de problemas.
   async limpar({ idsAntes } = {}) {
@@ -238,9 +276,22 @@ export class Ambiente {
     const mesaIds = (e.mesas ?? []).map((m) => m.id);
     const nums = (e.mesas ?? []).map((m) => m.number);
 
-    // 1) pedidos do teste (cascade em itens, baixas, cupons, avaliações)
+    // 0) pedidos que JÁ EXISTIAM nas mesas do teste (o servidor pode ter reaproveitado um): tira só os itens criados pelo teste e restaura o pedido
     const t0 = e.t0;
-    const { data: pedidos } = await this.admin.from('orders').select('id').eq('store_id', loja).in('table_id', mesaIds.length ? mesaIds : ['00000000-0000-0000-0000-000000000000']).gte('created_at', t0);
+    const idsNulos = ['00000000-0000-0000-0000-000000000000'];
+    const { data: velhos } = await this.admin.from('orders').select('id,created_at').eq('store_id', loja).in('table_id', mesaIds.length ? mesaIds : idsNulos).lt('created_at', t0);
+    for (const v of velhos ?? []) {
+      await tentar('itens do teste em pedido antigo', () => this.admin.from('order_items').delete().eq('order_id', v.id).gte('created_at', t0));
+      const snap = (e.ordensAntes ?? []).find((o) => o.id === v.id);
+      if (snap) await tentar('restaurar pedido antigo', () => this.admin.from('orders').update({ status: snap.status, total: snap.total, payment_details: snap.payment_details, payment_method: snap.payment_method, updated_at: snap.updated_at, customer_name: snap.customer_name, coupon_id: snap.coupon_id, coupon_discount: snap.coupon_discount }).eq('id', v.id));
+      else {
+        const { data: resto } = await this.admin.from('order_items').select('quantity,price_at_time,status').eq('order_id', v.id);
+        const total = (resto ?? []).filter((i) => i.status !== 'canceled').reduce((a, i) => a + i.quantity * Number(i.price_at_time), 0);
+        await tentar('recalcular pedido antigo', () => this.admin.from('orders').update({ total, status: 'pending', payment_details: null, payment_method: null }).eq('id', v.id));
+      }
+    }
+    // 1) pedidos do teste (cascade em itens, baixas, cupons, avaliações)
+    const { data: pedidos } = await this.admin.from('orders').select('id').eq('store_id', loja).in('table_id', mesaIds.length ? mesaIds : idsNulos).gte('created_at', t0);
     const ordemIds = [...new Set([...(pedidos ?? []).map((p) => p.id), ...(e.ordemIds ?? [])])];
     e.ordemIds = ordemIds; this.salvar();
     if (ordemIds.length) {

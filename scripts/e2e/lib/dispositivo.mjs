@@ -14,12 +14,12 @@ export async function esperar(cond, { timeout = 15000, intervalo = 250, motivo =
 }
 
 const INIT = `(() => {
-  const rec = (kind, texto, titulo) => { try { window.__ntbDoc(JSON.stringify({ kind, texto: String(texto || '').slice(0, 6000), titulo: String(titulo || '') })); } catch (e) {} };
+  const rec = (kind, texto, titulo, html) => { try { window.__ntbDoc(JSON.stringify({ kind, texto: String(texto || '').slice(0, 20000), titulo: String(titulo || ''), html: html ? String(html).slice(0, 400000) : undefined })); } catch (e) {} };
   try {
     const desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
     Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', { configurable: true, get() {
       const w = desc.get.call(this);
-      try { if (w && !w.__ntbPatched) { w.__ntbPatched = true; w.print = () => rec('iframe', w.document.body ? w.document.body.innerText : '', w.document.title); } } catch (e) {}
+      try { if (w && !w.__ntbPatched) { w.__ntbPatched = true; w.print = () => rec('iframe', w.document.body ? w.document.body.innerText : '', w.document.title, w.document.documentElement.outerHTML); } } catch (e) {}
       return w;
     } });
   } catch (e) {}
@@ -40,6 +40,8 @@ export function classificarDoc(d) {
 }
 
 export class Dispositivo {
+  static errosTodos = [];
+  static ultimo = null;
   constructor(browser, nome, { viewport = { width: 1280, height: 900 }, tema = 'light', nativo = false, baseUrl, storageState } = {}) {
     this.browser = browser; this.nome = nome; this.viewport = viewport; this.tema = tema; this.nativo = nativo; this.baseUrl = baseUrl; this.storageState = storageState;
     this.docs = []; this.erros = [];
@@ -54,7 +56,7 @@ export class Dispositivo {
     return this;
   }
   _ouvir(page) {
-    const guarda = (tipo, texto, extra) => this.erros.push({ tipo, texto: String(texto).slice(0, 300), url: page.url(), t: Date.now(), ...extra });
+    const guarda = (tipo, texto, extra) => { const e = { nome: this.nome, tipo, texto: String(texto).slice(0, 300), url: page.url(), t: Date.now(), ...extra }; this.erros.push(e); Dispositivo.errosTodos.push(e); };
     page.on('console', (m) => { if (m.type() === 'error') guarda('console', m.text()); });
     page.on('pageerror', (e) => guarda('pageerror', e.message));
     page.on('requestfailed', (r) => { const f = r.failure()?.errorText || ''; if (!/ERR_ABORTED|NS_BINDING_ABORTED/.test(f)) guarda('requestfailed', `${r.method()} ${r.url().slice(0, 140)} ${f}`); });
@@ -64,7 +66,7 @@ export class Dispositivo {
   docsDesde(marca, tipo) { return this.docs.slice(marca).filter((d) => !tipo || d.tipo === tipo); }
   marcaErros() { return this.erros.length; }
   errosDesde(marca) { return this.erros.slice(marca); }
-  async ir(caminho = '/loja') { await this.page.goto(`${this.baseUrl}${caminho}`, { waitUntil: 'domcontentloaded' }); }
+  async ir(caminho = '/loja') { Dispositivo.ultimo = this; await this.page.goto(`${this.baseUrl}${caminho}`, { waitUntil: 'domcontentloaded' }); }
   async fechar() { try { await this.ctx.close(); } catch { /* já fechado */ } }
 
   async tentarLogin(email, senha) {
@@ -92,7 +94,16 @@ export class Dispositivo {
   }
   menu(nome) { return this.page.locator('aside').getByRole('button', { name: new RegExp(`^${nome}`) }).first(); }
   async areaTrancada(nome) { return (await this.menu(nome).locator('svg.lucide-lock').count()) > 0; }
-  async irArea(nome) { await this.menu(nome).click(); await sleep(1200); }
+  async irArea(nome) { Dispositivo.ultimo = this; await this.menu(nome).click(); await sleep(1200); }
+  // Celular: botão da barra de baixo; áreas que não estão lá ficam no menu (hambúrguer).
+  async irAreaMobile(nome) {
+    Dispositivo.ultimo = this;
+    const alvo = nome === 'Mesas' ? /^(Mesas|Gestão de Mesas)/ : new RegExp(`^${nome}`);
+    let b = this.page.locator('button:visible').filter({ hasText: alvo });
+    if (!(await b.count())) { await this.page.getByRole('button', { name: 'Abrir menu' }).click(); await sleep(700); b = this.page.locator('button:visible').filter({ hasText: alvo }); }
+    await b.first().click();
+    await sleep(1200);
+  }
   // Título da tela: h2 grande no desktop, h1 do cabeçalho no celular.
   async titulo() { return ((await this.page.locator('h2:visible, header h1:visible').first().textContent().catch(() => '')) || '').trim(); }
   async texto() { return (await this.page.locator('body').innerText()).replace(/[ \t]+/g, ' '); }

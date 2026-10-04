@@ -92,3 +92,4 @@ scripts/.pooler-host
 /scripts/e2e/.estado-portao.json
 /scripts/e2e/.out/
 /.next-portao/
+/scripts/e2e/.portao.lock/
