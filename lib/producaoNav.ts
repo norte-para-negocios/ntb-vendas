@@ -22,9 +22,32 @@ export function contarPorLocal(
   return out;
 }
 
-// "Produção" substitui Cozinha/Bar no menu só quando existe pelo menos um setor próprio.
-// Loja sem setores (todas as de hoje) continua com os dois botões de sempre — zero mudança.
-export const usaMenuProducao = (locais: LocalPreparo[]): boolean => locais.some((l) => l.setorId !== null);
+// Regra do dono (04/10): "todos os locais são iguais". Com 2 ou mais abas de KDS (Cozinha se kitchen_kds ligado, Bar se bar_kds
+// ligado, e todo local criado — mesmo com 0 categorias) o menu vira UM item "Produção" com abas. Com 1 aba só, vira um item com o nome dela.
+// Passe aqui os locais JÁ filtrados por permissão (locaisAcessiveis).
+export const usaMenuProducao = (locais: LocalPreparo[]): boolean => locais.length >= 2;
+
+export type ModoProducao =
+  | { tipo: 'nenhum' }
+  | { tipo: 'abas' }
+  | { tipo: 'unico'; tabId: 'kitchen' | 'bar' | 'producao'; nome: string };
+
+export function modoProducao(locais: LocalPreparo[]): ModoProducao {
+  if (locais.length === 0) return { tipo: 'nenhum' };
+  if (locais.length >= 2) return { tipo: 'abas' };
+  const l = locais[0];
+  // Cozinha/Bar sozinhos mantêm as abas históricas (permissão e módulo por id); local criado sozinho usa 'producao' com o nome dele.
+  return { tipo: 'unico', tabId: l.setorId ? 'producao' : l.base, nome: l.nome };
+}
+
+// Se a aba aberta deixou de existir (loja ganhou/perdeu locais), devolve a aba equivalente; null = nada a fazer.
+export function abaCorretaDeProducao(modo: ModoProducao, abaAtual: string): string | null {
+  if (modo.tipo === 'nenhum') return null;
+  const ehProducao = abaAtual === 'kitchen' || abaAtual === 'bar' || abaAtual === 'producao';
+  if (!ehProducao) return null;
+  const alvo = modo.tipo === 'abas' ? 'producao' : modo.tabId;
+  return abaAtual === alvo ? null : alvo;
+}
 
 // Acessível se o usuário/loja alcança Cozinha OU Bar (ids de aba de computeAccessibleTabIds).
 export const producaoAcessivel = (acessiveis: Set<string>): boolean => acessiveis.has('kitchen') || acessiveis.has('bar');

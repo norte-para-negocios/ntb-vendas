@@ -56,7 +56,7 @@ import { NotificacoesProvider } from '@/components/NotificacoesContext';
 import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ProducaoView } from '@/components/modules/ProducaoView';
-import { usaMenuProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
+import { modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -997,7 +997,9 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     return unsubscribe;
   }, []);
 
-  const menuProducao = usaMenuProducao(notif.locais) && producaoAcessivel(accessibleTabIds);
+  // Regra única (04/10): 2+ abas de KDS => "Produção" com abas; 1 aba => item com o nome dela; ver lib/producaoNav.ts.
+  const locaisDoUsuario = locaisAcessiveis(notif.locais, accessibleTabIds);
+  const modoProd = modoProducao(locaisDoUsuario);
   const tabAcessivel = (id: string) => (id === 'producao' ? producaoAcessivel(accessibleTabIds) : accessibleTabIds.has(id));
   const allTabs = [
     // Aba Caixa (Task 3, frente-de-caixa) — primeira da lista de propósito,
@@ -1007,12 +1009,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     { id: 'counter', icon: Coffee, label: 'Balcão', permission: 'counter' },
     // Loja com local de preparo próprio (ex.: Pizzaria): um item "Produção" com abas por local.
     // Loja sem setores continua com Cozinha e Bar separados, como sempre foi.
-    ...(menuProducao
-      ? [{ id: 'producao', icon: ChefHat, label: 'Produção', permission: 'kitchen', count: somaContagens(abasProducao(locaisAcessiveis(notif.locais, accessibleTabIds), notif.porLocal)) }]
-      : [
-          { id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen },
-          { id: 'bar', icon: Wine, label: 'Bar (KDS)', permission: 'bar', count: notifications.bar },
-        ]),
+    ...(modoProd.tipo === 'abas'
+      ? [{ id: 'producao', icon: ChefHat, label: 'Produção', permission: 'kitchen', count: somaContagens(abasProducao(locaisDoUsuario, notif.porLocal)) }]
+      : modoProd.tipo === 'unico' && modoProd.tabId === 'producao'
+        ? [{ id: 'producao', icon: ChefHat, label: modoProd.nome, permission: 'kitchen', count: somaContagens(abasProducao(locaisDoUsuario, notif.porLocal)) }]
+        : [
+            ...(accessibleTabIds.has('kitchen') && modoProd.tipo === 'unico' && modoProd.tabId === 'kitchen' ? [{ id: 'kitchen', icon: ChefHat, label: 'Cozinha (KDS)', permission: 'kitchen', count: notifications.kitchen }] : []),
+            ...(accessibleTabIds.has('bar') && modoProd.tipo === 'unico' && modoProd.tabId === 'bar' ? [{ id: 'bar', icon: Wine, label: 'Bar (KDS)', permission: 'bar', count: notifications.bar }] : []),
+          ]),
     { id: 'menu', icon: UtensilsCrossed, label: 'Cardápio', permission: 'menu' },
     { id: 'admin', icon: BarChart3, label: 'Administração', permission: 'admin' }
   ];
@@ -1033,12 +1037,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     : allTabs.filter(tab => tabAcessivel(tab.id));
   const bottomNavTabs = visibleTabs.filter(item => tabAcessivel(item.id) && ['caixa', 'tables', 'counter', 'kitchen', 'bar', 'producao'].includes(item.id));
 
-  // Loja ganhou/perdeu o primeiro setor com a aba aberta: leva para a aba equivalente.
+  // Loja ganhou/perdeu abas de KDS com a aba aberta: leva para a aba equivalente.
+  const abaProdutoAlvo = abaCorretaDeProducao(modoProd, currentTab);
   useEffect(() => {
-    if (menuProducao && (currentTab === 'kitchen' || currentTab === 'bar')) onTabChange('producao');
-    if (!menuProducao && currentTab === 'producao') onTabChange(accessibleTabIds.has('kitchen') ? 'kitchen' : 'bar');
+    if (abaProdutoAlvo) onTabChange(abaProdutoAlvo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuProducao, currentTab]);
+  }, [abaProdutoAlvo]);
 
   return (
     <NotificacoesProvider value={notif}>
@@ -1339,7 +1343,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
                   {item.id === 'caixa' ? 'Caixa' :
                    item.id === 'tables' ? 'Mesas' :
                    item.id === 'kitchen' ? 'Cozinha' :
-                   item.id === 'producao' ? 'Produção' :
+                   item.id === 'producao' && item.label === 'Produção' ? 'Produção' :
                    item.id === 'bar' ? 'Bar' :
                    item.label.split(' ')[0]}
               </span>
@@ -9656,11 +9660,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     Seu perfil só pode consultar o cardápio. Peça ao gerente ou ao dono para alterar.
                 </p>
             )}
-            {/* Locais de preparo saíram do Cardápio (04/10/2026): cadastro único em Administração → Locais de preparo. */}
-            <p className="text-[13px] text-[var(--text-muted)] -mb-4">
-                Locais de preparo (Cozinha, Bar, Pizzaria...) agora ficam em Administração → Locais de preparo.
-            </p>
-
             {/* CARDÁPIO — navegação por abas + busca global (redesign 2026-09-04).
                 Gestão de categoria (criar/reordenar/horário/apagar) mora só no
                 modal abaixo; aqui é só navegar/ver/editar produto. */}
@@ -9892,8 +9891,6 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <p className="text-[11px] text-[var(--text-muted)] mt-1.5">A posição de cada grupo segue a da primeira categoria dele — arraste as categorias abaixo pra reordenar.</p>
                         )}
                     </div>
-
-                    <p className="text-[11px] text-[var(--text-muted)]">Locais de preparo (ex.: Pizzaria) agora ficam em Administração → Locais de preparo.</p>
 
                     <div>
                         <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Categorias</p>
