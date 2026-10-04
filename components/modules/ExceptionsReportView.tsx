@@ -22,6 +22,9 @@ const intervalo = (p: Periodo): [Date, Date] => {
   return [ini, fim];
 };
 
+// Status do item como o operador entende (o banco guarda em inglês).
+const STATUS_ANTERIOR: Record<string, string> = { pending: 'aguardando', accepted: 'aceito', preparing: 'em preparo', ready: 'pronto', delivered: 'entregue' };
+
 const hora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: number }> = ({ storeId, threshold = DEFAULT_EXCEPTION_THRESHOLD }) => {
@@ -124,7 +127,7 @@ export const ExceptionsReportView: React.FC<{ storeId: string; threshold?: numbe
                   d.produto ? String(d.produto) : null,
                   d.quantidade ? `${d.quantidade}x` : null,
                   d.valor ? `R$ ${formatBRL(Number(d.valor))}` : null,
-                  d.status_anterior ? `estava: ${d.status_anterior}` : null,
+                  d.status_anterior ? `estava: ${STATUS_ANTERIOR[String(d.status_anterior)] ?? String(d.status_anterior)}` : null,
                   d.de !== undefined && d.para !== undefined ? `de R$ ${formatBRL(Number(d.de))} para R$ ${formatBRL(Number(d.para))}` : null,
                   d.motivo ? `motivo: ${d.motivo}` : null,
                 ].filter(Boolean).join(' · ');
