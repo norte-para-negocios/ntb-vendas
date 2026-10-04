@@ -3,14 +3,18 @@ import type { Workbook, Worksheet } from 'exceljs';
 import type { Order } from '@/types';
 import type { CashShiftSummary } from '../api';
 import type { ExceptionEvent } from '../excecoes';
-import { completarFormas, completarCartoes, ticketMedio } from '../caixaResumo';
-import { getPaymentMethodLabel, getCardTotalLabel, getCardBrandLabel } from '../labels';
+import { montarPainel, type PainelDia } from './painelDia';
+import { getPaymentMethodLabel, getCardBrandLabel } from '../labels';
 
 export interface FechamentoTurno { operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
-export interface FechamentoData { loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
+export interface FechamentoData { nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
 
 const BRL = '"R$" #,##0.00';
-const HEAD_FILL = 'FF2B2E83';
+const HEAD_FILL = 'FF484DB5';      // azul Norte (--brand)
+const HEAD_DARK = 'FF2B2E83';
+const SOFT_FILL = 'FFEEEFFB';
+const BAR = 'FF9DA1E4';
+export const NORTE_RODAPE = 'Norte Vendas · Norte para Negócios · norteparanegocios.com.br';
 
 // O Excel não guarda fuso: grava o instante como relógio de parede. Desloca -3h (Bahia, sem horário de verão)
 // pra célula mostrar a hora que o restaurante viveu (22h16 continua 22h16, não 01h16 do dia seguinte).
@@ -27,6 +31,8 @@ function headerRow(ws: Worksheet, cols: { header: string; width: number; fmt?: s
   r.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEAD_FILL } };
   r.alignment = { vertical: 'middle' };
+  r.height = 22;
+  ws.properties.tabColor = { argb: HEAD_FILL };
   ws.views = [{ state: 'frozen', ySplit: 1 }];
 }
 
@@ -36,43 +42,16 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   wb.creator = d.geradoPor;
   wb.created = d.geradoEm;
 
-  // Totais do período (soma dos turnos, já deduplicados pelo servidor)
-  const formasTot: Record<string, number> = {};
-  const cartoesTot: Record<string, number> = {};
-  let contas = 0, recebido = 0, sangria = 0, suprimento = 0, taxa = 0;
-  d.turnos.forEach((t) => {
-    Object.entries(t.resumo.totals_by_method ?? {}).forEach(([k, v]) => { formasTot[k] = (formasTot[k] ?? 0) + Number(v); });
-    Object.entries(t.resumo.totals_by_card ?? {}).forEach(([k, v]) => { cartoesTot[k] = (cartoesTot[k] ?? 0) + Number(v); });
-    contas += Number(t.resumo.payments_count ?? 0);
-    recebido += Number(t.resumo.payments_total ?? 0);
-    sangria += Number(t.resumo.total_sangria ?? 0);
-    suprimento += Number(t.resumo.total_suprimento ?? 0);
-    taxa += Number(t.resumo.service_fee_total ?? 0);
-  });
-
-  // 1. Resumo
-  const res = wb.addWorksheet('Resumo');
-  res.columns = [{ width: 34 }, { width: 22 }];
-  res.addRow([d.loja]).font = { bold: true, size: 14 };
-  res.addRow(['Período', d.periodoLabel]);
-  res.addRow([]);
-  const kpis: [string, number | string, string?][] = [
-    ['Contas pagas', contas],
-    ['Total recebido', recebido, BRL],
-    ['Ticket médio', ticketMedio(recebido, contas) ?? 0, BRL],
-    ['Taxa de serviço', taxa, BRL],
-    ['Sangrias', sangria, BRL],
-    ['Suprimentos', suprimento, BRL],
-    ['Itens cancelados / exceções', d.excecoes.length],
-  ];
-  kpis.forEach(([l, v, fmt]) => { const r = res.addRow([l, v]); r.getCell(1).font = { bold: true }; if (fmt) r.getCell(2).numFmt = fmt; });
-  res.addRow([]);
-  res.addRow([`Gerado em ${d.geradoEm.toLocaleString('pt-BR')} por ${d.geradoPor}`]).font = { italic: true, color: { argb: 'FF666A75' } };
+  const painel = montarPainel(d, d.nomeCategoria);
+  const { kpis } = painel;
+  const { recebido, sangria, suprimento } = { recebido: kpis.recebido, sangria: kpis.sangria, suprimento: kpis.suprimento };
+  void recebido; void sangria; void suprimento;
+  montarPainelSheet(wb, d, painel);
 
   // 2. Formas de pagamento (sempre os 4 meios) com total em fórmula
   const fp = wb.addWorksheet('Formas de pagamento');
   headerRow(fp, [{ header: 'Forma', width: 24 }, { header: 'Total', width: 18, fmt: BRL }]);
-  const formas = completarFormas(formasTot);
+  const formas = painel.formas;
   formas.forEach((f) => fp.addRow([f.label, f.total]));
   const ultimaForma = formas.length + 1;
   const totRow = fp.addRow(['TOTAL', { formula: `SUM(B2:B${ultimaForma})`, result: formas.reduce((s, f) => s + f.total, 0) }]);
@@ -83,7 +62,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   // 3. Cartões (ordem da folha de papel)
   const ca = wb.addWorksheet('Cartões');
   headerRow(ca, [{ header: 'Bandeira', width: 30 }, { header: 'Total', width: 18, fmt: BRL }]);
-  const cartoes = completarCartoes(cartoesTot);
+  const cartoes = painel.cartoes;
   cartoes.forEach((c) => ca.addRow([c.label, c.total]));
   const ct = ca.addRow(['TOTAL', { formula: `SUM(B2:B${cartoes.length + 1})`, result: cartoes.reduce((s, c) => s + c.total, 0) }]);
   ct.font = { bold: true };
@@ -140,7 +119,103 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   });
 
   // Rodapé de impressão
-  wb.worksheets.forEach((w) => { w.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }; });
-  void getCardTotalLabel; // (mantido: rótulos de cartão vêm de completarCartoes)
+  wb.worksheets.forEach((w) => {
+    w.pageSetup = { orientation: w.name === 'Painel' ? 'portrait' : 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9, margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } };
+    w.headerFooter = { oddHeader: `&L&B${d.loja}&R${d.periodoLabel}`, oddFooter: `&L${NORTE_RODAPE}&RPágina &P de &N` };
+  });
   return wb;
+}
+
+const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
+
+function montarPainelSheet(wb: Workbook, d: FechamentoData, p: PainelDia) {
+  const ws = wb.addWorksheet('Painel', { views: [{ showGridLines: false }] });
+  ws.properties.tabColor = { argb: HEAD_DARK };
+  ws.columns = [{ width: 30 }, { width: 18 }, { width: 12 }, { width: 16 }, { width: 12 }, { width: 18 }, { width: 18 }, { width: 18 }];
+
+  // Faixa de título
+  ws.mergeCells('A1:H1');
+  const t = ws.getCell('A1');
+  t.value = 'NORTE VENDAS  ·  Relatório do dia';
+  t.font = { bold: true, size: 11, color: { argb: 'FFDCDEF8' } };
+  t.fill = fill(HEAD_DARK);
+  t.alignment = { vertical: 'middle', indent: 1 };
+  ws.getRow(1).height = 22;
+  ws.mergeCells('A2:H2');
+  const n = ws.getCell('A2');
+  n.value = d.loja;
+  n.font = { bold: true, size: 20, color: { argb: 'FFFFFFFF' } };
+  n.fill = fill(HEAD_FILL);
+  n.alignment = { vertical: 'middle', indent: 1 };
+  ws.getRow(2).height = 36;
+  ws.mergeCells('A3:H3');
+  const per = ws.getCell('A3');
+  per.value = `${d.periodoLabel}  ·  gerado em ${d.geradoEm.toLocaleString('pt-BR')} por ${d.geradoPor}`;
+  per.font = { size: 10, color: { argb: 'FFDCDEF8' } };
+  per.fill = fill(HEAD_FILL);
+  per.alignment = { vertical: 'middle', indent: 1 };
+  ws.getRow(3).height = 20;
+  ws.addRow([]);
+
+  // Cartões de indicadores (4 por linha, 2 colunas cada)
+  const cards: [string, number, string?][][] = [
+    [['Total recebido', p.kpis.recebido, BRL], ['Contas pagas', p.kpis.contas], ['Ticket médio', p.kpis.ticket ?? 0, BRL], ['Itens vendidos', p.kpis.itens]],
+    [['Cartão de crédito', p.kpis.credito, BRL], ['Cartão de débito', p.kpis.debito, BRL], ['Taxa de serviço', p.kpis.taxa, BRL], ['Cancelamentos', p.kpis.cancelamentos]],
+  ];
+  cards.forEach((linha) => {
+    const rl = ws.addRow([]); const rv = ws.addRow([]);
+    rl.height = 18; rv.height = 30;
+    linha.forEach(([label, valor, fmt], i) => {
+      const c1 = i * 2 + 1;
+      ws.mergeCells(rl.number, c1, rl.number, c1 + 1);
+      ws.mergeCells(rv.number, c1, rv.number, c1 + 1);
+      const cl = rl.getCell(c1); const cv = rv.getCell(c1);
+      cl.value = label; cl.font = { size: 9, bold: true, color: { argb: 'FF666A75' } }; cl.fill = fill(SOFT_FILL); cl.alignment = { indent: 1, vertical: 'bottom' };
+      cv.value = valor; cv.font = { size: 18, bold: true, color: { argb: HEAD_DARK } }; cv.fill = fill(SOFT_FILL); cv.alignment = { indent: 1, vertical: 'middle', horizontal: 'left' };
+      if (fmt) cv.numFmt = fmt;
+      rl.getCell(c1 + 1).fill = fill(SOFT_FILL); rv.getCell(c1 + 1).fill = fill(SOFT_FILL);
+    });
+    ws.addRow([]);
+  });
+
+  const secao = (titulo: string, cols: string[]) => {
+    const r = ws.addRow([titulo]);
+    r.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    for (let c = 1; c <= 5; c += 1) r.getCell(c).fill = fill(HEAD_FILL);
+    r.height = 22; r.alignment = { vertical: 'middle', indent: 1 };
+    const h = ws.addRow(cols);
+    h.font = { bold: true, size: 9, color: { argb: HEAD_DARK } };
+    for (let c = 1; c <= 5; c += 1) { h.getCell(c).fill = fill(SOFT_FILL); if (c > 1) h.getCell(c).alignment = { horizontal: 'right' }; }
+    return ws.rowCount;
+  };
+  const barras = (de: number, ate: number) => {
+    if (ate < de) return;
+    ws.addConditionalFormatting({ ref: `B${de}:B${ate}`, rules: [{ type: 'dataBar', priority: 1, gradient: false, border: false, minLength: 0, maxLength: 100, cfvo: [{ type: 'num', value: 0 }, { type: 'max' }], color: { argb: BAR } } as any] });
+  };
+  const bloco = (titulo: string, cols: string[], linhas: (string | number | null)[][], fmts: (string | undefined)[], totalLinha?: (string | number | null)[]) => {
+    const h = secao(titulo, cols);
+    linhas.forEach((l) => { const r = ws.addRow(l); fmts.forEach((f, i) => { if (f) r.getCell(i + 1).numFmt = f; }); r.getCell(1).alignment = { indent: 1 }; });
+    if (totalLinha) { const r = ws.addRow(totalLinha); r.font = { bold: true }; r.getCell(1).alignment = { indent: 1 }; fmts.forEach((f, i) => { if (f) r.getCell(i + 1).numFmt = f; }); r.eachCell((c) => { c.border = { top: { style: 'thin', color: { argb: HEAD_FILL } } }; }); }
+    barras(h + 1, h + linhas.length);
+    ws.addRow([]);
+  };
+  const soma = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+
+  bloco('Formas de pagamento', ['Forma', 'Total', '', '', '% do total'], p.formas.map((f) => [f.label, f.total, null, null, p.kpis.recebido > 0 ? f.total / p.kpis.recebido : 0]), [undefined, BRL, undefined, undefined, '0.0%'], ['TOTAL', soma(p.formas.map((f) => f.total)), null, null, null]);
+  bloco('Cartões por bandeira (crédito e débito separados)', ['Bandeira', 'Total', '', '', '% do total'], p.cartoes.map((c) => [c.label, c.total, null, null, p.kpis.recebido > 0 ? c.total / p.kpis.recebido : 0]), [undefined, BRL, undefined, undefined, '0.0%'], ['TOTAL EM CARTÕES', soma(p.cartoes.map((c) => c.total)), null, null, null]);
+  bloco('Vendas por hora', ['Hora', 'Total', 'Contas', 'Ticket médio', '% do total'], p.porHora.map((r) => [r.label, r.total, r.orders, r.ticket, p.kpis.recebido > 0 ? r.total / p.kpis.recebido : 0]), [undefined, BRL, '0', BRL, '0.0%']);
+  bloco('Vendas por operador', ['Operador', 'Total', 'Contas', 'Ticket médio', '% do total'], p.porOperador.map((r) => [safeCell(r.label), r.total, r.orders, r.ticket, p.kpis.recebido > 0 ? r.total / p.kpis.recebido : 0]), [undefined, BRL, '0', BRL, '0.0%']);
+  bloco('Vendas por categoria', ['Categoria', 'Total', '', '', ''], p.porCategoria.map((r) => [safeCell(r.label), r.total, null, null, null]), [undefined, BRL]);
+  bloco('Produtos mais vendidos', ['Produto', 'Total', 'Qtd', '', ''], p.topProdutos.map((r) => [safeCell(r.nome), r.total, r.qtd, null, null]), [undefined, BRL, '0']);
+
+  ws.mergeCells(`A${ws.rowCount + 1}:H${ws.rowCount + 1}`);
+  const rod = ws.getCell(`A${ws.rowCount}`);
+  rod.value = NORTE_RODAPE;
+  rod.font = { size: 8, italic: true, color: { argb: 'FF8A8EA0' } };
+  rod.alignment = { horizontal: 'center' };
+
+  // O painel é a primeira aba
+  wb.views = [{ x: 0, y: 0, width: 10000, height: 20000, firstSheet: 0, activeTab: 0, visibility: 'visible' }];
+  const idx = wb.worksheets.indexOf(ws);
+  if (idx > 0) { wb.worksheets.splice(idx, 1); wb.worksheets.unshift(ws); }
 }
