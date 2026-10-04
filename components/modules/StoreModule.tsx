@@ -10690,7 +10690,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h3 className="font-semibold text-[17px] tracking-[-0.01em] text-[var(--text)]">Usuários do sistema</h3>
-                <Button onClick={() => openModal()}><Plus size={18} /> Novo usuário</Button>
+                <Button className="max-sm:min-h-11" onClick={() => openModal()}><Plus size={18} /> Novo usuário</Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">

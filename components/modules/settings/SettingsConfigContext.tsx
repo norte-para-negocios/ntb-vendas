@@ -40,7 +40,18 @@ export const SettingsConfigProvider: React.FC<{ store: Store; onStoreUpdate?: (s
     onUpdateRef.current?.({ ...storeRef.current, config: novo as never });
   }, []);
 
-  const salvar = useCallback<Ctx['salvar']>(async (patch, rotulo, opts) => {
+  // Gravações em fila: cada uma lê o config já atualizado pela anterior. Sem isso, dois ajustes
+  // salvos quase juntos (ex.: número + interruptor) gravam o objeto inteiro e um apaga o outro.
+  const fila = useRef<Promise<unknown>>(Promise.resolve());
+  const salvar = useCallback<Ctx['salvar']>((patch, rotulo, opts) => {
+    const run = () => executar(patch, rotulo, opts);
+    const p = fila.current.then(run, run);
+    fila.current = p.catch(() => undefined);
+    return p;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const executar = async (patch: Cfg, rotulo: string, opts?: { semDesfazer?: boolean; mensagem?: string }): Promise<boolean> => {
     const anterior = ref.current;
     const novo = aplicarPatch(anterior, patch);
     try {
@@ -50,7 +61,7 @@ export const SettingsConfigProvider: React.FC<{ store: Store; onStoreUpdate?: (s
         // volta só as chaves que este salvar tocou (chave que não existia volta a não existir)
         const volta: Cfg = {};
         Object.keys(patch).forEach((k) => { volta[k] = anterior ? anterior[k] : undefined; });
-        toast.undo(opts?.mensagem ?? `${rotulo} atualizado.`, 'Desfazer', async () => { await salvar(volta, rotulo, { semDesfazer: true }); });
+        toast.undo(opts?.mensagem ?? `Ajuste salvo: ${rotulo}.`, 'Desfazer', async () => { await salvar(volta, rotulo, { semDesfazer: true }); });
       }
       return true;
     } catch (e) {
@@ -58,7 +69,7 @@ export const SettingsConfigProvider: React.FC<{ store: Store; onStoreUpdate?: (s
       toast.error(`Erro ao atualizar ${rotulo.toLowerCase()}.`);
       return false;
     }
-  }, [aplicarConfig]);
+  };
 
   const value = useMemo(() => ({ config, salvar, aplicarConfig }), [config, salvar, aplicarConfig]);
   return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;

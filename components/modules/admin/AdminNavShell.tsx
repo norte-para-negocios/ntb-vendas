@@ -46,6 +46,12 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
     const achados = buscarAjustes(q).filter((a) => areas.some((x) => x.abas.some((b) => b.id === a.aba))).slice(0, 6);
     const escolherAjuste = (aba: AbaId, id: string) => { setQ(''); setMobileArea(areaDaAba(aba)); onTab(aba, `aj-${id}`); };
 
+    const caminho = (aba: AbaId, secao: string) => {
+        const nomeAba = areas.flatMap((x) => x.abas).find((b) => b.id === aba)?.label;
+        const nomeSecao = ROTULO_SECAO[secao] ?? secao;
+        return [rotuloArea(areaDaAba(aba)), nomeAba, nomeSecao].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' › ');
+    };
+
     const Busca = (
         <div className="space-y-2">
             <label className="relative block">
@@ -60,7 +66,7 @@ export const AdminNavShell: React.FC<Props> = ({ ctx, activeTab, onTab, status, 
                         <li key={a.id}>
                             <button type="button" onClick={() => escolherAjuste(a.aba, a.id)} className="w-full text-left px-3 py-2 max-sm:min-h-11 rounded-[10px] hover:bg-[var(--surface-2)] u-motion u-press-sm">
                                 <span className="block text-[15px] text-[var(--text)]">{a.titulo}</span>
-                                <span className="block text-[12px] text-[var(--text-muted)]">{rotuloArea(areaDaAba(a.aba))} › {abas.length >= 0 && (areas.flatMap((x) => x.abas).find((b) => b.id === a.aba)?.label)} › {ROTULO_SECAO[a.secao] ?? a.secao}</span>
+                                <span className="block text-[12px] text-[var(--text-muted)]">{caminho(a.aba, a.secao)}</span>
                             </button>
                         </li>
                     ))}

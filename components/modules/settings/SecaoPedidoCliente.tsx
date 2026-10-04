@@ -65,7 +65,7 @@ export const SecaoPedidoCliente: React.FC = () => {
                         onChange={(e) => setNova(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionar(); } }}
                     />
-                    <Button onClick={adicionar} isLoading={salvando} aria-label="Adicionar sugestão"><Plus size={20} /></Button>
+                    <Button onClick={adicionar} isLoading={salvando} aria-label="Adicionar sugestão" className="max-sm:min-h-11"><Plus size={20} /></Button>
                 </div>
             </div>
         </section>
