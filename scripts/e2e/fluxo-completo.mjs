@@ -796,12 +796,24 @@ async function secRelatorios(C) {
     const bloco = t.split('\n').join(' ');
     ok(new RegExp(`Mesa ${mesa.number}\\s+3 itens\\s+R\\$ ${brl(C.totalConta)}`).test(bloco), `a linha da mesa ${mesa.number} deveria dizer "3 itens" (1 item foi cancelado): ${(bloco.match(new RegExp(`Mesa ${mesa.number}.{0,40}`)) ?? ['?'])[0]}`);
   });
-  await rel.passo('Histórico: abrir a venda mostra os itens com o nome de quem os lançou (garçom)', async () => {
+  const abrirVendaNoHistorico = async () => {
     const linha = m.page.locator('main div').filter({ hasText: new RegExp(`Mesa ${mesa.number}\\b`) }).filter({ hasText: totalTxt }).last();
     await linha.click();
     await sleep(1500);
     const dlg = m.page.getByRole('dialog').last();
-    ok(await dlg.count(), 'a venda do Histórico não abre detalhes (não há onde ver quem lançou cada item)');
+    ok(await dlg.count(), 'a venda do Histórico não abre detalhes');
+    return dlg;
+  };
+  await rel.passo('Histórico: o detalhe da venda abre e NÃO lista o item cancelado como se tivesse sido vendido', async () => {
+    const dlg = await abrirVendaNoHistorico();
+    const t = await dlg.innerText();
+    for (const n of [amb.produtos.cozinha.name, amb.produtos.bar.name, amb.produtos.pizza.name]) ok(t.includes(n), `o detalhe não lista ${n}`);
+    const riscado = t.includes(amb.produtos.extra.name) && await dlg.getByText(amb.produtos.extra.name).first().evaluate((el) => { let e = el; while (e && e !== document.body) { if (getComputedStyle(e).textDecorationLine.includes('line-through')) return true; e = e.parentElement; } return false; });
+    ok(!t.includes(amb.produtos.extra.name) || /cancelad/i.test(t) || riscado, `o detalhe da venda lista "${amb.produtos.extra.name}" (cancelado pelo gerente) como item normal, sem riscar nem escrever "cancelado": ${t.replace(/\s+/g, ' ').slice(0, 330)}`);
+    await fecharJanelas(m);
+  });
+  await rel.passo('Histórico: abrir a venda mostra os itens com o nome de quem os lançou (garçom)', async () => {
+    const dlg = await abrirVendaNoHistorico();
     const t = await dlg.innerText();
     ok(t.includes(amb.usuarios.garcom.nome), `o detalhe da venda não mostra o garçom "${amb.usuarios.garcom.nome}": ${t.replace(/\s+/g, ' ').slice(0, 300)}`);
     await fecharJanelas(m);
@@ -835,8 +847,15 @@ async function secRelatorios(C) {
     ok(painel.length > 20, 'aba Painel vazia');
     const caixa = txt(wb.getWorksheet('Caixa'));
     ok(caixa.includes('QA Portao caixa'), `aba Caixa sem o turno do operador de teste:\n${caixa.slice(0, 300)}`);
-    // consistência interna: o total das vendas listadas na aba Vendas é o mesmo do painel (faturamento)
-    C.xlsxTexto = { painel, vendas: txt(wb.getWorksheet('Vendas')) };
+    C.xlsx = { vendas, itens: linhas(wb.getWorksheet('Itens')), painel };
+  });
+  await rel.passo('Excel: o "Total do pedido" da venda bate com a soma dos itens listados na aba Itens (item cancelado não pode inflar o total)', async () => {
+    ok(C.xlsx, 'Excel não foi lido');
+    const venda = C.xlsx.vendas.find((r) => String(r[1]).includes(`Mesa ${mesa.number}`));
+    ok(venda, `a mesa ${mesa.number} não está na aba Vendas`);
+    const itens = C.xlsx.itens.filter((r) => String(r[1]).includes(`Mesa ${mesa.number}`));
+    const soma = itens.reduce((a, r) => a + Number(r[5] || 0), 0);
+    ok(Math.abs(Number(venda[6]) - soma) < 0.005, `Vendas.Total do pedido = ${venda[6]} mas os itens listados somam ${soma.toFixed(2)} (o item cancelado entra no total do pedido)`);
   });
   await rel.passo('PDF / Imprimir do fechamento do dia gera o documento com os valores da venda (PDF real conferido)', async () => {
     const marca = m.marcaDocs();

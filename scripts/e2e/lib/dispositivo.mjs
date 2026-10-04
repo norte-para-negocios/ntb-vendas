@@ -103,7 +103,8 @@ export class Dispositivo {
     const cand = () => this.page.locator('button:visible').filter({ hasText: re });
     // o botão da barra de baixo pode vir com selo de contagem ("9+Produção11"): por isso o texto não é ancorado no início
     if (!(await cand().count())) { await this.page.getByRole('button', { name: 'Abrir menu' }).click(); await sleep(700); }
-    await cand().first().click();
+    // o indicador do modo dev (Next) pode cobrir o 1º botão da barra de baixo; no build de produção não existe: força o toque
+    await cand().first().click({ timeout: 6000 }).catch(() => cand().first().click({ force: true }));
     await sleep(1200);
     if (await this.page.getByText('Menu Lojista').isVisible().catch(() => false)) { await this.page.keyboard.press('Escape'); await sleep(500); }
   }
