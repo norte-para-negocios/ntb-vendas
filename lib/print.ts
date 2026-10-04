@@ -278,6 +278,8 @@ export interface KitchenTicketLine {
   productName: string;
   addons?: string;
   observation?: string;
+  /** Alergênicos do produto (ex.: ['glúten', 'frutos do mar']) — sai em destaque na comanda. */
+  alergenicos?: string[];
 }
 
 // Um pedido confirmado com vários itens do mesmo destino sai numa comanda só.
@@ -313,7 +315,8 @@ export function printKitchenTicket(opts: {
   const itensHtml = linhas.map((l) => `
     <div class="item-line">${opts.cancelamento ? 'CANCELAR: ' : ''}${l.quantity}x ${escapeHtml(l.productName)}</div>
     ${l.addons ? `<div class="addons">Adicional: ${escapeHtml(l.addons)}</div>` : ''}
-    ${l.observation ? `<div class="obs">OBS: ${escapeHtml(l.observation)}</div>` : ''}`).join('');
+    ${l.observation ? `<div class="obs">OBS: ${escapeHtml(l.observation)}</div>` : ''}
+    ${l.alergenicos && l.alergenicos.length > 0 ? `<div class="obs" style="font-weight:800;border:2px solid #000;padding:2px 4px;margin-top:2px">ALERGIA: ${escapeHtml(l.alergenicos.join(', ').toUpperCase())}</div>` : ''}`).join('');
   const body = `
     <div class="header">
       ${opts.storeName ? `<div class="store-name">${escapeHtml(opts.storeName)}</div>` : ''}
@@ -478,6 +481,7 @@ export function buildKitchenTicketText(opts: {
     wrapLine(principal, W - 4).forEach((t, n) => lines.push(n === 0 ? t : `    ${t}`));
     if (l.addons) wrapLine(`+ ${l.addons}`, W - 4).forEach((t) => lines.push(`    ${t}`));
     if (l.observation) wrapLine(`OBS: ${l.observation.toUpperCase()}`, W - 4).forEach((t) => lines.push(`    ${t}`));
+    if (l.alergenicos && l.alergenicos.length > 0) wrapLine(`** ALERGIA: ${l.alergenicos.join(', ').toUpperCase()} **`, W - 4).forEach((t) => lines.push(`    ${t}`));
     lines.push(simples);
   });
   if (opts.cancelamento?.por) lines.push(...wrapLine(`Por: ${opts.cancelamento.por}`, W));

@@ -108,7 +108,7 @@ import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
-import { parseItemNote } from '@/lib/labels';
+import { parseItemNote, getAllergenLabels } from '@/lib/labels';
 import { Store, OrderItem, StoreUser, TableStatus } from '@/types';
 
 type Destination = 'kitchen' | 'bar';
@@ -710,6 +710,7 @@ async function reconcileDestination(
       productName: it.product?.name || 'Produto indisponível',
       addons: (it.selected_options || []).map((o: any) => o.name).join(', ') || undefined,
       observation: parseItemNote(it.notes || '').observation || undefined,
+      alergenicos: getAllergenLabels((it.product as any)?.tags),
     }));
     const client = parseItemNote(primeiro.notes || '').client;
     const dadosTicket = {

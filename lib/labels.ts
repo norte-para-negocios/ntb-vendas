@@ -104,7 +104,19 @@ export const PRODUCT_TAGS: Record<string, { label: string; emoji: string }> = {
     sem_lactose:  { label: 'Sem Lactose',  emoji: '🥛' },
     novo:         { label: 'Novo',         emoji: '✨' },
     da_casa:      { label: 'Da Casa',      emoji: '⭐' },
+    // Alergênicos (2026-10-04): prefixo `alergia_`. Aparecem como selo no cardápio e em destaque
+    // na comanda impressa da cozinha (lib/print.ts, campo `alergenicos`).
+    alergia_gluten:        { label: 'Contém glúten',        emoji: '⚠️' },
+    alergia_lactose:       { label: 'Contém lactose',       emoji: '⚠️' },
+    alergia_frutos_do_mar: { label: 'Contém frutos do mar', emoji: '⚠️' },
+    alergia_amendoim:      { label: 'Contém amendoim',      emoji: '⚠️' },
+    alergia_castanhas:     { label: 'Contém castanhas',     emoji: '⚠️' },
+    alergia_ovo:           { label: 'Contém ovo',           emoji: '⚠️' },
 };
+
+// Rótulos dos alergênicos de um produto (tags com prefixo `alergia_`), na ordem do catálogo.
+export const getAllergenLabels = (tags?: string[] | null): string[] =>
+    Object.keys(PRODUCT_TAGS).filter((k) => k.startsWith('alergia_') && (tags ?? []).includes(k)).map((k) => PRODUCT_TAGS[k].label.replace(/^Contém /, ''));
 
 // {label, emoji} de uma chave de tag, com fallback pra chave crua (mesmo
 // principio dos getters de enum acima: nunca deixar valor cru vazar pra tela
