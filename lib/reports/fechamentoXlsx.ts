@@ -2,7 +2,7 @@
 import type { Workbook, Worksheet } from 'exceljs';
 import type { Order } from '@/types';
 import type { CashShiftSummary } from '../api';
-import type { ExceptionEvent } from '../excecoes';
+import { EXCEPTION_LABELS, type ExceptionEvent } from '../excecoes';
 import { montarPainel, type PainelDia } from './painelDia';
 import { getPaymentMethodLabel, getCardBrandLabel } from '../labels';
 
@@ -116,7 +116,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   headerRow(ex, [{ header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Operador', width: 20 }, { header: 'Tipo', width: 24 }, { header: 'Produto/Detalhe', width: 30 }, { header: 'Valor', width: 14, fmt: BRL }, { header: 'Motivo', width: 30 }]);
   d.excecoes.forEach((e) => {
     const det = e.details as Record<string, unknown>;
-    ex.addRow([horaBahia(e.created_at), safeCell(e.operator_name), e.event_type, safeCell(String(det.produto ?? '')), Number(det.valor ?? 0), safeCell(String(det.motivo ?? ''))]);
+    ex.addRow([horaBahia(e.created_at), safeCell(e.operator_name), EXCEPTION_LABELS[e.event_type] ?? e.event_type, safeCell(String(det.produto ?? '')), Number(det.valor ?? 0), safeCell(String(det.motivo ?? ''))]);
   });
   }
 

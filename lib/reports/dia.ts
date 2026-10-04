@@ -26,8 +26,16 @@ export function limitesDoPeriodo(de: string, ate: string): [Date, Date] {
   const [ini] = limitesDoDia(de);
   const [, fim] = limitesDoDia(ate);
   const dias = Math.round((fim.getTime() - ini.getTime()) / 86_400_000);
-  if (!(fim > ini) || dias > 31) throw new Error('periodo-invalido');
+  if (!(fim > ini)) throw new Error('periodo-invertido'); // "até" antes de "de"
+  if (dias > 31) throw new Error('periodo-longo');
   return [ini, fim];
+}
+// Mensagem para a pessoa, a partir do erro de limitesDoPeriodo; undefined = não é erro de período.
+export function mensagemPeriodoInvalido(e: unknown): string | undefined {
+  const m = e instanceof Error ? e.message : '';
+  if (m === 'periodo-invertido') return 'A data final é anterior à inicial.';
+  if (m === 'periodo-longo' || m === 'periodo-invalido') return 'Escolha no máximo 31 dias.';
+  return undefined;
 }
 export const rotuloPeriodo = (de: string, ate: string): string => {
   const f = (d: string) => new Date(`${d}T12:00:00-03:00`).toLocaleDateString('pt-BR');

@@ -13,7 +13,7 @@ import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResum
 import { formatBRL } from '@/lib/calc';
 import type { Order } from '@/types';
 import { buildFechamentoWorkbook, fechamentoFileName } from '@/lib/reports/fechamentoXlsx';
-import { hojeISO, limitesDoDia, turnosDoPeriodo } from '@/lib/reports/dia';
+import { hojeISO, limitesDoDia, turnosDoPeriodo, mensagemPeriodoInvalido } from '@/lib/reports/dia';
 import { carregarFechamento } from '@/lib/reports/carregarFechamento';
 import { baixarWorkbook } from '@/lib/reports/baixar';
 
@@ -79,7 +79,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
       toast.success(dados.turnos.length === 0 ? 'Arquivo gerado (nenhum turno de caixa nesse período).' : 'Arquivo gerado.');
     } catch (e) {
       console.error('baixarFechamento falhou:', e);
-      toast.error(e instanceof Error && e.message === 'periodo-invalido' ? 'Escolha no máximo 31 dias.' : 'Não consegui gerar o arquivo. Tente de novo.');
+      toast.error(mensagemPeriodoInvalido(e) ?? 'Não consegui gerar o arquivo. Tente de novo.');
     } finally {
       setGerando(false);
     }
@@ -139,7 +139,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
       if (!ok) toast.error('Não consegui abrir a impressão. Confira o bloqueador de janelas.');
     } catch (e) {
       console.error('imprimirFechamento falhou:', e);
-      toast.error(e instanceof Error && e.message === 'periodo-invalido' ? 'Escolha no máximo 31 dias.' : 'Não consegui gerar o relatório. Tente de novo.');
+      toast.error(mensagemPeriodoInvalido(e) ?? 'Não consegui gerar o relatório. Tente de novo.');
     } finally {
       setImprimindo(false);
     }

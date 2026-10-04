@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/dia.test.ts
 import assert from 'node:assert/strict';
-import { limitesDoDia, turnosDoPeriodo, turnoParcial } from '../../lib/reports/dia';
+import { limitesDoDia, limitesDoPeriodo, mensagemPeriodoInvalido, turnosDoPeriodo, turnoParcial } from '../../lib/reports/dia';
 
 const [ini, fim] = limitesDoDia('2026-10-04');
 assert.equal(ini.toISOString(), '2026-10-04T03:00:00.000Z', 'início do dia em Bahia (UTC-3)');
@@ -18,4 +18,8 @@ assert.equal(turnoParcial(rows[1], ini, fim), false, 'inteiro dentro do dia');
 assert.equal(turnoParcial(rows[2], ini, fim), true, 'continua depois do dia');
 assert.equal(turnoParcial(rows[4], ini, fim), true, 'aberto antes do dia');
 assert.equal(turnoParcial(rows[5], ini, fim), true, 'abriu antes do dia');
+const msg = (de: string, ate: string) => { try { limitesDoPeriodo(de, ate); return null; } catch (e) { return mensagemPeriodoInvalido(e); } };
+assert.equal(msg('2026-10-04', '2026-10-01'), 'A data final é anterior à inicial.');
+assert.equal(msg('2026-09-04', '2026-10-05'), 'Escolha no máximo 31 dias.');
+assert.equal(msg('2026-09-04', '2026-10-04'), null, '31 dias inclusive passa');
 console.log('dia: ok');
