@@ -66,7 +66,9 @@ export function montarPainel(d: FechamentoData, nomeCategoria: (id: string) => s
       Object.entries(pg.formas).forEach(([k, v]) => { formasTot[k] = (formasTot[k] ?? 0) + v; });
       Object.entries(pg.cartoes).forEach(([k, v]) => { cartoesTot[k] = (cartoesTot[k] ?? 0) + v; });
       contas += pg.contas; recebido += pg.recebido;
-      taxa += doTurno.filter((o) => o.status !== 'canceled').reduce((s, o) => s + (o.order_items ?? []).filter((i) => i.product?.fee_type && i.status !== ('canceled' as never)).reduce((x, i) => x + Number(i.price_at_time) * i.quantity, 0), 0);
+      // Taxa automática (total da conta − itens) ou taxa lançada como item (produto-taxa): uma OU outra por conta; o maior dos dois evita contar em dobro.
+      const taxaItens = doTurno.filter((o) => o.status !== 'canceled').reduce((s2, o) => s2 + (o.order_items ?? []).filter((i) => i.product?.fee_type && i.status !== ('canceled' as never)).reduce((x, i) => x + Number(i.price_at_time) * i.quantity, 0), 0);
+      taxa += Math.max(taxaItens, taxaDasVendas(doTurno));
       sangria += Number(t.resumo.total_sangria ?? 0);
       suprimento += Number(t.resumo.total_suprimento ?? 0);
       return;
