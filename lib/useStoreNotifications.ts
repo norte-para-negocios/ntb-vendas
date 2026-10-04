@@ -16,7 +16,7 @@ import type { Store, StoreUser } from '@/types';
 
 interface Opcoes {
   store: Store;
-  user: Pick<StoreUser, 'id' | 'role'> & { permissions?: { caixa?: boolean; kitchen?: boolean; bar?: boolean } };
+  user: Pick<StoreUser, 'id' | 'role' | 'assigned_table_ids'> & { permissions?: { caixa?: boolean; kitchen?: boolean; bar?: boolean } };
   /** Abas acessíveis (computeAccessibleTabIds) — define quais bases (Cozinha/Bar) o usuário enxerga. */
   acessiveis: Set<string>;
   abaAtual: string;
@@ -50,9 +50,16 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
     [publicos, locais, acessiveis],
   );
 
+  // Jurisdição de mesas (garçom/caixa com mesas atribuídas): "item pronto" só das mesas dele. Sem atribuição = todas.
+  const mesasDoUsuario = useMemo(() => {
+    if (publicos.includes('gerencia')) return null;
+    const ids = user.assigned_table_ids;
+    return ids && ids.length > 0 ? new Set(ids) : null;
+  }, [publicos, user.assigned_table_ids]);
+
   // Refs: o poll e os eventos de realtime sempre leem o estado mais novo sem reassinar o canal.
-  const ctxRef = useRef({ prefs, aplicaveis, publicos, locaisPermitidos, abaAtual, setores, modulos });
-  useEffect(() => { ctxRef.current = { prefs, aplicaveis, publicos, locaisPermitidos, abaAtual, setores, modulos }; });
+  const ctxRef = useRef({ prefs, aplicaveis, publicos, locaisPermitidos, mesasDoUsuario, abaAtual, setores, modulos });
+  useEffect(() => { ctxRef.current = { prefs, aplicaveis, publicos, locaisPermitidos, mesasDoUsuario, abaAtual, setores, modulos }; });
   const eventosRef = useRef(eventos);
   const rodou = useRef<Record<string, boolean>>({});
 
@@ -65,7 +72,7 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
     rodou.current[grupo] = true;
     if (primeira) return; // abrir o app não toca som do que já estava lá
     const c = ctxRef.current;
-    const meus = filtrarEventos(novos, { prefs: c.prefs, aplicaveis: c.aplicaveis, publicos: c.publicos, locaisPermitidos: c.locaisPermitidos });
+    const meus = filtrarEventos(novos, { prefs: c.prefs, aplicaveis: c.aplicaveis, publicos: c.publicos, locaisPermitidos: c.locaisPermitidos, mesasDoUsuario: c.mesasDoUsuario });
     new Set(meus.map((e) => somDoEvento(e, { prefs: c.prefs, abaAtual: c.abaAtual })).filter((s): s is Som => !!s)).forEach(tocar);
     if (meus.some((e) => e.tipo === 'pedido_novo')) toast.info('Novo pedido chegou! 🔔');
     if (meus.some((e) => e.tipo === 'chamada_garcom' || e.tipo === 'pedido_conta')) toast.info('Atenção na mesa! 🔔');
@@ -151,7 +158,7 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
     };
   }, [storeId, carregarRapido, carregarLento, carregarSetores]);
 
-  const visiveis = useMemo(() => filtrarEventos(eventos, { prefs, aplicaveis, publicos, locaisPermitidos }), [eventos, prefs, aplicaveis, publicos, locaisPermitidos]);
+  const visiveis = useMemo(() => filtrarEventos(eventos, { prefs, aplicaveis, publicos, locaisPermitidos, mesasDoUsuario }), [eventos, prefs, aplicaveis, publicos, locaisPermitidos, mesasDoUsuario]);
   const marcarLidos = useCallback((ids?: string[]) => {
     const lista = marcarLidosLib(eventosRef.current, ids);
     eventosRef.current = lista;

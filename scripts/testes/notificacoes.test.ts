@@ -76,6 +76,18 @@ assert.equal(filtrarEventos(lista, { ...base, publicos: publicosDoUsuario({ role
 assert.equal(filtrarEventos(lista, { ...base, publicos: ['gerencia'], prefs: resolverPrefs({ notifications: { tipos: { estoque_baixo: false } } }) }).some((e) => e.tipo === 'estoque_baixo'), false);
 assert.equal(filtrarEventos(lista, { ...base, publicos: ['gerencia'], aplicaveis: tiposAplicaveis({ config: { order_flow: 'direct_print' } }) }).some((e) => e.tipo === 'pedido_novo'), false);
 
+// -- item pronto: o garçom é avisado das SUAS mesas mesmo sem acesso à aba Cozinha/Bar (achado F7)
+const prontos: EventoNotificacao[] = [
+  { id: 'item_pronto:1', tipo: 'item_pronto', titulo: 'Pronto: Pizza', criadoEm: 1, lido: false, ativo: true, localChave: 'kitchen', mesaId: 'mesa-A' },
+  { id: 'item_pronto:2', tipo: 'item_pronto', titulo: 'Pronto: Suco', criadoEm: 2, lido: false, ativo: true, localChave: 'bar', mesaId: 'mesa-B' },
+  { id: 'item_pronto:3', tipo: 'item_pronto', titulo: 'Pronto: Água', criadoEm: 3, lido: false, ativo: true, localChave: 'setor:p1', mesaId: null },
+  { id: 'pedido_novo:x', tipo: 'pedido_novo', titulo: 'Pedido novo', criadoEm: 4, lido: false, ativo: true, localChave: 'kitchen', mesaId: 'mesa-A' },
+];
+const semAcessoKds = { ...base, publicos: publicosDoUsuario({ role: 'waiter', permissions: { kitchen: false, bar: false } }), locaisPermitidos: new Set<string>() };
+assert.deepEqual(filtrarEventos(prontos, semAcessoKds).map((e) => e.id), ['item_pronto:1', 'item_pronto:2', 'item_pronto:3'], 'garçom sem KDS recebe item pronto, e só ele (não pedido novo)');
+assert.deepEqual(filtrarEventos(prontos, { ...semAcessoKds, mesasDoUsuario: new Set(['mesa-A']) }).map((e) => e.id), ['item_pronto:1', 'item_pronto:3'], 'garçom com mesas atribuídas só recebe das suas (balcão/sem mesa continua)');
+assert.deepEqual(filtrarEventos(prontos, { ...base, publicos: ['bar'], locaisPermitidos: new Set(['bar']) }).map((e) => e.id), [], 'só público bar não recebe item pronto (público salão/gerência)');
+
 // -- lidos
 assert.equal(contarNaoLidos(lista), 4);
 assert.equal(contarNaoLidos(marcarLidos(lista, ['a'])), 3);

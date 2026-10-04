@@ -35,8 +35,10 @@ export interface EventoNotificacao {
   criadoEm: number; lido: boolean; ativo: boolean;
   /** Chave do local de preparo ('kitchen' | 'bar' | 'setor:<id>') quando o aviso é de um local. */
   localChave?: string;
+  /** Mesa do item (só avisos de item). Serve para o garçom receber "pronto" das mesas que atende. */
+  mesaId?: string | null;
 }
-export type Detectado = Pick<EventoNotificacao, 'id' | 'tipo' | 'titulo' | 'detalhe' | 'localChave'>;
+export type Detectado = Pick<EventoNotificacao, 'id' | 'tipo' | 'titulo' | 'detalhe' | 'localChave' | 'mesaId'>;
 
 // ---- Quem vê o quê ----
 export function publicosDoUsuario(user: { role: string; permissions?: { caixa?: boolean; kitchen?: boolean; bar?: boolean } }): Publico[] {
@@ -80,7 +82,7 @@ export function detectarMesas(mesas: MesaLike[]): Detectado[] {
 export interface ItemKdsCompleto {
   id: string; order_id?: string | null; status: string; sector_id?: string | null; created_at: string;
   product?: { name?: string; prep_time_minutes?: number | null } | null;
-  order?: { order_type?: string; tables?: { number?: number | string } | null; customer_name?: string | null } | null;
+  order?: { order_type?: string; table_id?: string | null; tables?: { number?: number | string } | null; customer_name?: string | null } | null;
 }
 const onde = (i: ItemKdsCompleto) => (i.order?.order_type === 'counter' ? (i.order?.customer_name || 'Balcão') : `Mesa ${i.order?.tables?.number ?? '?'}`);
 
@@ -103,7 +105,7 @@ export function detectarItens(
         out.push({ id: `pedido_novo:${chavePedido}`, tipo: 'pedido_novo', titulo: `Pedido novo · ${nomeLocal}`, detalhe: onde(i), localChave });
       }
     }
-    if (i.status === 'ready') out.push({ id: `item_pronto:${i.id}`, tipo: 'item_pronto', titulo: `Pronto: ${i.product?.name ?? 'item'}`, detalhe: `${onde(i)} · ${nomeLocal}`, localChave });
+    if (i.status === 'ready') out.push({ id: `item_pronto:${i.id}`, tipo: 'item_pronto', titulo: `Pronto: ${i.product?.name ?? 'item'}`, detalhe: `${onde(i)} · ${nomeLocal}`, localChave, mesaId: i.order?.table_id ?? null });
     const prep = i.product?.prep_time_minutes;
     const ativo = i.status === 'pending' || i.status === 'accepted' || i.status === 'preparing';
     if (ativo && prep && (agora - new Date(i.created_at).getTime()) / 60000 > prep) {
@@ -169,7 +171,7 @@ export function reconciliar(
 
   detectados.forEach((d) => {
     const antigo = porId.get(d.id);
-    if (antigo && antigo.ativo) { porId.set(d.id, { ...antigo, titulo: d.titulo, detalhe: d.detalhe, localChave: d.localChave }); return; }
+    if (antigo && antigo.ativo) { porId.set(d.id, { ...antigo, titulo: d.titulo, detalhe: d.detalhe, localChave: d.localChave, mesaId: d.mesaId }); return; }
     const ev: EventoNotificacao = { ...d, criadoEm: agora, lido: false, ativo: true };
     porId.set(d.id, ev);
     novos.push(ev);
@@ -187,12 +189,21 @@ export function reconciliar(
 
 export function filtrarEventos(
   lista: EventoNotificacao[],
-  ctx: { prefs: PrefsNotificacao; aplicaveis: Set<TipoNotificacao>; publicos: Publico[]; locaisPermitidos: Set<string> | null },
+  ctx: {
+    prefs: PrefsNotificacao; aplicaveis: Set<TipoNotificacao>; publicos: Publico[]; locaisPermitidos: Set<string> | null;
+    /** Mesas que o usuário atende (jurisdição). null = todas. Só restringe "item pronto". */
+    mesasDoUsuario?: Set<string> | null;
+  },
 ): EventoNotificacao[] {
   return lista.filter((e) => {
     const def = DEF[e.tipo];
     if (!ctx.aplicaveis.has(e.tipo) || !ctx.prefs.tipos[e.tipo]) return false;
     if (!def.publicos.some((p) => ctx.publicos.includes(p))) return false;
+    if (e.tipo === 'item_pronto') {
+      // "Pronto" é aviso do salão: vale para quem atende a mesa, tenha ou não acesso à aba Cozinha/Bar.
+      if (e.mesaId && ctx.mesasDoUsuario && !ctx.mesasDoUsuario.has(e.mesaId)) return false;
+      return true;
+    }
     if (e.localChave && ctx.locaisPermitidos && !ctx.locaisPermitidos.has(e.localChave)) return false;
     return true;
   });
