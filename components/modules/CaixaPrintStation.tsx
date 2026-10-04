@@ -1367,7 +1367,7 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
 
           {status.itensAntigosPulados > 0 && (
             <p className="text-[13px] text-[var(--text-muted)] p-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)]">
-              {status.itensAntigosPulados === 1 ? '1 item antigo não foi impresso' : `${status.itensAntigosPulados} itens antigos não foram impressos`} automaticamente (mais de {MAX_IDADE_AUTOIMPRESSAO_MIN} minutos). Se ainda precisar, use Reimprimir em &quot;Pedidos do Dia&quot;.
+              {status.itensAntigosPulados === 1 ? '1 item antigo não foi impresso' : `${status.itensAntigosPulados} itens antigos não foram impressos`} automaticamente {`(mais de ${MAX_IDADE_AUTOIMPRESSAO_MIN} minutos)`}. Se ainda precisar, use Reimprimir em &quot;Pedidos do Dia&quot;.
             </p>
           )}
 
