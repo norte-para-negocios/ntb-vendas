@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { setorDoItem, localEstoqueDoItem } from '@/lib/setores';
+import { montarPayloadsPorPedido, registrarBaixa, carregarLinha, processarBaixa, type ResumoProcessamento } from '@/lib/baixaEstoqueServidor';
 
 // Integração ntb-vendas -> ntb-estoque (2026-07-07, ver AGENTS.md e a memória
 // "integracao_ntb_vendas_estoque_omie"): dispara Ordem de Produção automática
@@ -12,10 +12,11 @@ import { setorDoItem, localEstoqueDoItem } from '@/lib/setores';
 // desde a correção de segurança de 021/022, então o browser não conseguiria
 // montar a lista de itens sozinho mesmo se quisesse.
 //
-// Fire-and-forget por design: nunca deve derrubar o fechamento do pedido no
-// ntb-vendas. Qualquer falha (loja sem integração, ntb-estoque fora do ar,
-// produto sem "estrutura" no Omie) retorna 200 com o motivo — quem chama essa
-// rota (lib/api.ts) ignora o resultado.
+// Quem chama (lib/api.ts) continua fire-and-forget e nunca derruba o fechamento
+// do pedido, MAS a baixa deixou de depender do navegador: cada pedido vira uma
+// linha de outbox (integracao_baixas, migration 156) ANTES de chamar o Estoque,
+// o resultado é gravado por item e o job do servidor (lib/baixaEstoqueRetry.ts)
+// reenvia o que falhou e varre pedidos que o navegador não registrou.
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -131,152 +132,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'Integração ntb-estoque desativada pela loja' });
   }
 
-  const { data: items } = await admin
-    .from('order_items')
-    .select('order_id, quantity, status, selected_options, product:products(omie_codigo, destination, sector_id, category_id, ignore_category_sector, fee_type)')
-    .in('order_id', pendentesDeOp);
+  // Outbox (migration 156, auditoria 04/10): cada pedido vira UMA linha em integracao_baixas ANTES de chamar o Estoque; o
+  // resultado é gravado POR ITEM e só vira "ok" (e op_enviada_em) quando TODOS os itens deram ok. O que falhar fica visível
+  // na Administração e o job do servidor (lib/baixaEstoqueRetry.ts) reenvia só o que está comprovadamente não gravado.
+  const pedidosPendentes = pendentesDeOp.map((id) => ({ id, payment_details: detalhesPorPedido.get(id) ?? null }));
+  const payloads = await montarPayloadsPorPedido(admin, storeId, pedidosPendentes);
 
-  // Regra do dono (30/09): a saída só vai como movimento de PDV no Omie quando a venda
-  // gera nota fiscal; sem nota é baixa comum. Vem da escolha feita ao receber
-  // (payment_details.emitir_nota); se o pedido não tiver essa marca, olha se existe nota.
-  const { data: notasDosPedidos } = await admin
-    .from('fiscal_notas')
-    .select('order_id, status')
-    .in('order_id', pendentesDeOp);
-  const temNota = new Set((notasDosPedidos ?? []).filter((n: { status: string }) => n.status !== 'erro' && n.status !== 'cancelada').map((n: { order_id: string }) => n.order_id));
-  const comNotaDoPedido = (orderId: string) => {
-    const marca = detalhesPorPedido.get(orderId)?.emitir_nota;
-    return typeof marca === 'boolean' ? marca : temNota.has(orderId);
-  };
-
-  // Setor de produção de cada item (ex.: "Pizzaria", 2026-09-30): o Estoque usa pra
-  // baixar no local certo (pizza e embalagem de pizza -> local da pizzaria). Mesma
-  // regra da impressão (lib/setores.ts): setor do produto, senão o da categoria.
-  const [{ data: setores }, { data: categorias }, { data: locaisEstoque }] = await Promise.all([
-    admin.from('print_sectors').select('id, name').eq('store_id', storeId),
-    admin.from('categories').select('id, sector_id').eq('store_id', storeId),
-    // Local do Omie escolhido em Impressão → Locais de preparo (migration 134).
-    admin.from('store_estoque_locais').select('destino, omie_local_codigo').eq('store_id', storeId),
-  ]);
-  const mapaLocais: Record<string, number> = Object.fromEntries((locaisEstoque ?? []).map((l: { destino: string; omie_local_codigo: number }) => [l.destino, Number(l.omie_local_codigo)]));
-  const nomeSetor = new Map((setores ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
-  const catSetor: Record<string, string | null> = Object.fromEntries((categorias ?? []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
-
-  // Taxa de serviço automática pro Omie (2026-10-03, pedido do usuário):
-  // quando charge_service_fee=true e o produto de taxa percentual tem omie_codigo,
-  // mas o pedido NÃO tem o item de taxa lançado manualmente, calcula 10% do
-  // subtotal dos itens não-taxa e inclui na OP. Sem isso, os últimos 10 pedidos
-  // do Sertão tinham tem_taxa=0 e a taxa nunca chegava ao Omie.
-  const [{ data: storeRow }, { data: feeProduct }] = await Promise.all([
-    admin.from('stores').select('config').eq('id', storeId).maybeSingle(),
-    admin.from('products').select('id, omie_codigo, fee_percent').eq('store_id', storeId).eq('fee_type', 'percent').maybeSingle(),
-  ]);
-  const chargeServiceFee = !!(storeRow?.config as any)?.charge_service_fee;
-  const feePercent = feeProduct?.fee_percent != null ? Number(feeProduct.fee_percent) : 10;
-  const feeOmieCodigo = feeProduct?.omie_codigo ?? null;
-  // Calcular subtotal por pedido (itens não-taxa, não-cancelados) pra saber
-  // se a taxa já foi lançada ou precisa ser adicionada automaticamente.
-  const subtotalPorPedido = new Map<string, number>();
-  const temTaxaLancada = new Set<string>();
-  for (const item of items ?? []) {
-    if (item.status === 'canceled') continue;
-    const prod = (item as any).product as { fee_type?: string | null } | null;
-    const orderId = (item as { order_id: string }).order_id;
-    if (prod?.fee_type) {
-      temTaxaLancada.add(orderId);
-    } else {
-      subtotalPorPedido.set(orderId, (subtotalPorPedido.get(orderId) ?? 0) + item.quantity * (item as any).price_at_time);
-    }
+  const baixas: ResumoProcessamento[] = [];
+  const ntbEstoque: unknown[] = [];
+  let semItens = 0;
+  for (const id of pendentesDeOp) {
+    const montado = payloads.get(id);
+    if (!montado || !montado.payload.itens.length) { semItens++; continue; }
+    const reg = await registrarBaixa(admin, storeId, id, montado.rotulo, montado.payload);
+    if (!reg.criada) { baixas.push({ id: reg.id, status: reg.status, processada: false, motivo: 'Baixa deste pedido já registrada', enviados: 0 }); continue; }
+    const linha = await carregarLinha(admin, reg.id, storeId);
+    if (!linha) continue;
+    const r = await processarBaixa(admin, linha);
+    baixas.push(r);
+    ntbEstoque.push({ pedido: id, status: r.status });
   }
 
-  // Cada adicional/opcional (ex.: borda de pizza) tambem pode ter seu proprio
-  // omie_codigo (migration 026) e gera Ordem de Producao própria — snapshot
-  // gravado em selected_options pela create_order_secure (migration 028), não
-  // precisa de join extra. Pedidos anteriores a essa migration simplesmente
-  // não têm o campo (undefined), tratados como sem código.
-  //
-  // destination (2026-08-16, pedido explícito do usuário) — vai junto pro
-  // ntb-estoque escolher o local de estoque certo (Cozinha/Bar) na Ordem de
-  // Produção, em vez de sempre cair no local padrão do Omie. Um adicional
-  // (ex.: borda de pizza) sempre herda o destination do PRODUTO PAI — faz a
-  // pizza inteira na mesma estação, não existe "destination" próprio de
-  // opcional.
-  const porCodigo = new Map<string, { codigo: string; quantidade: number; destination: 'kitchen' | 'bar' | null; setor: string | null; localEstoque: number | null; comNota: boolean }>();
-  for (const item of items ?? []) {
-    if (item.status === 'canceled') continue;
-
-    const produto = (item as any).product as { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null; sector_id?: string | null; category_id?: string | null; ignore_category_sector?: boolean; fee_type?: string | null } | null;
-    // Taxa (rolha, frete, serviço...) baixa no estoque padrão da loja, não em Cozinha/Bar/Pizzaria (pedido do Ramon, 01/10).
-    const ehTaxaItem = !!produto?.fee_type;
-    const destination = ehTaxaItem ? null : (produto?.destination ?? null);
-    const setorId = ehTaxaItem ? null : setorDoItem(produto, catSetor);
-    const setor = setorId ? nomeSetor.get(setorId) ?? null : null;
-    const localEstoque = localEstoqueDoItem(mapaLocais, setorId, destination);
-    const comNota = comNotaDoPedido((item as { order_id: string }).order_id);
-    const codigoProduto = produto?.omie_codigo;
-    if (codigoProduto) {
-      const chave = `${codigoProduto}|${comNota}`;
-      const atual = porCodigo.get(chave);
-      porCodigo.set(chave, { codigo: codigoProduto, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, localEstoque: atual?.localEstoque ?? localEstoque, comNota });
-    }
-
-    const opcoes = (item.selected_options ?? []) as { omie_codigo?: string | null }[];
-    for (const opcao of opcoes) {
-      if (!opcao.omie_codigo) continue;
-      const chave = `${opcao.omie_codigo}|${comNota}`;
-      const atual = porCodigo.get(chave);
-      porCodigo.set(chave, { codigo: opcao.omie_codigo, quantidade: (atual?.quantidade ?? 0) + item.quantity, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, localEstoque: atual?.localEstoque ?? localEstoque, comNota });
-    }
-  }
-  // Taxa de serviço automática: se chargeServiceFee=true, o produto de taxa tem
-  // omie_codigo, e o pedido NÃO tem a taxa lançada manualmente, calcula o valor
-  // e inclui na OP. destination=null (baixa no estoque padrão, não Cozinha/Bar).
-  if (chargeServiceFee && feeOmieCodigo) {
-    for (const [orderId, subtotal] of subtotalPorPedido) {
-      if (temTaxaLancada.has(orderId)) continue;
-      if (subtotal <= 0) continue;
-      const valorTaxa = Math.round(subtotal * feePercent / 100 * 100) / 100;
-      if (valorTaxa <= 0) continue;
-      const comNota = comNotaDoPedido(orderId);
-      const chave = `${feeOmieCodigo}|${comNota}`;
-      const atual = porCodigo.get(chave);
-      porCodigo.set(chave, { codigo: feeOmieCodigo, quantidade: (atual?.quantidade ?? 0) + 1, destination: null, setor: null, localEstoque: null, comNota });
-    }
-  }
-
-  if (!porCodigo.size) {
+  if (!baixas.length && semItens === pendentesDeOp.length) {
     return NextResponse.json({ skipped: true, reason: 'Nenhum item com omie_codigo vinculado' });
   }
-
-  const itens = Array.from(porCodigo.values(), (v) => ({ codigo: v.codigo, quantidade: v.quantidade, destination: v.destination, setor: v.setor, localEstoque: v.localEstoque, comNota: v.comNota }));
-
-  // Ambiente fiscal da loja (2026-08-16, pedido explícito do usuário) — repassado
-  // junto pro ntb-estoque conseguir mostrar/filtrar "essa OP veio de uma venda de
-  // homologação" na própria tela de Ordem de Produção, sem precisar consultar o
-  // banco do ntb-vendas pra saber. Loja sem `store_fiscal_config` configurado
-  // (a maioria) manda `null` — ntb-estoque trata como "não informado".
-  const { data: fiscalConfig } = await admin
-    .from('store_fiscal_config')
-    .select('ambiente')
-    .eq('store_id', storeId)
-    .maybeSingle();
-
-  try {
-    const res = await fetch(`${secret.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/ordem-producao`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret.ntb_estoque_api_key}` },
-      body: JSON.stringify({ itens, pedidoRef: pendentesDeOp[0], ambiente: fiscalConfig?.ambiente ?? null }),
-    });
-    const json = await res.json().catch(() => null);
-    if (res.ok) {
-      // Marca só depois do Estoque aceitar (falha/ fila do lado dele não conta como enviada).
-      const marcaEm = new Date().toISOString();
-      for (const id of pendentesDeOp) {
-        await admin.from('orders').update({ payment_details: { ...(detalhesPorPedido.get(id) ?? {}), op_enviada_em: marcaEm } }).eq('id', id);
-      }
-    }
-    return NextResponse.json({ ok: res.ok, ntbEstoque: json });
-  } catch (e) {
-    return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Falha ao chamar ntb-estoque' });
-  }
+  return NextResponse.json({ ok: baixas.length > 0 && baixas.every((b) => b.status === 'ok'), baixas, ntbEstoque });
 }

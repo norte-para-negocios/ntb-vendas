@@ -16,20 +16,35 @@ export async function register() {
   // esta trava, um dev server de teste viraria um SEGUNDO processo
   // retransmitindo as mesmas notas pra SEFAZ ao mesmo tempo que o servidor
   // (o job não tem lock distribuído — assume processo único).
-  if (process.env.DISABLE_FISCAL_RETRANSMISSAO === '1') {
+  const fiscalDesligado = process.env.DISABLE_FISCAL_RETRANSMISSAO === '1';
+  if (fiscalDesligado) {
     console.log('Retransmissão fiscal de contingência: desligada neste processo (DISABLE_FISCAL_RETRANSMISSAO=1).');
-    return;
+  } else {
+    const { verificarNotasEmContingencia } = await import('./lib/fiscal/retransmissao');
+
+    const DOIS_MINUTOS = 2 * 60 * 1000;
+    setInterval(() => {
+      // `.catch` obrigatório: uma rejeição não tratada dentro de um setInterval
+      // derrubaria o processo inteiro do servidor (unhandled rejection) — o job
+      // fiscal nunca pode tirar o PDV do ar.
+      verificarNotasEmContingencia().catch((e) => console.error('Erro no ciclo de retransmissão fiscal:', e));
+    }, DOIS_MINUTOS);
+
+    console.log('Retransmissão fiscal de contingência: ciclo agendado a cada 2 minutos.');
   }
 
-  const { verificarNotasEmContingencia } = await import('./lib/fiscal/retransmissao');
-
-  const DOIS_MINUTOS = 2 * 60 * 1000;
+  // Job da baixa de estoque (outbox, migration 156): reenvia ao Estoque só o que está comprovadamente não gravado e
+  // varre pedidos que o navegador não registrou. Desligado por DISABLE_BAIXA_RETRY=1 ou, como o job fiscal, em dev
+  // (DISABLE_FISCAL_RETRANSMISSAO=1): `npm run dev` fala com o banco de produção e não pode virar um segundo processo
+  // mandando baixa pro Estoque.
+  if (process.env.DISABLE_BAIXA_RETRY === '1' || fiscalDesligado) {
+    console.log('Baixa de estoque (reenvio): desligada neste processo (DISABLE_BAIXA_RETRY=1 ou DISABLE_FISCAL_RETRANSMISSAO=1).');
+    return;
+  }
+  const { ciclarBaixasDeEstoque } = await import('./lib/baixaEstoqueRetry');
+  const intervaloMs = Number(process.env.BAIXA_RETRY_INTERVALO_MS) || 2 * 60 * 1000;
   setInterval(() => {
-    // `.catch` obrigatório: uma rejeição não tratada dentro de um setInterval
-    // derrubaria o processo inteiro do servidor (unhandled rejection) — o job
-    // fiscal nunca pode tirar o PDV do ar.
-    verificarNotasEmContingencia().catch((e) => console.error('Erro no ciclo de retransmissão fiscal:', e));
-  }, DOIS_MINUTOS);
-
-  console.log('Retransmissão fiscal de contingência: ciclo agendado a cada 2 minutos.');
+    ciclarBaixasDeEstoque().catch((e) => console.error('Erro no ciclo da baixa de estoque:', e));
+  }, intervaloMs);
+  console.log(`Baixa de estoque (reenvio): ciclo agendado a cada ${Math.round(intervaloMs / 1000)} s.`);
 }
