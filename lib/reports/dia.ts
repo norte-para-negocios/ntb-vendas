@@ -4,8 +4,21 @@ export const hojeISO = (): string => new Date().toLocaleDateString('sv-SE', { ti
 // Início e fim do dia em Bahia (UTC-3, sem horário de verão) como instantes UTC.
 export const limitesDoDia = (dia: string): [Date, Date] => [new Date(`${dia}T00:00:00-03:00`), new Date(`${dia}T23:59:59.999-03:00`)];
 
-export function turnosDoPeriodo<T extends { opened_at: string }>(rows: T[], ini: Date, fim: Date): T[] {
-  return rows.filter((t) => { const d = new Date(t.opened_at); return d >= ini && d <= fim; });
+type TurnoLike = { opened_at: string; closed_at?: string | null };
+
+// Turno que SE SOBREPÕE ao período: abriu até o fim e (ainda está aberto ou fechou depois do início).
+// Cobre o turno que vira a noite e o que foi esquecido aberto. Cada turno aparece uma única vez.
+export function turnosDoPeriodo<T extends TurnoLike>(rows: T[], ini: Date, fim: Date): T[] {
+  return rows.filter((t) => {
+    if (new Date(t.opened_at) > fim) return false;
+    return !t.closed_at || new Date(t.closed_at) >= ini;
+  });
+}
+
+// Turno que sai do período (abriu antes do início, ou continua depois do fim): o resumo dele cobre mais do que o período,
+// então os totais do relatório usam só as vendas do período ligadas a esse turno.
+export function turnoParcial(t: TurnoLike, ini: Date, fim: Date): boolean {
+  return new Date(t.opened_at) < ini || !t.closed_at || new Date(t.closed_at) > fim;
 }
 
 // Intervalo de dias (início do dia `de` até o fim do dia `ate`), no máximo 31 dias.

@@ -6,7 +6,7 @@ import type { ExceptionEvent } from '../excecoes';
 import { montarPainel, type PainelDia } from './painelDia';
 import { getPaymentMethodLabel, getCardBrandLabel } from '../labels';
 
-export interface FechamentoTurno { operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
+export interface FechamentoTurno { id?: string; /** O turno sai do período: totais só das vendas do período. */ parcial?: boolean; operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
 export interface FechamentoData { painel?: PainelDia; nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
 
 const FONT = 'Calibri';
@@ -74,7 +74,7 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
     { header: 'Fundo', width: 14, fmt: BRL }, { header: 'Esperado em dinheiro', width: 20, fmt: BRL }, { header: 'Contado', width: 14, fmt: BRL }, { header: 'Diferença', width: 14, fmt: BRL },
   ]);
   d.turnos.forEach((t, i) => {
-    const r = cx.addRow([safeCell(t.operador), horaBahia(t.abertoEm), t.fechadoEm ? horaBahia(t.fechadoEm) : null, t.fundo, t.resumo.expected_cash, t.contado, null]);
+    const r = cx.addRow([safeCell(t.parcial ? `${t.operador} (turno passa do período)` : t.operador), horaBahia(t.abertoEm), t.fechadoEm ? horaBahia(t.fechadoEm) : null, t.fundo, t.resumo.expected_cash, t.contado, null]);
     if (t.contado != null) r.getCell(7).value = { formula: `F${i + 2}-E${i + 2}`, result: t.contado - t.resumo.expected_cash };
   });
   }

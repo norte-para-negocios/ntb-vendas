@@ -17,4 +17,17 @@ assert.equal(p.porOperador.length, 2);
 assert.ok(p.melhorHora);
 assert.equal(p.cartoes.length >= 12, true, 'cartões zerados continuam listados');
 assert.equal(montarPainel({ loja: 'X', periodoLabel: 'd', geradoEm: new Date(), geradoPor: 'u', excecoes: [], turnos: [], vendas: [] }).melhorHora, null);
+
+// Turno que atravessa o dia (parcial): só entram as vendas DO PERÍODO ligadas a ele, nunca o total do turno inteiro (sem dupla contagem)
+const resumoLongo: any = { totals_by_method: { CASH: 5000 }, totals_by_card: {}, payments_count: 80, payments_total: 5000, total_sangria: 0, total_suprimento: 0, service_fee_total: 400 };
+const vendaDoTurno = (id: string, shift: string, valor: number): any => ({ id, table_id: id, status: 'delivered', created_at: '2026-09-29T20:00:00Z', order_type: 'table', total: valor,
+  payment_details: { cash_shift_id: shift, methods: [{ method: 'CASH', amount: valor }] }, order_items: [it('Prato', 1, valor), it('Taxa', 1, valor * 0.1, { fee_type: 'percent' })] });
+const pp = montarPainel({ loja: 'X', periodoLabel: 'd', geradoEm: new Date(), geradoPor: 'u', excecoes: [],
+  turnos: [{ id: 'T1', parcial: true, operador: 'QA', abertoEm: '2026-09-12T21:00:00Z', fechadoEm: null, fundo: 0, contado: null, resumo: resumoLongo },
+           { id: 'T2', operador: 'ANE', abertoEm: '', fechadoEm: null, fundo: 0, contado: null, resumo }],
+  vendas: [vendaDoTurno('v1', 'T1', 30), vendaDoTurno('v2', 'OUTRO', 77)] } as any);
+assert.equal(pp.kpis.recebido, 450 + 30, 'turno parcial soma só a venda do dia (30), não os 5000 do turno inteiro');
+assert.equal(pp.kpis.contas, 5 + 1);
+assert.equal(pp.kpis.taxa, 45 + 3, 'taxa do turno parcial sai dos itens-taxa das vendas do dia');
+assert.equal(pp.formas.find((f) => f.key === 'CASH')!.total, 100 + 30);
 console.log('painelDia: ok');

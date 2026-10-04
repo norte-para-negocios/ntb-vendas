@@ -2,6 +2,7 @@
 import type { Order } from '@/types';
 import type { FechamentoData } from './fechamentoXlsx';
 import { groupSales, type GroupRow } from './groupSales';
+import { salesOfShift } from './shiftSales';
 import { completarFormas, completarCartoes, ticketMedio } from '../caixaResumo';
 
 export interface TopProduto { nome: string; qtd: number; total: number }
@@ -55,6 +56,18 @@ export function montarPainel(d: FechamentoData, nomeCategoria: (id: string) => s
   const cartoesTot: Record<string, number> = {};
   let contas = 0, recebido = 0, sangria = 0, suprimento = 0, taxa = 0;
   d.turnos.forEach((t) => {
+    if (t.parcial && t.id) {
+      // Turno que atravessa o período: só o que as vendas DO PERÍODO ligadas a ele pagaram (o resumo do turno cobre mais dias).
+      const doTurno = salesOfShift(d.vendas, t.id);
+      const pg = somarPagamentos(doTurno);
+      Object.entries(pg.formas).forEach(([k, v]) => { formasTot[k] = (formasTot[k] ?? 0) + v; });
+      Object.entries(pg.cartoes).forEach(([k, v]) => { cartoesTot[k] = (cartoesTot[k] ?? 0) + v; });
+      contas += pg.contas; recebido += pg.recebido;
+      taxa += doTurno.filter((o) => o.status !== 'canceled').reduce((s, o) => s + (o.order_items ?? []).filter((i) => i.product?.fee_type && i.status !== ('canceled' as never)).reduce((x, i) => x + Number(i.price_at_time) * i.quantity, 0), 0);
+      sangria += Number(t.resumo.total_sangria ?? 0);
+      suprimento += Number(t.resumo.total_suprimento ?? 0);
+      return;
+    }
     Object.entries(t.resumo.totals_by_method ?? {}).forEach(([k, v]) => { formasTot[k] = (formasTot[k] ?? 0) + Number(v); });
     Object.entries(t.resumo.totals_by_card ?? {}).forEach(([k, v]) => { cartoesTot[k] = (cartoesTot[k] ?? 0) + Number(v); });
     contas += Number(t.resumo.payments_count ?? 0);
@@ -81,9 +94,10 @@ type Pd = { methods?: { method: string; brand?: string; amount: number }[] } | n
 // Painel a partir das próprias vendas (Histórico de vendas, com filtros): formas, cartões e contas saem de
 // payment_details.methods, uma vez por conta (mesma regra de groupSales). Não há turno aqui, então taxa de
 // serviço, sangria e suprimento ficam em 0 (não existem nas vendas).
-export function montarPainelDeVendas(vendas: Order[], nomeCategoria: (id: string) => string | undefined = () => undefined): PainelDia {
-  const formasTot: Record<string, number> = {};
-  const cartoesTot: Record<string, number> = {};
+// Formas, cartões e contas pagas a partir das vendas (payment_details.methods, uma vez por conta).
+function somarPagamentos(vendas: Order[]) {
+  const formas: Record<string, number> = {};
+  const cartoes: Record<string, number> = {};
   const vistas = new Set<string>();
   let contas = 0, recebido = 0;
   vendas.filter((o) => o.status !== 'canceled').forEach((o) => {
@@ -96,10 +110,15 @@ export function montarPainelDeVendas(vendas: Order[], nomeCategoria: (id: string
     methods.forEach((m) => {
       const v = Number(m.amount) || 0;
       recebido += v;
-      formasTot[m.method] = (formasTot[m.method] ?? 0) + v;
-      if (m.brand && (m.method === 'CREDIT' || m.method === 'DEBIT')) { const k = `${m.method}|${m.brand}`; cartoesTot[k] = (cartoesTot[k] ?? 0) + v; }
+      formas[m.method] = (formas[m.method] ?? 0) + v;
+      if (m.brand && (m.method === 'CREDIT' || m.method === 'DEBIT')) { const k = `${m.method}|${m.brand}`; cartoes[k] = (cartoes[k] ?? 0) + v; }
     });
   });
+  return { formas, cartoes, contas, recebido };
+}
+
+export function montarPainelDeVendas(vendas: Order[], nomeCategoria: (id: string) => string | undefined = () => undefined): PainelDia {
+  const { formas: formasTot, cartoes: cartoesTot, contas, recebido } = somarPagamentos(vendas);
   const soma = (pref: string) => Object.entries(cartoesTot).filter(([k]) => k.startsWith(pref)).reduce((s, [, v]) => s + v, 0);
   const { itens, ...analise } = analiseDeVendas(vendas, nomeCategoria);
   return {
