@@ -283,6 +283,7 @@ async function orcamento(C, nome, acao, esperado = {}, { quieto = 11500, janela 
     }
     await sleep(quieto);
     const novos = (await amb.ledgerFila()).filter((j) => !antes.has(j.id));
+    (C.vistos = C.vistos ?? new Set()); novos.forEach((j) => C.vistos.add(j.id));
     const obtido = resumirFila(novos);
     const doc = {};
     for (const [k, d] of Object.entries(C.devs)) for (const x of d.docsDesde(marcas[k] ?? 0)) doc[x.tipo] = (doc[x.tipo] ?? 0) + 1;
@@ -487,6 +488,7 @@ async function secPermissoesAcoes(C) {
     await esperar(async () => (await statusItem(amb, iExtra.id)).status === 'canceled', { timeout: 10000, motivo: 'item cancelado no banco' });
     await esperar(async () => (await amb.ledgerFila()).filter((j) => !antes.has(j.id)).length >= 1, { timeout: 15000, motivo: 'aviso de cancelamento na fila' }).catch(() => {});
     const novos = (await amb.ledgerFila()).filter((j) => !antes.has(j.id));
+    (C.vistos = C.vistos ?? new Set()); novos.forEach((j) => C.vistos.add(j.id));
     ok(novos.length === 1 && novos[0].tipo === 'cancelamento' && novos[0].local === 'Cozinha', `esperado 1 cancelamento na cozinha, obtido: ${JSON.stringify(novos.map((j) => [j.tipo, j.local, j.titulo]))}`);
     await fecharJanelas(m);
   });
@@ -504,6 +506,7 @@ async function secPermissoesAcoes(C) {
     await esperar(async () => (await pedidoDoItem(amb, iExtra2.id)).table_id === mesaC.id, { timeout: 10000, motivo: 'item na outra mesa' });
     await sleep(6000);
     const novos = (await amb.ledgerFila()).filter((j) => !antes.has(j.id));
+    (C.vistos = C.vistos ?? new Set()); novos.forEach((j) => C.vistos.add(j.id));
     igual(novos.length, 0, `mover item mandou ${novos.length} documento(s) para a impressora: ${novos.map((j) => j.titulo).join(' ; ')}`);
     await fecharJanelas(m);
   });
@@ -520,6 +523,7 @@ async function secPermissoesAcoes(C) {
     await esperar(async () => (await statusItem(amb, iExtra2.id)).status === 'canceled', { timeout: 10000, motivo: 'pedido cancelado no banco' });
     await esperar(async () => (await amb.ledgerFila()).filter((j) => !antes.has(j.id)).length >= 1, { timeout: 15000, motivo: 'aviso de cancelamento na fila' }).catch(() => {});
     const novos = (await amb.ledgerFila()).filter((j) => !antes.has(j.id));
+    (C.vistos = C.vistos ?? new Set()); novos.forEach((j) => C.vistos.add(j.id));
     ok(novos.length === 1 && novos[0].tipo === 'cancelamento', `esperado 1 cancelamento, obtido: ${JSON.stringify(novos.map((j) => [j.tipo, j.local, j.titulo]))}`);
     await fecharJanelas(cx);
   });
@@ -741,8 +745,8 @@ async function secFechamentoCaixa(C) {
     await esperar(async () => /Total por forma de pagamento/.test(await dlg.innerText()), { timeout: 20000, motivo: 'resumo do turno carregado no fechamento' });
     const t = await dlg.innerText();
     ok(/Dinheiro[\s\S]{0,30}40,00/.test(t), `Dinheiro líquido R$ 40,00 não aparece no fechamento: ${t.replace(/\n/g, ' ').slice(0, 400)}`);
-    ok(/Visa[\s\S]{0,30}${(C.totalConta - 60).toFixed(2).replace('.', ',')}/.test(t), `Visa não bate no fechamento`);
-    ok(/Mastercard[\s\S]{0,30}20,00/.test(t), 'Mastercard não bate no fechamento');
+    ok(new RegExp(`Visa crédito[\\s\\S]{0,15}${(C.totalConta - 60).toFixed(2).replace('.', ',')}`).test(t), `"Visa crédito" R$ ${(C.totalConta - 60).toFixed(2).replace('.', ',')} não bate no fechamento: ${t.replace(/\n/g, ' ').slice(0, 700)}`);
+    ok(/Maestro \(Master débito\)[\s\S]{0,15}20,00/.test(t), 'débito Mastercard ("Maestro (Master débito)") R$ 20,00 não bate no fechamento');
     ok(/Esperado em dinheiro[\s\S]{0,30}140,00/.test(t), `esperado em dinheiro deveria ser R$ 140,00 (fundo 100 + 40): ${t.replace(/\n/g, ' ').slice(0, 500)}`);
     const campos = dlg.locator('input[type=number]');
     await campos.nth(1).fill('1');   // 1 nota de R$ 100
@@ -787,16 +791,21 @@ async function secRelatorios(C) {
     const t = await m.page.locator('main').innerText();
     ok(new RegExp(`Mesa ${mesa.number}[\\s\\S]{0,80}${totalTxt.replace('$', '\\$')}`).test(t), `venda da mesa ${mesa.number} (${totalTxt}) não aparece no Histórico`);
   });
+  await rel.passo('Histórico: a coluna Itens conta só o que foi cobrado (3 itens; o item cancelado não entra)', async () => {
+    const t = await m.page.locator('main').innerText();
+    const bloco = t.split('\n').join(' ');
+    ok(new RegExp(`Mesa ${mesa.number}\\s+3 itens\\s+R\\$ ${brl(C.totalConta)}`).test(bloco), `a linha da mesa ${mesa.number} deveria dizer "3 itens" (1 item foi cancelado): ${(bloco.match(new RegExp(`Mesa ${mesa.number}.{0,40}`)) ?? ['?'])[0]}`);
+  });
   await rel.passo('Histórico: abrir a venda mostra os itens com o nome de quem os lançou (garçom)', async () => {
-    const linha = m.page.locator('main tr, main [role=row]').filter({ hasText: new RegExp(`Mesa ${mesa.number}\\b`) }).first();
+    const linha = m.page.locator('main div').filter({ hasText: new RegExp(`Mesa ${mesa.number}\\b`) }).filter({ hasText: totalTxt }).last();
     await linha.click();
     await sleep(1500);
     const dlg = m.page.getByRole('dialog').last();
-    ok(await dlg.count(), 'a venda não abriu em uma janela de detalhes');
+    ok(await dlg.count(), 'a venda do Histórico não abre detalhes (não há onde ver quem lançou cada item)');
     const t = await dlg.innerText();
     ok(t.includes(amb.usuarios.garcom.nome), `o detalhe da venda não mostra o garçom "${amb.usuarios.garcom.nome}": ${t.replace(/\s+/g, ' ').slice(0, 300)}`);
     await fecharJanelas(m);
-  });
+  }, { pendente: 'permissões/senha única (outra frente): o Histórico precisa mostrar quem lançou cada item (hoje só mostra data, tipo, mesa, itens e total)' });
   await abrirAdmin(m, 'Vendas', 'Relatórios');
   let arquivoXlsx = null;
   await rel.passo('Excel do fechamento do dia baixa, abre e as abas batem com a venda (total, formas de pagamento, cartões)', async () => {
@@ -912,6 +921,7 @@ async function secRegressaoImpressao(C) {
   rel.entrar('12. Regressão de impressão ao reiniciar (recarregar, cair/voltar a internet, trocar de aba, tempo real, aparelho novo, itens velhos)');
   const { amb } = C; const cx = C.devs.caixa; const U = amb.usuarios; const [mesaA, mesaB, mesaC] = amb.mesas;
   await fecharJanelas(cx);
+  const estadoCaixa = await cx.ctx.storageState(); // sessão do caixa, guardada para os aparelhos "novos" (o aparelho original é fechado mais adiante)
   await orcamento(C, 'recarregar a página (F5) duas vezes = nenhum documento novo', async () => {
     await cx.page.reload({ waitUntil: 'domcontentloaded' }); await sleep(4000);
     await cx.page.reload({ waitUntil: 'domcontentloaded' }); await sleep(3000);
@@ -939,7 +949,7 @@ async function secRegressaoImpressao(C) {
     await sleep(2500);
   }, {});
   await orcamento(C, 'abrir o app num aparelho NOVO logo depois do pedido = nenhum documento novo (a fila barra a duplicata)', async () => {
-    const estado = await cx.ctx.storageState();
+    const estado = estadoCaixa;
     const novo = await new Dispositivo(C.browser, 'aparelho-novo', { baseUrl: C.BASE_URL, storageState: estado }).iniciar();
     C.devs['aparelho-novo'] = novo;
     await novo.ir('/loja');
@@ -955,7 +965,7 @@ async function secRegressaoImpressao(C) {
   await amb.admin.from('order_items').insert([amb.produtos.cozinha, amb.produtos.bar].map((p) => ({ order_id: o.id, store_id: LOJA, product_id: p.id, quantity: 1, price_at_time: p.price, status: 'pending', added_by_role: 'garcom', added_by_name: 'QA Portao antigo', created_at: velho })));
   await amb.admin.from('tables').update({ status: 'occupied', current_host_name: 'QA Portao antigo' }).eq('id', mesaC.id);
   const aparelhoComCorteAntigo = async (nome, extra = {}) => {
-    const estado = await cx.ctx.storageState();
+    const estado = estadoCaixa;
     const chaveCorte = `ntb_caixa_print_corte_ativacao_${LOJA}`; const chaveVida = `ntb_caixa_print_ultima_atividade_${LOJA}`;
     const dois = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString();
     const d = await new Dispositivo(C.browser, nome, { baseUrl: C.BASE_URL, storageState: estado, ...extra }).iniciar();
@@ -996,6 +1006,14 @@ async function secRegressaoImpressao(C) {
   }, { pedido: { Cozinha: 1 } });
   await amb.admin.from('order_items').delete().eq('order_id', o.id).eq('added_by_name', 'QA Portao 30min');
 
+  await rel.passo('banco: TUDO o que está na fila de impressão da loja de teste foi contado por alguma ação medida (nada enfileirado fora do esperado)', async () => {
+    const todos = await amb.ledgerFila();
+    const soltos = todos.filter((j) => !(C.vistos ?? new Set()).has(j.id));
+    ok(soltos.length === 0, `${soltos.length} documento(s) na fila que nenhuma ação medida esperava: ${soltos.map((j) => `${j.tipo}/${j.local}: ${j.titulo}`).join(' ; ')}`);
+    const total = todos.length;
+    console.log(`  (fila da loja de teste nesta execução: ${total} documentos no total: ${JSON.stringify(resumirFila(todos))})`);
+  });
+
   // ---- caminho da JANELA do navegador (loja sem impressora cadastrada): prova positiva e depois as mesmas proteções.
   // Sem impressora cadastrada CADA aparelho logado imprime na própria impressora padrão (não há fila para barrar a duplicata entre aparelhos),
   // então aqui só pode haver UM aparelho aberto: fecha os outros.
@@ -1013,7 +1031,7 @@ async function secRegressaoImpressao(C) {
   amb.estado.ordemIds.push(o2.id); amb.salvar();
   let dJanela = null;
   await orcamento(C, 'JANELA: item novo lançado depois de o aparelho abrir = exatamente 1 pedido na cozinha pelo navegador', async () => {
-    dJanela = await novoDispositivo(C, 'janela', 'janela-1', { storageState: await cx.ctx.storageState() });
+    dJanela = await novoDispositivo(C, 'janela', 'janela-1', { storageState: estadoCaixa });
     await dJanela.ir('/loja');
     await dJanela.page.locator('h2:visible, header h1:visible').first().waitFor({ timeout: 30000 });
     await sleep(4000);

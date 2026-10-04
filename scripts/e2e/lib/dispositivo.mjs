@@ -24,6 +24,7 @@ const INIT = `(() => {
     } });
   } catch (e) {}
   window.print = () => rec('window', '', document.title);
+  try { const st = document.createElement('style'); st.textContent = 'nextjs-portal{display:none!important}'; (document.head || document.documentElement).appendChild(st); } catch (e) {} // indicador do modo dev cobre o 1º botão da barra do celular
   if (window.__ntbNativo) {
     window.ntbPrinter = { printText: async ({ text }) => { rec('nativo', text, ''); return { success: true }; }, printDialog: async ({ title, html }) => { rec('dialogo', html, title); return { success: true }; } };
   }
