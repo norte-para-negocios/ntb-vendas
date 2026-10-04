@@ -13,6 +13,8 @@ import { formatServiceFeeRate, formatBRL } from './calc';
 // (regra do projeto, já foi bug real 3x). Sem dependência de volta pra
 // print.ts em lib/labels.ts, então importar aqui não cria ciclo.
 import { getPaymentMethodLabel, getCardBrandLabel } from './labels';
+import { buildRelatorioHtml, buildTabelaHtml, RELATORIO_STYLES, type RelatorioMeta } from './reports/relatorioHtml';
+import type { PainelDia } from './reports/painelDia';
 
 // Nome do cliente e observação do pedido são texto livre digitado pelo cliente final e
 // vão parar aqui sem passar por nenhum framework de render (é document.write puro) — sem
@@ -833,6 +835,16 @@ export function printSalesReport(opts: {
     </table>
   `;
   return printHtmlDocument(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
+}
+
+// Relatório do dia (A4). "Salvar como PDF" é pelo próprio diálogo de impressão do navegador.
+export function printRelatorioDia(p: PainelDia, m: RelatorioMeta): Promise<boolean> {
+  return printHtmlDocument(`Relatório do dia - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildRelatorioHtml(p, m));
+}
+
+// Qualquer relatório em tabela (análise por hora/operador, turno, exceções) com o mesmo cabeçalho e rodapé.
+export function printTabela(t: Parameters<typeof buildTabelaHtml>[0], m: RelatorioMeta): Promise<boolean> {
+  return printHtmlDocument(`${t.titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildTabelaHtml(t, m));
 }
 
 // Relatório de fechamento de caixa ("POSIÇÃO DO CAIXA") — pedido do Ramon, 2026-09-29: sai sozinho ao fechar

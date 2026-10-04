@@ -1,7 +1,9 @@
 // components/modules/ReportsView.tsx
 'use client';
 import React, { useState } from 'react';
-import { Download, FileSpreadsheet, BarChart3, ListChecks } from 'lucide-react';
+import { Download, FileSpreadsheet, BarChart3, ListChecks, Printer } from 'lucide-react';
+import { printRelatorioDia } from '@/lib/print';
+import { montarPainel } from '@/lib/reports/painelDia';
 import { Button, Card, Input } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchSalesHistory, fetchMenu, type CashShiftSummary, type CashShiftHistoryRow } from '@/lib/api';
@@ -90,25 +92,41 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
     }
   };
 
+  const [imprimindo, setImprimindo] = useState(false);
+  const imprimirFechamento = async () => {
+    setImprimindo(true);
+    try {
+      const dados = await carregarFechamento({ storeId, storeName, userName, dia });
+      const ok = await printRelatorioDia(montarPainel(dados, dados.nomeCategoria), dados);
+      if (!ok) toast.error('Não consegui abrir a impressão. Confira o bloqueador de janelas.');
+    } catch (e) {
+      console.error('imprimirFechamento falhou:', e);
+      toast.error('Não consegui gerar o relatório. Tente de novo.');
+    } finally {
+      setImprimindo(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
         <h3 className="text-[17px] font-semibold text-[var(--text)]">Relatórios</h3>
-        <p className="text-[13px] text-[var(--text-muted)]">Arquivos prontos para o contador conciliar. O Excel traz as abas Resumo, Formas de pagamento, Cartões, Caixa, Vendas, Itens e Exceções.</p>
+        <p className="text-[13px] text-[var(--text-muted)]">Arquivos prontos para o contador conciliar. O Excel traz as abas Painel, Formas de pagamento, Cartões, Caixa, Vendas, Itens e Exceções.</p>
       </div>
       <Card className="p-5 space-y-4">
         <div className="flex items-start gap-3">
           <FileSpreadsheet size={22} className="text-[var(--brand)] shrink-0 mt-0.5" />
           <div>
-            <h4 className="text-[15px] font-semibold text-[var(--text)]">Fechamento do dia (Excel)</h4>
-            <p className="text-[13px] text-[var(--text-muted)]">Todos os turnos de caixa do dia, com meios de pagamento e bandeiras (inclusive zeradas), ticket médio, vendas, itens e exceções.</p>
+            <h4 className="text-[15px] font-semibold text-[var(--text)]">Fechamento do dia (Excel ou PDF)</h4>
+            <p className="text-[13px] text-[var(--text-muted)]">Todos os turnos de caixa do dia, com meios de pagamento e bandeiras (inclusive zeradas), ticket médio, vendas, itens e exceções. Para PDF, use PDF / Imprimir e escolha <i>Salvar como PDF</i>.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-[13px] text-[var(--text-muted)]">Dia
             <Input type="date" value={dia} max={hojeISO()} onChange={(e) => setDia(e.target.value)} />
           </label>
-          <Button onClick={baixarFechamento} isLoading={gerando} disabled={!dia}><Download size={16} /> Baixar Excel</Button>
+          <Button onClick={baixarFechamento} isLoading={gerando} disabled={!dia || imprimindo}><Download size={16} /> Baixar Excel</Button>
+          <Button variant="secondary" onClick={imprimirFechamento} isLoading={imprimindo} disabled={!dia || gerando}><Printer size={16} /> PDF / Imprimir</Button>
         </div>
       </Card>
 
