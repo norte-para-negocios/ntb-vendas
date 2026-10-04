@@ -71,6 +71,7 @@ import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemD
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
 import { setorDoItem } from '@/lib/setores';
 import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
+import { itensAtivos, qtdItensAtivos, subtotalItensAtivos, rotuloQtdItens, itemCancelado } from '@/lib/itensVenda';
 import { descreverHoraDoPedido } from '@/lib/tempo';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
@@ -5041,6 +5042,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                                      <span className="flex-1 min-w-0">
                                                                          <span className="text-[var(--text-muted)] num">{l.qtd}× </span>
                                                                          <span className="font-medium">{l.nome}</span>
+                                                                         {l.status === 'canceled' ? <span className="ml-2 inline-block whitespace-nowrap text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--err)]/12 text-[var(--err)] no-underline">Cancelado</span> : null}
                                                                          {l.quem ? <span className="ml-2 inline-block whitespace-nowrap text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-muted)] no-underline">{l.quem}</span> : null}
                                                                      </span>
                                                                      <span className="num shrink-0">R$ {formatBRL(l.valor)}</span>
@@ -11238,10 +11240,10 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             });
         }
         if (filterMinItems) {
-            result = result.filter(order => (order.order_items?.length || 0) >= parseInt(filterMinItems));
+            result = result.filter(order => qtdItensAtivos(order) >= parseInt(filterMinItems));
         }
         if (filterMaxItems) {
-            result = result.filter(order => (order.order_items?.length || 0) <= parseInt(filterMaxItems));
+            result = result.filter(order => qtdItensAtivos(order) <= parseInt(filterMaxItems));
         }
         if (filterMinTotal) {
             result = result.filter(order => getOrderDisplayTotal(order) >= parseFloat(filterMinTotal));
@@ -11265,8 +11267,8 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 valA = a.order_type === 'table' ? `Mesa ${a.tables?.number || '?'}` : (a.customer_name || 'Cliente Balcão');
                 valB = b.order_type === 'table' ? `Mesa ${b.tables?.number || '?'}` : (b.customer_name || 'Cliente Balcão');
             } else if (sortColumn === 'items') {
-                valA = a.order_items?.length || 0;
-                valB = b.order_items?.length || 0;
+                valA = qtdItensAtivos(a);
+                valB = qtdItensAtivos(b);
             } else if (sortColumn === 'total') {
                 valA = getOrderDisplayTotal(a);
                 valB = getOrderDisplayTotal(b);
@@ -11349,7 +11351,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // "2x Pizza Marguerita (Catupiry), 1x Coca-Cola" — reusa getOrderItemDisplayName
     // (produto + adicional) por item da venda, não só a contagem de linhas.
     const buildItemsSummary = (order: Order) =>
-        order.order_items?.map(item => `${item.quantity}x ${getOrderItemDisplayName(item)}`).join(', ') || '';
+        itensAtivos(order).map(item => `${item.quantity}x ${getOrderItemDisplayName(item)}`).join(', ');
 
     // Achado real (auditoria "o que falta", 2026-08-27 — item B13 da
     // reunião): mesma fórmula de handleReprintReceipt (total - subtotal dos
@@ -11357,7 +11359,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // próprio, então isso é a melhor aproximação disponível a partir do
     // valor realmente cobrado (getOrderDisplayTotal).
     const calcOrderServiceFee = (order: Order): number => {
-        const itemsTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+        const itemsTotal = subtotalItensAtivos(order);
         const fee = Number((getOrderDisplayTotal(order) - itemsTotal).toFixed(2));
         return fee > 0.005 ? fee : 0;
     };
@@ -11375,7 +11377,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                     date: `${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                     type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
                     customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
-                    items: order.order_items?.length || 0,
+                    items: qtdItensAtivos(order),
                     itemsSummary: buildItemsSummary(order),
                     total: getOrderDisplayTotal(order),
                     serviceFee: calcOrderServiceFee(order),
@@ -11398,7 +11400,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 date: `${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                 type: order.order_type === 'table' ? 'Mesa' : 'Balcão',
                 customer: order.order_type === 'table' ? `Mesa ${order.tables?.number || '?'}` : (order.customer_name || 'Cliente Balcão'),
-                items: order.order_items?.length || 0,
+                items: qtdItensAtivos(order),
                 itemsSummary: buildItemsSummary(order),
                 total: getOrderDisplayTotal(order),
                 serviceFee: calcOrderServiceFee(order),
@@ -11417,7 +11419,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // mas `amount`/`charged` vêm do valor real cobrado (payment_details),
     // nunca recalculados.
     const handleReprintReceipt = async (order: Order) => {
-        const itemsTotal = order.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+        const itemsTotal = subtotalItensAtivos(order);
         const total = getOrderDisplayTotal(order);
         const feeAmount = Number((total - itemsTotal).toFixed(2));
         const methods = order.payment_details?.methods;
@@ -11427,7 +11429,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 cnpj: store.cnpj,
                 paperWidthMm: store.config?.printer_paper_width_mm,
                 label: `${order.order_type === 'table' ? `MESA ${order.tables?.number || '?'}` : `BALCÃO - ${order.customer_name || 'Cliente'}`} - REIMPRESSÃO`,
-                items: (order.order_items || []).map(item => ({
+                items: itensAtivos(order).map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
                     client: parseItemNote(item.notes || '').client,
@@ -12216,12 +12218,12 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                                     </td>
                                                     <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs">
                                                         <div className="group/items relative inline-block">
-                                                            <span className="truncate">{order.order_items?.length || 0} {(order.order_items?.length || 0) === 1 ? 'item' : 'itens'}</span>
+                                                            <span className="truncate">{rotuloQtdItens(qtdItensAtivos(order))}</span>
                                                             {(order.order_items?.length || 0) > 0 && (
                                                                 <div className="hidden group-hover/items:block absolute z-20 left-0 top-full mt-1 w-56 max-h-48 overflow-y-auto rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-2 text-xs text-[var(--text)] whitespace-normal">
                                                                     {order.order_items?.map((i, idx) => (
                                                                         <div key={idx} className="flex justify-between gap-2 py-0.5">
-                                                                            <span>{i.quantity}x {getOrderItemDisplayName(i)}</span>
+                                                                            <span className={itemCancelado(i) ? 'line-through text-[var(--text-muted)]' : ''}>{i.quantity}x {getOrderItemDisplayName(i)}{itemCancelado(i) ? ' (cancelado)' : ''}</span>
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -12290,15 +12292,23 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                         <div>
                             <h4 className="font-semibold text-[15px] text-[var(--text)] mb-2">Itens do pedido</h4>
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                                {selectedOrderDetails.order_items?.map(item => (
-                                    <div key={item.id} className="flex justify-between text-sm">
-                                        <div className="flex gap-2">
-                                            <span className="font-medium text-[var(--text-muted)]">{item.quantity}x</span>
-                                            <span className="text-[var(--text)]">{getOrderItemDisplayName(item)}</span>
+                                {/* Ativos primeiro; item cancelado aparece riscado com selo e FORA de qualquer total. Cada linha mostra quem lançou (added_by_name). */}
+                                {[...itensAtivos(selectedOrderDetails), ...(selectedOrderDetails.order_items ?? []).filter(itemCancelado)].map(item => {
+                                    const cancelado = itemCancelado(item);
+                                    return (
+                                        <div key={item.id} data-item-cancelado={cancelado ? 'true' : undefined} className="flex justify-between gap-3 text-sm">
+                                            <div className="flex gap-2 min-w-0">
+                                                <span className="font-medium text-[var(--text-muted)]">{item.quantity}x</span>
+                                                <div className="min-w-0">
+                                                    <span className={cancelado ? 'text-[var(--text-muted)] line-through' : 'text-[var(--text)]'}>{getOrderItemDisplayName(item)}</span>
+                                                    {cancelado && <span className="ml-2 rounded-full bg-[var(--err)]/12 px-2 py-0.5 text-[11px] font-semibold text-[var(--err)] no-underline">Cancelado</span>}
+                                                    {item.added_by_name && <p className="text-[12px] text-[var(--text-muted)]">Lançado por {item.added_by_name}</p>}
+                                                </div>
+                                            </div>
+                                            <span className={`shrink-0 ${cancelado ? 'text-[var(--text-muted)] line-through' : 'text-[var(--text-muted)]'}`}>R$ {formatBRL(item.price_at_time * item.quantity)}</span>
                                         </div>
-                                        <span className="text-[var(--text-muted)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -12310,7 +12320,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                             // divergiam no mesmo modal. Agora uma fonte só, usada nos dois
                             // lugares; cai no total de produtos (sem taxa) só quando a venda é
                             // antiga o bastante pra não ter payment_details.methods gravado.
-                            const itemsTotal = selectedOrderDetails.order_items?.reduce((sum, item) => sum + (item.price_at_time * item.quantity), 0) || 0;
+                            const itemsTotal = subtotalItensAtivos(selectedOrderDetails);
                             const methods = selectedOrderDetails.payment_details?.methods;
                             const totalPago = getOrderDisplayTotal(selectedOrderDetails);
                             // Achado real (WhatsApp do usuário, 2026-08-27): a diferença entre

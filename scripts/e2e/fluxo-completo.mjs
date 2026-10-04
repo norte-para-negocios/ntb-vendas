@@ -818,7 +818,7 @@ async function secRelatorios(C) {
     const t = await dlg.innerText();
     ok(t.includes(amb.usuarios.garcom.nome), `o detalhe da venda não mostra o garçom "${amb.usuarios.garcom.nome}": ${t.replace(/\s+/g, ' ').slice(0, 300)}`);
     await fecharJanelas(m);
-  }, { pendente: 'permissões/senha única (outra frente): o Histórico precisa mostrar quem lançou cada item (hoje só mostra data, tipo, mesa, itens e total)' });
+  });
   await abrirAdmin(m, 'Vendas', 'Relatórios');
   let arquivoXlsx = null;
   await rel.passo('Excel do fechamento do dia baixa, abre e as abas batem com a venda (total, formas de pagamento, cartões)', async () => {
