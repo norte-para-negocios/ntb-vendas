@@ -14,6 +14,8 @@ import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
 import { AdminNavShell } from '@/components/modules/admin/AdminNavShell';
 import { useAdminStatus } from '@/components/modules/admin/useAdminStatus';
+import RolePermissionsView from '@/components/modules/RolePermissionsView';
+import CardapioSaudeView from '@/components/modules/CardapioSaudeView';
 import RegrasCaixaView from '@/components/modules/admin/RegrasCaixaView';
 import type { AbaId, NavCtx } from '@/lib/adminNav';
 import CouponManagementView from '@/components/modules/CouponManagementView';
@@ -11989,6 +11991,8 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 </>
             )}
 
+            {activeTab === 'permissoes' && <RolePermissionsView store={store} loggedUser={loggedUser} onStoreUpdate={onStoreUpdate} />}
+            {activeTab === 'saude' && roleCan(loggedUser, store, 'editar_cardapio') && <CardapioSaudeView storeId={storeId} />}
             {activeTab === 'regras_caixa' && <RegrasCaixaView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
             {activeTab === 'locais' && <LocaisPreparoView store={store} />}

@@ -4,7 +4,7 @@ import { AREAS, AJUSTES, ABAS_EM_BREVE, abasVisiveis, areasVisiveis, areaDaAba, 
 
 const dono: NavCtx = { user: { role: 'owner' }, podeVerExcecoes: true };
 const garcom: NavCtx = { user: { role: 'waiter' }, podeVerExcecoes: false, can: () => false };
-ABAS_EM_BREVE.clear();
+assert.equal(ABAS_EM_BREVE.size, 0, 'nenhuma aba escondida por "em breve"');
 
 // as abas antigas continuam, cada uma em exatamente uma área
 const antigas = ['dashboard', 'sales', 'shifts', 'relatorios', 'excecoes', 'impressao', 'locais', 'users', 'link', 'settings', 'cupons', 'precos', 'fiscal'];
