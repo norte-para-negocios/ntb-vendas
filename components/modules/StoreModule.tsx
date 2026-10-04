@@ -3551,7 +3551,7 @@ NOTIFY pgrst, 'reload schema';`;
     const tablesBoasRef = useRef<Table[]>([]);
     const ordersBoasRef = useRef<Order[]>([]);
     // Troca de loja: a última lista boa é da loja anterior, nunca pode aparecer na nova.
-    useEffect(() => { tablesBoasRef.current = []; ordersBoasRef.current = []; loadDataAplicado.current = loadDataSeq.current; }, [storeId]);
+    useEffect(() => { tablesBoasRef.current = []; ordersBoasRef.current = []; loadDataAplicado.current = ++loadDataSeq.current; }, [storeId]);
     const loadData = async () => {
         if(!storeId) return;
         // Nao rebusca `stores` aqui (achado de performance #9): os eventos
