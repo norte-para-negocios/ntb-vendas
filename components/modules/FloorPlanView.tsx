@@ -155,7 +155,7 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
         animate={{ left: `${pos.x}%`, top: `${pos.y}%` }}
         transition={transicao}
         whileTap={clicavel && !reduzMovimento ? { scale: 0.96, transition: SPRING_TAP } : undefined}
-        style={{ x: '-50%', y: '-50%', touchAction: editing ? 'none' : 'auto' }}
+        style={{ x: '-50%', y: '-50%', touchAction: editing ? 'none' : 'auto', ...(t.status === 'occupied' || t.status === 'waiting_bill' ? { borderColor: i.dotColor, borderWidth: 2 } : {}) }}
         className={`absolute min-w-[44px] min-h-[44px] px-2 rounded-xl border bg-[var(--surface)] shadow-[var(--shadow-sm)] flex flex-col items-center justify-center text-[13px] font-semibold text-[var(--text)] ${
           editing ? 'cursor-grab outline outline-1 outline-dashed outline-[var(--brand)]' : clicavel ? 'hover:shadow-md' : 'opacity-50'
         }`}
@@ -182,8 +182,10 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
         <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={SPRING_UI} className="flex items-start gap-3 rounded-[14px] bg-[var(--brand-soft)] px-4 py-3 text-[14px] text-[var(--text)]" role="note">
           <Info size={18} className="mt-0.5 shrink-0 text-[var(--brand)]" />
           <p className="flex-1">
-            <b>Como funciona:</b> cada quadradinho é uma mesa — a bolinha mostra se está livre, ocupada ou pedindo atenção, e o número é há quanto tempo está ocupada. Toque numa mesa para abrir a conta.
-            {canEdit ? ' Para mudar as mesas de lugar, toque em “Editar planta”.' : ''}
+            <b>Como funciona:</b>{' '}
+            <span className="sm:hidden">cada quadradinho é uma mesa; toque para abrir a conta.</span>
+            <span className="max-sm:hidden">cada quadradinho é uma mesa — a bolinha mostra se está livre, ocupada ou pedindo atenção, e o número é há quanto tempo está ocupada. Toque numa mesa para abrir a conta.
+            {canEdit ? ' Para mudar as mesas de lugar, toque em “Editar planta”.' : ''}</span>
           </p>
           <button type="button" onClick={fecharDica} aria-label="Fechar a explicação" className="min-h-11 min-w-11 -m-2 grid place-items-center text-[var(--text-muted)]"><X size={16} /></button>
         </motion.div>
@@ -218,6 +220,9 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
             )}
           </div>
           {confirmandoOrg && <p className="text-[12px] text-[var(--warn)]">Isso coloca TODAS as mesas em grade, por área e número, e perde o arranjo atual.</p>}
+          <details className="group">
+            <summary className="min-h-11 flex items-center cursor-pointer text-[13px] font-semibold text-[var(--text)]">Agrupar mesas por área</summary>
+            <div className="space-y-3 pt-1">
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-[12px] text-[var(--text-muted)]">Área
               <input value={areaNome} onChange={(e) => setAreaNome(e.target.value)} maxLength={40} placeholder="Ex.: Varanda" className="block h-11 w-36 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-[15px] text-[var(--text)]" />
@@ -231,6 +236,8 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
             <button type="button" disabled={salvando} onClick={aplicarArea} className={chip(false)}>Aplicar área</button>
           </div>
           <p className="text-[12px] text-[var(--text-muted)]">Deixe a área em branco para tirar a área dessas mesas. Depois use “Organizar automaticamente” para agrupar por área.</p>
+            </div>
+          </details>
         </motion.div>
       )}
       </AnimatePresence>
@@ -244,7 +251,7 @@ export const FloorPlanView: React.FC<Props> = ({ tables, info, onOpen, canEdit, 
           className="relative w-full aspect-[16/10] min-h-[280px] bg-[var(--surface-2)]"
           style={{ minWidth: largura, backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: '24px 24px' }}
         >
-          {rotulos.filter((r) => areaSel === 'todas' || r.area === areaSel).map((r) => (
+          {rotulos.filter((r) => (areaSel === 'todas' || r.area === areaSel) && visiveis.some((t) => (t.area ?? '') === r.area)).map((r) => (
             <span key={r.area} className="pointer-events-none absolute -translate-y-full text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]" style={{ left: `${r.x}%`, top: `calc(${r.y}% - 24px)` }}>{r.area}</span>
           ))}
           {visiveis.map((t) => pin(t))}
