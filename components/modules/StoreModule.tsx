@@ -63,6 +63,7 @@ import { descreverHoraDoPedido } from '@/lib/tempo';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
+import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, SERVICE_FEE_RATE, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
@@ -4970,6 +4971,50 @@ NOTIFY pgrst, 'reload schema';`;
                              
                              {selectedTable?.status !== 'available' && (
                                  <div className="space-y-3 animate-fade-in">
+                                     {(() => {
+                                         // Pedidos à vista ao tocar na mesa (plano mesa-cardapio-permissoes, Task 1).
+                                         const resumoMesa = selectedTable ? getTableSummary(selectedTable.id) : null;
+                                         const { linhas } = resumirPedidosDaMesa(resumoMesa?.allItems ?? []);
+                                         return (
+                                             <div className="bg-[var(--surface-2)] rounded-[14px] overflow-hidden" aria-label="Pedidos da mesa">
+                                                 <p className="eyebrow px-4 pt-3 pb-1">Pedidos da mesa</p>
+                                                 {linhas.length === 0 ? (
+                                                     <p className="px-4 pb-4 pt-1 text-[14px] text-[var(--text-muted)]">Nenhum pedido ainda. Toque em Adicionar Pedido.</p>
+                                                 ) : (
+                                                     <>
+                                                         <ul className="max-h-[40vh] overflow-y-auto">
+                                                             {linhas.filter(l => !l.taxa).map(l => (
+                                                                 <li key={l.id} className={`flex justify-between items-baseline gap-3 px-4 py-2 border-b border-[var(--border)] last:border-b-0 text-[15px] ${l.status === 'canceled' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
+                                                                     <span className="flex-1 min-w-0">
+                                                                         <span className="text-[var(--text-muted)] num">{l.qtd}× </span>
+                                                                         <span className="font-medium">{l.nome}</span>
+                                                                         {l.quem ? <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-muted)] no-underline">{l.quem}</span> : null}
+                                                                     </span>
+                                                                     <span className="num shrink-0">R$ {formatBRL(l.valor)}</span>
+                                                                 </li>
+                                                             ))}
+                                                         </ul>
+                                                         {linhas.filter(l => l.taxa).map(l => (
+                                                             <div key={l.id} className="flex justify-between items-baseline gap-3 px-4 py-2 border-t border-[var(--border)] text-[14px] text-[var(--text-muted)]">
+                                                                 <span className="flex-1 min-w-0">{l.nome}</span>
+                                                                 <span className="num shrink-0">R$ {formatBRL(l.valor)}</span>
+                                                             </div>
+                                                         ))}
+                                                         {resumoMesa && resumoMesa.serviceFee > 0 && (
+                                                             <div className="flex justify-between items-baseline gap-3 px-4 py-2 border-t border-[var(--border)] text-[14px] text-[var(--text-muted)]">
+                                                                 <span>Taxa de Serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
+                                                                 <span className="num shrink-0">R$ {formatBRL(resumoMesa.serviceFee)}</span>
+                                                             </div>
+                                                         )}
+                                                         <div className="flex justify-between items-baseline px-4 py-3 border-t border-[var(--border)] font-semibold text-[16px] text-[var(--text)]">
+                                                             <span>Total</span>
+                                                             <span className="num">R$ {formatBRL(resumoMesa?.total ?? 0)}</span>
+                                                         </div>
+                                                     </>
+                                                 )}
+                                             </div>
+                                         );
+                                     })()}
                                      <div className="grid grid-cols-2 gap-3">
                                          <Button
                                             size="lg"
