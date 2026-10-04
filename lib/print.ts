@@ -850,6 +850,8 @@ export function buildCashClosingText(opts: {
   dinheiroEsperado: number;
   dinheiroContado: number | null;
   diferenca: number | null;
+  /** Contas pagas, total e ticket médio do turno (pedido do Ramon, 03/10) — ausente em app/RPC antigos. */
+  vendas?: { contas: number; total: number; ticketMedio: number | null } | null;
   /** Taxa de serviço das contas do turno (30/09, pedido do Ramon) — ausente em app/RPC antigos. */
   taxaServico?: { quantidade: number; total: number } | null;
   /** Taxas de valor fixo lançadas como item (rolha, troca...) — migration 139. */
@@ -876,6 +878,11 @@ export function buildCashClosingText(opts: {
   if (opts.formas.length === 0) lines.push('Nenhuma venda no turno.');
   opts.formas.forEach((f) => lines.push(linha(f.label, f.total)));
   lines.push(linha('TOTAL', totalVendas), simples);
+
+  if (opts.vendas) {
+    lines.push('*** Resumo de Vendas ***', esqDir('Contas pagas', String(opts.vendas.contas), W), linha('Total vendido', opts.vendas.total));
+    lines.push(opts.vendas.ticketMedio != null ? linha('Ticket medio', opts.vendas.ticketMedio) : esqDir('Ticket medio', '-', W), simples);
+  }
 
   if (opts.cartoes.length > 0) {
     lines.push('*** Resumo dos Cartoes ***');

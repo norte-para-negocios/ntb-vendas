@@ -1905,6 +1905,9 @@ export interface CashShiftSummary {
   totals_by_brand: Record<string, number>;
   /** Crédito e débito separados por bandeira, chave "CREDIT|visa" (migration 147). Ausente antes dela. */
   totals_by_card?: Record<string, number>;
+  /** Contas pagas e total recebido no turno, sem dupla contagem (migration 147). Ticket médio = total / contas. */
+  payments_count?: number;
+  payments_total?: number;
   total_sangria: number;
   total_suprimento: number;
   expected_cash: number;

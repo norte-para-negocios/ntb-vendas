@@ -24,6 +24,7 @@ import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { FloorPlanView } from './FloorPlanView';
 import { ExceptionsReportView } from './ExceptionsReportView';
 import { PriceSchedulesView } from './PriceSchedulesView';
+import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
 import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablePosition, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
@@ -7691,15 +7692,31 @@ const CaixaViewMeu: React.FC<{
                                         <p className="text-[var(--text-muted)] mt-1">{historySummary.shift.notes}</p>
                                     )}
                                 </div>
+                                {historySummary.payments_count != null && (
+                                    <div className="grid grid-cols-3 gap-3 text-sm">
+                                        <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                            <p className="text-[var(--text-muted)]">Contas pagas</p>
+                                            <p className="num font-bold text-[var(--text)]">{historySummary.payments_count}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                            <p className="text-[var(--text-muted)]">Total vendido</p>
+                                            <p className="num font-bold text-[var(--text)]">R$ {formatBRL(Number(historySummary.payments_total) || 0)}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                            <p className="text-[var(--text-muted)]">Ticket médio</p>
+                                            <p className="num font-bold text-[var(--text)]">{ticketMedio(historySummary.payments_total, historySummary.payments_count) != null ? `R$ ${formatBRL(ticketMedio(historySummary.payments_total, historySummary.payments_count) as number)}` : '—'}</p>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="space-y-1.5">
                                     <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                         Total por forma de pagamento
                                     </h4>
-                                    {Object.keys(historySummary.totals_by_method).length === 0 ? (
+                                    {false ? (
                                         <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
                                     ) : (
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {Object.entries(historySummary.totals_by_method).map(([method, total]) => (
+                                            {completarFormas(historySummary.totals_by_method).map(({ key: method, total }) => (
                                                 <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
@@ -7708,15 +7725,15 @@ const CaixaViewMeu: React.FC<{
                                         </div>
                                     )}
                                 </div>
-                                {Object.keys(historySummary.totals_by_card ?? historySummary.totals_by_brand).length > 0 && (
+                                {(historySummary.totals_by_card || Object.keys(historySummary.totals_by_brand).length > 0) && (
                                     <div className="space-y-1.5">
                                         <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                             Cartões: crédito e débito por bandeira
                                         </h4>
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {Object.entries(historySummary.totals_by_card ?? historySummary.totals_by_brand).sort(([a], [b]) => a.localeCompare(b)).map(([brand, total]) => (
+                                            {(historySummary.totals_by_card ? completarCartoes(historySummary.totals_by_card).map((c) => [c.label, c.total] as [string, number]) : Object.entries(historySummary.totals_by_brand).map(([b, t]) => [getCardBrandLabel(b), t] as [string, number])).map(([brand, total]) => (
                                                 <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
-                                                    <span className="text-[var(--text)]">{brand.includes('|') ? getCardTotalLabel(brand) : getCardBrandLabel(brand)}</span>
+                                                    <span className="text-[var(--text)]">{brand}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}
@@ -7895,10 +7912,11 @@ const CaixaViewMeu: React.FC<{
                         abertoEm: new Date(shift.opened_at),
                         fechadoEm: new Date(),
                         fundo: Number(shift.opening_float) || 0,
-                        formas: Object.entries(resumo.totals_by_method).map(([m, total]) => ({ label: getPaymentMethodLabel(m), total: Number(total) || 0 })),
+                        formas: completarFormas(resumo.totals_by_method).map(({ label, total }) => ({ label, total })),
                         cartoes: resumo.totals_by_card
-                            ? Object.entries(resumo.totals_by_card).sort(([a], [b]) => a.localeCompare(b)).map(([k, total]) => ({ label: getCardTotalLabel(k), total: Number(total) || 0 }))
+                            ? completarCartoes(resumo.totals_by_card)
                             : Object.entries(resumo.totals_by_brand).map(([b, total]) => ({ label: getCardBrandLabel(b), total: Number(total) || 0 })),
+                        vendas: resumo.payments_count != null ? { contas: Number(resumo.payments_count) || 0, total: Number(resumo.payments_total) || 0, ticketMedio: ticketMedio(resumo.payments_total, resumo.payments_count) } : null,
                         sangria: Number(resumo.total_sangria) || 0,
                         suprimento: Number(resumo.total_suprimento) || 0,
                         dinheiroEsperado: Number(resumo.expected_cash) || 0,
@@ -8652,15 +8670,31 @@ const CaixaViewMeu: React.FC<{
                                         </p>
                                     </div>
                                 )}
+                                {closeSummary.payments_count != null && (
+                                    <div className="grid grid-cols-3 gap-3 text-sm">
+                                        <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                            <p className="text-[var(--text-muted)]">Contas pagas</p>
+                                            <p className="num font-bold text-[var(--text)]">{closeSummary.payments_count}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                            <p className="text-[var(--text-muted)]">Total vendido</p>
+                                            <p className="num font-bold text-[var(--text)]">R$ {formatBRL(Number(closeSummary.payments_total) || 0)}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-[var(--border)] px-3 py-2">
+                                            <p className="text-[var(--text-muted)]">Ticket médio</p>
+                                            <p className="num font-bold text-[var(--text)]">{ticketMedio(closeSummary.payments_total, closeSummary.payments_count) != null ? `R$ ${formatBRL(ticketMedio(closeSummary.payments_total, closeSummary.payments_count) as number)}` : '—'}</p>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="space-y-1.5">
                                     <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                         Total por forma de pagamento
                                     </h4>
-                                    {Object.keys(closeSummary.totals_by_method).length === 0 ? (
+                                    {false ? (
                                         <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
                                     ) : (
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {Object.entries(closeSummary.totals_by_method).map(([method, total]) => (
+                                            {completarFormas(closeSummary.totals_by_method).map(({ key: method, total }) => (
                                                 <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
@@ -8675,15 +8709,15 @@ const CaixaViewMeu: React.FC<{
                                     (Mastercard, Alelo etc.) contra a maquineta física,
                                     não só por método. Pagamento sem bandeira escolhida
                                     (campo opcional) não aparece aqui de propósito. */}
-                                {Object.keys(closeSummary.totals_by_card ?? closeSummary.totals_by_brand).length > 0 && (
+                                {(closeSummary.totals_by_card || Object.keys(closeSummary.totals_by_brand).length > 0) && (
                                     <div className="space-y-1.5">
                                         <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                             Cartões: crédito e débito por bandeira
                                         </h4>
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {Object.entries(closeSummary.totals_by_card ?? closeSummary.totals_by_brand).sort(([a], [b]) => a.localeCompare(b)).map(([brand, total]) => (
+                                            {(closeSummary.totals_by_card ? completarCartoes(closeSummary.totals_by_card).map((c) => [c.label, c.total] as [string, number]) : Object.entries(closeSummary.totals_by_brand).map(([b, t]) => [getCardBrandLabel(b), t] as [string, number])).map(([brand, total]) => (
                                                 <div key={brand} className="flex items-center justify-between px-3 py-2 text-sm">
-                                                    <span className="text-[var(--text)]">{brand.includes('|') ? getCardTotalLabel(brand) : getCardBrandLabel(brand)}</span>
+                                                    <span className="text-[var(--text)]">{brand}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
                                                 </div>
                                             ))}

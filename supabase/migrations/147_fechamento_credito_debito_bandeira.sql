@@ -1,4 +1,8 @@
--- 147: fechamento do turno separa CRÉDITO e DÉBITO por bandeira (totals_by_card) e traz contas/total/ticket médio
+-- 147: fechamento do turno separa CRÉDITO e DÉBITO por bandeira (totals_by_card), traz contas/total/ticket médio
+-- e CORRIGE a dupla contagem: pedidos da mesma conta (ex.: pedido principal + pedido da taxa) dividem o mesmo
+-- payment_details e eram somados uma vez por pedido (turno 02/10: Crédito 1.865,81 contra 1.419,53 real).
+-- Agora totals_by_method/brand/card seguem a mesma deduplicação de _cash_shift_expected_cash.
+-- Original da 147:
 -- (payments_count, payments_total — pedido do Ramon 03/10: "o ticket médio não aparece no fechamento do caixa").
 -- Pedido do Ramon: o resumo de cartões somava crédito+débito da mesma bandeira e
 -- ignorava cartão sem bandeira. Mantém totals_by_brand (apps antigos). Base: 139.
@@ -37,7 +41,10 @@ begin
   select coalesce(jsonb_object_agg(method, total), '{}'::jsonb) into v_totals_by_method
   from (
     select m->>'method' as method, sum((m->>'amount')::numeric) as total
-    from orders o, jsonb_array_elements(o.payment_details->'methods') m
+    from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details, x.store_id
+       from orders x
+      where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+      order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) o, jsonb_array_elements(o.payment_details->'methods') m
     where o.store_id = v_shift.store_id
       and o.payment_details->>'cash_shift_id' = p_shift_id::text
     group by m->>'method'
@@ -46,7 +53,10 @@ begin
   select coalesce(jsonb_object_agg(brand, total), '{}'::jsonb) into v_totals_by_brand
   from (
     select m->>'brand' as brand, sum((m->>'amount')::numeric) as total
-    from orders o, jsonb_array_elements(o.payment_details->'methods') m
+    from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details, x.store_id
+       from orders x
+      where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+      order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) o, jsonb_array_elements(o.payment_details->'methods') m
     where o.store_id = v_shift.store_id
       and o.payment_details->>'cash_shift_id' = p_shift_id::text
       and m->>'method' in ('CREDIT', 'DEBIT')
@@ -57,7 +67,10 @@ begin
   select coalesce(jsonb_object_agg(k, total), '{}'::jsonb) into v_totals_by_card
   from (
     select (m->>'method') || '|' || coalesce(m->>'brand', '') as k, sum((m->>'amount')::numeric) as total
-    from orders o, jsonb_array_elements(o.payment_details->'methods') m
+    from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details, x.store_id
+       from orders x
+      where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+      order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) o, jsonb_array_elements(o.payment_details->'methods') m
     where o.store_id = v_shift.store_id
       and o.payment_details->>'cash_shift_id' = p_shift_id::text
       and m->>'method' in ('CREDIT', 'DEBIT')
@@ -65,15 +78,15 @@ begin
   ) t;
 
   -- Contas pagas no turno (mesa com vários pedidos = 1 conta; cada pedido de balcão = 1 conta) e total recebido.
-  select count(*), coalesce(sum(pago), 0) into v_pay_count, v_pay_total
-  from (
-    select (o.payment_details->>'total')::numeric as pago
-    from orders o
-    where o.store_id = v_shift.store_id
-      and o.payment_details->>'cash_shift_id' = p_shift_id::text
-      and (o.payment_details->>'total') is not null
-    group by coalesce(o.table_id::text, o.id::text), o.payment_details->>'total', o.payment_details->'methods', o.payment_details->>'operador_id'
-  ) g;
+  -- Total = valor efetivamente recebido (soma das formas de pagamento), igual ao TOTAL do relatório; o campo
+  -- payment_details.total nem sempre inclui a taxa digitada pelo caixa.
+  select count(*), coalesce(sum((select sum((m->>'amount')::numeric) from jsonb_array_elements(g.payment_details->'methods') m)), 0)
+    into v_pay_count, v_pay_total
+  from (select distinct on (coalesce(x.table_id::text, x.id::text), x.payment_details) x.payment_details
+          from orders x
+         where x.store_id = v_shift.store_id and x.payment_details->>'cash_shift_id' = p_shift_id::text
+           and jsonb_typeof(x.payment_details->'methods') = 'array'
+         order by coalesce(x.table_id::text, x.id::text), x.payment_details, x.id) g;
 
   select coalesce(sum(amount), 0) into v_sangria from cash_movements where shift_id = p_shift_id and type = 'sangria';
   select coalesce(sum(amount), 0) into v_suprimento from cash_movements where shift_id = p_shift_id and type = 'suprimento';
