@@ -1377,7 +1377,7 @@ const ProductModal: React.FC<{
     });
 
     return (
-        <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet" surface="opaque" hideTitle>
+        <Modal isOpen={!!incomingProduct} onClose={onClose} title={product.name} variant="sheet" hideTitle>
             {/* -m-5 cancela o p-5 do container de conteúdo do Modal (ui.tsx) —
                 só a foto do topo (Passo 1) precisa sangrar de borda a borda;
                 cada seção abaixo reintroduz o próprio px-4. O botão de fechar
@@ -4306,7 +4306,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 )}
             </div>
 
-            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet" surface="opaque">
+            <Modal isOpen={showAllCategories} onClose={() => setShowAllCategories(false)} title="Categorias" variant="sheet">
                 {/* Lista agrupada estilo Ajustes: cada item de 1º nível (grupo OU
                     categoria solta) é um cartão próprio, na mesma ordem da barra.
                     A solta ganha o mesmo peso de título que um grupo — antes ela

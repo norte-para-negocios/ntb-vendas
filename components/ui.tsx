@@ -184,12 +184,6 @@ export const Modal: React.FC<{
   // via Motion) pra todo consumidor existente (admin/lojista), não é mais
   // CSS fadeIn/slideUp — mesma linguagem de spring do resto do app.
   variant?: 'center' | 'sheet';
-  // 'opaque' (2026-08-21, revisão final do cardápio): opt-out do vidro pra
-  // essa sheet específica — usa os tokens normais (--surface/--surface-2/
-  // --text) em vez de forçar os valores escuros do .on-glass. Default
-  // 'glass' preserva o visual de todo consumidor existente (CartModal,
-  // OrderStatusModal, BillSplitter) — só o ProductModal passa 'opaque'.
-  surface?: 'glass' | 'opaque';
   // Esconde visualmente o <h3> da barra de título sem tirá-lo do DOM (o
   // dialog continua com aria-labelledby apontando pra ele) — usado só pelo
   // ProductModal, que já mostra o nome do produto no próprio conteúdo
@@ -235,7 +229,7 @@ export const Modal: React.FC<{
   // antigo (fade+scale com SPRING_SHEET em qualquer tela) — usado pelo
   // cardápio do cliente, que não muda com o redesign do lojista.
   phoneSheet?: boolean;
-}> = ({ isOpen, onClose, title, children, width, variant = 'center', surface = 'glass', hideTitle = false, size = 'sm', phoneSheet = true }) => {
+}> = ({ isOpen, onClose, title, children, width, variant = 'center', hideTitle = false, size = 'sm', phoneSheet = true }) => {
   // `width` continua aceito como override explícito (compat, nenhum call
   // site usa hoje); na ausência dele, `size` decide a largura.
   const SIZE_WIDTH_CLASSES: Record<'sm' | 'md' | 'lg', string> = {
@@ -361,7 +355,7 @@ export const Modal: React.FC<{
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm"
             style={{ background: 'rgba(10,13,19,0.6)' }}
             onClick={() => { if (!justDraggedRef.current) onClose(); }}
           >
@@ -394,18 +388,12 @@ export const Modal: React.FC<{
                 setTimeout(() => { justDraggedRef.current = false; }, 150);
                 if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.35) onClose();
               }}
-              className={`w-full ${resolvedWidth} ${surface === 'opaque' ? 'rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)]' : 'rounded-t-[var(--r-lg)] sm:rounded-[var(--r-lg)]'} relative overflow-hidden u-sheet-h flex flex-col ${
-                surface === 'opaque' ? 'bg-[var(--surface)]' : 'u-glass-modal on-glass'
-              }`}
-              style={
-                surface === 'opaque'
-                  ? { border: '1px solid var(--border)', boxShadow: 'var(--shadow-md), 0 -8px 40px -8px rgba(0,0,0,0.35)' }
-                  : { border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 40px -8px rgba(0,0,0,0.5)' }
-              }
+              className={`w-full ${resolvedWidth} rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)] relative overflow-hidden u-sheet-h flex flex-col bg-[var(--surface)]`}
+              style={{ border: '1px solid var(--border)', boxShadow: 'var(--shadow-modal)' }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
-                <div className={`w-10 h-1 rounded-full ${surface === 'opaque' ? 'bg-[var(--border)]' : 'bg-white/20'}`} />
+                <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
               </div>
               {/* hideTitle: a barra de título vazia (só com o X) ocupava uma
                   faixa branca inteira acima da foto do produto (varredura
@@ -415,9 +403,7 @@ export const Modal: React.FC<{
               <div
                 className={hideTitle
                   ? 'absolute left-3 top-6 z-20'
-                  : `flex items-center justify-between px-5 py-3 flex-shrink-0 ${
-                      surface === 'opaque' ? 'border-b border-[var(--border)]' : 'border-b border-white/10'
-                    }`}
+                  : 'flex items-center justify-between px-5 py-3 flex-shrink-0 border-b border-[var(--border)]'}
               >
                 {/* hideTitle: some sheets (ProductModal) já mostram o nome no
                     próprio conteúdo (<h2>) e não querem repeti-lo na barra —
@@ -425,7 +411,7 @@ export const Modal: React.FC<{
                     pra ele), só fica visualmente oculto via sr-only. */}
                 <h3
                   id={titleId}
-                  className={`text-[15px] font-semibold ${hideTitle ? 'sr-only' : ''} ${surface === 'opaque' ? 'text-[var(--text)]' : 'text-white'}`}
+                  className={`text-[15px] font-semibold text-[var(--text)] ${hideTitle ? 'sr-only' : ''}`}
                 >
                   {title}
                 </h3>
@@ -434,11 +420,7 @@ export const Modal: React.FC<{
                   aria-label="Fechar"
                   className={hideTitle
                     ? 'w-9 h-9 rounded-full flex items-center justify-center bg-black/40 text-white backdrop-blur-md u-motion u-press'
-                    : `p-1 rounded-[var(--r-sm)] u-motion ${
-                        surface === 'opaque'
-                          ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-                          : 'text-white/60 hover:text-white hover:bg-white/10'
-                      }`}
+                    : 'p-1 rounded-[var(--r-sm)] u-motion text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'}
                 >
                   <X size={hideTitle ? 18 : 16} />
                 </button>
