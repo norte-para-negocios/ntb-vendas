@@ -2,6 +2,7 @@
 import { normalizarNcm } from '@/lib/fiscal/ncm';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
+import { publicarMesas, publicarKds } from '@/lib/dadosAoVivo';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence, MotionConfig, useDragControls, useAnimate, useReducedMotion } from 'motion/react';
@@ -1546,7 +1547,10 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
 
   const loadOrders = async (notify = false) => {
       if(!storeId) return;
-      const data = await fetchKitchenOrders(storeId, destination);
+      let falhou = false;
+      const data = await fetchKitchenOrders(storeId, destination, () => { falhou = true; });
+      // O sino reaproveita o que esta tela acabou de buscar (evita uma 2ª consulta igual).
+      if (!falhou) publicarKds(storeId, destination, data);
       if (notify) {
           notifyNewPendingItems(data);
       } else {
@@ -3503,6 +3507,7 @@ NOTIFY pgrst, 'reload schema';`;
             buildPendingOrdersForStore(storeId),
         ]);
         setTables(t);
+        publicarMesas(storeId, t);
         // Mescla pedidos ainda só na fila offline (nunca sincronizados) —
         // sem isso, remontar este componente (ex. trocar de aba e voltar)
         // faz a comanda "esquecer" um pedido lançado offline até
@@ -7416,6 +7421,7 @@ const CaixaViewMeu: React.FC<{
             buildPendingOrdersForStore(storeId),
         ]);
         setTables(t);
+        publicarMesas(storeId, t);
         // Mesmo achado/fix de TablesView.loadData — sem isso, a lista
         // "Mesas ocupadas" do Caixa também "esquece" um pedido lançado
         // offline sempre que este componente remonta.

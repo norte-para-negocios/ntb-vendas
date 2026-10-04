@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { fetchTables, fetchKitchenOrders, fetchPrintSectors, fetchRecentPrintJobs, fetchFiscalNotas, fetchExceptionsReport, fetchLowStockAlerts } from '@/lib/api';
 import { toast } from '@/components/Toast';
 import { playNewOrderAlert, playReadyAlert, playItemLateAlert, playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
+import { aoPublicar, mesasRecentes, kdsRecente } from '@/lib/dadosAoVivo';
 import { resolveStoreModules } from '@/lib/storeModules';
 import { listarLocais, type SetorLike } from '@/lib/locaisPreparo';
 import { contarPorLocal, itemPrecisaAcao, locaisAcessiveis, type ItemKds } from '@/lib/producaoNav';
@@ -12,7 +13,12 @@ import {
   detectarSangrias, detectarEstoque, reconciliar, filtrarEventos, contarNaoLidos, marcarLidos as marcarLidosLib, somDoEvento,
   serializarEventos, restaurarEventos, type Detectado, type EventoNotificacao, type ItemKdsCompleto, type Som, type TipoNotificacao,
 } from '@/lib/notificacoes';
-import type { Store, StoreUser } from '@/types';
+import type { Store, StoreUser, Table } from '@/types';
+
+// Dado publicado por uma tela aberta vale por este tempo; passado disso o sino busca sozinho.
+const IDADE_MAX_MS = 12000;
+// Rede de segurança (o Realtime nem sempre entrega entre aparelhos): 45 s, só com a aba visível.
+const RAPIDO_MS = 45000;
 
 interface Opcoes {
   store: Store;
@@ -65,9 +71,14 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
 
   const aplicar = useCallback((grupo: string, detectados: Detectado[], vistos: TipoNotificacao[]) => {
     const { lista, novos } = reconciliar(eventosRef.current, detectados, vistos, Date.now());
+    // Só mexe no estado/armazenamento quando algo mudou (a tela repete a leitura a cada poucos segundos).
+    const antes = serializarEventos(eventosRef.current);
+    const depois = serializarEventos(lista);
     eventosRef.current = lista;
-    setEventos(lista);
-    try { localStorage.setItem(chave, serializarEventos(lista)); } catch { /* sem persistência */ }
+    if (antes !== depois) {
+      setEventos(lista);
+      try { localStorage.setItem(chave, depois); } catch { /* sem persistência */ }
+    }
     const primeira = !rodou.current[grupo];
     rodou.current[grupo] = true;
     if (primeira) return; // abrir o app não toca som do que já estava lá
@@ -80,16 +91,30 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
 
   const carregarSetores = useCallback(() => { fetchPrintSectors(storeId).then((l) => setSetores(l.map((s) => ({ id: s.id, name: s.name, base: s.base })))).catch(() => {}); }, [storeId]);
 
-  const carregarRapido = useCallback(async () => {
+  // Última leitura feita pelo próprio sino (por fonte), para não repetir a consulta quando só uma tela publicou dado de outra fonte.
+  const proprio = useRef<Record<string, { em: number; dados: any }>>({});
+  const lerFonte = useCallback(async <T,>(nome: string, publicado: T | null, buscar: () => Promise<T>, idadeMax: number): Promise<T> => {
+    if (publicado) return publicado;
+    const p = proprio.current[nome];
+    if (p && Date.now() - p.em <= idadeMax) return p.dados as T;
+    const dados = await buscar();
+    proprio.current[nome] = { em: Date.now(), dados };
+    return dados;
+  }, []);
+
+  const carregarRapido = useCallback(async (idadeProprio = IDADE_MAX_MS) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) { setPausado(true); return; }
     setPausado(false);
     const detectados: Detectado[] = [];
     const vistos: TipoNotificacao[] = [];
     try {
-      const mesas = detectarMesas(await fetchTables(storeId));
+      // Tela de Mesas/Caixa aberta já busca a cada 5 s: reaproveita (até 12 s) em vez de repetir a consulta.
+      const mesasLista = await lerFonte<Table[]>('mesas', mesasRecentes<Table>(storeId, IDADE_MAX_MS), () => fetchTables(storeId), idadeProprio);
+      const mesas = detectarMesas(mesasLista);
       detectados.push(...mesas);
       vistos.push('chamada_garcom', 'pedido_conta');
-      setCounts((c) => ({ ...c, tables: new Set(mesas.map((m) => m.id.split(':')[1])).size }));
+      const nMesas = new Set(mesas.map((m) => m.id.split(':')[1])).size;
+      setCounts((c) => (c.tables === nMesas ? c : { ...c, tables: nMesas }));
     } catch { /* mantém o que já tinha */ }
 
     const { aplicaveis: ap, setores: st, modulos: m } = ctxRef.current;
@@ -98,8 +123,8 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
       let falhou = false;
       const onError = () => { falhou = true; };
       const [k, b] = await Promise.all([
-        m.kitchen_kds ? fetchKitchenOrders(storeId, 'kitchen', onError) : Promise.resolve([]),
-        m.bar_kds ? fetchKitchenOrders(storeId, 'bar', onError) : Promise.resolve([]),
+        m.kitchen_kds ? lerFonte<any[]>('kds:kitchen', kdsRecente<any>(storeId, 'kitchen', IDADE_MAX_MS), () => fetchKitchenOrders(storeId, 'kitchen', onError), idadeProprio) : Promise.resolve([]),
+        m.bar_kds ? lerFonte<any[]>('kds:bar', kdsRecente<any>(storeId, 'bar', IDADE_MAX_MS), () => fetchKitchenOrders(storeId, 'bar', onError), idadeProprio) : Promise.resolve([]),
       ]);
       if (!falhou) {
         const nomes = Object.fromEntries(st.map((s) => [s.id, s.name]));
@@ -108,12 +133,15 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
           detectados.push(...detectarItens(k as ItemKdsCompleto[], 'kitchen', nomes, agora), ...detectarItens(b as ItemKdsCompleto[], 'bar', nomes, agora));
           vistos.push('pedido_novo', 'item_pronto', 'item_atrasado');
         }
-        setCounts((c) => ({ ...c, kitchen: (k as ItemKds[]).filter(itemPrecisaAcao).length, bar: (b as ItemKds[]).filter(itemPrecisaAcao).length }));
-        setPorLocal(contarPorLocal({ kitchen: k as ItemKds[], bar: b as ItemKds[] }, new Set(st.map((s) => s.id))));
+        const nK = (k as ItemKds[]).filter(itemPrecisaAcao).length;
+        const nB = (b as ItemKds[]).filter(itemPrecisaAcao).length;
+        setCounts((c) => (c.kitchen === nK && c.bar === nB ? c : { ...c, kitchen: nK, bar: nB }));
+        const novoPorLocal = contarPorLocal({ kitchen: k as ItemKds[], bar: b as ItemKds[] }, new Set(st.map((s) => s.id)));
+        setPorLocal((p) => (JSON.stringify(p) === JSON.stringify(novoPorLocal) ? p : novoPorLocal));
       }
     }
     aplicar('rapido', detectados, vistos);
-  }, [storeId, aplicar]);
+  }, [storeId, aplicar, lerFonte]);
 
   // Fontes lentas (só gerência/caixa): impressão, notas fiscais, sangria; estoque a cada 10 min.
   const ultimoEstoque = useRef(0);
@@ -142,18 +170,43 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
     carregarSetores();
     carregarRapido();
     carregarLento();
+
+    // Uma leitura por vez: pings em rajada, tela publicando dado e o relógio viram no máximo uma rodada a cada ~1,5 s.
+    let emAndamento = false;
+    let pendente = false;
+    let timer: number | undefined;
+    let porPublicacao = false;
+    const rodar = async () => {
+      if (document.visibilityState !== 'visible') return; // aba oculta: não gasta rede; ao voltar, atualiza
+      if (emAndamento) { pendente = true; return; }
+      emAndamento = true;
+      const idade = porPublicacao ? 40000 : IDADE_MAX_MS; porPublicacao = false;
+      try { await carregarRapido(idade); } finally {
+        emAndamento = false;
+        if (pendente) { pendente = false; agendar(); }
+      }
+    };
+    const agendar = () => { if (timer !== undefined) return; timer = window.setTimeout(() => { timer = undefined; void rodar(); }, 1500); };
+
     const onSetores = () => carregarSetores();
     window.addEventListener('ntb-setores-changed', onSetores);
+    const aoVoltar = () => { if (document.visibilityState === 'visible') { void rodar(); carregarSetores(); } };
+    document.addEventListener('visibilitychange', aoVoltar);
     const canal = supabase.channel(`notifications_${storeId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, carregarRapido)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, carregarRapido)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, agendar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, agendar)
       .subscribe();
-    const rapido = window.setInterval(() => { if (document.visibilityState === 'visible') carregarRapido(); }, 30000);
-    const lento = window.setInterval(() => { if (document.visibilityState === 'visible') carregarLento(); }, 4 * 60000);
-    const setoresTimer = window.setInterval(carregarSetores, 60000);
+    // Tela de Mesas/Caixa/Cozinha/Bar publicou dado novo: detecta já (sem nova consulta, usa o que ela buscou).
+    const pararPublicacao = aoPublicar(() => { porPublicacao = true; agendar(); });
+    const rapido = window.setInterval(() => { void rodar(); }, RAPIDO_MS);
+    const lento = window.setInterval(() => { if (document.visibilityState === 'visible') carregarLento(); }, 5 * 60000);
+    const setoresTimer = window.setInterval(() => { if (document.visibilityState === 'visible') carregarSetores(); }, 5 * 60000);
     return () => {
       supabase.removeChannel(canal);
+      pararPublicacao();
       window.removeEventListener('ntb-setores-changed', onSetores);
+      document.removeEventListener('visibilitychange', aoVoltar);
+      if (timer !== undefined) window.clearTimeout(timer);
       window.clearInterval(rapido); window.clearInterval(lento); window.clearInterval(setoresTimer);
     };
   }, [storeId, carregarRapido, carregarLento, carregarSetores]);
