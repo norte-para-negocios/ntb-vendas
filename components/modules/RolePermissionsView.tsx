@@ -18,8 +18,8 @@ const RolePermissionsView: React.FC<{
     loggedUser: { role: string };
     onStoreUpdate?: (store: Store) => void;
 }> = ({ store, loggedUser, onStoreUpdate }) => {
-    // Só dono e conta universal editam; o gerente vê, desabilitado.
-    const podeEditar = loggedUser.role === 'owner' || loggedUser.role === 'universal';
+    // Dono, conta universal e gerente configuram tudo (regra do dono, 04/10).
+    const podeEditar = loggedUser.role === 'owner' || loggedUser.role === 'universal' || loggedUser.role === 'manager';
     const [matriz, setMatriz] = useState(() => matrizEfetiva(store.config?.role_permissions));
     const [salvando, setSalvando] = useState(false);
     const configRef = useRef(store.config);
@@ -77,7 +77,7 @@ const RolePermissionsView: React.FC<{
                 Dono e conta universal sempre podem tudo.
             </p>
             {!podeEditar && (
-                <p className="text-[13px] text-[var(--text-muted)]" role="status">Só o dono altera estas permissões. Você pode consultar.</p>
+                <p className="text-[13px] text-[var(--text-muted)]" role="status">Só o gerente altera estas permissões. Você pode consultar.</p>
             )}
 
             <div className="rounded-[var(--r-lg)] bg-[var(--surface)] overflow-hidden" style={{ boxShadow: 'var(--shadow-sm)' }}>
