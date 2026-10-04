@@ -2,6 +2,7 @@
 // Responde como as rotas reais de ntb-estoque/app/api/integracao/*:
 //   POST /api/integracao/ordem-producao   (Bearer <chave>; resposta { lojaId, resultados:[{codigo, ok, nCodOP, op, baixa, erro}] })
 //   GET  /api/integracao/locais-estoque   (Bearer; 200 { locais } ou 401)
+//   POST /api/integracao/nota-fiscal      (ImportarNFCe; cenário pelo prefixo da chNFe, ver abaixo)
 //   GET  /api/integracao/status           (se MOCK_STATUS=off responde 404, como o Estoque antigo)
 // Controle por código do item (POST /__mock/regra {codigo, tipo, vezes?}) — sem regra o item vai ok:
 //   ok | sem_estrutura | pulada (sem cadastro, nada gravado) | op_erro (OP criada, conclusão falhou)
@@ -66,6 +67,19 @@ http.createServer(async (req, res) => {
       }
     });
     return enviar(res, 200, { lojaId: 99, resultados });
+  }
+  if (url.pathname === '/api/integracao/nota-fiscal' && req.method === 'POST') {
+    // Registro da NFC-e no Omie (ImportarNFCe). Como a rota real, responde 200 até quando falha. Cenário pelo prefixo da chNFe:
+    // ERR -> ok:false definitivo; FILA -> ok:false naFila; SKIP -> skipped; H500 -> HTTP 500; demais -> ok.
+    const body = await ler(req);
+    if (!okChave) return enviar(res, 401, { error: 'Chave de integração inválida' });
+    if (!body?.chNFe || !body.itens?.length) return enviar(res, 400, { error: 'Payload inválido: chNFe e itens são obrigatórios' });
+    log.push({ em: new Date().toISOString(), rota: 'nota-fiscal', chNFe: body.chNFe });
+    if (body.chNFe.startsWith('H500')) return enviar(res, 500, { error: 'Erro interno simulado' });
+    if (body.chNFe.startsWith('ERR')) return enviar(res, 200, { ok: false, naFila: false, reason: 'NCM inválido para o produto 90001' });
+    if (body.chNFe.startsWith('FILA')) return enviar(res, 200, { ok: false, naFila: true, reason: 'consumo redundante do Omie' });
+    if (body.chNFe.startsWith('SKIP')) return enviar(res, 200, { skipped: true, reason: 'Loja sem Omie configurada' });
+    return enviar(res, 200, { ok: true, resultado: { status: 'ok' } });
   }
   res.writeHead(404); res.end('Not found');
 }).listen(PORTA, () => console.log(`mock-estoque na porta ${PORTA} (chave: ${CHAVE})`));

@@ -12981,6 +12981,12 @@ const FiscalNotasView: React.FC<{ storeId: string; onConfigurarEmissor?: () => v
                                             ) : nota.motivo_erro && (
                                                 <p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs truncate" title={nota.motivo_erro}>{nota.motivo_erro}</p>
                                             )}
+                                            {nota.modelo === '65' && nota.omie_status === 'erro' && (
+                                                <p className="text-xs text-[var(--err)] mt-1 max-w-xs line-clamp-3" title={nota.omie_erro || undefined}>Omie não registrou{nota.omie_erro ? `: ${nota.omie_erro}` : ' a nota'}</p>
+                                            )}
+                                            {nota.modelo === '65' && nota.omie_status === 'na_fila' && (
+                                                <p className="text-xs text-[var(--warn)] mt-1 max-w-xs line-clamp-2" title={nota.omie_erro || undefined}>Omie: reenvio automático</p>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">
                                             {nota.chave_acesso ? (

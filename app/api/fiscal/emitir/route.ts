@@ -18,7 +18,9 @@ import {
 import { transmitirNota, resolverEndpointsNfceConsulta, ehSefazIndisponivel } from '@/lib/fiscal/soap';
 import { montarNfeProc } from '@/lib/fiscal/pdf';
 import { gerarPdfContingencia } from '@/lib/fiscal/pdfContingencia';
-import { montarPayloadIncluirNfce, incluirNfceDireto } from '@/lib/omie/nota-fiscal';
+import { montarPayloadIncluirNfce } from '@/lib/omie/nota-fiscal';
+import { interpretarErroEnvioNfce } from '@/lib/omieEnvio';
+import { enviarNfceAutorizadaAoOmie, registrarEnvioOmie } from '@/lib/omieEnvioServidor';
 import { salvarNotaAutorizada } from '@/lib/fiscal/salvarNotaAutorizada';
 
 // O pipeline completo (download+parse de certificado, XML, assinatura,
@@ -1005,7 +1007,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // status de 'autorizada'. Extraída pra lib/fiscal/salvarNotaAutorizada.ts
   // pra ser compartilhada com a retransmissão em background de notas que
   // nasceram em contingência.
-  const { motivoPosAutorizacao } = await salvarNotaAutorizada({
+  const { motivoPosAutorizacao, notaId: notaIdSalva } = await salvarNotaAutorizada({
     storeId,
     modelo,
     chave,
@@ -1022,8 +1024,11 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // Envio pra Omie (2026-09-05) — só NFC-e (modelo 65) por enquanto,
   // ver Global Constraints do plano/spec pro porquê do modelo 55 ficar
   // de fora. Fire-and-forget: falha aqui nunca muda o status da nota
-  // já autorizada, só loga (mesmo princípio do resto desta rota a
-  // partir do cStat=100).
+  // já autorizada (mesmo princípio do resto desta rota a partir do
+  // cStat=100). Mas o RESULTADO é gravado na própria nota (omie_status/
+  // omie_erro, migration 157) e aparece em Notas fiscais: antes o fetch
+  // não olhava a resposta (a rota do Estoque responde 200 até quando
+  // falha) e o erro só ia pro log.
   if (modelo === '65') {
     after(async () => {
       try {
@@ -1052,35 +1057,11 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
           valorTotal: valorTotalComTaxa,
         });
 
-        // Caminho A: loja com ntb-estoque configurado e ativo.
-        const { data: ntbEstoqueSecret } = await admin
-          .from('store_ntb_estoque_secrets')
-          .select('ntb_estoque_url, ntb_estoque_api_key, ativo')
-          .eq('store_id', storeId)
-          .maybeSingle();
-
-        if (ntbEstoqueSecret?.ativo) {
-          await fetch(`${ntbEstoqueSecret.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/nota-fiscal`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ntbEstoqueSecret.ntb_estoque_api_key}` },
-            body: JSON.stringify(payload),
-          });
-          return;
-        }
-
-        // Caminho B: loja só com ntb-vendas, chave Omie direta.
-        const { data: omieSecret } = await admin
-          .from('store_omie_secrets')
-          .select('omie_app_key, omie_app_secret')
-          .eq('store_id', storeId)
-          .maybeSingle();
-
-        if (omieSecret) {
-          await incluirNfceDireto({ appKey: omieSecret.omie_app_key, appSecret: omieSecret.omie_app_secret }, payload);
-        }
-        // Nem A nem B configurado: no-op silencioso, loja não quer Omie.
+        await enviarNfceAutorizadaAoOmie(admin, storeId, notaIdSalva, payload);
       } catch (e) {
+        // Só chega aqui se montar o payload falhar: o envio em si grava o próprio resultado.
         console.error('Envio de NFC-e pra Omie falhou (nota já autorizada, sem impacto no status):', e);
+        await registrarEnvioOmie(admin, notaIdSalva, interpretarErroEnvioNfce(e)).catch(() => {});
       }
     });
   }
@@ -1092,3 +1073,4 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     ...(motivoPosAutorizacao ? { pdfWarning: motivoPosAutorizacao } : {}),
   });
 }
+

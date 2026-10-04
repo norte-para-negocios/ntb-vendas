@@ -455,6 +455,10 @@ export interface FiscalNota {
   cancelada_em?: string | null;
   cancelamento_protocolo?: string | null;
   cancelamento_justificativa?: string | null;
+  // Registro da NFC-e no Omie (migration 157): ok | na_fila (o Estoque reenvia) | ignorada | erro. null = loja sem Omie.
+  omie_status?: 'ok' | 'na_fila' | 'ignorada' | 'erro' | null;
+  omie_erro?: string | null;
+  omie_em?: string | null;
   created_at: string;
   updated_at: string;
 }
