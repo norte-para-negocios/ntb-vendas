@@ -1,4 +1,5 @@
 'use client';
+import { abertoDesde } from '@/lib/turnoRotulo';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
 import { Order, TableSession, OrderRating, OperatorCheckin, Table, TableStatus, OrderStatus } from '@/types';
@@ -541,8 +542,8 @@ export const StoreDashboardView: React.FC<{
                                             <li key={s.id} className="text-[15px] text-[var(--text)] flex items-baseline gap-2">
                                                 <span className="h-2 w-2 rounded-full bg-[var(--ok-fill)] shrink-0 translate-y-[-1px]" />
                                                 <span><span className="font-medium">Aberto</span>
-                                                {s.operator_name ? ` — ${s.operator_name}` : ''} desde{' '}
-                                                {new Date(s.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {` — ${s.operator_name || 'Equipe'}`} desde{' '}
+                                                {abertoDesde(s.opened_at)}
                                                 <span className="text-[var(--text-muted)]">{' · '}fundo R$ {formatBRL(s.opening_float)}</span></span>
                                             </li>
                                         ))}
