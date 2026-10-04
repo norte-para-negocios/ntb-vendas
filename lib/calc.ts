@@ -1,3 +1,4 @@
+import { scheduledPrice, type PriceSchedule } from './priceSchedule';
 // Fonte única da fórmula de taxa de serviço e split de conta, antes
 // duplicada em 7+ lugares entre StoreModule.tsx e ClientModule.tsx.
 // O percentual é configurável por loja (store.config.service_fee_rate);
@@ -122,16 +123,18 @@ export function getPaymentMethodsForRecord<T extends { method: string; amount: n
 // coalesce em create_order_secure já garantem isso no servidor, mas aqui
 // evitamos exibir "promoção" que na verdade encareceria o item caso um dado
 // inconsistente escape. Fonte única: carrinho, modal e total leem daqui.
-export function getEffectivePrice(product: { price: number; promo_price?: number | null }): number {
+export function getEffectivePrice(product: { price: number; promo_price?: number | null; price_schedules?: PriceSchedule[] | null }, now: Date = new Date()): number {
   const promo = product.promo_price;
-  return promo != null && promo < product.price ? promo : product.price;
+  const base = promo != null && promo < product.price ? promo : product.price;
+  // Preço por horário (migration 153): vale o menor entre o preço-base/promoção e as regras do momento.
+  return product.price_schedules && product.price_schedules.length > 0 ? scheduledPrice(base, product.price_schedules, now) : base;
 }
 
 // Preço unitário de uma linha do carrinho com adicionais (base + soma dos
 // price_delta escolhidos). Centraliza aqui em vez de repetir a soma no
 // ProductModal, no CartModal e no cartTotal do ClientModule. Usa
 // getEffectivePrice pra que a promoção entre automaticamente em todo cálculo.
-export function calculateCartItemUnitPrice(item: { product: { price: number; promo_price?: number | null }; selectedOptions?: { price_delta: number }[] }): number {
+export function calculateCartItemUnitPrice(item: { product: { price: number; promo_price?: number | null; price_schedules?: PriceSchedule[] | null }; selectedOptions?: { price_delta: number }[] }): number {
   const addonsTotal = (item.selectedOptions || []).reduce((acc, o) => acc + o.price_delta, 0);
   return getEffectivePrice(item.product) + addonsTotal;
 }

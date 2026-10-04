@@ -262,6 +262,8 @@ export interface Product {
   available: boolean;
   // Esgotado (migration 151): aparece no cardápio marcado e não dá pra pedir; oculto = available=false.
   sold_out?: boolean;
+  // Regras de preço por horário aplicáveis (só no app, anexadas pelo fetchMenu; migration 153).
+  price_schedules?: import('@/lib/priceSchedule').PriceSchedule[];
   prep_time_minutes: number;
   order?: number;
   destination?: 'kitchen' | 'bar';

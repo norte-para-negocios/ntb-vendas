@@ -1,3 +1,4 @@
+import type { PriceSchedule } from '@/lib/priceSchedule';
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
 import { vendaTemCobranca } from '@/lib/calc';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
@@ -491,12 +492,13 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
     // Query de adicionais e de recomendações paralelizadas com
     // categorias/produtos (não dependem do resultado delas, só do storeId)
     // — antes rodava sequencialmente depois do Promise.all abaixo.
-    const [cats, catGroups, prods, groupsByProduct, recommendedByProduct] = await Promise.all([
+    const [cats, catGroups, prods, groupsByProduct, recommendedByProduct, priceSchedules] = await Promise.all([
       categoriesQuery,
       categoryGroupsQuery,
       productsQuery,
       fetchOptionGroupsByProduct(storeId, includeUnavailable),
       fetchProductRecommendationsByStore(storeId),
+      fetchPriceSchedules(storeId),
     ]);
 
     // Resolve os ids de recomendação contra a própria lista de produtos já
@@ -513,7 +515,12 @@ export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUn
     // compartilhada) — funciona ate com ciclo A->B->A, porque cada produto
     // referenciado dentro de outro e' o mesmo objeto vivo, nao uma copia.
     const resolveRecommended = (products: Product[]): Product[] => {
-      const resolved = products.map(p => ({ ...p, recommended_products: [] as Product[] }));
+      const resolved = products.map(p => ({
+        ...p,
+        recommended_products: [] as Product[],
+        // Regras de preço por horário que valem pro produto (dele ou da categoria dele).
+        price_schedules: priceSchedules.filter(s => s.active && (s.product_id === p.id || (s.category_id && s.category_id === p.category_id))),
+      }));
       const byId = new Map(resolved.map(p => [p.id, p]));
       resolved.forEach(p => {
         p.recommended_products = (recommendedByProduct.get(p.id) || []).map(id => byId.get(id)).filter(Boolean) as Product[];
@@ -965,6 +972,25 @@ export const fetchTables = async (storeId: string): Promise<Table[]> => {
 export const updateTablePosition = async (storeId: string, tableId: string, x: number | null, y: number | null): Promise<boolean> => {
   const { data, error } = await supabase.rpc('update_table_position_secure', { p_store_id: storeId, p_table_id: tableId, p_x: x, p_y: y });
   if (error) { console.error('updateTablePosition falhou:', error); return false; }
+  return data === true;
+};
+
+// Preço por horário (migration 153). Tolerante: banco sem a tabela (app novo, migration ainda não aplicada) = sem regras.
+export const fetchPriceSchedules = async (storeId: string): Promise<PriceSchedule[]> => {
+  try {
+    const { data, error } = await supabase.from('price_schedules').select('*').eq('store_id', storeId).order('created_at');
+    if (error) return [];
+    return (data as PriceSchedule[]) || [];
+  } catch { return []; }
+};
+export const savePriceSchedule = async (storeId: string, id: string | null, data: Record<string, unknown>): Promise<boolean> => {
+  const { data: r, error } = await supabase.rpc('save_price_schedule_secure', { p_store_id: storeId, p_id: id, p_data: data });
+  if (error) { console.error('savePriceSchedule falhou:', error); return false; }
+  return !!r;
+};
+export const deletePriceSchedule = async (storeId: string, id: string): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('delete_price_schedule_secure', { p_store_id: storeId, p_id: id });
+  if (error) { console.error('deletePriceSchedule falhou:', error); return false; }
   return data === true;
 };
 
