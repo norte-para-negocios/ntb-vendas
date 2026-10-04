@@ -1,7 +1,7 @@
 // rodar com: npx tsx scripts/testes/producaoNav.test.ts
 import assert from 'node:assert/strict';
 import { contarPorLocal, usaMenuProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens, itemPrecisaAcao } from '../../lib/producaoNav';
-import { listarLocais } from '../../lib/locaisPreparo';
+import { listarLocaisComTela } from '../../lib/locaisPreparo';
 
 const it = (status: string, sector_id: string | null = null, tipo = 'table') => ({ status, sector_id, order: { order_type: tipo } });
 
@@ -14,8 +14,8 @@ const conhecidos = new Set(['p1']);
 const c = contarPorLocal({ kitchen: [it('pending'), it('pending', 'p1'), it('pending', 'p1'), it('preparing', 'p1'), it('pending', 'apagado')], bar: [it('pending')] }, conhecidos);
 assert.deepEqual(c, { kitchen: 2, 'setor:p1': 2, bar: 1 }, 'setor apagado cai na Cozinha; preparando não conta');
 
-const semSetor = listarLocais([], { cozinha: true, bar: true });
-const comSetor = listarLocais([{ id: 'p1', name: 'Pizzaria', base: 'kitchen' }], { cozinha: true, bar: true });
+const semSetor = listarLocaisComTela([], { cozinha: true, bar: true });
+const comSetor = listarLocaisComTela([{ id: 'p1', name: 'Pizzaria', base: 'kitchen' }], { cozinha: true, bar: true });
 assert.equal(usaMenuProducao(semSetor), false, 'loja de hoje continua com Cozinha e Bar separados');
 assert.equal(usaMenuProducao(comSetor), true);
 

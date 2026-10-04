@@ -1,23 +1,21 @@
 'use client';
-// Cadastro único dos locais de preparo (Cozinha, Bar e setores como Pizzaria): nome, base, impressora,
-// baixa de estoque no Omie e categorias, tudo num cartão com checklist do que ainda falta.
+// Cadastro único dos locais de preparo (Cozinha, Bar e locais criados como Pizzaria), todos como cartões iguais:
+// categorias, impressora e baixa de estoque no Omie, com checklist do que ainda falta.
 import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, AlertTriangle, XCircle, Pencil, Trash2, Plus } from 'lucide-react';
-import { Badge, Button, Card, Input, SegmentedControl } from '@/components/ui';
+import { Badge, Button, Card, Input } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { LIST_ITEM_MOTION } from '@/lib/motion';
 import {
   fetchPrintSectors, createPrintSector, updatePrintSector, deletePrintSector, updateCategorySector,
-  fetchPrinterConfigs, updatePrinterConfig, fetchLocaisEstoque, salvarLocalEstoque, fetchMenu,
+  fetchPrinterConfigs, updatePrinterConfig, fetchLocaisEstoque, salvarLocalEstoque, fetchMenu, setCategoryDestination,
   type LocaisEstoqueStatus,
 } from '@/lib/api';
-import { resolveStoreModules } from '@/lib/storeModules';
-import { listarLocais, statusLocal, type BaseLocal, type EstadoItem, type LocalPreparo } from '@/lib/locaisPreparo';
+import { listarLocais, statusLocal, categoriasPorLocal, textoMoverCategoria, type BaseLocal, type EstadoItem, type LocalPreparo } from '@/lib/locaisPreparo';
 import type { Category, PrinterConfig, PrintSector, Product, Store } from '@/types';
 
-const BASES: { value: BaseLocal; label: string }[] = [{ value: 'kitchen', label: 'Cozinha' }, { value: 'bar', label: 'Bar' }];
 const nomeBase = (b: BaseLocal) => (b === 'bar' ? 'Bar' : 'Cozinha');
 
 const ICONE_ESTADO: Record<EstadoItem, React.ReactNode> = {
@@ -34,13 +32,10 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [estoque, setEstoque] = useState<LocaisEstoqueStatus | null>(null);
   const [novoNome, setNovoNome] = useState('');
-  const [novaBase, setNovaBase] = useState<BaseLocal>('kitchen');
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [editNome, setEditNome] = useState('');
-  const [editBase, setEditBase] = useState<BaseLocal>('kitchen');
-
-  const modulos = resolveStoreModules(store);
+  const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(async () => {
     const [sts, imps, menu, est] = await Promise.all([
@@ -60,7 +55,10 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
 
   if (carregando) return <p className="text-sm text-[var(--text-muted)] py-6 text-center">Carregando locais de preparo...</p>;
 
-  const locais = listarLocais(setores.map((s) => ({ id: s.id, name: s.name, base: s.base })), { cozinha: modulos.kitchen_kds, bar: modulos.bar_kds });
+  const setoresLike = setores.map((s) => ({ id: s.id, name: s.name, base: s.base }));
+  const locais = listarLocais(setoresLike);
+  const nomeDoLocal = (chave: string) => locais.find((x) => x.chave === chave)?.nome ?? 'outro local';
+  const porLocal = categoriasPorLocal(categorias, produtos, setoresLike);
   const estoqueIntegrado = !!estoque?.configurado;
   const omieComLocais = estoqueIntegrado && estoque!.locais.length > 0;
   const impressorasDeTicket = impressoras.filter((p) => p.destination !== 'receipt');
@@ -70,7 +68,7 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
     if (!nome) { toast.error('Digite o nome do local.'); return; }
     setCriando(true);
     try {
-      await createPrintSector(store.id, nome, novaBase);
+      await createPrintSector(store.id, nome, 'kitchen');
       setNovoNome('');
       toast.success(`Local "${nome}" criado. Veja abaixo o que falta configurar.`);
       await carregar();
@@ -82,7 +80,7 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
     const nome = editNome.trim();
     if (!nome || !l.setorId) return;
     try {
-      await updatePrintSector(l.setorId, { name: nome, base: editBase });
+      await updatePrintSector(l.setorId, { name: nome });
       setEditando(null);
       toast.success('Local atualizado.');
       await carregar();
@@ -122,12 +120,37 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
     toast.success(local ? `${l.nome} baixa no local ${local.nome}.` : `${l.nome} sem local de estoque escolhido.`);
   };
 
+  // Uma categoria pertence a UM local. Local criado: categories.sector_id. Cozinha/Bar: destino de todos os produtos da
+  // categoria (RPC 155) e sector_id = null.
   const alternarCategoria = async (l: LocalPreparo, cat: Category) => {
-    if (!l.setorId) return;
-    const novo = cat.sector_id === l.setorId ? null : l.setorId;
-    setCategorias((prev) => prev.map((c) => (c.id === cat.id ? { ...c, sector_id: novo } : c)));
-    try { await updateCategorySector(cat.id, novo); }
-    catch (e: any) { toast.error('Erro ao mudar a categoria: ' + (e?.message || '')); await carregar(); }
+    if (ocupado) return;
+    const atrib = porLocal.get(l.chave)?.find((x) => x.cat.id === cat.id)?.atrib;
+    const ativa = !!atrib;
+    if (l.setorId) {
+      const novo = ativa ? null : l.setorId;
+      setOcupado(true);
+      setCategorias((prev) => prev.map((c) => (c.id === cat.id ? { ...c, sector_id: novo } : c)));
+      try { await updateCategorySector(cat.id, novo); }
+      catch (e: any) { toast.error('Erro ao mudar a categoria: ' + (e?.message || '')); await carregar(); }
+      finally { setOcupado(false); }
+      return;
+    }
+    const dest = l.base;
+    const info = atrib ?? [...porLocal.values()].flat().find((x) => x.cat.id === cat.id)!.atrib;
+    if (ativa && !info.misto) {
+      toast.info(`${cat.name} já vai para ${l.nome}. Para mudar, marque-a no outro local.`);
+      return;
+    }
+    const sai = !ativa && info.chave !== l.chave ? ` Ela sai de ${nomeDoLocal(info.chave)}.` : '';
+    if (!(await confirm({ message: `${textoMoverCategoria(cat.name, l.nome, info.total)}${sai}` }))) return;
+    setOcupado(true);
+    try {
+      const n = await setCategoryDestination(store.id, cat.id, dest);
+      setCategorias((prev) => prev.map((c) => (c.id === cat.id ? { ...c, sector_id: null } : c)));
+      setProdutos((prev) => prev.map((p) => (p.category_id === cat.id ? { ...p, destination: dest } : p)));
+      toast.success(`${cat.name} agora vai para ${l.nome} (${n} produto(s) alterado(s)).`);
+    } catch (e: any) { toast.error('Erro ao mudar a categoria: ' + (e?.message || '')); await carregar(); }
+    finally { setOcupado(false); }
   };
 
   return (
@@ -135,7 +158,7 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
       <div>
         <h3 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">Locais de preparo</h3>
         <p className="text-[13px] leading-snug text-[var(--text-muted)] mt-0.5">
-          Pra onde cada pedido vai: tela de acompanhamento, impressora e baixa de estoque. Cozinha e Bar já existem; crie outros (ex.: Pizzaria) e complete a lista de cada um.
+          Pra onde cada pedido vai: categorias, impressora e baixa de estoque de cada local. Cada local é separado dos outros; crie quantos precisar (ex.: Pizzaria).
         </p>
       </div>
 
@@ -147,8 +170,8 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
 
       <AnimatePresence initial={false}>
         {locais.map((l) => {
-          const categoriasDoLocal = l.setorId ? categorias.filter((c) => c.sector_id === l.setorId) : [];
-          const produtosDoLocal = l.setorId ? produtos.filter((p) => p.sector_id === l.setorId && !categoriasDoLocal.some((c) => c.id === p.category_id)) : [];
+          const categoriasDoLocal = porLocal.get(l.chave) ?? [];
+          const produtosDoLocal = l.setorId ? produtos.filter((p) => p.sector_id === l.setorId && !categoriasDoLocal.some((c) => c.cat.id === p.category_id)) : [];
           const status = statusLocal({
             local: l,
             impressoras: impressoras.map((p) => ({ sector_id: p.sector_id, is_active: p.is_active, destination: p.destination })),
@@ -165,7 +188,6 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
                   {emEdicao ? (
                     <div className="flex flex-wrap items-end gap-2 flex-1">
                       <div className="flex-1 min-w-[160px]"><Input label="Nome do local" value={editNome} maxLength={30} onChange={(e) => setEditNome(e.target.value)} /></div>
-                      <SegmentedControl options={BASES} value={editBase} onChange={(v) => setEditBase(v as BaseLocal)} />
                       <Button size="sm" onClick={() => salvarEdicao(l)}>Salvar</Button>
                       <Button size="sm" variant="ghost" onClick={() => setEditando(null)}>Cancelar</Button>
                     </div>
@@ -173,12 +195,11 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
                     <>
                       <div className="flex items-center gap-2 min-w-0">
                         <p className="text-[16px] font-semibold text-[var(--text)] truncate">{l.nome}</p>
-                        <Badge>{l.setorId ? `Base: ${nomeBase(l.base)}` : 'Já existe'}</Badge>
                         {status.completo && <Badge variant="success" dot>Completo</Badge>}
                       </div>
                       {l.setorId && (
                         <div className="flex items-center gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => { setEditando(l.chave); setEditNome(l.nome); setEditBase(l.base); }}><Pencil size={14} /> Renomear</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setEditando(l.chave); setEditNome(l.nome); }}><Pencil size={14} /> Renomear</Button>
                           <Button size="sm" variant="ghost" onClick={() => excluir(l)}><Trash2 size={14} /> Excluir</Button>
                         </div>
                       )}
@@ -193,26 +214,39 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
                       <div className="min-w-0 flex-1 u-motion">
                         <p className="text-[14px] text-[var(--text)]">{item.texto}</p>
 
-                        {item.id === 'categorias' && l.setorId && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {categorias.length === 0 && <span className="text-xs text-[var(--text-muted)]">A loja ainda não tem categorias.</span>}
-                            {categorias.map((c) => {
-                              const ativa = c.sector_id === l.setorId;
-                              const outroLocal = !!c.sector_id && !ativa;
-                              return (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => alternarCategoria(l, c)}
-                                  aria-pressed={ativa}
-                                  title={outroLocal ? `Hoje em: ${setores.find((s) => s.id === c.sector_id)?.name ?? 'outro local'}` : undefined}
-                                  className={`min-h-9 max-sm:min-h-11 px-3 rounded-full text-[13px] font-medium u-motion u-press-sm ${ativa ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--border)]'}`}
-                                >
-                                  {c.name}
-                                </button>
-                              );
-                            })}
-                          </div>
+                        {item.id === 'categorias' && (
+                          <>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {categorias.length === 0 && <span className="text-xs text-[var(--text-muted)]">A loja ainda não tem categorias.</span>}
+                              {categorias.map((c) => {
+                                const mine = categoriasDoLocal.find((x) => x.cat.id === c.id);
+                                const ativa = !!mine;
+                                const hoje = ativa ? null : nomeDoLocal([...porLocal.values()].flat().find((x) => x.cat.id === c.id)?.atrib.chave ?? 'kitchen');
+                                const misto = !!mine?.atrib.misto;
+                                const titulo = misto
+                                  ? `Mista: ${mine!.atrib.cozinha} produto(s) vão para a Cozinha e ${mine!.atrib.bar} para o Bar. Tocar aqui manda todos para ${l.nome}.`
+                                  : hoje ? `Hoje em: ${hoje}` : undefined;
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => alternarCategoria(l, c)}
+                                    disabled={ocupado}
+                                    aria-pressed={ativa}
+                                    title={titulo}
+                                    className={`min-h-9 max-sm:min-h-11 px-3 rounded-full text-[13px] font-medium u-motion u-press-sm disabled:opacity-60 ${ativa ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--border)]'}`}
+                                  >
+                                    {c.name}{misto && <span className="ml-1.5 text-[11px] font-semibold uppercase tracking-wide opacity-80">misto</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {categoriasDoLocal.some((x) => x.atrib.misto) && (
+                              <p className="text-xs text-[var(--text-muted)] mt-2">
+                                Categoria com a marca “misto” tem produtos indo para a Cozinha e outros para o Bar. Tocar nela aqui manda todos os produtos para {l.nome}.
+                              </p>
+                            )}
+                          </>
                         )}
 
                         {item.id === 'impressora' && (
@@ -257,10 +291,6 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[180px]">
             <Input label="Nome" placeholder="Ex: Pizzaria" value={novoNome} maxLength={30} onChange={(e) => setNovoNome(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') criar(); }} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[13px] font-medium text-[var(--text-muted)]">Funciona como</span>
-            <SegmentedControl options={BASES} value={novaBase} onChange={(v) => setNovaBase(v as BaseLocal)} />
           </div>
           <Button onClick={criar} isLoading={criando}><Plus size={16} /> Criar local</Button>
         </div>

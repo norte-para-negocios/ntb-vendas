@@ -2408,7 +2408,13 @@ completo abrir→ver no dashboard→fechar confirmado na tela de Caixa real.
   `lib/useStoreNotifications.ts` (contexto em `NotificacoesContext`), sino em `NotificationBell`. Preferências em
   `stores.config.notifications` (Configurações → Notificações); histórico/lido no `localStorage` por loja+usuário. Sem aviso de
   "cliente sentou". Contadores de Cozinha/Bar/Produção contam sempre; avisos de KDS só em loja com KDS (não `direct_print`).
-- Sem migration nova.
+- **Tela Locais de preparo (revisão 04/10, migration 155)**: Cozinha, Bar e locais criados são cartões IGUAIS, sempre listados
+  (`listarLocais`; módulos KDS só controlam a tela, via `listarLocaisComTela`). Sem "Base:"/"Funciona como" (local novo grava
+  base='kitchen'). Cada categoria pertence a UM local: `sector_id` de local criado, senão o destino da maioria dos produtos sem
+  setor próprio (null = Cozinha); mista aparece no da maioria com a marca "misto" (`categoriasPorLocal`). Marcar em Cozinha/Bar =
+  RPC `set_category_destination_secure` (`setCategoryDestination`: destination de TODOS os produtos + sector_id null; sem a 155 dá
+  erro claro).
+- Sem migration nova (além da 155 acima).
 
 ## Planta de mesas (04/10/2026, migration 154)
 
