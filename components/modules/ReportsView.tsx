@@ -15,9 +15,11 @@ import type { Order } from '@/types';
 import { buildFechamentoWorkbook, fechamentoFileName } from '@/lib/reports/fechamentoXlsx';
 import { hojeISO, limitesDoDia, turnosDoPeriodo } from '@/lib/reports/dia';
 import { carregarFechamento } from '@/lib/reports/carregarFechamento';
+import { baixarWorkbook } from '@/lib/reports/baixar';
 
 export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSlug: string; userName: string }> = ({ storeId, storeName, storeSlug, userName }) => {
   const [dia, setDia] = useState(hojeISO());
+  const [ate, setAte] = useState('');
   const [gerando, setGerando] = useState(false);
 
   // --- Análise de vendas agrupada ---
@@ -71,22 +73,13 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
   const baixarFechamento = async () => {
     setGerando(true);
     try {
-      const dados = await carregarFechamento({ storeId, storeName, userName, dia });
+      const dados = await carregarFechamento({ storeId, storeName, userName, dia, ate: ate || undefined });
       const wb = await buildFechamentoWorkbook(dados);
-      const buf = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fechamentoFileName(storeSlug, dia);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      toast.success(dados.turnos.length === 0 ? 'Arquivo gerado (nenhum turno de caixa nesse dia).' : 'Arquivo gerado.');
+      await baixarWorkbook(wb, fechamentoFileName(storeSlug, ate && ate !== dia ? `${dia}_a_${ate}` : dia));
+      toast.success(dados.turnos.length === 0 ? 'Arquivo gerado (nenhum turno de caixa nesse período).' : 'Arquivo gerado.');
     } catch (e) {
       console.error('baixarFechamento falhou:', e);
-      toast.error('Não consegui gerar o arquivo. Tente de novo.');
+      toast.error(e instanceof Error && e.message === 'periodo-invalido' ? 'Escolha no máximo 31 dias.' : 'Não consegui gerar o arquivo. Tente de novo.');
     } finally {
       setGerando(false);
     }
@@ -141,12 +134,12 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
   const imprimirFechamento = async () => {
     setImprimindo(true);
     try {
-      const dados = await carregarFechamento({ storeId, storeName, userName, dia });
+      const dados = await carregarFechamento({ storeId, storeName, userName, dia, ate: ate || undefined });
       const ok = await printRelatorioDia(montarPainel(dados, dados.nomeCategoria), dados);
       if (!ok) toast.error('Não consegui abrir a impressão. Confira o bloqueador de janelas.');
     } catch (e) {
       console.error('imprimirFechamento falhou:', e);
-      toast.error('Não consegui gerar o relatório. Tente de novo.');
+      toast.error(e instanceof Error && e.message === 'periodo-invalido' ? 'Escolha no máximo 31 dias.' : 'Não consegui gerar o relatório. Tente de novo.');
     } finally {
       setImprimindo(false);
     }
@@ -169,6 +162,9 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-[13px] text-[var(--text-muted)]">Dia
             <Input type="date" value={dia} max={hojeISO()} onChange={(e) => setDia(e.target.value)} />
+          </label>
+          <label className="text-[13px] text-[var(--text-muted)]">Até (opcional)
+            <Input type="date" value={ate} min={dia} max={hojeISO()} onChange={(e) => setAte(e.target.value)} />
           </label>
           <Button onClick={baixarFechamento} isLoading={gerando} disabled={!dia || imprimindo}><Download size={16} /> Baixar Excel</Button>
           <Button variant="secondary" onClick={imprimirFechamento} isLoading={imprimindo} disabled={!dia || gerando}><Printer size={16} /> PDF / Imprimir</Button>

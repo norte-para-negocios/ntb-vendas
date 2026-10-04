@@ -1,10 +1,13 @@
 // lib/reports/carregarFechamento.ts — busca tudo do dia (as mesmas funções de sempre) e devolve FechamentoData.
 import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchSalesHistory, fetchExceptionsReport, fetchMenu } from '../api';
-import { limitesDoDia, turnosDoPeriodo } from './dia';
+import { limitesDoDia, limitesDoPeriodo, rotuloPeriodo, turnosDoPeriodo } from './dia';
 import type { FechamentoData, FechamentoTurno } from './fechamentoXlsx';
 
-export async function carregarFechamento(p: { storeId: string; storeName: string; userName: string; dia: string }): Promise<FechamentoData> {
-  const [ini, fim] = limitesDoDia(p.dia);
+// `dia` é o primeiro dia; `ate` (opcional, até 31 dias depois) fecha o intervalo. Sem `ate`, é um dia só.
+// Lança Error('periodo-invalido') se o intervalo for inválido.
+export async function carregarFechamento(p: { storeId: string; storeName: string; userName: string; dia: string; ate?: string }): Promise<FechamentoData> {
+  const ate = p.ate || p.dia;
+  const [ini, fim] = p.ate ? limitesDoPeriodo(p.dia, ate) : limitesDoDia(p.dia);
   const [turnosRows, vendas, exc, menu] = await Promise.all([
     fetchCashShiftsHistory(p.storeId, 200),
     fetchSalesHistory(p.storeId, ini.toISOString(), fim.toISOString()),
@@ -19,7 +22,7 @@ export async function carregarFechamento(p: { storeId: string; storeName: string
   }
   const nomes = new Map(menu.categories.map((c) => [c.id, c.name]));
   return {
-    loja: p.storeName, periodoLabel: new Date(`${p.dia}T12:00:00-03:00`).toLocaleDateString('pt-BR'), geradoEm: new Date(), geradoPor: p.userName,
+    loja: p.storeName, periodoLabel: rotuloPeriodo(p.dia, ate), geradoEm: new Date(), geradoPor: p.userName,
     turnos, vendas, excecoes: exc.events, nomeCategoria: (id) => nomes.get(id),
   };
 }
