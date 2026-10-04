@@ -8934,6 +8934,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     useEffect(() => { fetchNtbEstoqueIntegracaoStatus(storeId).then(setNtbEstoqueStatus); }, [storeId]);
 
     const handleSaveNtbEstoqueIntegracao = async () => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
             return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
         }
@@ -8953,6 +8954,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     };
 
     const handleToggleNtbEstoqueAtivo = async (ativo: boolean) => {
+        if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
         const result = await saveNtbEstoqueIntegracaoConfig(storeId, { ativo });
         if (!result.success) return toast.error('Erro ao atualizar: ' + result.message);
         setNtbEstoqueStatus((prev) => ({ ...prev, ativo }));
@@ -9714,7 +9716,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         </div>
                         <button
                             onClick={() => handleToggleNtbEstoqueAtivo(!ntbEstoqueStatus.ativo)}
-                            disabled={!ntbEstoqueStatus.configurado}
+                            disabled={!ntbEstoqueStatus.configurado || !podeEditar}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ntbEstoqueStatus.ativo ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                         >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ntbEstoqueStatus.ativo ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -9726,6 +9728,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             label="URL do NTB Estoque"
                             placeholder="https://app-estoque.norteparanegocios.com.br"
                             value={ntbEstoqueUrlInput}
+                            disabled={!podeEditar}
                             onChange={e => setNtbEstoqueUrlInput(e.target.value)}
                         />
                         <Input
@@ -9733,12 +9736,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             type="password"
                             placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
                             value={ntbEstoqueApiKeyInput}
+                            disabled={!podeEditar}
                             onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
                         />
                     </div>
                     <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
 
-                    <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque}>
+                    <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque} disabled={!podeEditar}>
                         Salvar integração com o NTB Estoque
                     </Button>
                 </div>
@@ -9761,7 +9765,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 className="pl-9 pr-3 h-[38px] w-full sm:w-64 rounded-full border-0 bg-[var(--surface-2)] text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)]/80 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 max-sm:text-base"
                             />
                         </div>
-                        <Button variant="secondary" onClick={() => setIsCategoryModalOpen(true)}>
+                        <Button variant="secondary" onClick={() => setIsCategoryModalOpen(true)} disabled={!podeEditar}>
                             <List size={16} className="mr-1.5"/> Categorias
                         </Button>
                     </div>
@@ -9887,7 +9891,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                     {groupSelectMode ? 'Cancelar seleção' : 'Agrupar variações'}
                                 </Button>
                             </div>
-                            <Button onClick={() => openProductModal()}><Plus size={18} className="-ml-1"/> Novo produto</Button>
+                            <Button onClick={() => openProductModal()} disabled={!podeEditar}><Plus size={18} className="-ml-1"/> Novo produto</Button>
                         </div>
                         {groupSelectMode && (
                             <p className="text-xs text-[var(--text-muted)] mb-4">
