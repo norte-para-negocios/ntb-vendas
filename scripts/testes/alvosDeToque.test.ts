@@ -1,6 +1,5 @@
 // rodar com: npx tsx scripts/testes/alvosDeToque.test.ts
 import assert from 'node:assert/strict';
-// @ts-expect-error módulo .mjs sem tipos
 import { protegerBotoes } from '../auditoria/alvos-de-toque.mjs';
 
 // botão pequeno simples ganha proteção só de celular
