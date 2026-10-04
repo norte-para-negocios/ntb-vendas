@@ -40,8 +40,8 @@ export const AREAS: AreaDef[] = [
   ] },
 ];
 
-// Abas cujas telas ainda não existem. Vazio desde a Task 9 (Permissões e Saúde ligadas).
-export const ABAS_EM_BREVE = new Set<AbaId>();
+// Abas cujas telas ainda não estão ligadas; a Task 9 esvazia este conjunto.
+export const ABAS_EM_BREVE = new Set<AbaId>(['saude', 'permissoes']);
 
 export interface NavCtx {
   user: { role: string };
