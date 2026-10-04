@@ -3,8 +3,10 @@
 export type DocPrint = 'comanda' | 'pre_conta' | 'comprovante' | 'cupom_fiscal' | 'fechamento_caixa';
 
 export const DOCS_IMPRESSAO: { id: DocPrint; rotulo: string }[] = [
-  { id: 'comanda', rotulo: 'Comanda (pedidos)' },
-  { id: 'pre_conta', rotulo: 'Pré-conta' },
+  // Os ids ('comanda', 'pre_conta') são o armazenamento (printer_configs.documentos) e NÃO mudam; só o rótulo.
+  // Vocabulário do dono: PEDIDO = papel do local de preparo; COMANDA = a conta com preços ao cliente (antes da nota fiscal).
+  { id: 'comanda', rotulo: 'Pedidos' },
+  { id: 'pre_conta', rotulo: 'Comanda (conta do cliente)' },
   { id: 'comprovante', rotulo: 'Comprovante de pagamento' },
   { id: 'cupom_fiscal', rotulo: 'Cupom fiscal (nota)' },
   { id: 'fechamento_caixa', rotulo: 'Fechamento de caixa' },
@@ -31,4 +33,15 @@ export function impressoraRecebe(
   const marcados = printer.documentos && printer.documentos.length > 0 ? printer.documentos : null;
   if (opcoes?.soConfigurado) return Boolean(marcados && marcados.includes(doc));
   return (marcados ?? documentosPadrao(printer.destination)).includes(doc);
+}
+
+export const rotuloDoc = (id: DocPrint): string => DOCS_IMPRESSAO.find((d) => d.id === id)?.rotulo ?? id;
+
+/** Impressoras ATIVAS que recebem o documento (com `soConfigurado`, só as marcadas explicitamente: é o caso da comanda automática). */
+export function impressorasDoDoc<P extends { destination: string; documentos?: string[] | null; is_active?: boolean }>(
+  printers: P[],
+  doc: DocPrint,
+  opcoes?: { soConfigurado?: boolean },
+): P[] {
+  return printers.filter((p) => p.is_active !== false && impressoraRecebe(p, doc, opcoes));
 }

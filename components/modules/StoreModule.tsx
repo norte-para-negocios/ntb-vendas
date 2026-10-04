@@ -1811,9 +1811,9 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                         {/* 4) Ações secundárias, discretas: impressão e controles do item */}
                         <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-[var(--border)]">
                             <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                {imprimeAuto && <span title="O ticket sai sozinho na impressora deste local (o sistema não confirma o papel impresso)"><Badge variant="success">Impressão automática</Badge></span>}
-                                <Button size="sm" variant="ghost" className="max-sm:!h-11" onClick={() => printOrderTicket(item)} title={imprimeAuto ? 'Imprimir o ticket de novo' : 'Imprimir ticket'}>
-                                    <Printer size={14} /> {imprimeAuto ? 'Reimprimir' : 'Imprimir'}
+                                {imprimeAuto && <span title="O pedido sai sozinho na impressora deste local (o sistema não confirma o papel impresso)"><Badge variant="success">Impressão automática</Badge></span>}
+                                <Button size="sm" variant="ghost" className="max-sm:!h-11" onClick={() => printOrderTicket(item)} title={imprimeAuto ? 'Imprimir o pedido de novo' : 'Imprimir pedido'}>
+                                    <Printer size={14} /> {imprimeAuto ? 'Reimprimir pedido' : 'Imprimir pedido'}
                                 </Button>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -4332,8 +4332,8 @@ NOTIFY pgrst, 'reload schema';`;
                     const sig = `${mesa.number}|${l.product.id}|${l.qty}|${notasNoBanco}`;
                     impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Mesa ${mesa.number}`, content: conteudo, sig }).catch(() => 0);
                 }
-                if (impressas > 0) toast.info('Sem internet: comanda impressa direto na impressora.');
-                else toast.warning('Sem internet: o pedido foi salvo, mas a comanda não saiu na impressora. Ela sai quando a internet voltar.');
+                if (impressas > 0) toast.info('Sem internet: pedido impresso direto na impressora.');
+                else toast.warning('Sem internet: o pedido foi salvo, mas o papel do pedido não saiu na impressora. Ele sai quando a internet voltar.');
             }
 
             // Atualização otimista da comanda — sem isso, "Ver Comanda" e o
@@ -4447,7 +4447,7 @@ NOTIFY pgrst, 'reload schema';`;
             }
             if (enviadas === 0) {
                 const ok = await printKitchenTicket({ ...dados, interativo: true }).catch(() => false);
-                if (!ok) toast.warning('O item foi cancelado, mas a comanda de cancelamento não imprimiu. Avise a cozinha.');
+                if (!ok) toast.warning('O item foi cancelado, mas o pedido de cancelamento não imprimiu. Avise a cozinha.');
             }
         }
     };
@@ -5332,7 +5332,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 </Button>
                                 ) : <span />}
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => selectedTable && printTableBill(selectedTable.id)}>
-                                    <Printer size={16}/> Imprimir
+                                    <Printer size={16}/> Imprimir comanda
                                 </Button>
                             </div>
                             {podeCancelarPedido && (currentTableSummary?.allItems || []).some((i) => i.status !== OrderStatus.CANCELED) && (
@@ -5558,7 +5558,7 @@ NOTIFY pgrst, 'reload schema';`;
             <Modal isOpen={showCancelarPedido} onClose={() => !cancelandoPedido && setShowCancelarPedido(false)} title={`Cancelar pedido da Mesa ${selectedTable?.number ?? ''}`}>
                 <div className="space-y-4">
                     <p className="text-sm text-[var(--text-muted)]">
-                        Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe uma comanda de cancelamento. Não dá para desfazer.
+                        Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe um pedido de cancelamento. Não dá para desfazer.
                     </p>
                     <Input label="Motivo (opcional)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={80} />
                     <div className="grid grid-cols-2 gap-2">
@@ -6287,7 +6287,7 @@ const CounterView: React.FC<{
                     const sig = `|${l.product.id}|${l.qty}|${notasNoBanco}`;
                     impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Balcão`, content: conteudo, sig }).catch(() => 0);
                 }
-                if (impressas === 0) toast.warning('Sem internet: a comanda não saiu na impressora. Avise a cozinha.');
+                if (impressas === 0) toast.warning('Sem internet: o pedido não saiu na impressora. Avise a cozinha.');
             } else if (!paymentFirst) {
                 // Pedido de balcão nasce 'pending', e a Estação de Impressão /
                 // KDS ignoram item de balcão pendente de propósito (é o pedido
@@ -8409,7 +8409,7 @@ const CaixaViewMeu: React.FC<{
                                                             disabled={reprintingPendingIds.has(item.id)}
                                                             onClick={() => handleReprintPending({ ...item, tableNumber: t.number })}
                                                             className="relative hit-44 shrink-0 p-1 rounded-full hover:bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
-                                                            title="Reimprimir"
+                                                            title="Reimprimir pedido"
                                                             aria-label={`Reimprimir ${item.productName}`}
                                                         >
                                                             <RotateCcw size={12} className={reprintingPendingIds.has(item.id) ? 'animate-spin' : ''} />

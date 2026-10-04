@@ -27,7 +27,7 @@
 // Sem o agente rodando, o job fica 'pending' pra sempre — esta tela nunca
 // finge que "enfileirou" é o mesmo que "imprimiu".
 
-import { DOCS_IMPRESSAO, impressoraRecebe } from '@/lib/printDocs';
+import { DOCS_IMPRESSAO, impressoraRecebe, impressorasDoDoc } from '@/lib/printDocs';
 import React, { useEffect, useState, useCallback } from 'react';
 import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
@@ -105,7 +105,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [pausada, setPausada] = useState(false);
   const [trocandoPausa, setTrocandoPausa] = useState(false);
   useEffect(() => { fetchImpressaoPausada(store.id).then(setPausada); }, [store.id]);
-  // "Imprimir pré-conta (comanda) automaticamente": ligada por padrão; desligada, só o botão manual Imprimir da mesa imprime.
+  // "Comanda automática" (a conta do cliente; chave de config `auto_pre_conta`, nome interno mantido): ligada por padrão; desligada, só o botão manual Imprimir da mesa imprime.
   const [preContaAuto, setPreContaAuto] = useState(true);
   const [trocandoPreConta, setTrocandoPreConta] = useState(false);
   useEffect(() => { fetchStoreById(store.id).then((s) => setPreContaAuto(preContaAutomaticaLigada(s?.config))).catch(() => {}); }, [store.id]);
@@ -114,7 +114,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
     try {
       await setPreContaAutomatica(store.id, !preContaAuto);
       setPreContaAuto(!preContaAuto);
-      toast.success(!preContaAuto ? 'Pré-conta automática ligada.' : 'Pré-conta automática desligada.');
+      toast.success(!preContaAuto ? 'Comanda automática ligada.' : 'Comanda automática desligada.');
     } catch {
       toast.error('Não foi possível mudar agora. Tente de novo.');
     } finally {
@@ -311,6 +311,18 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
     load();
   };
 
+  // Resumo dos dois papéis (só leitura): qual impressora imprime os PEDIDOS de cada local e qual imprime a COMANDA.
+  const pedidosPorLocal = (() => {
+    const mapa = new Map<string, string[]>();
+    impressorasDoDoc(printers, 'comanda').forEach((p) => {
+      const local = setores.find((x) => x.id === p.sector_id)?.name ?? DESTINATION_LABELS[p.destination];
+      mapa.set(local, [...(mapa.get(local) ?? []), p.name]);
+    });
+    return Array.from(mapa, ([local, impressoras]) => ({ local, impressoras }));
+  })();
+  const comandaAuto = impressorasDoDoc(printers, 'pre_conta', { soConfigurado: true });
+  const comandaManual = impressorasDoDoc(printers, 'pre_conta');
+
   if (isLoading) {
     return <div className="text-center py-10 text-[var(--text-muted)] text-sm">Carregando...</div>;
   }
@@ -349,22 +361,49 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
         </Button>
       </Card>
 
-      <Card className="p-4 flex items-center justify-between gap-4 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold text-[var(--text)] flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${preContaAuto ? 'bg-[var(--ok)]' : 'bg-[var(--text-muted)]'}`} />
-            {preContaAuto ? 'Pré-conta (comanda) automática ligada' : 'Pré-conta (comanda) automática desligada'}
-          </p>
-          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
-            {preContaAuto
-              ? 'Quando uma mesa pede a conta, a pré-conta com preços sai sozinha nas impressoras marcadas com "Pré-conta" (edite a impressora para escolher qual). Mesa que já estava aberta não reimprime sozinha.'
-              : 'A pré-conta não sai sozinha. Só o botão Imprimir da mesa imprime. Os pedidos da cozinha e do bar não mudam.'}
-          </p>
+      {/* Dois papéis, separados: PEDIDO (local de preparo) e COMANDA (conta do cliente, antes da nota fiscal). */}
+      <Card className="p-4 space-y-2">
+        <p className="text-[15px] font-semibold text-[var(--text)]">Pedidos (por local de preparo)</p>
+        <p className="text-[13px] text-[var(--text-muted)]">
+          O pedido é o papel que sai no local onde o item é preparado (Cozinha, Bar, Pizzaria...). Cada local imprime na sua impressora: na impressora, marque &quot;Pedidos&quot; e escolha o local dela.
+        </p>
+        {pedidosPorLocal.length === 0 ? (
+          <p className="text-[13px] text-[var(--warn)]">Nenhuma impressora marcada para Pedidos: o pedido sai na janela de impressão do aparelho.</p>
+        ) : (
+          <ul className="text-[13px] text-[var(--text)] space-y-0.5">
+            {pedidosPorLocal.map((l) => (
+              <li key={l.local}><span className="font-medium">{l.local}</span> <span className="text-[var(--text-muted)]">→ {l.impressoras.join(', ')}</span></li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-semibold text-[var(--text)] flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${preContaAuto ? 'bg-[var(--ok)]' : 'bg-[var(--text-muted)]'}`} />
+              {preContaAuto ? 'Comanda automática ligada' : 'Comanda automática desligada'}
+            </p>
+            <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+              {preContaAuto
+                ? 'Comanda (conta do cliente): quando uma mesa pede a conta, a comanda com preços sai sozinha nas impressoras marcadas com "Comanda (conta do cliente)". Mesa que já estava aberta não reimprime sozinha.'
+                : 'Comanda (conta do cliente): ela não sai sozinha. Só o botão Imprimir da mesa imprime. Os pedidos da cozinha e do bar não mudam.'}
+            </p>
+          </div>
+          <Button size="sm" variant={preContaAuto ? 'secondary' : 'primary'} onClick={alternarPreConta} disabled={trocandoPreConta}>
+            {trocandoPreConta ? <Loader2 size={14} className="animate-spin" /> : null}
+            {preContaAuto ? 'Desligar comanda automática' : 'Ligar comanda automática'}
+          </Button>
         </div>
-        <Button size="sm" variant={preContaAuto ? 'secondary' : 'primary'} onClick={alternarPreConta} disabled={trocandoPreConta}>
-          {trocandoPreConta ? <Loader2 size={14} className="animate-spin" /> : null}
-          {preContaAuto ? 'Desligar pré-conta automática' : 'Ligar pré-conta automática'}
-        </Button>
+        <p className="text-[13px] text-[var(--text-muted)]">
+          A comanda é a conta com preços entregue ao cliente antes da nota fiscal.{' '}
+          {comandaAuto.length > 0
+            ? <>Impressora da comanda automática: <span className="font-medium text-[var(--text)]">{comandaAuto.map((p) => p.name).join(', ')}</span>.</>
+            : comandaManual.length > 0
+              ? <>Nenhuma impressora marcada para a automática. O botão Imprimir sai em: <span className="font-medium text-[var(--text)]">{comandaManual.map((p) => p.name).join(', ')}</span>.</>
+              : <>Nenhuma impressora marcada: a comanda sai na janela de impressão do aparelho (só manual).</>}
+        </p>
       </Card>
 
       {printers.some((p) => p.connection_type === 'network' || p.connection_type === 'usb') && (() => {
@@ -433,7 +472,7 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-[var(--text-muted)]">É o sistema que define o tamanho da impressão (comanda, comprovante e cupom fiscal) — não depende de configurar o driver.</p>
+            <p className="text-[11px] text-[var(--text-muted)]">É o sistema que define o tamanho da impressão (pedido, comanda, comprovante e cupom fiscal) — não depende de configurar o driver.</p>
           </div>
 
           <div className="flex flex-col gap-1">

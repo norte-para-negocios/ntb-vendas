@@ -30,7 +30,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-// Achado real (reunião com o Ramon, 2026-08-25): comanda saía cortada numa
+// Achado real (reunião com o Ramon, 2026-08-25): pedido saía cortado numa
 // impressora térmica de 58mm/80mm porque a largura era fixa em 48mm (a
 // impressora antiga de uma das lojas). Todo o resto do CSS já usa `%`
 // (relativo), então parametrizar só essa única linha basta — sem precisar
@@ -256,7 +256,7 @@ async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 
     if (ok) return true;
     // Sem impressora que o app conheça (nem embutida nem Bluetooth): se a pessoa
     // pediu na mão, abre a janela de impressão do Android (escolher impressora ou
-    // salvar em PDF). Impressão automática (comanda de cozinha) nunca abre janela.
+    // salvar em PDF). Impressão automática (pedido de cozinha) nunca abre janela.
     if (interativo && nativo.printDialog) {
       try {
         const html = `<html><head><title>${escapeHtml(title)}</title><style>${thermalStyles(paperWidthMm)}</style></head><body>${bodyHtml}</body></html>`;
@@ -271,7 +271,7 @@ async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 
   return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
 
-// Comanda de CANCELAMENTO: mesma comanda, mas avisa a cozinha/bar que o que estava
+// Pedido de CANCELAMENTO: mesmo pedido, mas avisa a cozinha/bar que o que estava
 // feito/na fila foi cancelado (quem cancelou e o motivo).
 export interface CancelamentoTicket { por?: string | null; motivo?: string | null }
 
@@ -280,11 +280,11 @@ export interface KitchenTicketLine {
   productName: string;
   addons?: string;
   observation?: string;
-  /** Alergênicos do produto (ex.: ['glúten', 'frutos do mar']) — sai em destaque na comanda. */
+  /** Alergênicos do produto (ex.: ['glúten', 'frutos do mar']) — sai em destaque no pedido. */
   alergenicos?: string[];
 }
 
-// Um pedido confirmado com vários itens do mesmo destino sai numa comanda só.
+// Um pedido confirmado com vários itens do mesmo destino sai num pedido só.
 // Sem `items`, o ticket é de um item só (quantity/productName), como sempre foi.
 function kitchenTicketLines(opts: {
   items?: KitchenTicketLine[];
@@ -437,7 +437,7 @@ const esqDir = (esq: string, dir: string, w: number): string => {
   return esq.slice(0, Math.max(0, w - dir.length - 1)) + ' ' + dir;
 };
 
-// Comanda de cozinha/bar usa MENOS colunas que a conta: o driver calcula a fonte pra caber as colunas
+// Pedido de cozinha/bar usa MENOS colunas que a conta: o driver calcula a fonte pra caber as colunas
 // na largura do papel, então menos colunas = letra maior (pedido do Ramon, 2026-09-29: fonte pequena).
 export const colunasDaComanda = (mm?: number | null, modoDireto = false): number => {
   // Modo direto (ESC/POS): a própria térmica imprime em LETRA DUPLA (metade das colunas: 24 no 80 mm, 16 no 58 mm).

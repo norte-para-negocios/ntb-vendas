@@ -33,7 +33,7 @@ const { execFile } = require('child_process');
 const POLL_INTERVAL_MS = 3000;
 const HEARTBEAT_INTERVAL_MS = 30000;
 const DISCOVER_INTERVAL_MS = 60000;
-// Comanda antiga não pode sair. Achado na revisão independente (2026-09-13):
+// Pedido antigo não pode sair. Achado na revisão independente (2026-09-13):
 // a fila é do SERVIDOR e continua enchendo com o app fechado (o PDV no
 // navegador e os outros terminais seguem enfileirando). Sem corte de idade,
 // abrir o app de manhã cuspiria na cozinha o lote inteiro da noite anterior.
@@ -89,7 +89,7 @@ function printViaNetwork(ip, port, content, raw, paperWidthMm) {
     // Depois que os bytes saíram, o papel JÁ ESTÁ SAINDO — um erro de socket
     // a partir daí (impressora térmica barata que corta a conexão em vez de
     // fechar direito é comum) não pode virar "falhou" e disparar
-    // reimpressão, senão a comanda sai duas vezes. Achado da revisão
+    // reimpressão, senão o pedido sai duas vezes. Achado da revisão
     // independente. Antes disso, qualquer erro rejeitava.
     let jaEscreveu = false;
     const timeout = setTimeout(() => {
@@ -250,7 +250,7 @@ const CP850 = { 'á':0xA0,'é':0x82,'í':0xA1,'ó':0xA2,'ú':0xA3,'à':0x85,'è'
   'Á':0xB5,'É':0x90,'Í':0xD6,'Ó':0xE0,'Ú':0xE9,'À':0xB7,'Ã':0xC7,'Õ':0xE5,'Â':0xB6,'Ê':0xD2,'Ô':0xE2,'Ç':0x80,'º':0xA7,'ª':0xA6,'°':0xF8 };
 
 // init, CP850, alinhado à esquerda (o texto já vem diagramado em colunas por lib/print.ts — centralizar cada
-// linha aqui bagunçava a comanda) e negrito. Comanda estreita (linhas com até metade das colunas do papel, ver
+// linha aqui bagunçava o pedido) e negrito. Pedido estreito (linhas com até metade das colunas do papel, ver
 // colunasDaComanda) sai em LETRA DUPLA — pedido da cozinha do Sertão (29/09: "fonte pequena").
 function toEscPos(content, paperWidthMm) {
   const texto = String(content).replace(/[\u2013\u2014]/g, '-').replace(/\u2026/g, '...').replace(/\r/g, '');
@@ -288,7 +288,7 @@ function printViaUsbRaw(printerName, content, paperWidthMm) {
 function colunasDoPapel(mm) { return mm === 58 || mm === 48 ? 32 : 48; }
 
 function printViaUsb(printerName, content, colunas = 48) {
-  // Colunas reais do conteúdo (a comanda é diagramada em menos colunas que a conta => fonte maior).
+  // Colunas reais do conteúdo (o pedido é diagramado em menos colunas que a conta => fonte maior).
   const maior = String(content).split('\n').reduce((m, l) => Math.max(m, l.replace(/\r$/, '').length), 0);
   if (maior >= 16 && maior < colunas) colunas = maior;
   return new Promise((resolve, reject) => {
@@ -514,7 +514,7 @@ async function printOnce(printer, content) {
   } else if (printer.connection_type === 'usb') {
     if (printer.print_mode === 'raw') {
       // Modo Direto com rede de segurança: se o envio direto (ESC/POS) falhar, imprime pelo driver do Windows
-      // na mesma hora — a cozinha nunca fica sem comanda por causa do modo (pedido do dono, 2026-09-29).
+      // na mesma hora — a cozinha nunca fica sem pedido por causa do modo (pedido do dono, 2026-09-29).
       try {
         await printViaUsbRaw(printer.usb_system_name, content, printer.paper_width_mm);
       } catch (e) {
@@ -607,13 +607,13 @@ function stop() {
 //
 // Sem isso (achado da revisão independente), dois computadores com o app
 // aberto na mesma loja liam a mesma fila na mesma janela de 3s, os DOIS
-// marcavam "printing" e os DOIS imprimiam: comanda dobrada na cozinha. Não
+// marcavam "printing" e os DOIS imprimiam: pedido dobrado na cozinha. Não
 // era hipótese remota — com a impressão embutida no app, ter o app aberto em
 // mais de um terminal é o caso normal, não a exceção.
 // Marca o resultado da impressão, com 2 tentativas. Achado da revisão
 // independente: se o PATCH de "done" falhasse DEPOIS do papel ter saído, o
 // job voltava a ser lido como pendente 3s depois e era reimpresso pra
-// sempre — impressora térmica cuspindo a mesma comanda em loop. Se nem
+// sempre — impressora térmica cuspindo o mesmo pedido em loop. Se nem
 // assim gravar, deixa em `printing` (que ninguém reprocessa) em vez de
 // arriscar o loop.
 async function marcarJob(jobId, campos) {
@@ -700,7 +700,7 @@ function start(storeId, options) {
         // Impressora USB só imprime na máquina onde ela está pendurada. Sem
         // isso (achado da revisão independente), o PC da cozinha pegava o job
         // da impressora USB do caixa, o `Out-Printer` falhava porque aquele
-        // nome não existe ali, e o job virava "erro" — a comanda NUNCA saía,
+        // nome não existe ali, e o job virava "erro" — o pedido NUNCA saía,
         // mesmo com a máquina certa disponível pra imprimir.
         let impressoraDoJob = printer;
         let viaCompartilhamento = false;

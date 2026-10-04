@@ -94,7 +94,7 @@ app.setAppUserModelId('com.norteparanegocios.ntbvendas');
 
 // Segundo plano (pedido do dono, 2026-09-18): "o aplicativo funciona em segundo
 // plano, mesmo fechado, com o computador ligado, pra continuar imprimindo".
-// O motor de impressão e a auto-impressão de comanda rodam neste app (motor no
+// O motor de impressão e a auto-impressão de pedido rodam neste app (motor no
 // processo principal, auto-impressão no renderer) — então fechar a janela NÃO
 // pode encerrar o app: só esconde na bandeja. Encerrar de verdade = "Sair" no
 // menu da bandeja (isQuitting).
@@ -105,7 +105,7 @@ const iniciouEscondido = process.argv.includes('--hidden');
 
 // Uma instância só: sem isso, abrir o app de novo (ou o Windows abrindo no
 // login + o usuário clicando no atalho) duplicava o motor de impressão e a
-// comanda saía 2x.
+// pedido saía 2x.
 const temInstanciaUnica = app.requestSingleInstanceLock();
 if (!temInstanciaUnica) {
   app.quit();
@@ -265,13 +265,13 @@ function createWindow() {
       // `showMessageBox` com JANELA-PAI, e NUNCA `showErrorBox` nem
       // `showMessageBox` sem pai: o motor de impressão (print-engine.js)
       // roda neste mesmo processo e sobrevive à morte do renderer — é ele
-      // que continua imprimindo as comandas que os OUTROS terminais da loja
+      // que continua imprimindo os pedidos que os OUTROS terminais da loja
       // enfileiram. Um diálogo bloqueante trava o event loop, e com ele o
       // `setInterval` da fila, o heartbeat e os sockets da porta 9100. Pior:
       // a fila só busca job com `created_at` dentro dos últimos 30 min
       // (IDADE_MAXIMA_JOB_MS), então um diálogo esquecido aberto por mais
       // tempo que isso faria os jobs acumulados serem descartados como
-      // obsoletos — comanda que nunca sai.
+      // obsoletos — pedido que nunca sai.
       //
       // A janela-pai é o que torna a chamada realmente assíncrona (vira
       // sheet). Medido nesta máquina com um Electron de teste (2026-09-13):

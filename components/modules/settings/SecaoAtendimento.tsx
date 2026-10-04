@@ -26,10 +26,10 @@ export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
             >
                 <Switch ligado={pedeSenha} onChange={() => setPedeSenha(!pedeSenha)} rotulo="Pedir a senha de quem lança o pedido" />
             </SettingRow>
-            <SettingRow id="aj-taxa_servico" titulo={`Cobrar taxa de serviço (${taxaFmt})`} descricao={`Aplica ${taxaFmt} de taxa opcional no total das comandas e pedidos.`}>
+            <SettingRow id="aj-taxa_servico" titulo={`Cobrar taxa de serviço (${taxaFmt})`} descricao={`Aplica ${taxaFmt} de taxa opcional no total das comandas (a conta do cliente).`}>
                 <Switch ligado={taxa} onChange={() => setTaxa(!taxa)} rotulo="Cobrar taxa de serviço" />
             </SettingRow>
-            <SettingRow id="aj-taxa_servico_percentual" titulo="Percentual da taxa de serviço" descricao={`De 0% a ${TAXA_MAXIMA_PERCENT}%. Vale para comanda, caixa, pré-conta e a conta que o cliente vê. O padrão é 10%.`}>
+            <SettingRow id="aj-taxa_servico_percentual" titulo="Percentual da taxa de serviço" descricao={`De 0% a ${TAXA_MAXIMA_PERCENT}%. Vale para a comanda, o caixa e a conta que o cliente vê. O padrão é 10%.`}>
                 <NumberField valor={taxaPercent} onChange={(n) => setTaxaRate(taxaPercentualParaConfig(n))} sufixo="%" max={TAXA_MAXIMA_PERCENT} passo={0.5} largura="w-16" rotulo="Percentual da taxa de serviço" />
             </SettingRow>
             <SettingRow id="aj-avisos_tempo" titulo="Avisos de tempo na gestão de mesas" descricao="Destaca o card da mesa quando passar desse tempo. Deixe 0 pra desligar.">

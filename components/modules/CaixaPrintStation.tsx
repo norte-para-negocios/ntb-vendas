@@ -543,7 +543,7 @@ interface FailedEntry {
   description: string;
   attempts: number;
   retry: (manual?: boolean) => Promise<boolean>;
-  // Comanda agrupada: todos os itens que saem juntos no mesmo papel.
+  // Pedido agrupado: todos os itens que saem juntos no mesmo papel.
   itemIds?: string[];
 }
 
@@ -657,7 +657,7 @@ async function reconcileDestination(
   // tantas vezes quantas foi impressa offline.
   const offlineSigs = await fetchOfflinePrintedSigs(storeId).catch(() => null);
   // Sem conseguir consultar as marcas, não imprime nesta rodada (tenta na próxima):
-  // imprimir às cegas poderia repetir uma comanda já impressa sem internet.
+  // imprimir às cegas poderia repetir um pedido já impresso sem internet.
   if (offlineSigs === null) return true;
   const chaveConsumidas = `ntb-offline-marcas-consumidas:${storeId}`;
   const consumidas = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(chaveConsumidas) || '[]'); } catch { return []; } })());
@@ -697,9 +697,9 @@ async function reconcileDestination(
 
   // Itens do MESMO pedido confirmado (mesmo order_id e mesmo created_at, porque
   // o servidor grava o pedido inteiro numa transação) e das MESMAS impressoras
-  // saem numa comanda só — antes saía um papel por item.
+  // saem num pedido só — antes saía um papel por item.
   const grupos = new Map<string, { itens: any[]; printers: PrinterConfig[] }>();
-  // Itens de comandas que já esgotaram as tentativas automáticas ficam esperando
+  // Itens de pedidos que já esgotaram as tentativas automáticas ficam esperando
   // a reimpressão manual — o grupo inteiro, não só o primeiro item dele.
   const aguardandoManual = new Set<string>();
   failedRef.current.forEach((entry) => {
@@ -761,7 +761,7 @@ async function reconcileDestination(
         // `dedupeKey` (migration 073): o dedupe desta tela é `printedIds` no
         // localStorage, ou seja, POR APARELHO — dois computadores da mesma
         // loja com o app aberto nunca enxergam o que o outro já imprimiu e
-        // cada um cria seu próprio print_job pra MESMA comanda, fazendo-a sair
+        // cada um cria seu próprio print_job pra MESMO pedido, fazendo-o sair
         // duas vezes na cozinha. Quem decide é o índice único no banco. A
         // chave do grupo usa os ids dos itens (mesmos nos dois aparelhos); um
         // grupo de 1 item mantém a chave antiga.

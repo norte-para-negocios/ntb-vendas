@@ -2621,6 +2621,11 @@ node scripts/e2e/fluxo-completo.mjs --limpar    # desfaz o que uma execução in
   de ativação de 2 dias e itens de 3 h no servidor não imprime nada (fila e janela), e um item novo imprime exatamente 1 vez e não repete ao recarregar.
 - **Vocabulário** (não misturar): **PEDIDO** = papel que imprime no local de preparo (Cozinha/Bar/Pizzaria); **COMANDA** = a conta com preços entregue ao
   cliente ANTES da nota fiscal (pré-conta/comprovante); **NOTA FISCAL** = a última etapa.
+- **Vocabulário na interface (aplicado em 04/10/2026)**: o armazenamento NÃO mudou (`printer_configs.documentos` continua com `comanda` = papel do local de
+  preparo e `pre_conta` = conta com preços; `stores.config.auto_pre_conta`; `colunasDaComanda`, `DocPrint`); só os textos: `comanda` aparece como **Pedidos**
+  e `pre_conta` como **Comanda (conta do cliente)** (`lib/printDocs.ts`, `rotuloDoc`). Configurações > Impressão tem dois cartões separados: "Pedidos (por local
+  de preparo)" e "Comanda automática" (+ qual impressora). Botões: "Imprimir pedido"/"Reimprimir pedido" (KDS) e "Imprimir comanda" (janela da mesa). O papel
+  impresso da conta continua com o título "CONFERÊNCIA DE CONSUMO" (não mudou). "Comanda" para a conta aberta da mesa ("Ver Comanda", "Comanda aberta", "Abrir Comanda") continua.
 - **ESPERADO-AINDA-NÃO-IMPLEMENTADO**: item que descreve o comportamento correto de uma frente ainda em andamento e que hoje falha. Aparece como tal no
   relatório, NÃO derruba o portão, e vira PASSOU sozinho quando for implementado (o relatório avisa "remova a marca": tire o `{ pendente: ... }` do passo).
   Use só para frente de outro agente em andamento; qualquer outra falha é FALHOU.

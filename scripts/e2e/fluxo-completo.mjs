@@ -623,7 +623,7 @@ async function secComandaEConta(C) {
       await fecharJanelas(m);
     }
     ok(erros.length === 0, erros.join('; '));
-  }, { pendente: 'frente "comanda automática configurável"/vocabulário PEDIDO x COMANDA (outro agente): hoje a tela usa "Pré-conta (comanda)" e "Comanda (pedidos)"' });
+  });
 }
 
 async function secPagamento(C) {

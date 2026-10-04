@@ -3178,7 +3178,7 @@ const printDirectOffline = async (params: { storeId: string; printerConfigId?: s
   return true;
 };
 
-// Pedido do garçom feito SEM internet: imprime a comanda direto nas impressoras
+// Pedido do garçom feito SEM internet: imprime o pedido direto nas impressoras
 // de rede do destino (cache local) e registra no histórico com uma chave
 // "offline:<assinatura>#<impressora>" — a Estação de Impressão usa essas chaves
 // pra não imprimir de novo o mesmo item quando o pedido sincronizar.
@@ -3230,7 +3230,7 @@ export const enqueuePrintJob = async (params: {
   content: string;
   // Ver migration 073: quando informada, o banco garante que o MESMO
   // trabalho não entra duas vezes na fila — é o que impede dois PCs da
-  // mesma loja de mandarem a mesma comanda pra cozinha (o dedupe antigo era
+  // mesma loja de mandarem o mesmo pedido pra cozinha (o dedupe antigo era
   // localStorage, por aparelho).
   dedupeKey?: string;
 }): Promise<{ success: boolean; id?: string; message?: string; duplicado?: boolean }> => {
@@ -3254,7 +3254,7 @@ export const enqueuePrintJob = async (params: {
   return { success: true, id: data?.id };
 };
 
-// Comanda de CANCELAMENTO: manda pra(s) impressora(s) de rede/USB do destino (mesma
+// Pedido de CANCELAMENTO: manda pra(s) impressora(s) de rede/USB do destino (mesma
 // regra de setor da Estação de Impressão). Devolve quantas impressoras receberam;
 // 0 = nenhuma impressora cadastrada pra esse destino (quem chama decide o plano B).
 export const enfileirarCancelamento = async (params: {
