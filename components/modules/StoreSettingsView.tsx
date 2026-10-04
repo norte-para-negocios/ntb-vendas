@@ -29,10 +29,10 @@ const irPara = (e: React.MouseEvent, id: string) => {
 
 const StoreSettingsView: React.FC<{ store: Store; onStoreUpdate?: (store: Store) => void }> = ({ store, onStoreUpdate }) => (
     <SettingsConfigProvider store={store} onStoreUpdate={onStoreUpdate}>
-        <div className="lg:grid lg:grid-cols-[180px_1fr] lg:gap-6">
-            <nav aria-label="Seções de configurações" className="max-lg:hidden sticky top-4 self-start space-y-0.5">
+        <div className="2xl:grid 2xl:grid-cols-[180px_1fr] 2xl:gap-6">
+            <nav aria-label="Seções de configurações" className="max-2xl:mb-3 max-2xl:flex max-2xl:gap-1 max-2xl:overflow-x-auto max-2xl:[scrollbar-width:none] 2xl:sticky 2xl:top-4 2xl:self-start 2xl:space-y-0.5">
                 {SETTINGS_SECOES.map((s) => (
-                    <a key={s.id} href={`#sec-${s.id}`} onClick={(e) => irPara(e, s.id)} className="block px-3 h-9 leading-9 rounded-[10px] text-[15px] text-[var(--text)] hover:bg-[var(--surface-2)] u-motion">{s.label}</a>
+                    <a key={s.id} href={`#sec-${s.id}`} onClick={(e) => irPara(e, s.id)} className="block shrink-0 whitespace-nowrap px-3 h-9 max-sm:h-11 leading-9 max-sm:leading-[44px] rounded-[10px] text-[15px] text-[var(--text)] hover:bg-[var(--surface-2)] u-motion">{s.label}</a>
                 ))}
             </nav>
             <div className="min-w-0 space-y-8 bg-[var(--surface)] p-6 max-sm:p-4 rounded-[var(--r-lg)] shadow-[var(--shadow-sm)]">

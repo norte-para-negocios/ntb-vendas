@@ -12,6 +12,9 @@ import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
+import { AdminNavShell } from '@/components/modules/admin/AdminNavShell';
+import RegrasCaixaView from '@/components/modules/admin/RegrasCaixaView';
+import type { AbaId, NavCtx } from '@/lib/adminNav';
 import CouponManagementView from '@/components/modules/CouponManagementView';
 import { dentroDoPrazoCancelamento, limiteCancelamento, mensagemPrazoEncerrado, PRAZO_CANCELAMENTO_TEXTO } from '@/lib/fiscal/prazoCancelamento';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
@@ -11146,7 +11149,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'users' | 'link' | 'fiscal' | 'shifts' | 'impressao' | 'locais' | 'settings' | 'cupons' | 'excecoes' | 'precos' | 'relatorios'>('dashboard');
+    const [activeTab, setActiveTab] = useState<AbaId>('dashboard');
     const [sales, setSales] = useState<Order[]>([]);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
     const [ratings, setRatings] = useState<OrderRating[]>([]);
@@ -11548,94 +11551,35 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         [sales],
     );
 
-    // Menu lateral de Administração (Task 4, redesign 2026-08-29) — substitui
-    // a antiga barra de 8 abas soltas em linha por 4 categorias agrupadas.
-    // "Notas Fiscais" ganha destaque visual próprio dentro de "Loja"
-    // (separador + ícone de cadeado) por ser dado sensível, não trivial como
-    // "Meu Link / QR Code" ao lado.
-    const ADMIN_NAV_GROUPS: { label: string; icon: React.ReactNode; tabs: { id: string; label: string; sensitive?: boolean }[] }[] = [
-        { label: 'Visão geral', icon: <LayoutDashboard size={14} />, tabs: [
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'sales', label: 'Histórico de vendas' },
-        ]},
-        { label: 'Operação', icon: <Wallet size={14} />, tabs: [
-            { id: 'shifts', label: 'Turnos' },
-            { id: 'relatorios', label: 'Relatórios' },
-            ...(roleCan(loggedUser, store, 'ver_excecoes') ? [{ id: 'excecoes', label: 'Exceções' }] : []),
-            { id: 'impressao', label: 'Impressão' },
-            { id: 'locais', label: 'Locais de preparo' },
-        ]},
-        { label: 'Time', icon: <Users size={14} />, tabs: [
-            { id: 'users', label: 'Gestão de usuários' },
-        ]},
-        { label: 'Loja', icon: <StoreIcon size={14} />, tabs: [
-            { id: 'link', label: 'Meu link / QR code' },
-            { id: 'settings', label: 'Configurações' },
-            { id: 'cupons', label: 'Cupons de desconto' },
-            ...(podeEditarPrecosHorario ? [{ id: 'precos', label: 'Preço por horário' }] : []),
-            { id: 'fiscal', label: 'Notas fiscais', sensitive: true },
-        ]},
-    ];
+    // Navegação em 5 áreas (lib/adminNav.ts + AdminNavShell). Os ids de aba antigos seguem
+    // sendo o valor de `activeTab`, então os efeitos de carregamento acima não mudaram.
+    const navCtx: NavCtx = {
+        user: loggedUser,
+        podeVerExcecoes: roleCan(loggedUser, store, 'ver_excecoes'),
+        can: (acao) =>
+            acao === 'editar_cardapio' ? roleCan(loggedUser, store, 'editar_cardapio')
+            : acao === 'editar_precos_horario' ? podeEditarPrecosHorario
+            : loggedUser.role === 'owner' || loggedUser.role === 'universal' || loggedUser.role === 'manager', // ver_permissoes: gerente vê (só leitura), dono edita
+    };
+    const adminStatus = {};
+    const [secaoAlvo, setSecaoAlvo] = useState<string | null>(null);
+    const irPara = React.useCallback((id: AbaId, alvo?: string) => { setActiveTab(id); setSecaoAlvo(alvo ?? null); }, []);
+    // Depois da troca de aba (crossfade de 120 ms), rola até o ajuste achado na busca e o destaca.
+    useEffect(() => {
+        if (!secaoAlvo) return;
+        const t = setTimeout(() => {
+            const el = document.getElementById(secaoAlvo);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el?.classList.add('ring-2', 'ring-[var(--brand)]/50');
+            setTimeout(() => el?.classList.remove('ring-2', 'ring-[var(--brand)]/50'), 1800);
+            setSecaoAlvo(null);
+        }, 250);
+        return () => clearTimeout(t);
+    }, [secaoAlvo, activeTab]);
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row gap-6">
-                <div role="tablist" aria-label="Administração" className="md:hidden -mx-4 px-4 overflow-x-auto flex gap-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {ADMIN_NAV_GROUPS.flatMap((g) => g.tabs).map((tab) => (
-                        <button
-                            key={tab.id}
-                            role="tab"
-                            aria-selected={activeTab === tab.id}
-                            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                            className={`shrink-0 min-h-11 px-4 rounded-full text-[15px] font-medium whitespace-nowrap flex items-center gap-1.5 u-motion ${
-                                activeTab === tab.id
-                                    ? 'bg-[var(--brand-fill)] text-white font-semibold'
-                                    : 'text-[var(--text)] bg-[var(--surface)] shadow-[var(--shadow-sm)]'
-                            }`}
-                        >
-                            {tab.sensitive && <Lock size={12} />}
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-                <nav className="w-full md:w-56 flex-shrink-0 space-y-5 max-md:hidden">
-                    {ADMIN_NAV_GROUPS.map((group) => (
-                        <div key={group.label}>
-                            <p className="px-3 text-[13px] font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1.5">
-                                {group.icon} {group.label}
-                            </p>
-                            <div className="bg-[var(--surface)] rounded-[14px] shadow-[var(--shadow-sm)] p-1 space-y-0.5">
-                                {group.tabs.map((tab) => (
-                                    <React.Fragment key={tab.id}>
-                                        {tab.sensitive && <div className="mx-3 my-1 border-t border-[var(--border)]" />}
-                                        <button
-                                            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                                            aria-current={activeTab === tab.id ? 'page' : undefined}
-                                            className={`relative isolate w-full text-left px-3 h-9 rounded-[10px] text-[15px] u-motion u-press-sm flex items-center gap-1.5 max-sm:min-h-11 ${
-                                                activeTab === tab.id
-                                                    ? 'text-[var(--brand)] font-semibold'
-                                                    : 'text-[var(--text)] hover:bg-[var(--surface-2)]'
-                                            }`}
-                                        >
-                                            {activeTab === tab.id && (
-                                                // layoutId por GRUPO (não compartilhado entre os 4 grupos do menu) —
-                                                // senão o indicador "voaria" de um grupo pro outro na tela toda.
-                                                <motion.div
-                                                    layoutId={`admin-nav-active-${group.label}`}
-                                                    className="absolute inset-0 rounded-[10px] bg-[var(--brand-soft)] -z-10"
-                                                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                                                />
-                                            )}
-                                            {tab.label}
-                                            {tab.sensitive && <Lock size={13} className="ml-auto text-[var(--text-muted)]" />}
-                                        </button>
-                                    </React.Fragment>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </nav>
-                <div className="flex-1 min-w-0">
+            <AdminNavShell ctx={navCtx} activeTab={activeTab} onTab={irPara} status={adminStatus}>
                     {/* Crossfade mínimo na troca de aba (Task 5, 2026-08-29) —
                     120ms, sem y na saída (só opacity), sem bounce/stagger:
                     painel usado 50x/dia, motion tem que ser quase invisível. */}
@@ -11663,7 +11607,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                     tableSessions={tableSessions}
                     ratings={ratings}
                     storeId={storeId}
-                    onNavigateToOperatorHistory={() => { setActiveTab('sales'); setHistoryView('operator'); }}
+                    onNavigateToOperatorHistory={() => { irPara('sales'); setHistoryView('operator'); }}
                 />
             )}
 
@@ -12041,6 +11985,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 </>
             )}
 
+            {activeTab === 'regras_caixa' && <RegrasCaixaView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
             {activeTab === 'locais' && <LocaisPreparoView store={store} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
@@ -12527,8 +12472,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                     </div>
                 )}
             </Modal>
-                </div>
-            </div>
+            </AdminNavShell>
         </div>
     );
 };
