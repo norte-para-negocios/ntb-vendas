@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
-import { fetchMenu } from '@/lib/api';
+import { fetchMenu, fetchNtbEstoqueIntegracaoStatus } from '@/lib/api';
 import { auditarCardapio, type Achado } from '@/lib/cardapioIntegridade';
 
 const TITULO: Record<Achado['severidade'], string> = { alta: 'Precisa corrigir', media: 'Vale conferir', baixa: 'Detalhe' };
@@ -24,7 +24,7 @@ const CardapioSaudeView: React.FC<{ storeId: string }> = ({ storeId }) => {
         setCarregando(true);
         setErro(false);
         try {
-            const m = await fetchMenu(storeId, false, true);
+            const [m, integ] = await Promise.all([fetchMenu(storeId, false, true), fetchNtbEstoqueIntegracaoStatus(storeId)]);
             if ((m as { error?: unknown }).error) throw new Error('menu');
             const produtos = m.products.map((p) => ({
                 id: p.id, name: p.name, price: Number(p.price), category_id: p.category_id ?? null, available: p.available,
@@ -36,7 +36,7 @@ const CardapioSaudeView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     temCodigoOmie: (g.options ?? []).some((o) => !!o.omie_codigo || Object.values(o.variants ?? {}).some((v) => !!v?.omie_codigo)),
                 })),
             }));
-            setAchados(auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }));
+            setAchados(auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }, { integracaoLigada: integ.configurado && integ.ativo }));
             setTotais({ produtos: produtos.filter((p) => p.available).length, categorias: m.categories.length });
         } catch (e) {
             console.error('Erro ao auditar o cardápio', e);

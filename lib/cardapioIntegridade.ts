@@ -14,7 +14,12 @@ export interface ProdutoAudit {
 
 const PESO = { alta: 0, media: 1, baixa: 2 } as const;
 
-export function auditarCardapio(d: { categorias: { id: string; name: string; order?: number | null }[]; produtos: ProdutoAudit[] }): Achado[] {
+export interface OpcoesAuditoria {
+  /** A integração com o NTB Estoque está ligada (configurada e ativa) nesta loja. */
+  integracaoLigada?: boolean;
+}
+
+export function auditarCardapio(d: { categorias: { id: string; name: string; order?: number | null }[]; produtos: ProdutoAudit[] }, opts: OpcoesAuditoria = {}): Achado[] {
   const out: Achado[] = [];
   const ativos = d.produtos.filter((p) => p.available);
   const norm = (s: string) => s.trim().toLowerCase();
@@ -41,7 +46,10 @@ export function auditarCardapio(d: { categorias: { id: string; name: string; ord
   // Produto com grupos só pede código no produto se nenhuma opção/variante carrega o código.
   const semCodigo = ativos.filter((p) => !p.fee_type && !p.omie_codigo && !(p.grupos ?? []).some((g) => g.temCodigoOmie));
   const comCodigo = ativos.filter((p) => !p.fee_type).length - semCodigo.length;
-  if (semCodigo.length > 0 && comCodigo === 0) {
+  if (semCodigo.length > 0 && comCodigo === 0 && opts.integracaoLigada) {
+    // Integração ligada e nenhum produto vinculado: a loja acha que baixa estoque e NÃO baixa. Não é detalhe.
+    out.push({ tipo: 'sem_codigo_omie', severidade: 'alta', texto: `A integração com o Estoque está ligada, mas nenhum produto está vinculado ao código do Omie (${semCodigo.length} produtos): nenhuma venda desta loja baixa estoque. Vincule os produtos no Cardápio (Vincular ao Estoque).` });
+  } else if (semCodigo.length > 0 && comCodigo === 0) {
     // Loja inteira sem código = loja sem integração com o estoque; um aviso só, não um por produto.
     out.push({ tipo: 'sem_codigo_omie', severidade: 'baixa', texto: `Nenhum produto tem código do Omie (${semCodigo.length} produtos): a loja não está ligada ao estoque, a venda não baixa estoque.` });
   } else {

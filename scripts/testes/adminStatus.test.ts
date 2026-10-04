@@ -18,6 +18,11 @@ assert.deepEqual(statusCaixa(1), { texto: '1 caixa aberto', tom: 'ok' });
 assert.deepEqual(statusCardapio(0), { texto: 'Cardápio em ordem', tom: 'ok' });
 assert.deepEqual(statusCardapio(3), { texto: '3 alertas no cardápio', tom: 'atencao' });
 assert.deepEqual(statusCardapio(1), { texto: '1 alerta no cardápio', tom: 'atencao' });
+// Estoque ligado e nenhum produto vinculado: nunca "em ordem"
+assert.deepEqual(statusCardapio(0, { estoqueSemVinculo: true }), { texto: 'Estoque ligado, 0 vinculados', tom: 'atencao' });
+assert.deepEqual(statusCardapio(4, { estoqueSemVinculo: true }), { texto: 'Estoque ligado, 0 vinculados', tom: 'atencao' });
+assert.deepEqual(statusCardapio(0, { estoqueSemVinculo: false }), { texto: 'Cardápio em ordem', tom: 'ok' });
+assert.equal(statusCardapio(null, { estoqueSemVinculo: true }), null);
 assert.deepEqual(statusEquipe(1), { texto: '1 pessoa', tom: 'neutro' });
 assert.deepEqual(statusEquipe(5), { texto: '5 pessoas', tom: 'neutro' });
 

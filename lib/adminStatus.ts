@@ -14,8 +14,8 @@ export const statusVendas = (contasHoje: number | null): Status | null =>
 export const statusCaixa = (abertos: number | null): Status | null =>
   !valido(abertos) ? null : abertos === 0 ? { texto: 'Nenhum caixa aberto', tom: 'neutro' } : { texto: qtd(abertos, 'caixa aberto', 'caixas abertos'), tom: 'ok' };
 
-export const statusCardapio = (alertasAltos: number | null): Status | null =>
-  !valido(alertasAltos) ? null : alertasAltos === 0 ? { texto: 'Cardápio em ordem', tom: 'ok' } : { texto: `${qtd(alertasAltos, 'alerta', 'alertas')} no cardápio`, tom: 'atencao' };
+export const statusCardapio = (alertasAltos: number | null, opts: { estoqueSemVinculo?: boolean } = {}): Status | null =>
+  !valido(alertasAltos) ? null : opts.estoqueSemVinculo ? { texto: 'Estoque ligado, 0 vinculados', tom: 'atencao' } : alertasAltos === 0 ? { texto: 'Cardápio em ordem', tom: 'ok' } : { texto: `${qtd(alertasAltos, 'alerta', 'alertas')} no cardápio`, tom: 'atencao' };
 
 export const statusEquipe = (pessoas: number | null): Status | null =>
   !valido(pessoas) ? null : { texto: qtd(pessoas, 'pessoa', 'pessoas'), tom: 'neutro' };

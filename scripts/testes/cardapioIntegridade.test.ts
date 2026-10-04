@@ -42,4 +42,17 @@ assert.deepEqual(sev, [...sev].sort((a, b) => ({ alta: 0, media: 1, baixa: 2 }[a
 // loja sem nenhum código: um aviso só
 const sem = auditarCardapio({ categorias: [{ id: 'c', name: 'C' }], produtos: [1, 2, 3].map((n) => ({ id: String(n), name: 'P' + n, price: 5, category_id: 'c', available: true, order: n })) as any });
 assert.equal(sem.filter((a) => a.tipo === 'sem_codigo_omie').length, 1, 'loja sem integração: um aviso agregado');
+// integração com o Estoque LIGADA mas nenhum produto vinculado: não é detalhe, é a loja que acha que baixa estoque e não baixa
+const ligada = auditarCardapio({ categorias: [{ id: 'c', name: 'C' }], produtos: [1, 2, 3].map((n) => ({ id: String(n), name: 'P' + n, price: 5, category_id: 'c', available: true, order: n })) as any }, { integracaoLigada: true });
+const aviso = ligada.filter((a) => a.tipo === 'sem_codigo_omie');
+assert.equal(aviso.length, 1, 'um aviso só');
+assert.equal(aviso[0].severidade, 'alta', 'com integração ligada é alerta alto');
+assert.match(aviso[0].texto, /integração com o Estoque está ligada/i);
+assert.match(aviso[0].texto, /nenhuma venda/i);
+assert.equal(ligada[0].tipo, 'sem_codigo_omie', 'vem primeiro (alta)');
+// integração ligada e a loja JÁ tem produtos vinculados: continua um aviso por produto que falta (média)
+const parcial = auditarCardapio({ categorias: [{ id: 'c', name: 'C' }], produtos: [{ id: '1', name: 'A', price: 5, category_id: 'c', available: true, order: 1, omie_codigo: '9' }, { id: '2', name: 'B', price: 5, category_id: 'c', available: true, order: 2 }] as any }, { integracaoLigada: true });
+assert.equal(parcial.filter((a) => a.tipo === 'sem_codigo_omie' && a.severidade === 'media').length, 1);
+// integração desligada: continua o aviso baixo de sempre
+assert.equal(auditarCardapio({ categorias: [{ id: 'c', name: 'C' }], produtos: [1].map((n) => ({ id: String(n), name: 'P' + n, price: 5, category_id: 'c', available: true, order: n })) as any }, { integracaoLigada: false }).find((a) => a.tipo === 'sem_codigo_omie')?.severidade, 'baixa');
 console.log('cardapioIntegridade: ok');

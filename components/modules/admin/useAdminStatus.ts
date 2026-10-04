@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchPrinterConfigs, fetchOpenCashShifts, fetchStoreTeamMembers, fetchStoreFiscalConfig, fetchMenu, resolverUrlApi } from '@/lib/api';
+import { fetchPrinterConfigs, fetchOpenCashShifts, fetchStoreTeamMembers, fetchStoreFiscalConfig, fetchMenu, fetchNtbEstoqueIntegracaoStatus, resolverUrlApi } from '@/lib/api';
 import { auditarCardapio } from '@/lib/cardapioIntegridade';
 import { statusVendas, statusCaixa, statusConfig, statusEquipe, statusCardapio, contarContasDeHoje, type Status, type Prontidao } from '@/lib/adminStatus';
 import type { AreaId } from '@/lib/adminNav';
@@ -21,6 +21,7 @@ export function useAdminStatus({ storeId, sales, incluirCardapio }: Args): Parti
   const [prontidao, setProntidao] = useState<Prontidao | null>(null);
   const [ambiente, setAmbiente] = useState<'homologacao' | 'producao' | null>(null);
   const [alertas, setAlertas] = useState<number | null>(null);
+  const [estoqueSemVinculo, setEstoqueSemVinculo] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -35,7 +36,7 @@ export function useAdminStatus({ storeId, sales, incluirCardapio }: Args): Parti
   useEffect(() => {
     if (!incluirCardapio) { setAlertas(null); return; }
     let vivo = true;
-    fetchMenu(storeId, false, true).then((m) => {
+    Promise.all([fetchMenu(storeId, false, true), fetchNtbEstoqueIntegracaoStatus(storeId)]).then(([m, integ]) => {
       if (!vivo || (m as { error?: unknown }).error) return;
       const produtos = m.products.map((p) => ({
         id: p.id, name: p.name, price: Number(p.price), category_id: p.category_id ?? null, available: p.available,
@@ -46,8 +47,9 @@ export function useAdminStatus({ storeId, sales, incluirCardapio }: Args): Parti
           temCodigoOmie: (g.options ?? []).some((o) => !!o.omie_codigo || Object.values(o.variants ?? {}).some((v) => !!v?.omie_codigo)),
         })),
       }));
-      const achados = auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos });
+      const achados = auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }, { integracaoLigada: integ.configurado && integ.ativo });
       setAlertas(achados.filter((a) => a.severidade === 'alta').length);
+      setEstoqueSemVinculo(achados.some((a) => a.tipo === 'sem_codigo_omie' && a.severidade === 'alta'));
     }).catch(() => {});
     return () => { vivo = false; };
   }, [storeId, incluirCardapio]);
@@ -55,8 +57,8 @@ export function useAdminStatus({ storeId, sales, incluirCardapio }: Args): Parti
   return useMemo(() => ({
     vendas: statusVendas(sales ? contarContasDeHoje(sales) : null),
     caixa: statusCaixa(abertos),
-    cardapio: statusCardapio(alertas),
+    cardapio: statusCardapio(alertas, { estoqueSemVinculo }),
     equipe: statusEquipe(pessoas),
     config: statusConfig(impressoras, prontidao, ambiente),
-  }), [sales, abertos, alertas, pessoas, impressoras, prontidao, ambiente]);
+  }), [sales, abertos, alertas, estoqueSemVinculo, pessoas, impressoras, prontidao, ambiente]);
 }
