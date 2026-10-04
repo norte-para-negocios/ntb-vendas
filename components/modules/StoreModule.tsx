@@ -3109,7 +3109,6 @@ const TablesView: React.FC<{
     const [locaisInfo, setLocaisInfo] = useState<{ setores: PrintSector[]; catSetor: Record<string, string | null> }>({ setores: [], catSetor: {} });
     const [filtroLocal, setFiltroLocal] = useState<string>('todos');
     useEffect(() => {
-        if (!showSentHistory) return;
         Promise.all([fetchPrintSectors(storeId), fetchCategorySectors(storeId)])
             .then(([setores, catSetor]) => setLocaisInfo({ setores, catSetor }))
             .catch(() => {});
@@ -4436,10 +4435,17 @@ NOTIFY pgrst, 'reload schema';`;
     const imprimirCancelamento = async (itens: OrderItem[], mesaNumero: number | string, motivo?: string) => {
         // Mesmo critério da Estação de Impressão: setor do produto, senão o da categoria (a pizza herda
         // "Pizzaria" da categoria). Sem isso o cancelamento da pizza saía na impressora da cozinha.
+        // Os setores (Pizzaria etc.) só eram carregados com o painel "Pedidos do Dia" aberto; fora dele
+        // a lista vinha vazia e o cancelamento da pizza caía no destino padrão (cozinha). Busca na hora
+        // (04/10, achado do Ramon: "cancelamento de pizza tem que ir pra pizzaria, de acordo com o produto").
+        const [setoresAgora, catSetorAgora] = await Promise.all([
+            fetchPrintSectors(storeId).catch(() => locaisInfo.setores),
+            fetchCategorySectors(storeId).catch(() => locaisInfo.catSetor),
+        ]);
         const grupos = new Map<string, { destino: 'kitchen' | 'bar'; setorId: string | null; lista: OrderItem[] }>();
         itens.forEach((it) => {
-            const setorId = setorDoItem(it.product, locaisInfo.catSetor);
-            const setor = setorId ? locaisInfo.setores.find((x) => x.id === setorId) : undefined;
+            const setorId = setorDoItem(it.product, catSetorAgora);
+            const setor = setorId ? setoresAgora.find((x) => x.id === setorId) : undefined;
             const destino: 'kitchen' | 'bar' = setor ? setor.base : (it.product?.destination === 'bar' ? 'bar' : 'kitchen');
             const chave = `${destino}|${setorId ?? ''}`;
             const g = grupos.get(chave) ?? { destino, setorId, lista: [] };
