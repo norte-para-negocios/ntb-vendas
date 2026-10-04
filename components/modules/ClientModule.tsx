@@ -2581,6 +2581,16 @@ function composeFullStoreAddress(config: StoreFiscalConfig | null): string | nul
 }
 
 export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
+    // Banner offline (hooks ficam ANTES dos returns antecipados abaixo — senão a tela trava com "Rendered more hooks"): avisa o cliente quando a conexão cai (Task 8, plano design/animação/ux 2026-10-02)
+    const [isOnline, setIsOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    React.useEffect(() => {
+        const goOnline = () => setIsOnline(true);
+        const goOffline = () => setIsOnline(false);
+        window.addEventListener('online', goOnline);
+        window.addEventListener('offline', goOffline);
+        return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+    }, []);
+
     const [hasAccess, setHasAccess] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
     const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
@@ -3600,16 +3610,6 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // derivação local) -- somá-lo por OR nunca esconde "Sair" quando não
     // deveria, só garante que uma mesa em `waiting_bill` nunca a oferece.
     const hasOpenTableOrders = mesaOrders.length > 0 || tableOrdersUnknown || isWaitingBill;
-
-    // Banner offline: avisa o cliente quando a conexão cai (Task 8, plano design/animação/ux 2026-10-02)
-    const [isOnline, setIsOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-    React.useEffect(() => {
-        const goOnline = () => setIsOnline(true);
-        const goOffline = () => setIsOnline(false);
-        window.addEventListener('online', goOnline);
-        window.addEventListener('offline', goOffline);
-        return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
-    }, []);
 
     return (
         <MotionConfig reducedMotion="user">
