@@ -54,15 +54,9 @@ export async function montarPayloadsPorPedido(
   const nomeSetor = new Map((setores ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
   const catSetor: Record<string, string | null> = Object.fromEntries((categorias ?? []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
 
-  // Taxa de serviço automática (2026-10-03): quando charge_service_fee=true e o produto de taxa percentual tem omie_codigo
-  // e o pedido NÃO tem a taxa lançada, inclui a taxa. (Regra inalterada neste trabalho.)
-  const [{ data: storeRow }, { data: feeProduct }] = await Promise.all([
-    admin.from('stores').select('config').eq('id', storeId).maybeSingle(),
-    admin.from('products').select('id, omie_codigo, fee_percent').eq('store_id', storeId).eq('fee_type', 'percent').maybeSingle(),
-  ]);
-  const chargeServiceFee = !!(storeRow?.config as { charge_service_fee?: boolean } | null)?.charge_service_fee;
-  const feePercent = feeProduct?.fee_percent != null ? Number(feeProduct.fee_percent) : 10;
-  const feeOmieCodigo = feeProduct?.omie_codigo ?? null;
+  // Taxa (serviço, rolha, couvert, frete) NÃO entra na baixa de estoque (05/10/2026): não é mercadoria. Ela já vai na nota fiscal como item
+  // (NFC-e -> Omie, lib/fiscal) e é isso que cobra a taxa no Omie. Mandar a taxa para a baixa gerava saída de estoque de um item que não existe
+  // fisicamente (33 saídas de "Taxa de Serviço" sem custo em 04/10, estoque negativo). Vale para a taxa lançada e para a automática.
 
   type Linha = { order_id: string; quantity: number; status: string; price_at_time: number; selected_options: { omie_codigo?: string | null }[] | null;
     product: { omie_codigo: string | null; destination: 'kitchen' | 'bar' | null; sector_id?: string | null; category_id?: string | null; ignore_category_sector?: boolean; fee_type?: string | null } | null };
@@ -88,17 +82,12 @@ export async function montarPayloadsPorPedido(
       const atual = porCodigo.get(codigo);
       porCodigo.set(codigo, { codigo, quantidade: (atual?.quantidade ?? 0) + quantidade, destination: atual?.destination ?? destination, setor: atual?.setor ?? setor, localEstoque: atual?.localEstoque ?? localEstoque, comNota });
     };
-    let subtotal = 0;
-    let temTaxaLancada = false;
     for (const item of linhas) {
       if (item.status === 'canceled') continue;
       const produto = item.product;
-      if (produto?.fee_type) temTaxaLancada = true; else subtotal += item.quantity * item.price_at_time;
-
-      // Taxa (rolha, frete, serviço...) baixa no estoque padrão da loja, não em Cozinha/Bar/Pizzaria (pedido do Ramon, 01/10).
-      const ehTaxaItem = !!produto?.fee_type;
-      const destination = ehTaxaItem ? null : (produto?.destination ?? null);
-      const setorId = ehTaxaItem ? null : setorDoItem(produto, catSetor);
+      if (produto?.fee_type) continue; // taxa: só na nota fiscal, nunca na baixa de estoque
+      const destination = produto?.destination ?? null;
+      const setorId = setorDoItem(produto, catSetor);
       const setor = setorId ? nomeSetor.get(setorId) ?? null : null;
       const localEstoque = localEstoqueDoItem(mapaLocais, setorId, destination);
       if (produto?.omie_codigo) somar(produto.omie_codigo, item.quantity, destination, setor, localEstoque);
@@ -106,10 +95,6 @@ export async function montarPayloadsPorPedido(
       for (const opcao of item.selected_options ?? []) {
         if (opcao.omie_codigo) somar(opcao.omie_codigo, item.quantity, destination, setor, localEstoque);
       }
-    }
-    if (chargeServiceFee && feeOmieCodigo && !temTaxaLancada && subtotal > 0) {
-      const valorTaxa = Math.round(subtotal * feePercent / 100 * 100) / 100;
-      if (valorTaxa > 0) somar(feeOmieCodigo, 1, null, null, null);
     }
     out.set(orderId, { payload: { itens: Array.from(porCodigo.values()), pedidoRef: orderId, ambiente }, rotulo: rotuloDe.get(orderId) ?? 'Pedido' });
   }
