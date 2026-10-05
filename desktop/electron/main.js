@@ -9,6 +9,7 @@ const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const printEngine = require('./print-engine');
 const engineSession = require('./engine-session');
+const updateGuard = require('./update-guard');
 
 // Achado real (2026-09-10, pedido do dono: "a atualização não está
 // funcionando"): antes disso, o único jeito de saber o que o
@@ -452,6 +453,32 @@ app.whenReady().then(() => {
   const marcarTentativa = (versao) => {
     try { fs.writeFileSync(arquivoTentativa(), JSON.stringify({ versao, ts: Date.now() })); } catch { /* sem trava, segue */ }
   };
+  // Instalação da versão baixada (botão "Atualizar agora" e janela da madrugada). 05/10/2026: a instalação silenciosa podia
+  // falhar sem deixar rastro (app fechava, nada instalava, nada reabria, versão antiga ao abrir de novo). Agora:
+  //  1) grava o marcador "tentei instalar X"; ao abrir de novo, se a versão ainda é menor, a tentativa FALHOU (vai pro log) e a
+  //     próxima por botão usa o instalador VISÍVEL (assistente do Windows, com erro/permissão na tela);
+  //  2) agenda um PowerShell que reabre o app sozinho se, terminada a instalação, nada estiver rodando.
+  const dirDados = () => app.getPath('userData');
+  const marcadorAnterior = updateGuard.lerMarcador(dirDados());
+  let instalacaoAnteriorFalhou = false;
+  if (marcadorAnterior) {
+    if (updateGuard.versaoMenor(app.getVersion(), marcadorAnterior.versaoAlvo)) {
+      instalacaoAnteriorFalhou = true;
+      logUpdate(`ERROR a instalação da v${marcadorAnterior.versaoAlvo} (modo ${marcadorAnterior.modo}) NÃO se completou: o app abriu na v${app.getVersion()}. A próxima tentativa por botão usa o instalador visível.`);
+    } else {
+      logUpdate(`INFO instalação da v${marcadorAnterior.versaoAlvo} confirmada (rodando v${app.getVersion()})`);
+      updateGuard.apagarMarcador(dirDados());
+    }
+  }
+  const instalarAgora = (origem, permitirVisivel) => {
+    const alvo = estadoUpdate.versaoBaixada;
+    const visivel = !!(permitirVisivel && instalacaoAnteriorFalhou);
+    logUpdate(`INFO instalando v${alvo} (${origem}; ${visivel ? 'instalador VISÍVEL porque a tentativa anterior falhou' : 'silencioso'})`);
+    if (alvo) updateGuard.gravarMarcador(dirDados(), alvo, visivel ? 'visivel' : 'silencioso');
+    updateGuard.agendarReabertura(process.execPath, logUpdate);
+    isQuitting = true;
+    autoUpdater.quitAndInstall(!visivel, true);
+  };
   autoUpdater.on('update-downloaded', (info) => {
     // Guardado pra quem perguntar DEPOIS (ver ipcMain 'ntb-update-status').
     // Achado real (2026-09-13, cobrando "nem aparece o botão de atualizar"):
@@ -473,7 +500,7 @@ app.whenReady().then(() => {
         title: 'Norte Vendas',
         body: `Atualizando para ${formatAppVersion(info.version)}… o app reabre sozinho em instantes.`,
       }).show();
-      setTimeout(() => { isQuitting = true; autoUpdater.quitAndInstall(true, true); }, 4000);
+      setTimeout(() => instalarAgora('app recém-aberto', false), 4000);
     } else {
       new Notification({
         title: 'Norte Vendas',
@@ -542,11 +569,9 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('ntb-install-update', () => {
-    logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora" (silenciosa)');
-    isQuitting = true;
-    // Silencioso + reabre sozinho: o instalador assistido do modo comum não aparecia/era
-    // travado no Caixa do Sertão ("clica e nada acontece", 2026-09-29).
-    autoUpdater.quitAndInstall(true, true);
+    logUpdate('INFO Instalação solicitada manualmente pelo botão "Atualizar agora"');
+    // Silencioso + reabre sozinho (o assistido travava no Caixa do Sertão, 29/09); se a tentativa anterior falhou, visível.
+    instalarAgora('botão Atualizar agora', true);
   });
 
   // Impressão de rede/USB embutida (ver print-engine.js). Chamado pelo
@@ -696,9 +721,7 @@ app.whenReady().then(() => {
     if (!estadoUpdate.versaoBaixada) return;
     const hora = new Date().getHours();
     if (hora < 4 || hora > 5) return;
-    logUpdate(`INFO instalando v${estadoUpdate.versaoBaixada} de madrugada (${hora}h)`);
-    isQuitting = true;
-    autoUpdater.quitAndInstall(true, true);
+    instalarAgora(`madrugada (${hora}h)`, false);
   }, 10 * 60 * 1000);
 
   app.on('activate', mostrarJanela);
