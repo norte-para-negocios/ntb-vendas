@@ -2587,6 +2587,29 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
   na troca do primeiro acesso, na edição e ao mudar de loja. Senha inicial igual à de outra senha inicial ainda é permitida (ninguém se identifica
   com ela); contra a senha de quem já escolheu a sua, não.
 
+## Release dos apps Windows/Android (05/10/2026)
+
+**Regra: app só vai para o feed por `scripts/release-apps.sh`.** Em 04/10 os apps 1.2.84-1.2.86 (Windows) e 1.0.20-1.0.22 (Android) foram
+construídos numa worktree SEM `desktop/webapp/.env.local` / `mobile/webapp/.env.local` (gitignored, existem só na pasta principal) e caíram na reserva do
+código, que era o Supabase Cloud apagado: todo aparelho que atualizou ficou "Sem internet" com a rede boa. Hoje:
+
+- `lib/supabaseClient.ts` e `lib/supabaseAdmin.ts` têm como reserva o servidor de produção (`testvendase.norteparanegocios.com.br`).
+- `scripts/conferir-bundle.mjs <pasta|apk>` reprova bundle que cita `giiwtnddasminjxweohr` ou não cita o servidor certo; roda dentro de
+  `desktop` `npm run dist`, de `mobile` `npm run build:web`, nos dois `publish*.sh` e no teste `scripts/testes/offlineSertao0410.test.ts`.
+- `scripts/release-apps.sh [--dry-run] [--so-windows|--so-android]`: árvore limpa e commit no `origin/main` -> `.env.local` dos webapps (copia da pasta
+  principal se faltar) -> versão ainda não está no feed -> portão completo -> build -> trava de servidor -> backup do feed em
+  `/root/backups/feed-pre-<desktop>-<android>/` -> publica -> baixa o que publicou e confere tamanho/servidor.
+- `scripts/rollback-apps.sh [<desktop>-<android>]` restaura o feed anterior. Quem já atualizou não volta (sem downgrade).
+- Atualização é sempre OPCIONAL e nunca no meio do serviço (Ramon pediu 04/10). Nunca mandar link fixo ao cliente.
+
+## Pedido idempotente (05/10/2026, migration 162)
+
+- `create_order_v3(..., p_client_request_id uuid)` embrulha `create_order_secure` (que não mudou) e guarda a resposta em `order_requests`: o mesmo id
+  enviado de novo (reenvio da fila offline depois de a resposta se perder) devolve o MESMO pedido com `duplicado: true`, sem criar outro. Escopo por loja
+  (`store_id`), id nulo = comportamento antigo, limpeza de 14 dias embutida.
+- Cliente: `lib/offline/criarPedido.ts` (`chamarCriarPedido`) usado por `createOrder` e pela fila (`sync.ts`); cai na função antiga se o banco não tem a 162
+  (`PGRST202`). Teste: `scripts/testes/pedidoIdempotente.test.ts`. Apps antigos seguem criando pedido pela função antiga (sem proteção).
+
 ## Portão de deploy (04/10/2026)
 
 **Regra do dono: nenhum deploy sobe sem o portão passar.** Contexto: mudanças novas escaparam sem verificar o fluxo inteiro (impressão velha saiu em massa
