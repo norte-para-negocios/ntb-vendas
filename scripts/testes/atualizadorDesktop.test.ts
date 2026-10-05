@@ -35,6 +35,7 @@ assert.ok(s.includes("Get-Process -Name 'Norte Vendas'"), 'só abre se o app nã
 assert.ok(s.includes("Norte Vendas Setup*"), 'espera o instalador terminar');
 assert.ok(s.includes('AddSeconds(300)'), 'nunca passa de 5 minutos');
 assert.ok(s.includes('Start-Process -FilePath $exe'));
+assert.ok(readFileSync('desktop/electron/update-guard.js', 'utf8').includes('-EncodedCommand'), 'script vai codificado (sem problema de aspas)');
 
 // 4) o instalador NÃO pode usar taskkill /T (mataria a si mesmo: é filho do app que está fechando)
 const nsh = readFileSync('desktop/build/installer.nsh', 'utf8');

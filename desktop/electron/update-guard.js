@@ -48,7 +48,9 @@ function scriptReabertura(exePath) {
 function agendarReabertura(exePath, log) {
   if (process.platform !== 'win32') return false;
   try {
-    const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', scriptReabertura(exePath)], {
+    // -EncodedCommand (UTF-16LE em base64): sem problema de aspas/quebra de linha na linha de comando do Windows.
+    const codificado = Buffer.from(scriptReabertura(exePath), 'utf16le').toString('base64');
+    const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', codificado], {
       detached: true, stdio: 'ignore', windowsHide: true,
     });
     p.on('error', (e) => log && log(`WARN reabertura de segurança não iniciou: ${e.message}`));
