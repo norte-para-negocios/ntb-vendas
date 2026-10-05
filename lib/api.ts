@@ -10,6 +10,7 @@ import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
 import { enqueue } from './offline/queue';
 import { isNetworkError, checkRealConnectivity } from './offline/network';
+import { chamarCriarPedido } from './offline/criarPedido';
 
 // App desktop (Electron, ver docs/superpowers/specs/2026-09-07-desktop-app-
 // electron-design.md): a interface roda embutida no instalador, mas as
@@ -1608,14 +1609,16 @@ export const createOrder = async (
     p_items: pItems,
     p_added_by_role: addedByRole,
     p_added_by_name: addedByName || null,
+    // Identidade única deste pedido: se ele for reenviado (fila offline depois de a resposta se perder), o servidor
+    // reconhece e não cria outro (create_order_v3, migration 162).
+    p_client_request_id: crypto.randomUUID(),
   };
 
   try {
     // Garçom: confirma a conexão de verdade antes de esperar a resposta do servidor
     // (Wi-Fi sem internet deixaria o app pendurado); sem conexão vai direto pra fila local.
     if (addedByRole === 'garcom' && !(await checkRealConnectivity())) throw new TypeError('Failed to fetch (sem conexão)');
-    const { data, error } = await supabase.rpc('create_order_secure', rpcPayload);
-    if (error) throw error;
+    const data = await chamarCriarPedido(rpcPayload);
     if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
     return { success: true, orderId: data.order_id };
   } catch (error) {

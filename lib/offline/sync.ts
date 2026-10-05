@@ -1,5 +1,6 @@
 import { getPendingActions, markDone, markFailed, getFailedActions, resetActionAttempts, discardAction } from './queue';
 import { checkRealConnectivity, isNetworkError } from './network';
+import { chamarCriarPedido } from './criarPedido';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
 import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal } from '../api';
@@ -38,8 +39,7 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       // enfileira ele mais localOrderId) — chama a RPC direto, sem
       // reconstruir CartItem[].
       const { localOrderId, ...rpcPayload } = action.payload as any;
-      const { data, error } = await supabase.rpc('create_order_secure', rpcPayload);
-      if (error) throw error;
+      const data = await chamarCriarPedido(rpcPayload);
       if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
       if (localOrderId && data.order_id) idMap.set(localOrderId, data.order_id);
       break;
