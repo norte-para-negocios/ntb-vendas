@@ -232,7 +232,7 @@ async function secCadeados(C) {
     try {
       for (const a of PROIBIDAS_GARCOM) {
         await g.menu(a).click();
-        await g.page.getByText(/Sem permissão para esta área/).first().waitFor({ timeout: 5000 }).catch(() => { throw new Error(`sem o aviso de permissão ao clicar em ${a}`); });
+        await g.page.getByText(/Sem permissão para esta área|Só com login/).first().waitFor({ timeout: 5000 }).catch(() => { throw new Error(`sem o aviso de permissão ao clicar em ${a}`); });
         await sleep(1200);
         igual(await g.titulo(), 'Mesas & Comandas', `a tela mudou ao clicar em ${a}`);
       }
@@ -327,11 +327,16 @@ async function adicionarItens(dev, nomes) {
   }
 }
 // Confirma o pedido digitando `senha` no pedido de senha; devolve a mensagem de erro (ou null se o pedido saiu).
-async function confirmarComSenha(dev, senha) {
+async function confirmarComSenha(dev, senha, nome) {
   const p = dev.page;
   if (!(await p.getByRole('dialog').filter({ hasText: 'Quem está lançando?' }).count())) await p.getByRole('button', { name: /Confirmar pedido ·/ }).click();
   const dlg = p.getByRole('dialog').filter({ hasText: 'Quem está lançando?' });
   await dlg.waitFor({ timeout: 8000 });
+  // Garçom não tem perfil (migration 166): na tela livre de Mesas ele toca no NOME e digita a senha.
+  if (await dlg.getByRole('radiogroup').count()) {
+    if (!nome) throw new Error('o pedido pede o nome (tela livre de Mesas), mas o teste não informou quem está lançando');
+    await dlg.getByRole('radio', { name: nome, exact: true }).click();
+  }
   await dlg.getByLabel('Sua senha').fill(senha);
   await dlg.getByRole('button', { name: 'Confirmar pedido' }).click();
   await sleep(2500);
@@ -339,13 +344,13 @@ async function confirmarComSenha(dev, senha) {
   return null;
 }
 // Abre a mesa (se estiver livre) e lança os itens com a senha de quem está logado.
-async function lancar(dev, numero, nomes, senha) {
+async function lancar(dev, numero, nomes, senha, nome) {
   await abrirMesa(dev, numero);
   const abrir = dev.page.getByRole('button', { name: 'Abrir Mesa Manualmente' });
   if (await abrir.isVisible().catch(() => false)) { await abrir.click(); await sleep(1500); }
   await adicionarItens(dev, nomes);
   await dev.page.getByRole('button', { name: /Confirmar pedido ·/ }).click();
-  const erro = await confirmarComSenha(dev, senha);
+  const erro = await confirmarComSenha(dev, senha, nome);
   if (erro) throw new Error(`pedido não saiu: ${erro}`);
   await sleep(1200);
 }
@@ -362,17 +367,17 @@ async function secLancamento(C) {
   await adicionarItens(g, [P.cozinha.name, P.bar.name, P.pizza.name]);
   await g.page.getByRole('button', { name: /Confirmar pedido ·/ }).click();
   await rel.passo('senha ERRADA não lança o pedido', async () => {
-    const erro = await confirmarComSenha(g, 'senha-que-ninguem-tem-9');
-    ok(erro && /Senha não encontrada/i.test(erro), `mensagem inesperada: ${erro}`);
+    const erro = await confirmarComSenha(g, 'senha-que-ninguem-tem-9', U.garcom.nome);
+    ok(erro && /Nome ou senha incorretos/i.test(erro), `mensagem inesperada: ${erro}`);
     igual((await amb.pedidosDasMesas()).length, 0, 'pedidos criados com senha errada');
   });
-  await rel.passo('senha de OUTRO usuário (garçom 2) é recusada: "essa senha não é a sua"', async () => {
-    const erro = await confirmarComSenha(g, U.garcom2.senha);
-    ok(erro && /não é a sua/i.test(erro), `mensagem inesperada: ${erro}`);
+  await rel.passo('nome de um garçom com a senha de OUTRO (garçom 2) é recusado: "Nome ou senha incorretos"', async () => {
+    const erro = await confirmarComSenha(g, U.garcom2.senha, U.garcom.nome);
+    ok(erro && /Nome ou senha incorretos/i.test(erro), `mensagem inesperada: ${erro}`);
     igual((await amb.pedidosDasMesas()).length, 0, 'pedidos criados com a senha de outro usuário');
   });
   await orcamento(C, 'lançar 3 itens de locais diferentes (cozinha, bar, pizzaria) = 3 pedidos, um por local', async () => {
-    const erro = await confirmarComSenha(g, U.garcom.senha);
+    const erro = await confirmarComSenha(g, U.garcom.senha, U.garcom.nome);
     ok(!erro, `senha própria recusada: ${erro}`);
     await sleep(1500);
   }, { pedido: { Cozinha: 1, Bar: 1, Pizzaria: 1 } });
@@ -438,7 +443,7 @@ async function secPermissoesAcoes(C) {
     await abrirMesa(g, mesaA.number);
     await adicionarItens(g, [P.extra.name, P.extra2.name]);
     await g.page.getByRole('button', { name: /Confirmar pedido ·/ }).click();
-    const e = await confirmarComSenha(g, U.garcom.senha);
+    const e = await confirmarComSenha(g, U.garcom.senha, U.garcom.nome);
     ok(!e, `pedido não saiu: ${e}`);
     await sleep(1500);
   }, { pedido: { Cozinha: 1 } });
