@@ -3734,7 +3734,6 @@ NOTIFY pgrst, 'reload schema';`;
     // `automatica`: disparada por 'Pedir conta' — só imprime se houver impressora que receba a pré-conta (sem janela
     // de impressão do navegador no aparelho de quem pediu) e não repete no mesmo minuto (garçom + cliente pedindo junto).
     const printTableBill = async (tableId: string, automatica = false) => {
-        if (isAberto) { avisarSoComLogin(); return; }
         // Interruptor 'Imprimir pré-conta automaticamente' (Configurações > Impressão): desligado, só o botão manual imprime.
         if (automatica && !preContaAutomaticaLigada((await fetchStoreById(store.id).catch(() => null) ?? store).config)) return;
         const summary = getTableSummary(tableId);
@@ -4269,7 +4268,7 @@ NOTIFY pgrst, 'reload schema';`;
     // 4: "a mesa vai aparecer 'pediu conta' como se fosse o cliente
     // também").
     const handleRequestBill = async (tableId: string) => {
-        if (isAberto) { avisarSoComLogin(); return; }
+        // Pedir conta é do garçom (a conta e o pagamento é que são do caixa): vale também na tela livre de Mesas.
         try {
             const jaPediuConta = tables.find((t) => t.id === tableId)?.status === TableStatus.WAITING_BILL;
             await requestTableBill(tableId);
@@ -5170,10 +5169,6 @@ NOTIFY pgrst, 'reload schema';`;
                                                  <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
                                                  Conta pedida — aguardando o caixa
                                              </div>
-                                         ) : isAberto ? (
-                                             <div className="w-full flex items-center justify-center gap-2 text-[14px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-full h-12">
-                                                 <Lock size={15} aria-hidden /> Conta e pagamento: só com login
-                                             </div>
                                          ) : (
                                              <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
                                                 <Receipt size={18}/> Pedir conta
@@ -5410,10 +5405,6 @@ NOTIFY pgrst, 'reload schema';`;
                                 <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
                                     <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
                                     Conta pedida — aguardando o caixa
-                                </div>
-                            ) : isAberto ? (
-                                <div className="w-full flex items-center justify-center gap-2 text-[14px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-full h-12">
-                                    <Lock size={15} aria-hidden /> Conta e pagamento: só com login
                                 </div>
                             ) : (
                                 <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">

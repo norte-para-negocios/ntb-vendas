@@ -234,7 +234,9 @@ async function secCadeados(C) {
         await g.menu(a).click();
         await g.page.getByText(/Sem permissão para esta área|Só com login/).first().waitFor({ timeout: 5000 }).catch(() => { throw new Error(`sem o aviso de permissão ao clicar em ${a}`); });
         await sleep(1200);
-        igual(await g.titulo(), 'Mesas & Comandas', `a tela mudou ao clicar em ${a}`);
+        // Garçom não tem perfil: na tela livre a área abre só o painel "Só com login" (sem dados); ele volta para Mesas.
+        ok(await g.page.getByText(/Só com login/).first().isVisible().catch(() => false) || (await g.titulo()) === 'Mesas & Comandas', `sem o painel "Só com login" ao clicar em ${a}`);
+        await g.irArea('Mesas'); await sleep(600);
       }
     } finally { g.page.off('request', ouvir); }
     ok(vistas.length === 0, `dados de área bloqueada foram pedidos ao servidor: ${vistas.join(' | ')}`);

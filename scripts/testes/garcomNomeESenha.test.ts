@@ -10,6 +10,11 @@ assert.match(tela, /verificarLoginEquipe\(storeId, senhaPedido\.userId, senha\)/
 assert.match(tela, /Toque no seu nome\./);
 assert.match(tela, /role === 'waiter' \? `garcom-\$\{crypto\.randomUUID\(\)/, 'garçom novo não precisa de e-mail');
 
+// Na tela livre o garçom ainda pede a conta e imprime a comanda (só o pagamento é do caixa)
+assert.doesNotMatch(tela, /const handleRequestBill = async \(tableId: string\) => \{\s*if \(isAberto\)/, 'Pedir conta liberado na tela livre');
+assert.doesNotMatch(tela, /const printTableBill = async \(tableId: string, automatica = false\) => \{\s*if \(isAberto\)/, 'Imprimir comanda liberado na tela livre');
+assert.doesNotMatch(tela, /Conta e pagamento: só com login/, 'o painel que escondia o Pedir conta saiu');
+
 const api = readFileSync('lib/api.ts', 'utf8');
 assert.match(api, /verify_store_staff_login_secure/);
 assert.match(api, /r\.success && r\.user_id !== userId \? \{ success: false, error: 'invalid' \} : r/, 'servidor sem a 166: continua exigindo a MESMA pessoa');
