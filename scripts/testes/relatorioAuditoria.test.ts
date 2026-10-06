@@ -14,6 +14,10 @@ assert.match(descreverEvento(ev({ action: 'fiscal_notas.update', entity: 'fiscal
 assert.ok(ehAlerta(ev({ action: 'reimpressao.pedido_kds', origin: 'app' }), 'x'));
 assert.ok(ehAlerta(ev({}), 'CANCELOU pedido'));
 assert.ok(!ehAlerta(ev({ action: 'order_items.insert' }), 'Lançou 1x X'));
+assert.ok(!ehAlerta(ev({ action: 'orders.update' }), 'Registrou pagamento (mesa 5): R$ 10,00'), 'pagamento normal não é alerta');
+assert.ok(!ehAlerta(ev({ action: 'cash_shifts.insert' }), 'ABRIU turno de caixa (fundo R$ 0,00)'), 'abrir turno é rotina');
+assert.ok(ehAlerta(ev({ action: 'products.update' }), 'Alterou produto X: price: 1 para 2'));
+assert.ok(ehAlerta(ev({ action: 'orders.update' }), 'MUDOU o pedido da mesa 1 para a mesa 2'));
 
 assert.equal(descreverEvento(ev({ action: 'orders.update', entity: 'orders', details: { mudou: { table_id: { de: 'tA', para: 'tB' } } } }), { ...nomes, mesas: { tA: 10, tB: 12 } }), 'MUDOU o pedido da mesa 10 para a mesa 12');
 assert.match(descreverEvento(ev({ action: 'orders.update', entity: 'orders', details: { ctx: { order_id: 'o1' }, mudou: { payment_details: { de: null, para: { total: 122.87, methods: [{ method: 'CREDIT', amount: 122.87, brand: 'visa' }], operador_nome: 'Ana' } } } } }), nomes), /Registrou pagamento \(mesa 5\): R\$ 122,87 \(R\$ 122,87 em crédito visa\) — recebido por Ana/);

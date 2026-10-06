@@ -156,17 +156,38 @@ export function descreverEvento(ev: EventoAuditoria, n: Nomes = SEM_NOMES): stri
   return `${(OP[op] || op).replace(/^./, (c) => c.toUpperCase())} ${nomeTab.toLowerCase()}${linha.name ? ` ${linha.name}` : ''}`;
 }
 
-export type LinhaRelatorio = { hora: string; texto: string; alerta: boolean; acao: string };
-export type SecaoLogin = { chave: string; nome: string; papel: string; total: number; primeira: string; ultima: string; alertas: number; linhas: LinhaRelatorio[] };
+export type Categoria = 'acesso' | 'pedido' | 'pagamento' | 'impressao' | 'mesa' | 'caixa' | 'fiscal' | 'cardapio' | 'equipe' | 'config' | 'ponto' | 'outro';
+export type LinhaRelatorio = { hora: string; h: number; texto: string; alerta: boolean; acao: string; categoria: Categoria };
+export type SecaoLogin = { chave: string; nome: string; papel: string; total: number; primeira: string; ultima: string; alertas: number; linhas: LinhaRelatorio[]; porHora: number[] };
+
+export function categoriaDe(ev: EventoAuditoria, texto: string): Categoria {
+  const a = ev.action;
+  if (a.startsWith('login.') || a.startsWith('sessao.')) return 'acesso';
+  if (a.startsWith('reimpressao.') || a === 'print_jobs.insert') return 'impressao';
+  if (a.startsWith('fiscal')) return 'fiscal';
+  if (a.startsWith('cash_')) return 'caixa';
+  if (a.startsWith('operator_checkins')) return 'ponto';
+  if (a.startsWith('tables.') || a.startsWith('table_sessions.') || /^MUDOU o pedido da/.test(texto)) return 'mesa';
+  if (/pagamento|Fechou\/entregou/i.test(texto)) return 'pagamento';
+  if (a.startsWith('orders.') || a.startsWith('order_items.')) return 'pedido';
+  if (/^(products|categories|category_groups|product_|price_schedules|discount_coupons)/.test(a)) return 'cardapio';
+  if (a.startsWith('store_users')) return 'equipe';
+  if (/^(stores|printer_configs|print_sectors|store_fiscal_config)/.test(a)) return 'config';
+  return 'outro';
+}
+
+export const horaDoDia = (iso: string) => Number(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' }).format(new Date(iso)));
 
 // Ações que o gestor quer ver em destaque.
 export function ehAlerta(ev: EventoAuditoria, texto: string): boolean {
   const a = ev.action;
   if (a.startsWith('reimpressao.') || a === 'historico.zerar' || a === 'login.falhou' || a === 'login.bloqueado' || a === 'fiscal.exportar') return true;
-  if (/^(CANCELOU|APAGOU|ZEROU|ABRIU turno|FECHOU turno)/.test(texto)) return true;
+  if (/^(CANCELOU|APAGOU|ZEROU|MUDOU)/.test(texto)) return true;      // cancelamento, exclusão, pedido movido de mesa
   if (a.endsWith('.delete')) return true;
   if (a === 'fiscal_notas.update' && /cancelada|rejeitada/.test(texto)) return true;
-  if (/pagamento|taxa|desconto/i.test(texto) && a.endsWith('.update')) return true;
+  if (/^Alterou forma de pagamento/.test(texto)) return true;          // pagamento NORMAL não é alerta; só a troca depois
+  if (a === 'products.update' && /price/.test(texto)) return true;     // preço de produto mudou
+  if (/taxa|desconto/i.test(texto) && a.endsWith('.update')) return true;
   return false;
 }
 
@@ -177,17 +198,19 @@ export function agruparPorLogin(eventos: EventoAuditoria[], n: Nomes = SEM_NOMES
     const chave = ev.actor_user_id || (sem ? '(sistema)' : `nome:${ev.actor_name}`);
     const nome = sem ? 'Sistema / clientes pelo QR (sem login)' : (ev.actor_name || 'Desconhecido');
     let s = mapa.get(chave);
-    if (!s) { s = { chave, nome, papel: sem ? '' : rotuloPapel(ev.actor_role), total: 0, primeira: ev.occurred_at, ultima: ev.occurred_at, alertas: 0, linhas: [] }; mapa.set(chave, s); }
+    if (!s) { s = { chave, nome, papel: sem ? '' : rotuloPapel(ev.actor_role), total: 0, primeira: ev.occurred_at, ultima: ev.occurred_at, alertas: 0, linhas: [], porHora: Array(24).fill(0) }; mapa.set(chave, s); }
     const texto = descreverEvento(ev, n);
     const alerta = ehAlerta(ev, texto);
-    s.linhas.push({ hora: horaBR(ev.occurred_at), texto, alerta, acao: ev.action });
+    const h = horaDoDia(ev.occurred_at);
+    s.linhas.push({ hora: horaBR(ev.occurred_at), h, texto, alerta, acao: ev.action, categoria: categoriaDe(ev, texto) });
+    s.porHora[h]++;
     s.total++; s.ultima = ev.occurred_at; if (alerta) s.alertas++;
   }
   // pessoas primeiro (por nº de ações), o bloco "sistema" por último
   return [...mapa.values()].sort((a, b) => (a.chave === '(sistema)' ? 1 : 0) - (b.chave === '(sistema)' ? 1 : 0) || b.total - a.total);
 }
 
-export function textoWhatsApp(opts: { loja: string; dia: string; secoes: SecaoLogin[]; limite?: string }): string {
+export function textoWhatsApp(opts: { loja: string; dia: string; secoes: SecaoLogin[]; link?: string }): string {
   const [y, m, d] = opts.dia.split('-');
   const linhas: string[] = [`*Auditoria do dia ${d}/${m}/${y} — ${opts.loja}*`];
   if (!opts.secoes.length) return linhas.concat('Nenhuma ação registrada neste dia.').join('\n');
@@ -195,7 +218,7 @@ export function textoWhatsApp(opts: { loja: string; dia: string; secoes: SecaoLo
     const alert = s.alertas ? ` · ⚠ ${s.alertas} para conferir` : '';
     linhas.push(`• ${s.nome}${s.papel ? ` (${s.papel})` : ''}: ${s.total} ações (${horaBR(s.primeira).slice(0, 5)}–${horaBR(s.ultima).slice(0, 5)})${alert}`);
   }
-  linhas.push('', 'O relatório completo, hora a hora por login, está no PDF.');
+  linhas.push('', opts.link ? `Ver o relatório completo, por login e hora a hora:\n${opts.link}` : 'O relatório completo, hora a hora por login, está no PDF.');
   return linhas.join('\n');
 }
 
@@ -249,9 +272,23 @@ export async function carregarNomes(admin: SupabaseClient, eventos: EventoAudito
   return n;
 }
 
-export async function montarRelatorioDia(admin: SupabaseClient, storeId: string, loja: string, dia: string) {
+export async function montarRelatorioDia(admin: SupabaseClient, storeId: string, loja: string, dia: string, link?: string) {
   const eventos = await buscarEventosDoDia(admin, storeId, dia);
   const nomes = await carregarNomes(admin, eventos);
   const secoes = agruparPorLogin(eventos, nomes);
-  return { eventos, secoes, texto: textoWhatsApp({ loja, dia, secoes }) };
+  return { eventos, secoes, texto: textoWhatsApp({ loja, dia, secoes, link }) };
+}
+
+// Números do topo do relatório.
+export function resumoDoDia(secoes: SecaoLogin[]) {
+  const todas = secoes.flatMap((x) => x.linhas);
+  const pessoas = secoes.filter((x) => x.chave !== '(sistema)');
+  return {
+    acoes: pessoas.reduce((t, x) => t + x.total, 0),
+    logins: pessoas.length,
+    alertas: todas.filter((l) => l.alerta).length,
+    reimpressoes: todas.filter((l) => l.acao.startsWith('reimpressao.')).length,
+    cancelamentos: todas.filter((l) => /^(CANCELOU|APAGOU)/.test(l.texto)).length,
+    pagamentos: todas.filter((l) => l.categoria === 'pagamento' && /Registrou pagamento/.test(l.texto)).length,
+  };
 }

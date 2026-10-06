@@ -5,7 +5,7 @@
 //   AUDIT_EVOLUTION_URL / AUDIT_EVOLUTION_KEY / AUDIT_EVOLUTION_INSTANCE   (Evolution API do WhatsApp)
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { montarRelatorioDia } from '@/lib/relatorioAuditoria';
-import { gerarPdfAuditoria } from '@/lib/relatorioAuditoriaPdf';
+import { urlRelatorio } from '@/lib/relatorioLink';
 
 type Destino = { storeId: string; numero: string; nome?: string };
 
@@ -41,10 +41,8 @@ export async function enviarRelatorioDoDia(dest: Destino, dia: string, opts: { f
   tentativas.set(chave, (tentativas.get(chave) ?? 0) + 1);
   const { data: loja } = await admin.from('stores').select('name').eq('id', dest.storeId).maybeSingle();
   const nomeLoja = loja?.name || 'Loja';
-  const rel = await montarRelatorioDia(admin, dest.storeId, nomeLoja, dia);
-  const pdf = await gerarPdfAuditoria({ loja: nomeLoja, dia, secoes: rel.secoes });
+  const rel = await montarRelatorioDia(admin, dest.storeId, nomeLoja, dia, urlRelatorio(dest.storeId, dia));
   if (!textoJaEnviado.has(chave)) { await evolution('sendText', { number: dest.numero, text: rel.texto }); textoJaEnviado.add(chave); }
-  await evolution('sendMedia', { number: dest.numero, mediatype: 'document', mimetype: 'application/pdf', fileName: `Auditoria ${dia}.pdf`, media: pdf.toString('base64') });
   jaEnviados.add(chave); // mesmo se o registro abaixo falhar, este processo nunca repete
   const { error } = await admin.from('staff_audit_log').insert({ store_id: dest.storeId, actor_name: 'Sistema', action: 'relatorio.enviado', entity: 'relatorio', entity_id: dia, summary: `Relatório do dia ${dia} enviado para ${dest.nome || dest.numero}`, origin: 'server' });
   if (error) console.error('Relatório de auditoria: enviado, mas não consegui registrar o envio:', error.message);
