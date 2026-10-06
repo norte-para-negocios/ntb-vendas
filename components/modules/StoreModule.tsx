@@ -40,7 +40,7 @@ import { subtituloHistorico, nomeArquivoHistorico, type FiltrosHistorico } from 
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
-import { fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -2926,8 +2926,21 @@ const TablesView: React.FC<{
     const isAberto = loggedUser.role === 'open';
     const avisarSoComLogin = () => toast.info('Só com login: saia do modo Aberto e entre com a sua conta.');
     // Senha de quem está lançando o pedido no modo Aberto (só a senha; ver migration 135).
-    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean }>({ aberto: false, senha: '', erro: '', verificando: false });
-    const pedirSenhaDoPedido = () => setSenhaPedido({ aberto: true, senha: '', erro: '', verificando: false });
+    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean; userId: string }>({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
+    // Quem lança escolhe o NOME e digita a senha (migration 166). Com login (não é o modo Aberto) o nome já é o da pessoa logada.
+    const [equipePedido, setEquipePedido] = useState<PessoaEquipe[]>([]);
+    const chaveUltimoLancador = `ntb-ultimo-lancador:${storeId}`;
+    const pedirSenhaDoPedido = () => {
+        let ultimo = '';
+        try { ultimo = localStorage.getItem(chaveUltimoLancador) || ''; } catch { /* sem armazenamento */ }
+        setSenhaPedido({ aberto: true, senha: '', erro: '', verificando: false, userId: isAberto ? ultimo : (loggedUser.role === 'universal' ? '' : loggedUser.id) });
+    };
+    useEffect(() => {
+        if (!senhaPedido.aberto || !isAberto) return;
+        let vivo = true;
+        fetchEquipePedido(storeId).then((l) => { if (vivo) setEquipePedido(l); });
+        return () => { vivo = false; };
+    }, [senhaPedido.aberto, isAberto, storeId]);
     // Subprojeto 3 (2026-08-25) — "trocar responsável" rápido: mesmo padrão
     // de acesso já usado pra decidir quem vê a aba Administração (onde a
     // edição completa de jurisdição já vivia, dentro de Gestão de
@@ -5567,16 +5580,19 @@ NOTIFY pgrst, 'reload schema';`;
                     onSubmit={async (e) => {
                         e.preventDefault();
                         const senha = senhaPedido.senha;
+                        const comNomes = isAberto || loggedUser.role === 'universal';
+                        if (comNomes && !senhaPedido.userId) { setSenhaPedido((x) => ({ ...x, erro: 'Toque no seu nome.' })); return; }
                         if (!senha) { setSenhaPedido((x) => ({ ...x, erro: 'Digite a sua senha.' })); return; }
                         setSenhaPedido((x) => ({ ...x, verificando: true, erro: '' }));
-                        const r = await verificarSenhaEquipe(storeId, senha);
+                        const r = senhaPedido.userId ? await verificarLoginEquipe(storeId, senhaPedido.userId, senha) : await verificarSenhaEquipe(storeId, senha);
                         // Com login (não é o modo Aberto): a senha tem que ser da PRÓPRIA pessoa logada, nunca de outra (R3).
                         if (r.success && !isAberto && loggedUser.role !== 'universal' && r.user_id !== loggedUser.id) {
                             setSenhaPedido((x) => ({ ...x, verificando: false, erro: 'Essa senha não é a sua. Digite a sua própria senha.', senha: '' }));
                             return;
                         }
                         if (r.success) {
-                            setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false });
+                            try { if (isAberto) localStorage.setItem(chaveUltimoLancador, r.user_id); } catch { /* sem armazenamento */ }
+                            setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
                             toast.success(`Pedido no nome de ${r.name}.`);
                             await confirmarPedidoMesa({ name: r.name });
                             return;
@@ -5585,15 +5601,32 @@ NOTIFY pgrst, 'reload schema';`;
                             r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Troque a sua senha ou entre com o seu login.' :
                             r.error === 'locked' ? `Muitas tentativas erradas. Espere ${r.seconds ?? 60} segundos.` :
                             r.error === 'offline' ? 'Sem internet: não dá pra conferir a senha agora.' :
-                            'Senha não encontrada.';
+                            (senhaPedido.userId ? 'Nome ou senha incorretos.' : 'Senha não encontrada.');
                         setSenhaPedido((x) => ({ ...x, verificando: false, erro, senha: '' }));
                     }}
                 >
-                    <p className="text-sm text-[var(--text-muted)]">Digite a <b>sua</b> senha de login. O pedido sai no seu nome.</p>
+                    <p className="text-sm text-[var(--text-muted)]">{isAberto ? <>Toque no <b>seu nome</b> e digite a <b>sua</b> senha. O pedido sai no seu nome.</> : <>Digite a <b>sua</b> senha de login. O pedido sai no seu nome.</>}</p>
+                    {isAberto && (
+                        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Quem está lançando">
+                            {equipePedido.length === 0 && <p className="text-sm text-[var(--text-muted)]">Carregando os nomes…</p>}
+                            {equipePedido.map((p) => (
+                                <button
+                                    key={p.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={senhaPedido.userId === p.id}
+                                    onClick={() => setSenhaPedido((x) => ({ ...x, userId: p.id, erro: '' }))}
+                                    className={`min-h-11 px-4 rounded-full text-[15px] font-semibold transition-colors ${senhaPedido.userId === p.id ? 'bg-[var(--brand-fill)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}`}
+                                >
+                                    {p.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <Input
                         label="Sua senha"
                         type="password"
-                        autoFocus
+                        autoFocus={!isAberto || Boolean(senhaPedido.userId)}
                         autoComplete="off"
                         value={senhaPedido.senha}
                         onChange={(e) => setSenhaPedido((x) => ({ ...x, senha: e.target.value, erro: '' }))}
@@ -10755,7 +10788,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     };
 
     const handleSave = async () => {
-        if (!name || !email || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
+        if (!name || (role !== 'waiter' && !email) || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
         setIsLoading(true);
         try {
             // Jurisdicao de mesas (Task 3): restrictTables=false ou lista
@@ -10764,7 +10797,9 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             // sinônimo de null, mas fica explícito aqui pra não depender
             // disso silenciosamente.
             const assignedTableIds = restrictTables && selectedTableIds.length > 0 ? selectedTableIds : null;
-            const userData = { name, email, role, permissions, assigned_table_ids: assignedTableIds, ...(password ? { password } : {}) };
+            // Garçom não tem perfil: só nome e senha (e-mail interno gerado, permissões vazias). A conta dele entra direto na tela de Mesas.
+            const emailFinal = email || (role === 'waiter' ? `garcom-${crypto.randomUUID().slice(0, 8)}@interno.norteparanegocios.com.br` : '');
+            const userData = { name, email: emailFinal, role, permissions: role === 'waiter' && !editingUser ? {} : permissions, assigned_table_ids: assignedTableIds, ...(password ? { password } : {}) };
 
             if (editingUser) {
                 await updateStoreTeamMember(editingUser.id, userData);
@@ -10834,7 +10869,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? 'Editar usuário' : 'Novo usuário'}>
                 <div className="space-y-4">
                     <Input label="Nome Completo" value={name} onChange={e => setName(e.target.value)} />
-                    <Input label="Email de Acesso" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+                    <div className={role === 'waiter' ? 'hidden' : ''}><Input label="Email de Acesso" type="email" value={email} onChange={e => setEmail(e.target.value)} /></div>
                     <Input label={editingUser ? "Nova Senha (opcional)" : "Senha"} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={editingUser ? "Deixe em branco para manter" : "******"} />
                     
                     <div>
@@ -10847,12 +10882,15 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <option value="manager">Gerente</option>
                             <option value="open">Aberto (computador só de mesas)</option>
                         </select>
+                        {role === 'waiter' && (
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Garçom não tem perfil: só usa a tela de Mesas. Para lançar um pedido, ele toca no próprio nome e digita esta senha.</p>
+                        )}
                         {role === 'open' && (
                             <p className="mt-1.5 text-xs text-[var(--text-muted)]">Conta pra deixar logada no computador do salão: só abre mesa e lança pedido. Cada pedido pede a senha de quem está lançando e sai no nome dessa pessoa. Conta, pagamento e o resto do sistema ficam bloqueados.</p>
                         )}
                     </div>
 
-                    <div className="bg-[var(--surface-2)] p-4 rounded-[14px]">
+                    <div className={`bg-[var(--surface-2)] p-4 rounded-[14px] ${role === 'waiter' ? 'hidden' : ''}`}>
                         <label className="text-[15px] font-semibold text-[var(--text)] mb-2 block">Permissões de acesso</label>
                         {!editingUser && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -13490,6 +13528,8 @@ export const StoreModule: React.FC = () => {
                     }
                 } else if (saved?.userId) {
                     restoredUser = await fetchStoreUserById(saved.userId);
+                    // Garçom não tem perfil: sessão antiga de garçom volta como a tela livre de Mesas.
+                    if (restoredUser?.role === 'waiter') restoredUser = usuarioAberto(restoredUser.store);
                 }
 
                 if (restoredUser) {
@@ -13554,6 +13594,18 @@ export const StoreModule: React.FC = () => {
     }, [user]);
 
     const handleLogin = (u: StoreUser & { store: Store }) => {
+        // Garçom não tem perfil nem abas: o login dele só abre a tela livre de Mesas, e cada pedido é confirmado com nome + senha.
+        if (u.role === 'waiter') {
+            const aberto = usuarioAberto(u.store);
+            definirAtor({ id: null, name: aberto.name, role: aberto.role });
+            registrarAcao(u.store.id, 'login.modo_aberto', { entity: 'login', entityId: u.id, summary: `${u.name} entrou pela tela de Mesas (garçom não tem perfil)` });
+            setUser(aberto);
+            setTab('tables');
+            localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ aberto: true, storeId: u.store.id }));
+            try { localStorage.setItem(MESAS_LOJA_STORAGE_KEY, u.store.id); } catch { /* sem armazenamento */ }
+            toast.info('Tela de Mesas. Para lançar um pedido, toque no seu nome e digite a senha.');
+            return;
+        }
         definirAtor({ id: u.role === 'universal' ? null : u.id, name: u.name, role: u.role });
         registrarAcao(u.store.id, 'login.entrou', { entity: 'login', entityId: u.id, summary: `${u.name} entrou no sistema`, details: { papel: u.role } });
         setUser(u);

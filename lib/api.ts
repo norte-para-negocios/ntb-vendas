@@ -3527,6 +3527,38 @@ export const verificarSenhaEquipe = async (storeId: string, senha: string): Prom
   return r;
 };
 
+// Garçom confirma o pedido com NOME + SENHA (migration 166). A lista de nomes vem do servidor e fica guardada no aparelho:
+// sem internet o garçom ainda escolhe o nome e a senha é conferida contra o cache (12 h) daquela pessoa.
+export type PessoaEquipe = { id: string; name: string; role: string };
+const CHAVE_EQUIPE_PEDIDO = 'ntb-equipe-pedido-v1';
+export const fetchEquipePedido = async (storeId: string): Promise<PessoaEquipe[]> => {
+  const lerCache = (): PessoaEquipe[] => { try { const c = JSON.parse(localStorage.getItem(`${CHAVE_EQUIPE_PEDIDO}:${storeId}`) || '[]'); return Array.isArray(c) ? c : []; } catch { return []; } };
+  try {
+    const { data, error } = await supabase.rpc('list_store_staff_for_orders_secure', { p_store_id: storeId });
+    if (error || !Array.isArray(data)) return lerCache();
+    try { localStorage.setItem(`${CHAVE_EQUIPE_PEDIDO}:${storeId}`, JSON.stringify(data)); } catch { /* sem cache */ }
+    return data as PessoaEquipe[];
+  } catch { return lerCache(); }
+};
+
+export const verificarLoginEquipe = async (storeId: string, userId: string, senha: string): Promise<ResultadoSenhaEquipe> => {
+  const { data, error } = await supabase.rpc('verify_store_staff_login_secure', { p_store_id: storeId, p_user_id: userId, p_password: senha });
+  // Servidor ainda sem a migration 166: confere pela senha (função antiga) e exige que seja a MESMA pessoa escolhida.
+  if (error?.code === 'PGRST202') {
+    const r = await verificarSenhaEquipe(storeId, senha);
+    return r.success && r.user_id !== userId ? { success: false, error: 'invalid' } : r;
+  }
+  if (error || !data) {
+    if (error && !isNetworkError(error)) return { success: false, error: 'invalid' };
+    const dela = lerSenhasConferidas().find((c) => c.storeId === storeId && c.user_id === userId);
+    if (dela && (await derivarSenha(senha, dela.salt)) === dela.hash) return { success: true, user_id: dela.user_id, name: dela.name, role: dela.role };
+    return { success: false, error: 'offline' };
+  }
+  const r = data as ResultadoSenhaEquipe;
+  if (r.success) await registrarSenhaConferida(storeId, senha, { id: r.user_id, name: r.name, role: r.role });
+  return r;
+};
+
 // --- Cupons de desconto (migration 142/143/144) ---
 import { calculateCouponDiscount, type CouponInfo } from './coupons';
 
