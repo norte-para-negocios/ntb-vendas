@@ -8,6 +8,10 @@
 // (não é serverless), então um setInterval de longa duração dentro do próprio
 // processo basta — não precisa de cron externo nem de fila.
 export async function register() {
+  // Fuso do processo = Brasil. O servidor do Contabo roda em Europe/Berlin (+5h): as bibliotecas de PDF/cupom
+  // (nfe-danfe-pdf, node-sped-pdf) formatam dhEmi no fuso do processo, então a nota emitida às 21h de 05/10
+  // saía impressa como 06/10 02h. Vale pra TODA data formatada no servidor (CSV, contingência, PDFs).
+  process.env.TZ = 'America/Sao_Paulo';
   // `register()` também é invocado pro runtime Edge; o job usa Node puro
   // (https, node-forge, pdfkit) e Supabase com service role — só faz sentido,
   // e só funciona, no runtime Node.

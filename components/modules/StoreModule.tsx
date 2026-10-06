@@ -8833,21 +8833,23 @@ const CaixaView: React.FC<{
     onOpenTablePayment: (tableId: string) => void;
     onOpenCounterPayment: (orderId: string) => void;
 }> = (props) => {
-    const [visao, setVisao] = useState<'meu' | 'equipe'>('meu');
-    if (!podeVerCaixasDaEquipe(props.loggedUser)) return <CaixaViewMeu {...props} />;
+    const [visao, setVisao] = useState<'meu' | 'equipe' | 'notas'>('meu');
+    const veEquipe = podeVerCaixasDaEquipe(props.loggedUser);
     return (
         <div className="space-y-4">
             <SegmentedControl
                 className="flex w-full [&>button]:flex-1 max-sm:[&>button]:px-1.5"
                 value={visao}
-                onChange={(v) => setVisao(v as 'meu' | 'equipe')}
+                onChange={(v) => setVisao(v as 'meu' | 'equipe' | 'notas')}
                 options={[
                     { value: 'meu', label: 'Meu caixa' },
-                    { value: 'equipe', label: 'Caixas da equipe' },
+                    { value: 'notas', label: 'Notas fiscais' },
+                    ...(veEquipe ? [{ value: 'equipe', label: 'Caixas da equipe' }] : []),
                 ]}
             />
             <div className={visao === 'meu' ? '' : 'hidden'}><CaixaViewMeu {...props} /></div>
-            {visao === 'equipe' && <CaixasAoVivo storeId={props.store.id} viewer={props.loggedUser} contagemCega={!!props.store.config?.cash_shift_blind_count} />}
+            {visao === 'notas' && <FiscalNotasView storeId={props.store.id} storeName={props.store.name} modoCaixa />}
+            {visao === 'equipe' && veEquipe && <CaixasAoVivo storeId={props.store.id} viewer={props.loggedUser} contagemCega={!!props.store.config?.cash_shift_blind_count} />}
         </div>
     );
 };
@@ -11653,7 +11655,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 </div>
             )}
 
-            {activeTab === 'notas' && <FiscalNotasView storeId={storeId} onConfigurarEmissor={() => irPara('fiscal')} />}
+            {activeTab === 'notas' && <FiscalNotasView storeId={storeId} storeName={store.name} onConfigurarEmissor={() => irPara('fiscal')} />}
 
             {activeTab === 'integracoes' && <IntegracoesView storeId={storeId} podeEditarEstoque={roleCan(loggedUser, store, 'editar_cardapio')} operador={loggedUser.name} />}
 
@@ -12647,8 +12649,9 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
     );
 };
 
-const FiscalNotasView: React.FC<{ storeId: string; onConfigurarEmissor?: () => void }> = ({ storeId, onConfigurarEmissor }) => {
+const FiscalNotasView: React.FC<{ storeId: string; storeName?: string; modoCaixa?: boolean; onConfigurarEmissor?: () => void }> = ({ storeId, storeName = '', modoCaixa = false, onConfigurarEmissor }) => {
     const [notas, setNotas] = useState<FiscalNota[]>([]);
+    const [reimprimindoId, setReimprimindoId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [retryingId, setRetryingId] = useState<string | null>(null);
@@ -12803,6 +12806,41 @@ const FiscalNotasView: React.FC<{ storeId: string; onConfigurarEmissor?: () => v
             toast.error('Erro ao gerar link do PDF: ' + e.message);
         } finally {
             setDownloadingId(null);
+        }
+    };
+
+    // Reimprime o cupom na MESMA impressora do fechamento (fila print_jobs, impressoras com o documento
+    // "cupom_fiscal"): quem está no caixa toca em Reimprimir e sai na térmica, sem abrir PDF no navegador.
+    // dedupeKey com carimbo de tempo: cada toque é uma impressão nova (a chave estável do fechamento a descartaria).
+    const handleReimprimir = async (nota: FiscalNota) => {
+        if (reimprimindoId) return;
+        setReimprimindoId(nota.id);
+        try {
+            const texto = buildFiscalCupomText({ storeName, nota });
+            const sobDemanda = nota.modelo === '65' && nota.status === 'autorizada';
+            let pdfFixo = '';
+            if (!sobDemanda) {
+                if (!nota.pdf_path) { toast.error('Esta nota ainda não tem PDF para imprimir.'); return; }
+                pdfFixo = await fetchFiscalNotaPdfUrl(nota.id, nota.pdf_path);
+            }
+            const vias = nota.status === 'contingencia' ? 2 : 1;
+            const carimbo = Date.now();
+            let enviados = 0;
+            for (let via = 1; via <= vias; via++) {
+                enviados = Math.max(enviados, await enqueueFiscalCupomPrintJobs(
+                    storeId,
+                    `Cupom Fiscal - ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} ${nota.numero ?? ''} (reimpressão${via > 1 ? ` via ${via}` : ''})`,
+                    texto,
+                    `cupom-fiscal-reimp:${nota.id}:${carimbo}:${via}`,
+                    (larg) => sobDemanda ? resolverUrlApi(`/api/fiscal/cupom-pdf?noteId=${nota.id}&larguraMm=${larg}`) : pdfFixo,
+                ));
+            }
+            if (enviados === 0) toast.error('Nenhuma impressora de cupom fiscal está configurada. Veja Configurações > Impressão.');
+            else toast.success(`Cupom ${nota.numero ?? ''} enviado para a impressora do caixa.`);
+        } catch (e: any) {
+            toast.error('Não consegui reimprimir: ' + (e?.message || 'erro desconhecido'));
+        } finally {
+            setReimprimindoId(null);
         }
     };
 
@@ -13072,17 +13110,22 @@ const FiscalNotasView: React.FC<{ storeId: string; onConfigurarEmissor?: () => v
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex justify-end gap-2">
+                                                {(nota.status === 'autorizada' || nota.status === 'contingencia') && (
+                                                    <Button variant="primary" size="sm" onClick={() => handleReimprimir(nota)} isLoading={reimprimindoId === nota.id}>
+                                                        <Printer size={14} className="mr-1.5" /> Reimprimir
+                                                    </Button>
+                                                )}
                                                 {nota.pdf_path && (
                                                     <Button variant="secondary" size="sm" onClick={() => handleDownload(nota)} isLoading={downloadingId === nota.id}>
                                                         <Download size={14} className="mr-1.5" /> {nota.modelo === '55' ? 'DANFE' : 'Cupom'}
                                                     </Button>
                                                 )}
-                                                {RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (
+                                                {!modoCaixa && RETRYABLE_FISCAL_STATUSES.includes(nota.status) && (
                                                     <Button variant="outline" size="sm" onClick={() => handleRetryClick(nota)} isLoading={retryingId === nota.id}>
                                                         <RotateCcw size={14} className="mr-1.5" /> Reemitir
                                                     </Button>
                                                 )}
-                                                {podeCancelar(nota) && (
+                                                {!modoCaixa && podeCancelar(nota) && (
                                                     <Button variant="outline" size="sm" onClick={() => openCancel(nota)}>
                                                         <Ban size={14} className="mr-1.5" /> Cancelar nota
                                                     </Button>

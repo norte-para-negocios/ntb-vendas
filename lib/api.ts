@@ -3352,14 +3352,14 @@ export const enqueueFiscalCupomPrintJobs = async (
   textContent: string,
   dedupeKeyBase: string,
   pdfUrlFor: (paperWidthMm: number) => string,
-): Promise<void> => {
+): Promise<number> => {
   const { data: printers, error } = await supabase
     .from('printer_configs')
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .in('connection_type', ['network', 'usb']);
-  if (error) { console.error('Error fetching receipt printers:', error); return; }
+  if (error) { console.error('Error fetching receipt printers:', error); return 0; }
   const impressorasCupom = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, 'cupom_fiscal'));
   const origem = typeof window !== 'undefined' ? window.location.origin : '';
   await Promise.all(
@@ -3377,6 +3377,8 @@ export const enqueueFiscalCupomPrintJobs = async (
       });
     })
   );
+  // Quantas impressoras receberam o cupom (0 = nenhuma impressora de cupom configurada).
+  return impressorasCupom.length;
 };
 
 export const fetchRecentPrintJobs = async (storeId: string, limit: number = 30): Promise<PrintJob[]> => {
