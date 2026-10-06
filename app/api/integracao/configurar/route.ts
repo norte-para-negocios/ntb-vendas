@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
 
   // Sem URL/chave enviadas: só está mudando o toggle `ativo` de uma
   // configuração já existente.

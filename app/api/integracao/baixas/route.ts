@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   if (!body?.storeId || !UUID_RE.test(body.storeId) || !body.id || !UUID_RE.test(body.id) || (body.acao !== 'reprocessar' && body.acao !== 'conferir')) {
     return NextResponse.json({ success: false, message: 'Dados inválidos.' }, { status: 400 });
   }
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
   const linha = await carregarLinha(admin, body.id, body.storeId);
   if (!linha) return NextResponse.json({ success: false, message: 'Baixa não encontrada.' }, { status: 404 });
 

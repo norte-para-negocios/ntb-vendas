@@ -73,6 +73,8 @@ import { setorDoItem } from '@/lib/setores';
 import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
 import { itensAtivos, qtdItensAtivos, subtotalItensAtivos, rotuloQtdItens, itemCancelado } from '@/lib/itensVenda';
 import { descreverHoraDoPedido } from '@/lib/tempo';
+import { definirAtor, cabecalhosApi } from '@/lib/atorAtual';
+import { registrarAcao } from '@/lib/auditoria';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
@@ -202,6 +204,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
         }
 
         // Rede fora ou conta bloqueada: não adianta tentar a conta universal, e a mensagem tem que dizer a verdade.
+        if (result.reason === 'locked') registrarAcao(null, 'login.bloqueado', { entity: 'login', summary: `Conta bloqueada por tentativas: ${emailUsado}`, details: { email: emailUsado } });
         if (result.reason === 'network' || result.reason === 'locked' || result.reason === 'store_inactive') {
             setError(result.message || 'Erro ao entrar.');
             setIsLoading(false);
@@ -227,6 +230,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
             } else {
                 setError(contaEscolhida ? 'Senha incorreta.' : (result.message || 'Erro ao entrar.'));
                 setTremerSenha(n => n + 1);
+                registrarAcao(null, 'login.falhou', { entity: 'login', summary: `Senha ou usuário incorretos: ${emailUsado}`, details: { email: emailUsado } });
             }
             setIsLoading(false);
             return (motivoUniv === 'network' || motivoUniv === 'locked') ? motivoUniv : ('wrong' as const);
@@ -1714,6 +1718,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
   };
 
   const printOrderTicket = (item: OrderItem) => {
+      registrarAcao(storeId, 'reimpressao.pedido_kds', { entity: 'order_item', entityId: item.id, summary: `Imprimiu/reimprimiu pedido no KDS: ${item.quantity}x ${item.product?.name ?? 'item'}`, details: { mesa: item.order?.tables?.number ?? null } });
       const { client, observation } = parseItemNote(item.notes || '');
       const orderType = item.order?.order_type === 'counter' ? 'BALCÃO' : 'MESA';
       const identifier = item.order?.order_type === 'counter'
@@ -3336,7 +3341,7 @@ const TablesView: React.FC<{
             const destinatario = buildDestinatario(paymentDestCpfCnpj, paymentDestNome);
             const res = await fetch(resolverUrlApi('/api/fiscal/emitir'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: cabecalhosApi(),
                 body: JSON.stringify({
                     tableId: selectedTable.id,
                     itemIds: items.map(i => i.id),
@@ -3457,6 +3462,7 @@ const TablesView: React.FC<{
         // configurada — não é aceitável depender só de esconder o botão.
         if (!canReprint) return;
         if (reprintingIds.has(row.id)) return;
+        registrarAcao(storeId, 'reimpressao.comanda', { entity: 'order_item', entityId: row.id, summary: `Reimprimiu comanda: ${row.quantity}x ${row.productName} (mesa ${row.tableNumber})`, details: { destino: row.destination } });
         setReprintingIds(prev => new Set(prev).add(row.id));
         try {
             const ok = await printPendingKitchenTicket({
@@ -3720,6 +3726,7 @@ NOTIFY pgrst, 'reload schema';`;
         const summary = getTableSummary(tableId);
         const table = tables.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
+        if (!automatica) registrarAcao(store.id, 'reimpressao.pre_conta', { entity: 'table', entityId: tableId, summary: `Imprimiu pré-conta da mesa ${table.number}`, details: { total: summary.total } });
 
         try {
             const receiptOpts = {
@@ -6831,6 +6838,7 @@ const CounterView: React.FC<{
     const printCounterReceipt = async (order: Order) => {
         const items = order.order_items || [];
         if (items.length === 0) return;
+        registrarAcao(store.id, 'reimpressao.comprovante_balcao', { entity: 'order', entityId: order.id, summary: `Imprimiu comprovante do balcão (${order.customer_name || 'sem nome'})` });
         const total = items.reduce((a, b) => a + (b.quantity * b.price_at_time), 0);
 
         try {
@@ -8129,6 +8137,7 @@ const CaixaViewMeu: React.FC<{
     // local, fazendo-o sumir da lista de "aguardando preparo" desta mesa.
     const handleReprintPending = async (item: { id: string; orderId: string; tableNumber: number | string; productName: string; quantity: number; destination: 'kitchen' | 'bar'; addons?: string; observation?: string; client?: string | null }) => {
         if (!canReprintPending || reprintingPendingIds.has(item.id)) return;
+        registrarAcao(storeId, 'reimpressao.pedido_pendente', { entity: 'order_item', entityId: item.id, summary: `Reimprimiu pedido pendente: ${item.quantity}x ${item.productName} (mesa ${item.tableNumber})` });
         setReprintingPendingIds(prev => new Set(prev).add(item.id));
         try {
             const ok = await printPendingKitchenTicket({
@@ -11230,6 +11239,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         if (!ok) return;
 
         setIsClearing(true);
+        registrarAcao(storeId, 'historico.zerar', { entity: 'orders', summary: 'ZEROU o histórico de vendas da loja' });
         try {
             await clearSalesHistory(storeId);
             toast.success("Histórico de vendas zerado com sucesso!");
@@ -11462,6 +11472,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // mas `amount`/`charged` vêm do valor real cobrado (payment_details),
     // nunca recalculados.
     const handleReprintReceipt = async (order: Order) => {
+        registrarAcao(store.id, 'reimpressao.comprovante_historico', { entity: 'order', entityId: order.id, summary: 'Reimprimiu comprovante pelo Histórico de vendas' });
         const itemsTotal = subtotalItensAtivos(order);
         const total = getOrderDisplayTotal(order);
         const feeAmount = Number((total - itemsTotal).toFixed(2));
@@ -12756,6 +12767,7 @@ const FiscalNotasView: React.FC<{ storeId: string; storeName?: string; modoCaixa
     // uma lista de ids que este componente mandasse), então não precisa (e
     // não deve) mandar `filteredNotas`/ids nenhum aqui, só o intervalo.
     const handleExportPeriodo = async () => {
+        registrarAcao(storeId, 'fiscal.exportar', { entity: 'fiscal_notas', summary: `Exportou notas fiscais (${exportStartDate || 'início'} a ${exportEndDate || 'hoje'})` });
         setIsExporting(true);
         try {
             const params = new URLSearchParams({ storeId });
@@ -12798,6 +12810,7 @@ const FiscalNotasView: React.FC<{ storeId: string; storeName?: string; modoCaixa
 
     const handleDownload = async (nota: FiscalNota) => {
         if (!nota.pdf_path) return;
+        registrarAcao(storeId, 'fiscal.ver_pdf', { entity: 'fiscal_notas', entityId: nota.id, summary: `Abriu o PDF da nota nº ${nota.numero ?? ''}` });
         setDownloadingId(nota.id);
         try {
             const url = await fetchFiscalNotaPdfUrl(nota.id, nota.pdf_path);
@@ -12814,6 +12827,7 @@ const FiscalNotasView: React.FC<{ storeId: string; storeName?: string; modoCaixa
     // dedupeKey com carimbo de tempo: cada toque é uma impressão nova (a chave estável do fechamento a descartaria).
     const handleReimprimir = async (nota: FiscalNota) => {
         if (reimprimindoId) return;
+        registrarAcao(storeId, 'reimpressao.cupom_fiscal', { entity: 'fiscal_notas', entityId: nota.id, summary: `Reimprimiu ${nota.modelo === '65' ? 'NFC-e' : 'NF-e'} nº ${nota.numero ?? ''}`, details: { valor: nota.valor_total } });
         setReimprimindoId(nota.id);
         try {
             const texto = buildFiscalCupomText({ storeName, nota });
@@ -13435,7 +13449,14 @@ export const StoreModule: React.FC = () => {
         return () => pararMotorImpressaoDesktop();
     }, [user?.store?.id]);
 
+    // Auditoria: o ator da sessão vai em toda requisição (lib/supabaseClient.ts) — também quando a sessão volta sozinha após F5.
+    useEffect(() => {
+        definirAtor(user ? { id: user.role === 'universal' || user.role === 'open' ? null : user.id, name: user.name, role: user.role } : null);
+    }, [user]);
+
     const handleLogin = (u: StoreUser & { store: Store }) => {
+        definirAtor({ id: u.role === 'universal' ? null : u.id, name: u.name, role: u.role });
+        registrarAcao(u.store.id, 'login.entrou', { entity: 'login', entityId: u.id, summary: `${u.name} entrou no sistema`, details: { papel: u.role } });
         setUser(u);
         setTab(pickInitialStoreTab(u));
         localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id, isUniversal: u.role === 'universal' }));
@@ -13456,12 +13477,15 @@ export const StoreModule: React.FC = () => {
         const store = await fetchStoreById(lojaMesas).catch(() => null);
         if (!store || !store.is_active) { toast.error('Não consegui abrir as mesas desta loja. Entre com o seu login.'); return; }
         const u = usuarioAberto(store);
+        definirAtor({ id: null, name: u.name, role: u.role });
+        registrarAcao(store.id, 'login.modo_aberto', { entity: 'login', summary: 'PC do salão entrou no modo Aberto (só Mesas)' });
         setUser(u);
         setTab('tables');
         localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ aberto: true, storeId: store.id }));
     };
 
     const handleLogout = () => {
+        if (user) registrarAcao(user.store.id, 'login.saiu', { entity: 'login', entityId: user.id, summary: `${user.name} saiu do sistema` });
         setUser(null);
         localStorage.removeItem(STORE_LAST_TAB_STORAGE_KEY);
         localStorage.removeItem(STORE_SESSION_STORAGE_KEY);

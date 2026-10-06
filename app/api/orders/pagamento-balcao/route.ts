@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'estornar inválido.' }, { status: 400 });
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
 
   // Estorno: limpa o pagamento de um pedido de balcão que ainda NÃO foi
   // entregue. Existe porque o fluxo "paga primeiro" criou uma janela real

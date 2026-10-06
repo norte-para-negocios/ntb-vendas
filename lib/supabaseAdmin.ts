@@ -16,7 +16,18 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // chamada de verdade sem a variável, não trava o build de todo o site.
 let cached: SupabaseClient | null = null;
 
-export function getSupabaseAdmin(): SupabaseClient {
+// `actorHeader` (cabeçalho X-NTB-Actor recebido da requisição do app): o cliente devolvido o repassa ao banco, e os
+// triggers de auditoria (migration 163) gravam QUEM fez a mudança em vez de "(sem login)". Sem ator = cliente compartilhado.
+export function getSupabaseAdmin(actorHeader?: string | null): SupabaseClient {
+  if (actorHeader && /^[A-Za-z0-9+/=]{8,2000}$/.test(actorHeader)) {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada nas env vars do servidor.');
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://testvendase.norteparanegocios.com.br',
+      key,
+      { auth: { autoRefreshToken: false, persistSession: false }, global: { headers: { 'x-ntb-actor': actorHeader } } }
+    );
+  }
   if (cached) return cached;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cabecalhoAtor } from '@/lib/atorAtual';
 
 // Reserva = o servidor de PRODUÇÃO (Contabo). Até 04/10/2026 a reserva era o Supabase Cloud antigo (já apagado): builds do
 // app feitos sem desktop/webapp/.env.local (worktree) saíram apontando para ele e os PCs/celulares ficaram "Sem internet"
@@ -18,6 +19,9 @@ export const OFFLINE_FLAG_MS = 8000;
 const LOGIN_TIMEOUT_MS = 15000;
 const fetchComFalhaRapida: typeof fetch = (input, init) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  // Auditoria: quem está logado vai em toda requisição ao banco (o banco grava o autor de cada mudança).
+  const ator = url.includes('/rest/v1/') ? cabecalhoAtor() : null;
+  if (ator) { const h = new Headers(init?.headers); h.set('x-ntb-actor', ator); init = { ...init, headers: h }; }
   // navigator.onLine NÃO decide nada: no Android (economia de bateria) e no Electron ele fica false com a rede funcionando,
   // e o app inteiro virava "sem internet". Quem decide é o teste real de rede (lib/offline/network.ts); sem rede de
   // verdade o fetch falha sozinho em instantes.

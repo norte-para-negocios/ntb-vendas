@@ -65,7 +65,7 @@ async function cancelarNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return falha(`O motivo do cancelamento pode ter no máximo ${JUSTIFICATIVA_MAX} caracteres.`);
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
   const { data: nota, error: notaErr } = await admin
     .from('fiscal_notas')
     .select('id, store_id, modelo, ambiente, status, chave_acesso, protocolo, xml_path, created_at, order_id, pessoa_identificador')

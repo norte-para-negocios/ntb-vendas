@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ skipped: true, reason: 'orderId ou tableId ausente' });
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
 
   let storeId: string | null = null;
   let orderIds: string[] = [];

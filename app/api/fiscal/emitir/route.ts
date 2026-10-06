@@ -315,7 +315,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ skipped: true, reason: 'orderId ou tableId ausente' });
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
 
   // 1. Resolve store_id e os itens da venda.
   let storeId: string | null = null;

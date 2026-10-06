@@ -37,6 +37,12 @@ export async function register() {
     console.log('Retransmissão fiscal de contingência: ciclo agendado a cada 2 minutos.');
   }
 
+  // Relatório diário de auditoria: às 00:00 (Brasília) manda o do dia anterior. Só envia com AUDIT_REPORT_SEND=1 (lib/relatorioAuditoriaEnvio.ts).
+  if (!fiscalDesligado) {
+    const { verificarEnvioDiario } = await import('./lib/relatorioAuditoriaEnvio');
+    setInterval(() => { verificarEnvioDiario().catch((e) => console.error('Ciclo do relatório de auditoria:', e)); }, 60 * 1000);
+  }
+
   // Job da baixa de estoque (outbox, migration 156): reenvia ao Estoque só o que está comprovadamente não gravado e
   // varre pedidos que o navegador não registrou. Desligado por DISABLE_BAIXA_RETRY=1 ou, como o job fiscal, em dev
   // (DISABLE_FISCAL_RETRANSMISSAO=1): `npm run dev` fala com o banco de produção e não pode virar um segundo processo

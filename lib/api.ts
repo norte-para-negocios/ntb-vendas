@@ -1,5 +1,6 @@
 import type { PriceSchedule } from '@/lib/priceSchedule';
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
+import { cabecalhosApi } from '@/lib/atorAtual';
 import { vendaTemCobranca } from '@/lib/calc';
 import { dividirEmLotes } from '@/lib/planta';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
@@ -700,7 +701,7 @@ export const criarProdutoNoEstoque = async (
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/criar-produto-estoque'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ storeId, productId, nome, preco, ncm }),
     });
     return await res.json();
@@ -1362,7 +1363,7 @@ export const closeCounterOrder = async (
       const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
       const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: cabecalhosApi(),
         body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
       });
       if (!res.ok) {
@@ -1407,7 +1408,7 @@ export const registrarPagamentoBalcao = async (
     const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
     const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
     });
     if (!res.ok) {
@@ -1499,7 +1500,7 @@ export const estornarPagamentoBalcao = async (
 ): Promise<{ notaAutorizada?: EstornoNotaAutorizada }> => {
   const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosApi(),
     body: JSON.stringify({ orderId, estornar: true, ...params }),
   });
   if (!res.ok) {
@@ -1521,7 +1522,7 @@ export const estornarPagamentoBalcao = async (
 export const triggerOrdemProducao = (body: { orderId?: string; tableId?: string }) => {
   fetch(resolverUrlApi('/api/integracao/ordem-producao'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosApi(),
     body: JSON.stringify(body),
   }).catch((e) => console.error('Integração ntb-estoque (Ordem de Produção) falhou:', e));
 };
@@ -1536,7 +1537,7 @@ export const triggerOrdemProducao = (body: { orderId?: string; tableId?: string 
 export const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
   fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosApi(),
     body: JSON.stringify(body),
   }).catch((e) => console.error('Emissão fiscal automática falhou:', e));
 };
@@ -2290,7 +2291,7 @@ export const saveNtbEstoqueIntegracaoConfig = async (
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/configurar'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ storeId, ...params }),
     });
     return await res.json();
@@ -2328,7 +2329,7 @@ export const acaoBaixaEstoque = async (
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/baixas'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ storeId, id, acao, quem }),
     });
     return await res.json();
@@ -2364,7 +2365,7 @@ export const saveOmieDiretoConfig = async (
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/omie-direto'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ storeId, ...params }),
     });
     return await res.json();
@@ -2385,7 +2386,7 @@ export const criarLojaNoEstoque = async (
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/criar-loja-estoque'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ storeId, nome, cnpj }),
     });
     return await res.json();
@@ -2542,7 +2543,7 @@ export const reemitirFiscalNota = async (params: {
 }): Promise<any> => {
   const res = await fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosApi(),
     body: JSON.stringify(params),
   });
   return res.json();
@@ -2559,7 +2560,7 @@ export const cancelarFiscalNota = async (params: {
 }): Promise<{ ok: boolean; reason?: string; aviso?: string; mensagem?: string; cStat?: string | null; xMotivo?: string | null; protocolo?: string | null; prazoEncerrado?: boolean }> => {
   const res = await fetch(resolverUrlApi('/api/fiscal/cancelar'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosApi(),
     body: JSON.stringify(params),
   });
   return res.json();
@@ -3458,7 +3459,7 @@ export const salvarLocalEstoque = async (storeId: string, destino: string, local
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/locais-estoque'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosApi(),
       body: JSON.stringify({ storeId, destino, codigo: local?.codigo ?? null, nome: local?.nome ?? null }),
     });
     return await res.json();

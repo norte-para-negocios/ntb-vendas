@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'App Key e App Secret da Omie são obrigatórios.' }, { status: 400 });
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
   const { error } = await admin.from('store_omie_secrets').upsert(
     {
       store_id: body.storeId,
