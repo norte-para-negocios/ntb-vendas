@@ -45,10 +45,21 @@ function mesaDe(ev: EventoAuditoria, n: Nomes): string {
   return '';
 }
 
+const STATUS_MESA: Record<string, string> = { available: 'livre', occupied: 'ocupada', waiting_bill: 'pediu a conta', blocked: 'bloqueada', reserved: 'reservada' };
+const METODO: Record<string, string> = { CASH: 'dinheiro', DEBIT: 'débito', CREDIT: 'crédito', PIX: 'Pix', MULTIPLE: 'mais de uma forma' };
+const SEGREDO = /^(pin|pin_attempts|pin_locked_until)$/;
+const semSegredo = (o: Record<string, any>) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !SEGREDO.test(k)));
+
+function pagamentoTexto(pd: any): string {
+  if (!pd || typeof pd !== 'object') return '';
+  const ms = Array.isArray(pd.methods) ? pd.methods.map((m: any) => `${BRL(m.amount)} em ${METODO[m.method] || m.method}${m.brand ? ` ${m.brand}` : ''}`).join(' + ') : '';
+  return `${pd.total != null ? BRL(pd.total) : ''}${ms ? ` (${ms})` : ''}${pd.operador_nome ? ` — recebido por ${pd.operador_nome}` : ''}`.trim();
+}
+
 function camposAlterados(m: Record<string, { de: unknown; para: unknown }>, max = 6): string {
   const partes = Object.entries(m).slice(0, max).map(([k, v]) => {
     const fmt = (x: unknown) => (x === null || x === undefined ? 'vazio' : typeof x === 'object' ? trunc(JSON.stringify(x), 50) : trunc(String(x), 50));
-    return `${k}: ${fmt(v.de)} → ${fmt(v.para)}`;
+    return `${k}: ${fmt(v.de)} para ${fmt(v.para)}`;
   });
   return partes.join('; ') + (Object.keys(m).length > max ? '; …' : '');
 }
@@ -56,8 +67,8 @@ function camposAlterados(m: Record<string, { de: unknown; para: unknown }>, max 
 export function descreverEvento(ev: EventoAuditoria, n: Nomes = SEM_NOMES): string {
   if (ev.origin === 'app' && ev.summary) return ev.summary;
   const d = ev.details || {};
-  const mudou = (d.mudou || {}) as Record<string, { de: any; para: any }>;
-  const linha = (d.linha || {}) as Record<string, any>;
+  const mudou = semSegredo(d.mudou || {}) as Record<string, { de: any; para: any }>;
+  const linha = semSegredo(d.linha || {}) as Record<string, any>;
   const mesa = mesaDe(ev, n);
   const emMesa = mesa ? ` (${mesa})` : '';
   const [tabela, op] = ev.action.split('.');
@@ -70,7 +81,7 @@ export function descreverEvento(ev: EventoAuditoria, n: Nomes = SEM_NOMES): stri
       const para = String(mudou.status.para);
       const nome = prod(d.ctx?.product_id);
       if (para === 'canceled' || para === 'cancelled') return `CANCELOU item ${nome}${emMesa}`;
-      return `Item ${nome}${emMesa}: ${STATUS_ITEM[String(mudou.status.de)] || mudou.status.de} → ${STATUS_ITEM[para] || para}`;
+      return `Item ${nome}${emMesa}: ${STATUS_ITEM[String(mudou.status.de)] || mudou.status.de} para ${STATUS_ITEM[para] || para}`;
     }
     if (mudou.quantity || mudou.price_at_time) return `Alterou item ${prod(d.ctx?.product_id)}${emMesa}: ${camposAlterados(mudou)}`;
     if (mudou.fiscal_nota_id) return `Item vinculado a nota fiscal${emMesa}`;
@@ -84,20 +95,39 @@ export function descreverEvento(ev: EventoAuditoria, n: Nomes = SEM_NOMES): stri
       const pg = d.mudou?.payment_method?.para || linha.payment_method;
       if (para === 'cancelled' || para === 'canceled') return `CANCELOU pedido${emMesa}`;
       if (para === 'delivered') return `Fechou/entregou pedido${emMesa}${pg ? ` — pagamento ${pg}` : ''}${mudou.total ? ` ${BRL(mudou.total.para)}` : ''}`;
-      return `Pedido${emMesa}: ${mudou.status.de} → ${para}`;
+      return `Pedido${emMesa}: ${mudou.status.de} para ${para}`;
     }
-    if (mudou.payment_details || mudou.payment_method) return `Registrou/alterou pagamento${emMesa}: ${camposAlterados(mudou, 3)}`;
+    if (mudou.table_id) {
+      const nm = (id: any) => (id && n.mesas[id] != null ? `mesa ${n.mesas[id]}` : 'outra mesa');
+      return `MUDOU o pedido da ${nm(mudou.table_id.de)} para a ${nm(mudou.table_id.para)}`;
+    }
+    if (mudou.payment_details) return `Registrou pagamento${emMesa}: ${pagamentoTexto(mudou.payment_details.para) || camposAlterados({ payment_details: mudou.payment_details }, 1)}`;
+    if (mudou.payment_method) return `Alterou forma de pagamento${emMesa}: ${camposAlterados({ payment_method: mudou.payment_method }, 1)}`;
     return `Alterou pedido${emMesa}: ${camposAlterados(mudou)}`;
   }
   if (tabela === 'tables') {
-    if (op === 'update') return `Mesa ${n.mesas[ev.entity_id || ''] ?? ''}: ${camposAlterados(mudou)}`.replace('Mesa : ', 'Mesa: ');
+    if (op === 'update') {
+      const num = n.mesas[ev.entity_id || ''] ?? '';
+      const partes: string[] = [];
+      if (mudou.status) partes.push(`${STATUS_MESA[String(mudou.status.de)] || mudou.status.de} para ${STATUS_MESA[String(mudou.status.para)] || mudou.status.para}`);
+      if (mudou.current_host_name) partes.push(mudou.current_host_name.para ? `cliente ${mudou.current_host_name.para}` : 'sem cliente');
+      const resto = { ...mudou }; delete (resto as any).status; delete (resto as any).current_host_name;
+      if (Object.keys(resto).length) partes.push(camposAlterados(resto));
+      return `Mesa ${num}: ${partes.join('; ') || 'alterada'}`;
+    }
     return `${op === 'insert' ? 'Criou' : 'Apagou'} mesa`;
+  }
+  if (tabela === 'table_sessions') {
+    const m = (linha.table_id && n.mesas[linha.table_id]) ?? (d.ctx?.table_id && n.mesas[d.ctx.table_id]) ?? '';
+    if (op === 'insert') return `Abriu sessão da mesa ${m}${linha.host_name ? ` (cliente ${linha.host_name})` : ''}`;
+    if (mudou.closed_at) return `Encerrou a sessão da mesa ${m}`;
+    return `Alterou sessão da mesa ${m}: ${camposAlterados(mudou, 3)}`;
   }
   if (tabela === 'fiscal_notas') {
     const nt = ev.entity_id ? n.notas[ev.entity_id] : undefined;
     const rot = nt ? `${nt.modelo === '65' ? 'NFC-e' : 'NF-e'} nº ${nt.numero ?? ''}` : 'nota fiscal';
     if (op === 'insert') return `Nota fiscal emitida: ${rot} (${linha.status ?? ''}) ${linha.valor_total != null ? BRL(linha.valor_total) : ''}`.trim();
-    if (mudou.status) return `${rot}: ${mudou.status.de} → ${mudou.status.para}`;
+    if (mudou.status) return `${rot}: ${mudou.status.de} para ${mudou.status.para}`;
     return `Alterou ${rot}: ${camposAlterados(mudou, 3)}`;
   }
   if (tabela === 'cash_shifts') {
@@ -201,6 +231,7 @@ export async function carregarNomes(admin: SupabaseClient, eventos: EventoAudito
     if (c.order_id) pedIds.add(c.order_id);
     if (e.entity === 'orders' && e.entity_id) pedIds.add(e.entity_id);
     if (e.entity === 'tables' && e.entity_id) mesaIds.add(e.entity_id);
+    const tid = e.details?.mudou?.table_id; if (tid?.de) mesaIds.add(tid.de); if (tid?.para) mesaIds.add(tid.para);
     if (e.entity === 'products' && e.entity_id) prodIds.add(e.entity_id);
     if (e.entity === 'fiscal_notas' && e.entity_id) notaIds.add(e.entity_id);
   }

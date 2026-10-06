@@ -10,10 +10,16 @@ const ev = (o: Partial<EventoAuditoria>): EventoAuditoria => ({ id: ++id, store_
 assert.equal(descreverEvento(ev({ action: 'order_items.insert', entity: 'order_items', details: { ctx: { order_id: 'o1' }, linha: { product_id: 'p1', quantity: 2, notes: 'sem gelo' } } }), nomes), 'Lançou 2x Caipirinha (mesa 5) — obs: sem gelo');
 assert.match(descreverEvento(ev({ action: 'order_items.update', entity: 'order_items', details: { ctx: { order_id: 'o1', product_id: 'p1' }, mudou: { status: { de: 'pending', para: 'canceled' } } } }), nomes), /^CANCELOU item Caipirinha \(mesa 5\)/);
 assert.equal(descreverEvento(ev({ origin: 'app', action: 'reimpressao.cupom_fiscal', summary: 'Reimprimiu NFC-e nº 134' })), 'Reimprimiu NFC-e nº 134');
-assert.match(descreverEvento(ev({ action: 'fiscal_notas.update', entity: 'fiscal_notas', entity_id: 'n1', details: { mudou: { status: { de: 'autorizada', para: 'cancelada' } } } }), nomes), /NFC-e nº 140: autorizada → cancelada/);
+assert.match(descreverEvento(ev({ action: 'fiscal_notas.update', entity: 'fiscal_notas', entity_id: 'n1', details: { mudou: { status: { de: 'autorizada', para: 'cancelada' } } } }), nomes), /NFC-e nº 140: autorizada para cancelada/);
 assert.ok(ehAlerta(ev({ action: 'reimpressao.pedido_kds', origin: 'app' }), 'x'));
 assert.ok(ehAlerta(ev({}), 'CANCELOU pedido'));
 assert.ok(!ehAlerta(ev({ action: 'order_items.insert' }), 'Lançou 1x X'));
+
+assert.equal(descreverEvento(ev({ action: 'orders.update', entity: 'orders', details: { mudou: { table_id: { de: 'tA', para: 'tB' } } } }), { ...nomes, mesas: { tA: 10, tB: 12 } }), 'MUDOU o pedido da mesa 10 para a mesa 12');
+assert.match(descreverEvento(ev({ action: 'orders.update', entity: 'orders', details: { ctx: { order_id: 'o1' }, mudou: { payment_details: { de: null, para: { total: 122.87, methods: [{ method: 'CREDIT', amount: 122.87, brand: 'visa' }], operador_nome: 'Ana' } } } } }), nomes), /Registrou pagamento \(mesa 5\): R\$ 122,87 \(R\$ 122,87 em crédito visa\) — recebido por Ana/);
+assert.ok(!descreverEvento(ev({ action: 'tables.update', entity: 'tables', entity_id: 't5', details: { mudou: { pin: { de: '1', para: '2' }, status: { de: 'occupied', para: 'available' } } } }), nomes).includes('pin'), 'PIN nunca aparece');
+assert.equal(descreverEvento(ev({ action: 'tables.update', entity: 'tables', entity_id: 't5', details: { mudou: { status: { de: 'occupied', para: 'available' } } } }), nomes), 'Mesa 5: ocupada para livre');
+assert.ok(!/→/.test(descreverEvento(ev({ action: 'products.update', entity: 'products', details: { mudou: { price: { de: 1, para: 2 } } } }), nomes)), 'a fonte do PDF não tem a seta');
 
 const secoes = agruparPorLogin([
   ev({ occurred_at: '2026-10-05T22:00:00Z', origin: 'app', action: 'login.entrou', summary: 'Ana entrou no sistema' }),
