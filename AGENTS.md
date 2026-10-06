@@ -2668,3 +2668,18 @@ node scripts/e2e/fluxo-completo.mjs --limpar    # desfaz o que uma execução in
   lançou cada item [ESPERADO]. Observado e fora do portão: `create_order_secure` REAPROVEITA qualquer pedido `pending` da mesa, mesmo de 3 dias atrás, e aí a venda
   de hoje fica com `created_at` antigo (Histórico/Excel filtram por `orders.created_at`, então a venda cai no dia errado); sem impressora cadastrada, TODO aparelho
   logado imprime o mesmo pedido na própria janela de impressão (só a fila `print_jobs` barra duplicata entre aparelhos).
+
+## Cardápio do Sertão: regras de preço e auditoria (06/10/2026)
+
+Quatro jeitos de cobrar, e cada produto usa o seu (conferido no banco em 06/10 com `scripts` ad-hoc na VPS, 278 produtos ativos):
+- **Preço fixo + adicional que SOMA** (borda de pizza, tamanho): grupo `price_rule='sum'`, o acréscimo entra em cima do preço base.
+- **Preço por escolha** (Moqueca ou Ensopado, sabor com preço próprio): grupo único obrigatório; o produto vale o preço da escolha mais barata e cada escolha soma a diferença. No cadastro é o seletor "Preço fixo | Preço por escolha" (`lib/variacoes.ts`, teste `variacoesPreco.test.ts`): o lojista digita o PREÇO FINAL de cada escolha e o código Omie dela. O produto nunca guarda código próprio nesse modo (senão a baixa saía em dobro).
+- **Pizza por camada** (Tradicional/Doce, Arretada, Danada de Boa, Violeira): base = preço da Pequena, tamanho soma, sabor +0, os dois sabores têm que ser da mesma camada.
+- **Pizza Meio a Meio (qualquer sabor)**: grupos Sabor 1 e Sabor 2 com `price_rule='max'` (vale o sabor mais caro) e `variants` por tamanho (acréscimo e código Omie). Simulado com o cálculo do app: 90 combinações (3 tamanhos x 5 camadas x 1 ou 2 sabores) batem com a tabela das camadas.
+
+**Achados e correções de 06/10** (backups em `/root/backups/bkp-pizza-*-2026-10-06.csv` e `bkp-file-peixe-2026-10-06.csv` na VPS):
+- Filé de Peixe (450g): escolha opcional e +R$ 149,90/159,90 em cada opção (cobrava R$ 309,80). O lojista digitou o preço final no campo de acréscimo (a tela antiga era só acréscimo) e salvou duas vezes. Corrigido: escolha obrigatória, acréscimo 0.
+- Pizza Meio a Meio: estava no modelo antigo (soma de meias por tamanho, sem camada, Sabor 2 opcional). 38 vendas de 02 a 04/10 saíram R$ 289,70 abaixo do preço da camada mais cara (6 com UM sabor só, cobradas pela metade; 2 cobradas a mais). Atualizada com o script `scripts/sertao/2026-10-01-pizza-meio-a-meio.sql` adaptado para atualizar o produto existente (mesmo id, histórico preservado).
+- Pizza Tradicional: Tamanho e Sabor 1 passaram a obrigatórios.
+- Pendentes: Fanta Zero 350 ml (código 90954) está INATIVO no Omie; Sprite Fresh 510ml foi ligado ao código 91008 que ainda não existe na loja 4 do Estoque; H2O custa R$ 9,90 no cardápio e R$ 10,90 no Omie; pizza de 1 sabor só (Média/Grande) baixa UMA meia no estoque (continua em aberto).
+- "Esgotar" só gerente/dono e só no cadastro (migration 165); a função antiga `set_product_sold_out_secure` fica até todos os apps passarem da 1.2.91/1.0.26.
