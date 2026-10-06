@@ -74,6 +74,7 @@ import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
 import { itensAtivos, qtdItensAtivos, subtotalItensAtivos, rotuloQtdItens, itemCancelado } from '@/lib/itensVenda';
 import { descreverHoraDoPedido } from '@/lib/tempo';
 import { definirAtor, cabecalhosApi } from '@/lib/atorAtual';
+import { grupoViraVariacoes, validarVariacoes, variacoesParaGrupo, type Variacao } from '@/lib/variacoes';
 import { registrarAcao } from '@/lib/auditoria';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
@@ -5442,7 +5443,7 @@ NOTIFY pgrst, 'reload schema';`;
                 return (
                         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                             <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" podeEsgotar={roleCanOr(loggedUser, store, 'esgotar', loggedUser.role === 'manager' || hasTabPermission(loggedUser, 'menu', store))} />
+                                <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" podeEsgotar={false} />
                             </div>
                             {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
                                 mesa já pediu ao lado do cardápio, com cancelar. Lê o mesmo
@@ -7250,7 +7251,7 @@ const CounterView: React.FC<{
             >
                 <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                     <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
-                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" podeEsgotar={roleCanOr(loggedUser, store, 'esgotar', loggedUser.role === 'manager' || hasTabPermission(loggedUser, 'menu', store))} />
+                        <StoreTableMenu storeId={storeId} onAddItem={adicionarNaVenda} addLabel="Adicionar à venda" podeEsgotar={false} />
                     </div>
                     <div className="md:w-[320px] lg:w-[34%] lg:max-w-[420px] max-md:max-h-[50%] flex-shrink-0 border-t md:border-t-0 md:border-l border-[var(--border)] bg-[var(--surface-2)] flex flex-col min-h-0 overflow-hidden">
                         <div className="px-4 pt-4 pb-2 flex items-baseline justify-between flex-shrink-0">
@@ -8925,7 +8926,7 @@ const parseOptionalInt = (value: string): number | null => {
 // domingo, mesmo indice usado em Category.available_days/getDay()).
 const SCHEDULE_DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void, podeEditar?: boolean }> = ({ store, onStoreUpdate, podeEditar = true }) => {
+const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void, podeEditar?: boolean, podeEsgotar?: boolean, operadorId?: string | null }> = ({ store, onStoreUpdate, podeEditar = true, podeEsgotar = false, operadorId = null }) => {
     const storeId = store.id;
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -8961,6 +8962,12 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [pName, setPName] = useState('');
     const [pDesc, setPDesc] = useState('');
     const [pPrice, setPPrice] = useState('');
+    // "Preço por escolha" (lib/variacoes.ts): produto sem preço próprio, cada escolha com o seu preço e código Omie.
+    const [pSoldOut, setPSoldOut] = useState(false);
+    const [pSoldOutSaving, setPSoldOutSaving] = useState(false);
+    const [pModoVar, setPModoVar] = useState(false);
+    const [pVarNome, setPVarNome] = useState('');
+    const [pVars, setPVars] = useState<Variacao[]>([]);
     const [pCostPrice, setPCostPrice] = useState('');
     const [pStockThreshold, setPStockThreshold] = useState('');
     const [pCat, setPCat] = useState('');
@@ -9303,7 +9310,15 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPDestination(product.destination || 'kitchen');
             setPSector(product.sector_id || '');
             setPIgnoreCat(Boolean(product.ignore_category_sector));
-            setPOptionGroups(toDraftGroups(product.option_groups));
+            setPSoldOut(Boolean(product.sold_out));
+            const comoEscolhas = grupoViraVariacoes(product.price, product.option_groups?.[0]);
+            if (comoEscolhas) {
+                setPModoVar(true); setPVarNome(comoEscolhas.nome); setPVars(comoEscolhas.vars);
+                setPOptionGroups(toDraftGroups(product.option_groups?.slice(1)));
+            } else {
+                setPModoVar(false); setPVarNome(''); setPVars([]);
+                setPOptionGroups(toDraftGroups(product.option_groups));
+            }
             setPPromoPrice(product.promo_price != null ? product.promo_price.toString() : '');
             setPFeatured(product.featured ?? false);
             setPTags(product.tags ?? []);
@@ -9335,6 +9350,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPSector('');
             setPIgnoreCat(false);
             setPOptionGroups([]);
+            setPModoVar(false); setPVarNome(''); setPVars([]); setPSoldOut(false);
             setPPromoPrice('');
             setPFeatured(false);
             setPTags([]);
@@ -9353,8 +9369,16 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     const handleSaveProduct = async () => {
         if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
-        if (!pName || !pPrice || !pCat) return toast.error('Preencha os campos obrigatórios');
-        const priceNum = parseFloat(pPrice);
+        if (!pName || (!pModoVar && !pPrice) || !pCat) return toast.error('Preencha os campos obrigatórios');
+        // Preço por escolha: o produto vale o preço da escolha mais barata e cada escolha soma a diferença.
+        let grupoEscolhas: ReturnType<typeof variacoesParaGrupo>['grupo'] | null = null;
+        let priceNum = parseFloat(pPrice);
+        if (pModoVar) {
+            const erroVar = validarVariacoes(pVars);
+            if (erroVar) return toast.error(erroVar);
+            const r = variacoesParaGrupo(pVarNome, pVars);
+            priceNum = r.precoBase; grupoEscolhas = r.grupo;
+        }
         if (isNaN(priceNum) || priceNum < 0) return toast.error('Preço não pode ser negativo.');
         const prepNum = parseInt(pTime);
         if (isNaN(prepNum) || prepNum < 0) return toast.error('Tempo de preparo não pode ser negativo.');
@@ -9364,7 +9388,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         // seguranca final, mas o lojista nao deveria descobrir isso via um
         // erro 400 cru. Vazio = sem promocao (null).
         let promoPriceNum: number | null = null;
-        if (pPromoPrice.trim() !== '') {
+        if (!pModoVar && pPromoPrice.trim() !== '') {
             promoPriceNum = parseFloat(pPromoPrice);
             if (isNaN(promoPriceNum) || promoPriceNum < 0) return toast.error('Preço promocional não pode ser negativo.');
             if (promoPriceNum >= priceNum) return toast.error('Preço promocional precisa ser menor que o preço cheio.');
@@ -9432,20 +9456,22 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 catch (e: any) { toast.error('Produto salvo, mas o setor não foi salvo: ' + (e.message || '')); }
             }
 
-            if (isNewProduct && pOmieMode === 'create') {
+            // Preço por escolha: o código mora em cada escolha; o produto nunca fica com código próprio (senão daria baixa em dobro).
+            const modoOmie = pModoVar ? 'none' : pOmieMode;
+            if (isNewProduct && modoOmie === 'create') {
                 const estoqueResult = await criarProdutoNoEstoque(storeId, productId, pName, priceNum, pNcm.trim() || null);
                 if (!estoqueResult.success) {
                     toast.error('Produto criado aqui, mas falhou criar no NTB Estoque: ' + estoqueResult.message);
                 } else {
                     toast.success('Produto criado no NTB Estoque também!');
                 }
-            } else if (pOmieMode === 'link') {
+            } else if (modoOmie === 'link') {
                 try {
                     await setProductOmieCodigo(productId, storeId, pOmieCodeInput.trim() || null);
                 } catch (omieError: any) {
                     toast.error('Produto salvo, mas houve erro ao vincular o código Omie: ' + omieError.message);
                 }
-            } else if (!isNewProduct && pOmieMode === 'none' && editingProduct?.omie_codigo) {
+            } else if (!isNewProduct && modoOmie === 'none' && editingProduct?.omie_codigo) {
                 // Lojista trocou de "vinculado" pra "sem Omie" explicitamente
                 // — limpa o vínculo em vez de deixar o código antigo preso.
                 try {
@@ -9455,14 +9481,14 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 }
             }
 
-            const groupsToSave: ProductOptionGroupInput[] = pOptionGroups
+            const groupsToSave: ProductOptionGroupInput[] = [...(grupoEscolhas ? [grupoEscolhas as ProductOptionGroupInput] : []), ...pOptionGroups
                 .filter(g => g.name.trim())
                 .map(g => ({
                     name: g.name.trim(), type: g.type, required: g.required, price_rule: g.price_rule,
                     min_select: g.type === 'multiple' ? parseOptionalInt(g.min_select) : null,
                     max_select: g.type === 'multiple' ? parseOptionalInt(g.max_select) : null,
                     options: g.options.filter(o => o.name.trim()).map(o => ({ name: o.name.trim(), price_delta: parseFloat(o.price_delta) || 0, available: o.available, omie_codigo: o.omie_codigo.trim() || null, variants: o.variants ?? null })),
-                }));
+                }))];
             await syncProductOptionGroups(productId, groupsToSave);
 
             // Vende mais II (migration 020) — "peca tambem": so' pode rodar
@@ -10086,7 +10112,48 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             onChange={e => setPDesc(e.target.value)}
                         />
                     </div>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-3">
+                        <SegmentedControl
+                            className="self-start"
+                            value={pModoVar ? 'escolha' : 'fixo'}
+                            onChange={(v) => {
+                                const porEscolha = v === 'escolha';
+                                setPModoVar(porEscolha);
+                                if (porEscolha) {
+                                    setPOmieMode('none');
+                                    if (pVars.length === 0) setPVars([
+                                        { tempId: crypto.randomUUID(), name: '', price: pPrice, omie_codigo: '', available: true },
+                                        { tempId: crypto.randomUUID(), name: '', price: pPrice, omie_codigo: '', available: true },
+                                    ]);
+                                } else if (pVars.length) {
+                                    const menor = Math.min(...pVars.map(x => parseFloat(String(x.price).replace(',', '.'))).filter(n => Number.isFinite(n)));
+                                    if (!pPrice && Number.isFinite(menor)) setPPrice(String(menor));
+                                }
+                            }}
+                            options={[{ value: 'fixo', label: 'Preço fixo' }, { value: 'escolha', label: 'Preço por escolha' }]}
+                        />
+                        {pModoVar ? (
+                            <div className="flex flex-col gap-3 p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
+                                <p className="text-[13px] text-[var(--text-muted)]">
+                                    O prato não tem preço único: o cliente escolhe <b>uma</b> opção e paga o preço dela (ex.: Moqueca ou Ensopado).
+                                    Coloque o <b>código do Omie</b> de cada escolha: é ele que dá baixa no estoque.
+                                </p>
+                                <Input label="Nome da escolha" placeholder="Ex.: Moqueca ou Ensopado" value={pVarNome} onChange={e => setPVarNome(e.target.value)} />
+                                <div className="flex flex-col gap-2">
+                                    {pVars.map((v, i) => (
+                                        <div key={v.tempId} className="grid grid-cols-[1fr_110px_110px_auto] max-sm:grid-cols-2 gap-2 items-end">
+                                            <Input label={i === 0 ? 'Escolha' : undefined} placeholder="Ex.: Moqueca" value={v.name} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, name: e.target.value } : x))} />
+                                            <Input label={i === 0 ? 'Preço (R$)' : undefined} type="number" inputMode="decimal" step="0.01" min="0" placeholder="0,00" value={v.price} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, price: e.target.value } : x))} />
+                                            <Input label={i === 0 ? 'Cód. Omie' : undefined} placeholder="Ex.: 90193" value={v.omie_codigo} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, omie_codigo: e.target.value } : x))} />
+                                            <Button type="button" variant="ghost" size="sm" aria-label="Remover escolha" onClick={() => setPVars(prev => prev.filter(x => x.tempId !== v.tempId))} disabled={pVars.length <= 2}><Trash2 size={15} /></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Button type="button" variant="secondary" size="sm" className="self-start" onClick={() => setPVars(prev => [...prev, { tempId: crypto.randomUUID(), name: '', price: '', omie_codigo: '', available: true }])}><Plus size={14} /> Adicionar escolha</Button>
+                                <p className="text-[12px] text-[var(--text-muted)]">No cardápio aparece &quot;a partir de&quot; o menor preço. Promoção não vale para prato com preço por escolha.</p>
+                            </div>
+                        ) : (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="Preço (R$)" type="number" inputMode="decimal" step="0.01" min="0" value={pPrice} onChange={e => setPPrice(e.target.value)} />
                         <Input
                             label="Preço promocional (opcional)"
@@ -10098,6 +10165,8 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             value={pPromoPrice}
                             onChange={e => setPPromoPrice(e.target.value)}
                         />
+                    </div>
+                        )}
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-1">
@@ -10176,7 +10245,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         de escopo, mesma decisão de sempre — ver AGENTS.md);
                         "Vincular a um código já existente" funciona nos dois
                         modos, já que é só gravar/trocar um texto. */}
-                    <div className="flex flex-col gap-2 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                    <div className={`flex-col gap-2 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] ${pModoVar ? 'hidden' : 'flex'}`}>
                         <span className="text-sm font-semibold text-[var(--text)]">Vínculo com Omie</span>
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'none'} onChange={() => setPOmieMode('none')} />
@@ -10256,6 +10325,37 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pFeatured ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
                     </div>
+
+                    {/* Esgotar: só gerente/dono e só aqui (migration 165). Garçom e caixa não têm este controle. */}
+                    {editingProduct && podeEsgotar && (
+                        <div className="flex items-center justify-between p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]">
+                            <div>
+                                <h4 className="font-bold text-sm text-[var(--text)]">Esgotado agora</h4>
+                                <p className="text-xs text-[var(--text-muted)]">Tira o produto do lançamento na hora (aparece como esgotado). Desligue quando voltar ao estoque.</p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={Boolean(pSoldOut)}
+                                aria-label="Produto esgotado"
+                                disabled={pSoldOutSaving}
+                                onClick={async () => {
+                                    if (!editingProduct) return;
+                                    const novo = !pSoldOut;
+                                    setPSoldOutSaving(true);
+                                    const ok = await setProductSoldOut(storeId, editingProduct.id, novo, operadorId);
+                                    setPSoldOutSaving(false);
+                                    if (!ok) { toast.error('Não consegui alterar. Só gerente ou dono pode marcar como esgotado.'); return; }
+                                    setPSoldOut(novo);
+                                    setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? { ...p, sold_out: novo } : p)));
+                                    toast.success(novo ? 'Produto marcado como esgotado.' : 'Produto voltou ao cardápio.');
+                                }}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors disabled:opacity-60 ${pSoldOut ? 'bg-[var(--err-fill)]' : 'bg-[var(--border)]'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pSoldOut ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+                    )}
 
                     <div>
                         <label className="text-sm font-semibold text-[var(--text)] block mb-1.5">Etiquetas</label>
@@ -13594,7 +13694,7 @@ export const StoreModule: React.FC = () => {
             )}
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} loggedUser={user} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} loggedUser={user} />}
-            {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} podeEditar={roleCanOr(user, user.store, 'editar_cardapio', true)} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
+            {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} podeEditar={roleCanOr(user, user.store, 'editar_cardapio', true)} podeEsgotar={user.role === 'manager' || user.role === 'owner' || user.role === 'universal'} operadorId={user.role === 'universal' ? null : user.id} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
             {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} loggedUser={user} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
 
             {!canAccess(tab) && (

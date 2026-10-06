@@ -1067,7 +1067,14 @@ export const transferItems = async (storeId: string, itemIds: string[], targetTa
 };
 
 // Esgotado em tempo real (migration 151).
-export const setProductSoldOut = async (storeId: string, productId: string, soldOut: boolean): Promise<boolean> => {
+export const setProductSoldOut = async (storeId: string, productId: string, soldOut: boolean, operatorUserId?: string | null): Promise<boolean> => {
+  // Só gerente/dono (migration 165): com o operador conhecido usa a função que valida o papel no servidor.
+  // Servidor sem a 165 (PGRST202) cai na antiga; conta universal manda null e usa a antiga (já é equipe interna).
+  if (operatorUserId) {
+    const v2 = await supabase.rpc('set_product_sold_out_v2', { p_store_id: storeId, p_product_id: productId, p_sold_out: soldOut, p_operator_user_id: operatorUserId });
+    if (!v2.error) return v2.data === true;
+    if (v2.error.code !== 'PGRST202') { console.error('setProductSoldOut falhou:', v2.error); return false; }
+  }
   const { data, error } = await supabase.rpc('set_product_sold_out_secure', { p_store_id: storeId, p_product_id: productId, p_sold_out: soldOut });
   if (error) { console.error('setProductSoldOut falhou:', error); return false; }
   return data === true;
