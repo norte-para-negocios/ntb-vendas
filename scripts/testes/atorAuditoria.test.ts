@@ -23,3 +23,7 @@ assert.match(cli, /h\.set\('x-ntb-actor', ator\)/);
 const adm = readFileSync('lib/supabaseAdmin.ts', 'utf8');
 assert.match(adm, /\^\[A-Za-z0-9\+\/=\]\{8,2000\}\$/);
 console.log('atorAuditoria: ok');
+
+// Desktop (app://bundle) chama /api/* de outra origem: o preflight tem que liberar o cabeçalho do ator, senão pagamento/nota/baixa falham.
+assert.match(readFileSync('proxy.ts', 'utf8'), /Access-Control-Allow-Headers', '[^']*X-NTB-Actor/i);
+console.log('atorAuditoria CORS: ok');

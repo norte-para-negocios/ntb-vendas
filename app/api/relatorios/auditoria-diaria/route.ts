@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { montarRelatorioDia } from '@/lib/relatorioAuditoria';
@@ -7,7 +8,8 @@ import { gerarPdfAuditoria } from '@/lib/relatorioAuditoriaPdf';
 // fez, então não pode ficar aberto como as outras rotas do app. GET ?storeId=...&dia=AAAA-MM-DD&formato=pdf|texto
 export async function GET(req: NextRequest) {
   const token = process.env.AUDIT_REPORT_TOKEN;
-  if (!token || req.headers.get('x-relatorio-token') !== token) return NextResponse.json({ ok: false }, { status: 404 });
+  const recebido = req.headers.get('x-relatorio-token') ?? '';
+  if (!token || recebido.length !== token.length || !timingSafeEqual(Buffer.from(recebido), Buffer.from(token))) return NextResponse.json({ ok: false }, { status: 404 });
   const storeId = req.nextUrl.searchParams.get('storeId') ?? '';
   const dia = req.nextUrl.searchParams.get('dia') ?? '';
   if (!/^[0-9a-f-]{36}$/i.test(storeId) || !/^\d{4}-\d{2}-\d{2}$/.test(dia)) return NextResponse.json({ ok: false, message: 'Parâmetros inválidos.' }, { status: 400 });

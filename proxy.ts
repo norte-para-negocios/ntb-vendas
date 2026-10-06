@@ -26,7 +26,7 @@ function withCorsHeaders(res: NextResponse, origin: string | null) {
   if (origin === ALLOWED_ORIGIN) {
     res.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
     res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-NTB-Actor');
   }
   return res;
 }

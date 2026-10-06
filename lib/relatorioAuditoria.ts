@@ -117,6 +117,7 @@ export function descreverEvento(ev: EventoAuditoria, n: Nomes = SEM_NOMES): stri
     const nome = linha.name || '';
     if (op === 'insert') return `Criou usuário ${nome} (${rotuloPapel(linha.role)})`;
     if (op === 'delete') return `APAGOU usuário ${nome}`;
+    if (!Object.keys(mudou).length) return `Alterou dados de acesso do usuário${nome ? ` ${nome}` : ''} (senha ou login)`;
     return `Alterou usuário${nome ? ` ${nome}` : ''}: ${camposAlterados(mudou)}`;
   }
   if (tabela === 'print_jobs') return `Mandou imprimir: ${linha.title ?? 'documento'}${linha.destination ? ` (${linha.destination})` : ''}`;
@@ -141,7 +142,7 @@ export function ehAlerta(ev: EventoAuditoria, texto: string): boolean {
 
 export function agruparPorLogin(eventos: EventoAuditoria[], n: Nomes = SEM_NOMES): SecaoLogin[] {
   const mapa = new Map<string, SecaoLogin>();
-  for (const ev of [...eventos].sort((x, y) => x.occurred_at.localeCompare(y.occurred_at))) {
+  for (const ev of [...eventos].filter((e) => !e.action.startsWith('relatorio.')).sort((x, y) => x.occurred_at.localeCompare(y.occurred_at))) {
     const sem = !ev.actor_user_id && (!ev.actor_name || ev.actor_name === '(sem login)');
     const chave = ev.actor_user_id || (sem ? '(sistema)' : `nome:${ev.actor_name}`);
     const nome = sem ? 'Sistema / clientes pelo QR (sem login)' : (ev.actor_name || 'Desconhecido');
@@ -175,7 +176,7 @@ export async function buscarEventosDoDia(admin: SupabaseClient, storeId: string,
   const { de, ate } = diaISO(dia);
   const todos: EventoAuditoria[] = [];
   for (let off = 0; off < 50000; off += 1000) {
-    const { data, error } = await admin.from('staff_audit_log').select('*').eq('store_id', storeId).gte('occurred_at', de).lt('occurred_at', ate).order('occurred_at').range(off, off + 999);
+    const { data, error } = await admin.from('staff_audit_log').select('*').eq('store_id', storeId).gte('occurred_at', de).lt('occurred_at', ate).order('occurred_at').order('id').range(off, off + 999);
     if (error) throw new Error('Falha ao ler a auditoria: ' + error.message);
     todos.push(...((data || []) as EventoAuditoria[]));
     if (!data || data.length < 1000) break;

@@ -11239,7 +11239,6 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         if (!ok) return;
 
         setIsClearing(true);
-        registrarAcao(storeId, 'historico.zerar', { entity: 'orders', summary: 'ZEROU o histórico de vendas da loja' });
         try {
             await clearSalesHistory(storeId);
             toast.success("Histórico de vendas zerado com sucesso!");

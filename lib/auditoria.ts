@@ -8,7 +8,7 @@ import { obterAtor } from '@/lib/atorAtual';
 const CHAVE_FILA = 'ntb_audit_pendentes';
 const MAX_FILA = 200;
 
-type Pendente = { storeId: string | null; action: string; entity: string | null; entityId: string | null; summary: string | null; details: Record<string, unknown>; occurredAt: string; actor: unknown };
+type Pendente = { clientId: string; tentativas: number; storeId: string | null; action: string; entity: string | null; entityId: string | null; summary: string | null; details: Record<string, unknown>; occurredAt: string; actor: unknown };
 
 function lerFila(): Pendente[] {
   try { return JSON.parse(localStorage.getItem(CHAVE_FILA) || '[]'); } catch { return []; }
@@ -17,14 +17,16 @@ function gravarFila(f: Pendente[]) {
   try { localStorage.setItem(CHAVE_FILA, JSON.stringify(f.slice(-MAX_FILA))); } catch { /* sem armazenamento */ }
 }
 
-async function enviar(p: Pendente): Promise<boolean> {
+// Resultado: 'ok' gravou; 'rede' falhou por rede/servidor (tenta de novo); 'recusado' o banco respondeu mas não aceitou (não adianta repetir).
+async function enviar(p: Pendente): Promise<'ok' | 'rede' | 'recusado'> {
   try {
     const { error } = await supabase.rpc('log_staff_action_secure', {
       p_store_id: p.storeId, p_action: p.action, p_entity: p.entity, p_entity_id: p.entityId,
-      p_summary: p.summary, p_details: p.details, p_occurred_at: p.occurredAt, p_actor: p.actor,
+      p_summary: p.summary, p_details: p.details, p_occurred_at: p.occurredAt, p_actor: p.actor, p_client_id: p.clientId,
     });
-    return !error;
-  } catch { return false; }
+    if (!error) return 'ok';
+    return /fetch|network|timeout|5\d\d/i.test(error.message || '') || !error.code ? 'rede' : 'recusado';
+  } catch { return 'rede'; }
 }
 
 let reenviando = false;
@@ -34,9 +36,15 @@ export async function reenviarPendentes() {
   try {
     const fila = lerFila();
     if (!fila.length) return;
-    const restantes: Pendente[] = [];
-    for (const p of fila) { if (!(await enviar(p))) restantes.push(p); }
-    gravarFila(restantes);
+    const feitos = new Set<string>();
+    for (const p of fila) {
+      const r = await enviar(p);
+      if (r === 'ok' || r === 'recusado' || p.tentativas >= 5) feitos.add(p.clientId);
+      else p.tentativas++;
+    }
+    // relê a fila antes de gravar: o que entrou enquanto reenviávamos não pode se perder (o id do cliente evita duplicar entre abas)
+    const tentativas = new Map(fila.map((p) => [p.clientId, p.tentativas]));
+    gravarFila(lerFila().filter((p) => !feitos.has(p.clientId)).map((p) => ({ ...p, tentativas: Math.max(p.tentativas, tentativas.get(p.clientId) ?? 0) })));
   } finally { reenviando = false; }
 }
 
@@ -47,12 +55,14 @@ export function registrarAcao(
 ): void {
   const a = obterAtor();
   const p: Pendente = {
+    clientId: crypto.randomUUID(), tentativas: 0,
     storeId: storeId ?? null, action, entity: opts.entity ?? null, entityId: opts.entityId ?? null,
     summary: opts.summary ?? null, details: opts.details ?? {}, occurredAt: new Date().toISOString(),
     actor: a ? { id: a.id, name: a.name, role: a.role } : null,
   };
   void (async () => {
-    if (await enviar(p)) { void reenviarPendentes(); return; }
-    gravarFila([...lerFila(), p]);
+    const r = await enviar(p);
+    if (r === 'ok') { void reenviarPendentes(); return; }
+    if (r === 'rede') gravarFila([...lerFila(), p]);
   })().catch(() => { /* auditoria nunca quebra a ação */ });
 }
