@@ -282,10 +282,17 @@ export async function montarRelatorioDia(admin: SupabaseClient, storeId: string,
   return { eventos, secoes, texto: textoWhatsApp({ loja, dia, secoes, link }) };
 }
 
-// Números do topo do relatório.
+// Números do topo e destaques do relatório.
+const valorDe = (texto: string) => { const m = texto.match(/:\s*R\$\s*([\d.]+),(\d{2})/); return m ? Number(m[1].replace(/\./g, '') + '.' + m[2]) : 0; };
+
 export function resumoDoDia(secoes: SecaoLogin[]) {
   const todas = secoes.flatMap((x) => x.linhas);
   const pessoas = secoes.filter((x) => x.chave !== '(sistema)');
+  const porHora = Array(24).fill(0) as number[];
+  for (const x of pessoas) x.porHora.forEach((n, h) => { porHora[h] += n; });
+  const pico = porHora.reduce((m, n, h) => (n > m.n ? { h, n } : m), { h: -1, n: 0 });
+  const cancelou = pessoas.map((x) => ({ nome: x.nome, n: x.linhas.filter((l) => /^(CANCELOU|APAGOU)/.test(l.texto)).length })).sort((a, b) => b.n - a.n)[0];
+  const ativo = [...pessoas].sort((a, b) => b.total - a.total)[0];
   return {
     acoes: pessoas.reduce((t, x) => t + x.total, 0),
     logins: pessoas.length,
@@ -293,5 +300,10 @@ export function resumoDoDia(secoes: SecaoLogin[]) {
     reimpressoes: todas.filter((l) => l.acao.startsWith('reimpressao.')).length,
     cancelamentos: todas.filter((l) => /^(CANCELOU|APAGOU)/.test(l.texto)).length,
     pagamentos: todas.filter((l) => l.categoria === 'pagamento' && /Registrou pagamento/.test(l.texto)).length,
+    recebido: todas.filter((l) => /^Registrou pagamento/.test(l.texto)).reduce((t, l) => t + valorDe(l.texto), 0),
+    porHora,
+    pico: pico.n ? pico : null,
+    maisAtivo: ativo ? { nome: ativo.nome, n: ativo.total } : null,
+    maisCancelou: cancelou && cancelou.n > 0 ? cancelou : null,
   };
 }
