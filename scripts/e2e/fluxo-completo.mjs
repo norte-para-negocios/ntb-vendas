@@ -236,7 +236,7 @@ async function secCadeados(C) {
         await sleep(1200);
         // Garçom não tem perfil: na tela livre a área abre só o painel "Só com login" (sem dados); ele volta para Mesas.
         ok(await g.page.getByText(/Só com login/).first().isVisible().catch(() => false) || (await g.titulo()) === 'Mesas & Comandas', `sem o painel "Só com login" ao clicar em ${a}`);
-        await g.irArea('Mesas'); await sleep(600);
+        await g.irArea('Gestão de Mesas'); await sleep(600);
       }
     } finally { g.page.off('request', ouvir); }
     ok(vistas.length === 0, `dados de área bloqueada foram pedidos ao servidor: ${vistas.join(' | ')}`);
