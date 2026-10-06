@@ -95,7 +95,32 @@ interface RequestBody {
 // dest.enderDest.xLgr sem checagem). Capturar o endereço REAL do
 // destinatário continua fora de escopo (trabalho de task futura); o que
 // mudou é que a Fase 1 (transmissão) não depende mais disso.
+// Trava por venda (05/10/2026): a guarda de idempotência de `emitirNotaFiscal` é "consulta e depois grava", e entre as
+// duas passa a ida à SEFAZ (segundos). Dois pedidos da MESMA venda em até ~2 s (mesa fechada duas vezes: dois caixas,
+// duplo toque, reenvio) passavam os dois pela consulta e saíam duas NFC-e autorizadas (notas 140 e 141 do Sertão, R$ 331,54;
+// antes, 74 e 75 em 03/10). Aqui o segundo pedido espera o primeiro terminar e então cai na guarda ("Nota já existe").
+// Vale por processo do servidor (o app roda num processo só por ambiente); chave inclui pessoa/itens para não travar
+// notas por pessoa de uma mesma mesa.
+const emissoesEmAndamento = new Map<string, Promise<unknown>>();
+
+async function chaveDaVenda(request: NextRequest): Promise<string | null> {
+  const b = (await request.clone().json().catch(() => null)) as RequestBody | null;
+  if (!b || (!b.orderId && !b.tableId)) return null;
+  const itens = Array.isArray((b as { itemIds?: unknown }).itemIds) ? ((b as { itemIds: string[] }).itemIds).slice().sort().join(',') : '';
+  return [b.tableId ?? '', b.orderId ?? '', (b as { pessoaNome?: string }).pessoaNome?.trim() ?? '', itens].join('|');
+}
+
 export async function POST(request: NextRequest) {
+  const chave = await chaveDaVenda(request);
+  let liberar: () => void = () => {};
+  let cauda: Promise<unknown> | null = null;
+  if (chave) {
+    const anterior = emissoesEmAndamento.get(chave) ?? Promise.resolve();
+    const minha = new Promise<void>((r) => { liberar = r; });
+    cauda = anterior.then(() => minha);
+    emissoesEmAndamento.set(chave, cauda);
+    await anterior;
+  }
   try {
     return await emitirNotaFiscal(request);
   } catch (e) {
@@ -103,6 +128,9 @@ export async function POST(request: NextRequest) {
     // um 500 não tratado (constraint do Task 13) — sempre volta JSON.
     console.error('Emissão fiscal: falha não tratada na rota:', e);
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
+  } finally {
+    liberar();
+    if (chave && emissoesEmAndamento.get(chave) === cauda) emissoesEmAndamento.delete(chave);
   }
 }
 
