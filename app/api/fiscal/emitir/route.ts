@@ -121,6 +121,17 @@ export async function POST(request: NextRequest) {
     emissoesEmAndamento.set(chave, cauda);
     await anterior;
   }
+  // Trava no BANCO (migration 167): vale para qualquer processo/reinício. Se a função ainda não existe (banco sem a 167), segue só com a
+  // trava em memória acima — nunca deixa de emitir por falha de infraestrutura.
+  let travaDoBanco = false;
+  if (chave) {
+    try {
+      const { data: ganhou, error } = await getSupabaseAdmin().rpc('adquirir_trava_emissao', { p_chave: chave });
+      if (error) console.error('Emissão fiscal: trava do banco indisponível (segue com a trava em memória):', error.message);
+      else if (ganhou === false) { liberar(); if (emissoesEmAndamento.get(chave) === cauda) emissoesEmAndamento.delete(chave); return NextResponse.json({ skipped: true, reason: 'Já existe uma emissão em andamento para esta venda' }); }
+      else travaDoBanco = true;
+    } catch (e) { console.error('Emissão fiscal: falha ao pegar a trava do banco:', e); }
+  }
   try {
     return await emitirNotaFiscal(request);
   } catch (e) {
@@ -129,6 +140,7 @@ export async function POST(request: NextRequest) {
     console.error('Emissão fiscal: falha não tratada na rota:', e);
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
   } finally {
+    if (travaDoBanco && chave) { try { await getSupabaseAdmin().rpc('liberar_trava_emissao', { p_chave: chave }); } catch { /* expira sozinha em 5 min */ } }
     liberar();
     if (chave && emissoesEmAndamento.get(chave) === cauda) emissoesEmAndamento.delete(chave);
   }
