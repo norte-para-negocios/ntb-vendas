@@ -228,12 +228,13 @@ async function secCadeados(C) {
   await rel.passo('garçom: clicar numa área com cadeado mostra o aviso, não sai de Mesas e NÃO carrega dados da área', async () => {
     const vistas = [];
     const ouvir = (r) => { if (PROIBIDOS.test(r.url())) vistas.push(`${r.method()} ${r.url().split('/v1/')[1]?.slice(0, 60)}`); };
-    g.page.on('request', ouvir);
     try {
       for (const a of PROIBIDAS_GARCOM) {
+        g.page.on('request', ouvir); // só escuta enquanto a área bloqueada está aberta (voltar para Mesas pede dados da própria tela de Mesas)
         await g.menu(a).click();
         await g.page.getByText(/Sem permissão para esta área|Só com login/).first().waitFor({ timeout: 5000 }).catch(() => { throw new Error(`sem o aviso de permissão ao clicar em ${a}`); });
         await sleep(1200);
+        g.page.off('request', ouvir);
         // Garçom não tem perfil: na tela livre a área abre só o painel "Só com login" (sem dados); ele volta para Mesas.
         ok(await g.page.getByText(/Só com login/).first().isVisible().catch(() => false) || (await g.titulo()) === 'Mesas & Comandas', `sem o painel "Só com login" ao clicar em ${a}`);
         await g.irArea('Gestão de Mesas'); await sleep(600);
