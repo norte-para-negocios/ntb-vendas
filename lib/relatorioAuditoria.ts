@@ -1,6 +1,7 @@
 // Relatório diário de auditoria (06/10/2026): tudo o que cada login fez no dia, em ordem de horário, para o gestor.
 // Funções puras (descrever/agrupar/alertas) + montagem a partir do banco (staff_audit_log, migration 163).
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { eventosHistoricos, PRIMEIRO_DIA_COM_AUDITORIA } from '@/lib/relatorioHistorico';
 
 export type EventoAuditoria = {
   id: number; store_id: string | null; occurred_at: string; actor_user_id: string | null; actor_name: string | null; actor_role: string | null;
@@ -182,7 +183,7 @@ export const horaDoDia = (iso: string) => Number(new Intl.DateTimeFormat('pt-BR'
 export function ehAlerta(ev: EventoAuditoria, texto: string): boolean {
   const a = ev.action;
   if (a.startsWith('reimpressao.') || a === 'historico.zerar' || a === 'login.falhou' || a === 'login.bloqueado' || a === 'fiscal.exportar') return true;
-  if (/^(CANCELOU|APAGOU|ZEROU|MUDOU)/.test(texto)) return true;      // cancelamento, exclusão, pedido movido de mesa
+  if (/^(CANCELOU|APAGOU|ZEROU|MUDOU|ESTORNOU|REMOVEU)/.test(texto)) return true;      // cancelamento, exclusão, pedido movido de mesa
   if (a.endsWith('.delete')) return true;
   if (a === 'fiscal_notas.update' && /cancelada|rejeitada/.test(texto)) return true;
   if (/^Alterou forma de pagamento/.test(texto)) return true;          // pagamento NORMAL não é alerta; só a troca depois
@@ -226,6 +227,8 @@ export function textoWhatsApp(opts: { loja: string; dia: string; secoes: SecaoLo
 const diaISO = (dia: string) => ({ de: `${dia}T00:00:00-03:00`, ate: new Date(new Date(`${dia}T00:00:00-03:00`).getTime() + 24 * 3600 * 1000).toISOString() });
 
 export async function buscarEventosDoDia(admin: SupabaseClient, storeId: string, dia: string): Promise<EventoAuditoria[]> {
+  // dias anteriores à auditoria nova: remonta pelo que as tabelas já guardavam (itens, pagamentos, cancelamentos, turnos, ponto)
+  if (dia < PRIMEIRO_DIA_COM_AUDITORIA) return eventosHistoricos(admin, storeId, dia);
   const { de, ate } = diaISO(dia);
   const todos: EventoAuditoria[] = [];
   for (let off = 0; off < 50000; off += 1000) {

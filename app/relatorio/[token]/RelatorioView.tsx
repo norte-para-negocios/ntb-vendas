@@ -46,6 +46,18 @@ function Atividade({ porHora, cor }: { porHora: number[]; cor: string }) {
   );
 }
 
+function porHora(linhas: SecaoLogin['linhas']): [number, SecaoLogin['linhas']][] {
+  const m = new Map<number, SecaoLogin['linhas']>();
+  for (const l of linhas) m.set(l.h, [...(m.get(l.h) ?? []), l]);
+  return [...m.entries()].sort((a, b) => a[0] - b[0]);
+}
+
+function resumoCategorias(linhas: SecaoLogin['linhas']) {
+  const c: Partial<Record<Categoria, number>> = {};
+  for (const l of linhas) c[l.categoria] = (c[l.categoria] ?? 0) + 1;
+  return (Object.entries(c) as [Categoria, number][]).sort((a, b) => b[1] - a[1]);
+}
+
 function Linha({ l, nome, mostrarNome }: { l: SecaoLogin['linhas'][number]; nome?: string; mostrarNome?: boolean }) {
   const { Icone, cor } = CAT[l.categoria];
   return (
@@ -84,8 +96,6 @@ export default function RelatorioView({ loja, dia, geradoEm, secoes, resumo }: {
       <style>{`@media print{.nao-imprime{display:none!important}details>*{display:block!important}details{break-inside:avoid}}@keyframes subir{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}.sobe{animation:subir .5s var(--ease-out) both}`}</style>
 
       <header className="relative overflow-hidden text-white" style={{ background: 'var(--ink)' }}>
-        <div aria-hidden className="absolute -top-24 -right-16 w-[420px] h-[420px] rounded-full opacity-60" style={{ background: 'radial-gradient(circle at 30% 30%, #484DB5 0%, transparent 65%)' }} />
-        <div aria-hidden className="absolute -bottom-32 left-[8%] w-[320px] h-[320px] rounded-full opacity-35" style={{ background: 'radial-gradient(circle, #8b90ea 0%, transparent 70%)' }} />
         <div className="relative max-w-5xl mx-auto px-5 pt-8 pb-16 sm:pb-20">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[12px] tracking-[0.14em] uppercase font-semibold text-white/70">Norte Vendas · Auditoria</span>
@@ -143,7 +153,7 @@ export default function RelatorioView({ loja, dia, geradoEm, secoes, resumo }: {
               {secoes.map((s, i) => {
                 const linhas = s.linhas.filter(passa);
                 const cor = s.chave === '(sistema)' ? '#6e6e73' : matiz(s.nome);
-                const aberto = abertos[s.chave] ?? (secoes.length <= 2);
+                const aberto = abertos[s.chave] ?? true;
                 return (
                   <article key={s.chave} className="sobe rounded-[var(--r-xl)] bg-[var(--surface)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden" style={{ animationDelay: `${i * 60}ms` }}>
                     <button onClick={() => setAbertos((o) => ({ ...o, [s.chave]: !aberto }))} aria-expanded={aberto} className="w-full text-left p-4 sm:p-5 grid gap-4 sm:grid-cols-[1fr_260px] items-center hover:bg-[var(--surface-2)] transition-colors">
@@ -151,7 +161,8 @@ export default function RelatorioView({ loja, dia, geradoEm, secoes, resumo }: {
                         <span className="grid place-items-center w-12 h-12 rounded-full text-white font-semibold text-[16px] shrink-0" style={{ background: cor }}>{s.chave === '(sistema)' ? <Users size={20} /> : iniciais(s.nome)}</span>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-[16px] truncate">{s.nome}</span>{s.papel && <span className="text-[11.5px] font-medium px-2 py-0.5 rounded-full" style={{ background: `color-mix(in srgb, ${cor} 14%, transparent)`, color: cor }}>{s.papel}</span>}</div>
-                          <div className="text-[13px] text-[var(--text-muted)] mt-0.5">{s.total} ações · das {hm(s.primeira)} às {hm(s.ultima)}{s.alertas > 0 && <span className="ml-2 font-medium" style={{ color: 'var(--err)' }}>⚠ {s.alertas} para conferir</span>}</div>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">{resumoCategorias(s.linhas).slice(0, 5).map(([c, n]) => <span key={c} className="text-[11.5px] px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)]">{n} {CAT[c].rotulo.toLowerCase()}</span>)}</div>
+                          <div className="text-[13px] text-[var(--text-muted)] mt-1">{s.total} ações · das {hm(s.primeira)} às {hm(s.ultima)}{s.alertas > 0 && <span className="ml-2 font-medium" style={{ color: 'var(--err)' }}>⚠ {s.alertas} para conferir</span>}</div>
                         </div>
                         <ChevronDown size={18} className={`ml-auto shrink-0 text-[var(--text-muted)] transition-transform nao-imprime ${aberto ? 'rotate-180' : ''}`} />
                       </div>
@@ -159,7 +170,16 @@ export default function RelatorioView({ loja, dia, geradoEm, secoes, resumo }: {
                     </button>
                     {aberto && (
                       <ul className="border-t border-[var(--border)] p-2 sm:p-3">
-                        {linhas.length ? linhas.map((l, j) => <Linha key={j} l={l} />) : <li className="p-4 text-[14px] text-[var(--text-muted)]">Nada neste filtro.</li>}
+                        {linhas.length ? porHora(linhas).map(([h, grupo]) => (
+                          <li key={h} className="list-none">
+                            <div className="flex items-center gap-3 px-3 pt-4 pb-1.5 sticky top-0 bg-[var(--surface)]/95 backdrop-blur-sm">
+                              <span className="text-[13px] font-semibold tabular-nums" style={{ color: cor }}>{String(h).padStart(2, '0')}h</span>
+                              <span className="h-px flex-1 bg-[var(--border)]" />
+                              <span className="text-[12px] text-[var(--text-muted)]">{grupo.length} {grupo.length === 1 ? 'ação' : 'ações'}</span>
+                            </div>
+                            <ul>{grupo.map((l, j) => <Linha key={j} l={l} />)}</ul>
+                          </li>
+                        )) : <li className="p-4 text-[14px] text-[var(--text-muted)]">Nada neste filtro.</li>}
                       </ul>
                     )}
                   </article>
