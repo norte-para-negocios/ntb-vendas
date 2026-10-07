@@ -63,7 +63,7 @@ assert.equal(buscarAjustes('percentual')[0].id, 'taxa_servico_percentual');
 // Notas fiscais (histórico) fica em Vendas logo depois de Histórico; emissor e integrações em Configurações
 const ids = (a: string) => AREAS.find((x) => x.id === a)!.abas.map((b) => b.id);
 assert.deepEqual(ids('vendas'), ['dashboard', 'sales', 'notas', 'relatorios', 'excecoes']);
-assert.deepEqual(ids('config'), ['settings', 'impressao', 'locais', 'fiscal', 'integracoes']);
+assert.deepEqual(ids('config'), ['settings', 'impressao', 'locais', 'locais_estoque', 'fiscal', 'integracoes']);
 const aba = (id: string) => AREAS.flatMap((a) => a.abas).find((b) => b.id === id)!;
 assert.equal(aba('notas').label, 'Notas fiscais');
 assert.equal(aba('notas').sensitive, undefined, 'histórico de notas não é a aba com cadeado');
