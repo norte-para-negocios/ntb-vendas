@@ -113,7 +113,7 @@ export async function enviarFechamentos(admin: SupabaseClient, storeId: string, 
     ? {
         codigo: feeProduct?.omie_codigo ?? '',
         nome: feeProduct?.name ?? 'Taxa de Serviço',
-        percentual: feeProduct?.fee_percent != null ? Number(feeProduct.fee_percent) : resolveServiceFeeRate(loja?.config as { service_fee_rate?: unknown } | null) * 100,
+        percentual: feeProduct?.fee_percent != null ? Number(feeProduct.fee_percent) : resolveServiceFeeRate(loja?.config as Parameters<typeof resolveServiceFeeRate>[0]) * 100,
       }
     : null;
 

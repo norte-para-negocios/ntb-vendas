@@ -40,6 +40,7 @@ import { subtituloHistorico, nomeArquivoHistorico, type FiltrosHistorico } from 
 import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } from '@/lib/reports/salesFilters';
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
+import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
@@ -11268,7 +11269,8 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         return <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]"><CheckCircle size={12} className="mr-1"/> {label}</Badge>;
     };
 
-    const [activeTab, setActiveTab] = useState<AbaId>('dashboard');
+    const [vendaDoLinkInicial] = useState<string | null>(() => vendaDoLinkAtual());
+    const [activeTab, setActiveTab] = useState<AbaId>(() => (vendaDoLinkInicial ? 'sales' : 'dashboard'));
     const [sales, setSales] = useState<Order[]>([]);
     const [salesLoaded, setSalesLoaded] = useState(false);
     const [tableSessions, setTableSessions] = useState<TableSession[]>([]);
@@ -11337,6 +11339,17 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     useEffect(() => {
         if (activeTab === 'sales' || activeTab === 'dashboard') loadSales();
     }, [storeId, activeTab]);
+
+    // Link do Norte Estoque: depois de carregar o histórico, abre o detalhe da venda pedida (uma vez) e limpa o link.
+    const [vendaDoLinkAberta, setVendaDoLinkAberta] = useState(false);
+    useEffect(() => {
+        if (!vendaDoLinkInicial || vendaDoLinkAberta || !salesLoaded) return;
+        setVendaDoLinkAberta(true);
+        const venda = sales.find(o => String(o.id).toLowerCase() === vendaDoLinkInicial);
+        if (venda) setSelectedOrderDetails(venda);
+        else toast.info('Venda do link não encontrada no histórico desta loja.');
+        limparLinkVenda();
+    }, [vendaDoLinkInicial, vendaDoLinkAberta, salesLoaded, sales]);
 
     // Achado real (auditoria "o que falta", 2026-08-27 — itens A8/A9 da
     // reunião): fechar uma mesa/venda em outra aba nunca atualizava sozinho
@@ -13468,6 +13481,8 @@ const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
     const modules = resolveStoreModules(u.store);
     const hasPermission = (tabId: string) => hasTabPermission(u, tabId, u.store);
     const accessible = computeAccessibleTabIds(modules, hasPermission);
+    // Link do Norte Estoque (/loja?venda=<pedido>): abre a Administração (Vendas > Histórico, ver StoreAdminView), se a pessoa tem acesso.
+    if (vendaDoLinkAtual() && accessible.has('admin')) return 'admin';
     return TAB_IDS.find((t) => accessible.has(t)) ?? 'admin';
 };
 
@@ -13540,7 +13555,8 @@ export const StoreModule: React.FC = () => {
                     const modules = resolveStoreModules(restoredUser.store);
                     const hasPermission = (t: string) => hasTabPermission(restoredUser, t, restoredUser.store);
                     const accessible = computeAccessibleTabIds(modules, hasPermission);
-                    setTab(savedTab && (savedTab === 'producao' ? producaoAcessivel(accessible) : accessible.has(savedTab)) ? savedTab : pickInitialStoreTab(restoredUser));
+                    setTab(vendaDoLinkAtual() && accessible.has('admin') ? 'admin'
+                        : savedTab && (savedTab === 'producao' ? producaoAcessivel(accessible) : accessible.has(savedTab)) ? savedTab : pickInitialStoreTab(restoredUser));
                 } else {
                     // Fix round final (C4, ver task-12-report.md): fetchStoreUserById/
                     // fetchUniversalUserById/fetchStoreById (lib/api.ts) já caem pro
