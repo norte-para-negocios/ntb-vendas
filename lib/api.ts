@@ -2588,6 +2588,8 @@ export interface CreateStoreParams {
   logoUrl?: string | null;
   coverUrl?: string | null;
   serviceFeeRate: number;
+  /** Liga/desliga a cobrança da taxa (config.charge_service_fee). Ausente = não mexe. Ver cobrancaTaxaDoCadastro. */
+  chargeServiceFee?: boolean;
   // Perfil de módulos por loja (Task 1, plano 2026-08-22). Sempre o perfil
   // completo escolhido no formulário (AdminModule.tsx) — createStore/
   // updateStore são quem decide se isso vira `config.modules`/
@@ -2672,7 +2674,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
         cover_url: params.coverUrl || null,
         ...stockModeFields(params.stockMode),
-        config: applyModulesConfigFields({ service_fee_rate: params.serviceFeeRate }, params),
+        config: applyModulesConfigFields({ service_fee_rate: params.serviceFeeRate, ...(params.chargeServiceFee ? { charge_service_fee: true } : {}) }, params),
       })
       .select()
       .single();
@@ -2783,7 +2785,7 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
         cover_url: params.coverUrl,
         ...stockModeUpdate,
-        config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate }, params),
+        config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate, ...(params.chargeServiceFee !== undefined ? { charge_service_fee: params.chargeServiceFee } : {}) }, params),
       })
       .eq('id', id);
 

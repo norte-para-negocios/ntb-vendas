@@ -16,6 +16,16 @@ export function resolveServiceFeeRate(config: { service_fee_rate?: unknown } | n
 /** Teto do campo de percentual em Configurações > Geral > Atendimento (o Master Admin pode ir além, até 100%). */
 export const TAXA_MAXIMA_PERCENT = 30;
 
+/**
+ * Cadastro de loja do Master Admin: a taxa (%) digitada também liga/desliga a cobrança (`config.charge_service_fee`,
+ * o mesmo interruptor de Configurações > Geral > Atendimento). Loja nova: cobra se a taxa > 0. Edição: só mexe no
+ * interruptor quando o admin alterou o campo da taxa (undefined = manter o que está gravado).
+ */
+export function cobrancaTaxaDoCadastro(criando: boolean, taxaAlterada: boolean, percentual: number): boolean | undefined {
+  if (!criando && !taxaAlterada) return undefined;
+  return Number.isFinite(percentual) && percentual > 0;
+}
+
 /** Percentual digitado na tela (0 a 30) -> fração gravada em service_fee_rate, com duas casas no percentual. */
 export function taxaPercentualParaConfig(percentual: number): number {
   if (!Number.isFinite(percentual)) return SERVICE_FEE_RATE;

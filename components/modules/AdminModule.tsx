@@ -15,7 +15,7 @@ import { ROTULO_MODO, MODOS_ESTOQUE, normalizarModo, type ModoEstoque } from '@/
 import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchSalesHistory } from '@/lib/api';
 import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
-import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
+import { cobrancaTaxaDoCadastro, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
 import { toast } from '@/components/Toast';
 import { confirm } from '@/components/ConfirmDialog';
 import { Skeleton, stagger } from '@/components/Skeleton';
@@ -189,6 +189,8 @@ export const AdminModule: React.FC = () => {
   const [periodMonths, setPeriodMonths] = useState<number | null>(12);
   const [isActive, setIsActive] = useState(true);
   const [serviceFeeRatePercent, setServiceFeeRatePercent] = useState<number>(10);
+  // Só liga/desliga a cobrança da taxa quando o admin mexe no campo (edição sem tocar mantém o que está gravado).
+  const [taxaAlterada, setTaxaAlterada] = useState(false);
   // Emite nota fiscal? — toggle simples que mapeia pro modelo_emissao_automatica
   // já existente em store_fiscal_config (nfce quando ligado, nenhuma quando desligado).
   const [emiteNotaFiscal, setEmiteNotaFiscal] = useState(false);
@@ -433,6 +435,7 @@ export const AdminModule: React.FC = () => {
       setPeriodMonths(12);
       setIsActive(true);
       setServiceFeeRatePercent(10);
+      setTaxaAlterada(false);
       setEmiteNotaFiscal(false);
       // Fix round 2 (revisão da Task 4, Critical #1): estes sete valores eram
       // literais `true` escritos à mão, e o `true` do caixa aqui anulava o
@@ -547,6 +550,7 @@ export const AdminModule: React.FC = () => {
       setPeriodMonths(store.contract_period_months);
       setIsActive(store.is_active);
       setServiceFeeRatePercent(store.config?.service_fee_rate != null ? store.config.service_fee_rate * 100 : 10);
+      setTaxaAlterada(false);
 
       // Perfil de módulos por loja — resolveStoreModules já devolve tudo
       // ligado quando a loja nunca configurou nada (comportamento atual),
@@ -860,6 +864,7 @@ export const AdminModule: React.FC = () => {
               logoUrl: finalLogoUrl,
               coverUrl: finalCoverUrl,
               serviceFeeRate: serviceFeeRatePercent / 100,
+              chargeServiceFee: cobrancaTaxaDoCadastro(!editingId, taxaAlterada, serviceFeeRatePercent),
               // Perfil de módulos por loja — createStore/updateStore só gravam
               // config.modules/config.order_flow quando isso realmente difere
               // do default (ver isDefaultStoreModules em lib/storeModules.ts);
@@ -1434,7 +1439,7 @@ export const AdminModule: React.FC = () => {
                   )}
               </div>
             <div className="max-w-[260px]">
-                <Input type="number" label="Taxa de Serviço (%)" value={serviceFeeRatePercent} onChange={e => setServiceFeeRatePercent(Number(e.target.value) || 0)} min="0" max="100" step="0.1" />
+                <Input type="number" label="Taxa de Serviço (%)" value={serviceFeeRatePercent} onChange={e => { setServiceFeeRatePercent(Number(e.target.value) || 0); setTaxaAlterada(true); }} min="0" max="100" step="0.1" />
             </div>
               {/* Módulos desta loja (Task 1, plano 2026-08-22-perfis-de-loja-e-caixa)
                   — quais telas essa loja tem, no painel do lojista (/loja).
