@@ -40,6 +40,21 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = getSupabaseAdmin();
+
+  // Idempotente por CNPJ (ligação automática Estoque <-> Vendas): se a loja já existe aqui, devolve a existente em vez de duplicar.
+  const digitos = (body.cnpj ?? '').replace(/\D/g, '');
+  if (digitos.length >= 11) {
+    const { data: candidatas } = await admin.from('stores').select('id, slug, cnpj, stock_mode').not('cnpj', 'is', null);
+    const existente = (candidatas ?? []).find((c) => String(c.cnpj).replace(/\D/g, '') === digitos);
+    if (existente) {
+      const alvo = body.stockMode === 'proprio' || body.stockMode === 'nenhum' ? body.stockMode : null;
+      if (alvo && existente.stock_mode !== alvo) {
+        const { data: tem } = await admin.rpc('store_tem_baixas_secure', { p_store_id: existente.id });
+        if (!tem) await admin.from('stores').update({ stock_mode: alvo }).eq('id', existente.id);
+      }
+      return NextResponse.json({ ok: true, storeId: existente.id, slug: existente.slug, existente: true });
+    }
+  }
   const baseSlug = generateSlug(body.nome) || 'loja';
   let slug = baseSlug;
 

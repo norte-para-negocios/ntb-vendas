@@ -51,6 +51,7 @@ import { checkRealConnectivity, isNetworkError } from '@/lib/offline/network';
 import { buildPendingOrdersForStore } from '@/lib/offline/pendingOrders';
 import { getCachedMenu } from '@/lib/offline/cache';
 import { toast } from '@/components/Toast';
+import { SincronizacaoCatalogo } from './settings/SincronizacaoCatalogo';
 import { useConexaoEstoque, SeloConexao, PainelConexao, BaixasEstoque } from '@/components/modules/settings/IntegracaoEstoque';
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
@@ -12698,6 +12699,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
 
     return (
         <div className="space-y-3">
+            <SincronizacaoCatalogo storeId={storeId} />
             <Collapsible
                 title="Integração com o NTB Estoque"
                 defaultOpen={true}
