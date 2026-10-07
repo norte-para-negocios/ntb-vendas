@@ -2601,6 +2601,8 @@ export interface CreateStoreParams {
   counterPaymentFirst?: boolean;
   // Cardápio vitrine (2026-09-26): ver applyModulesConfigFields.
   clientOrdering?: boolean;
+  // Modo por local de preparo (06/10/2026): ver applyModulesConfigFields.
+  locaisModo?: Record<string, 'acompanhamento' | 'impressao'> | null;
 }
 
 // Perfil de módulos por loja (Task 1): decide se `params.modules`/
@@ -2615,7 +2617,7 @@ export interface CreateStoreParams {
 // que a function realmente usa, pra não obrigar quem chama de fora de
 // createStore/updateStore a montar um CreateStoreParams inteiro só pra
 // mudar módulos/fluxo.
-export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow; counterPaymentFirst?: boolean; clientOrdering?: boolean }): Record<string, any> => {
+export const applyModulesConfigFields = (config: Record<string, any>, params: { modules?: StoreModules; orderFlow?: OrderFlow; counterPaymentFirst?: boolean; clientOrdering?: boolean; locaisModo?: Record<string, 'acompanhamento' | 'impressao'> | null }): Record<string, any> => {
   const next = { ...config };
   if (params.modules && !isDefaultStoreModules(params.modules)) {
     next.modules = params.modules;
@@ -2642,6 +2644,15 @@ export const applyModulesConfigFields = (config: Record<string, any>, params: { 
     next.client_ordering = false;
   } else if (params.clientOrdering === true) {
     delete next.client_ordering;
+  }
+  // Modo por local de preparo (06/10/2026): `undefined` = quem chamou não mexe (preserva o config); `null`/vazio = volta ao
+  // comportamento derivado (remove a chave); com valores = grava só entradas válidas.
+  if (params.locaisModo === null || (params.locaisModo && Object.keys(params.locaisModo).length === 0)) {
+    delete next.locais_preparo_modo;
+  } else if (params.locaisModo) {
+    const ok: Record<string, 'acompanhamento' | 'impressao'> = {};
+    for (const [k, v] of Object.entries(params.locaisModo)) if (v === 'acompanhamento' || v === 'impressao') ok[k] = v;
+    if (Object.keys(ok).length > 0) next.locais_preparo_modo = ok; else delete next.locais_preparo_modo;
   }
   // Removido (redesign 2026-08-23): `print_target` deixou de existir (ver
   // lib/storeModules.ts) — apagado incondicionalmente daqui em diante pra

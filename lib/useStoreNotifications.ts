@@ -5,7 +5,7 @@ import { fetchTables, fetchKitchenOrders, fetchPrintSectors, fetchRecentPrintJob
 import { toast } from '@/components/Toast';
 import { playNewOrderAlert, playReadyAlert, playItemLateAlert, playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { aoPublicar, mesasRecentes, kdsRecente } from '@/lib/dadosAoVivo';
-import { resolveStoreModules } from '@/lib/storeModules';
+import { resolveLocaisModo, resolveStoreModules } from '@/lib/storeModules';
 import { listarLocaisComTela, type SetorLike } from '@/lib/locaisPreparo';
 import { contarPorLocal, itemPrecisaAcao, locaisAcessiveis, type ItemKds } from '@/lib/producaoNav';
 import {
@@ -53,7 +53,8 @@ export function useStoreNotifications({ store, user, acessiveis, abaAtual }: Opc
   const prefs = useMemo(() => resolverPrefs(store.config), [store.config]);
   const aplicaveis = useMemo(() => tiposAplicaveis(store), [store]);
   const publicos = useMemo(() => publicosDoUsuario(user), [user]);
-  const locais = useMemo(() => listarLocaisComTela(setores, { cozinha: modulos.kitchen_kds, bar: modulos.bar_kds }), [setores, modulos.kitchen_kds, modulos.bar_kds]);
+  const modosLocais = useMemo(() => resolveLocaisModo(store), [store.config]); // eslint-disable-line react-hooks/exhaustive-deps
+  const locais = useMemo(() => listarLocaisComTela(setores, { cozinha: modulos.kitchen_kds, bar: modulos.bar_kds }, modosLocais), [setores, modulos.kitchen_kds, modulos.bar_kds, modosLocais]);
   // Gerência vê tudo; as demais funções só os locais cuja base (Cozinha/Bar) elas acessam.
   const locaisPermitidos = useMemo(
     () => (publicos.includes('gerencia') ? null : new Set(locaisAcessiveis(locais, acessiveis).map((l) => l.chave))),

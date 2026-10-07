@@ -48,6 +48,38 @@ export const resolveStoreModules = (store?: { config?: any } | null): StoreModul
 export const resolveOrderFlow = (store?: { config?: any } | null): OrderFlow =>
   store?.config?.order_flow === 'direct_print' ? 'direct_print' : 'kds';
 
+// Modo de cada LOCAL DE PREPARO (06/10/2026, cadastro de loja redesenhado): cada local (Cozinha, Bar, Pizzaria...) é
+// 'acompanhamento' (tela de produção/KDS) ou 'impressao' (impressão direta). Chave do mapa = a mesma de lib/locaisPreparo.ts
+// ('kitchen' | 'bar' | 'setor:<id>'), guardado em `config.locais_preparo_modo`.
+// REGRA que não pode quebrar: ausência da chave = comportamento de hoje, derivado do fluxo da loja (`order_flow`) e dos módulos
+// KDS. Quem lê SEMPRE usa `modoDoLocal`, nunca o mapa cru.
+export type LocalModo = 'acompanhamento' | 'impressao';
+export type LocaisModo = Record<string, LocalModo>;
+
+export const resolveLocaisModo = (store?: { config?: any } | null): LocaisModo => {
+  const m = store?.config?.locais_preparo_modo;
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return {};
+  const out: LocaisModo = {};
+  for (const [k, v] of Object.entries(m)) if (v === 'acompanhamento' || v === 'impressao') out[k] = v;
+  return out;
+};
+
+/** Modo EFETIVO de um local: o configurado, senão o que a loja já faz hoje (fluxo + módulos KDS). */
+export const modoDoLocal = (store: { config?: any } | null | undefined, chave: string): LocalModo => {
+  const cfg = resolveLocaisModo(store)[chave];
+  if (cfg) return cfg;
+  const fluxo = resolveOrderFlow(store);
+  if (fluxo === 'direct_print') return 'impressao';
+  const m = resolveStoreModules(store);
+  if (chave === 'kitchen') return m.kitchen_kds ? 'acompanhamento' : 'impressao';
+  if (chave === 'bar') return m.bar_kds ? 'acompanhamento' : 'impressao';
+  return 'acompanhamento';
+};
+
+/** Fluxo geral da loja que decorre dos modos por local: tudo impressão direta = 'direct_print', senão 'kds'. */
+export const fluxoDosLocais = (modos: LocalModo[]): OrderFlow =>
+  modos.length > 0 && modos.every((m) => m === 'impressao') ? 'direct_print' : 'kds';
+
 // Pedido do André (2026-09-11): no balcão o cliente paga ANTES do pedido ir
 // pra cozinha — "balcão paga primeiro". Configurável de propósito (o próprio
 // pedido pediu a chave), porque nem toda loja cobra na entrada.

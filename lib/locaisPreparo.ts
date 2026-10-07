@@ -17,8 +17,16 @@ export function listarLocais(setores: SetorLike[]): LocalPreparo[] {
 }
 
 // Locais que têm TELA de acompanhamento (Produção, avisos): Cozinha/Bar só entram com o módulo KDS ligado; locais criados sempre.
-export function listarLocaisComTela(setores: SetorLike[], modulos: { cozinha: boolean; bar: boolean }): LocalPreparo[] {
-  return listarLocais(setores).filter((l) => l.setorId !== null || (l.base === 'kitchen' ? modulos.cozinha : modulos.bar));
+// `modos` (opcional, 06/10/2026): mapa chave -> 'acompanhamento'|'impressao' vindo de `stores.config.locais_preparo_modo`.
+// Local marcado 'impressao' não tem tela de acompanhamento. Sem o mapa (ou sem a chave) nada muda.
+export function listarLocaisComTela(
+  setores: SetorLike[],
+  modulos: { cozinha: boolean; bar: boolean },
+  modos?: Record<string, 'acompanhamento' | 'impressao'>,
+): LocalPreparo[] {
+  return listarLocais(setores)
+    .filter((l) => l.setorId !== null || (l.base === 'kitchen' ? modulos.cozinha : modulos.bar))
+    .filter((l) => modos?.[l.chave] !== 'impressao');
 }
 
 // Modelo de categorias: cada categoria pertence a UM local.
