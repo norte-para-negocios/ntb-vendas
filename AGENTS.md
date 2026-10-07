@@ -2683,3 +2683,25 @@ Quatro jeitos de cobrar, e cada produto usa o seu (conferido no banco em 06/10 c
 - Pizza Tradicional: Tamanho e Sabor 1 passaram a obrigatórios.
 - Pendentes: Fanta Zero 350 ml (código 90954) está INATIVO no Omie; Sprite Fresh 510ml foi ligado ao código 91008 que ainda não existe na loja 4 do Estoque; H2O custa R$ 9,90 no cardápio e R$ 10,90 no Omie; pizza de 1 sabor só (Média/Grande) baixa UMA meia no estoque (continua em aberto).
 - "Esgotar" só gerente/dono e só no cadastro (migration 165); a função antiga `set_product_sold_out_secure` fica até todos os apps passarem da 1.2.91/1.0.26.
+
+## Conta aguardando pagamento — mesa livre sem esperar o pagamento (07/10/2026, migration 172)
+
+Pedido do dono: "se alguém pediu conta, a mesa fica em stand-by, porém já pode abrir outra".
+- **Desenho**: a conta que vai esperar o caixa vira uma linha própria em `tables` (`standby=true`, `standby_de` = mesa física, mesmo
+  número, status `'standby'`), levando os pedidos em aberto e a sessão. A mesa física volta a `available` com PIN novo (o cliente da
+  sessão anterior sai do cardápio pelo aviso de "mesa fechada" de sempre). Como comanda, pagamento, `close_table_orders_secure`,
+  `finalize_table_secure`, NFC-e, Ordem de Produção/baixa e faturamento do Estoque são todos por `table_id`, a conta aguardando é
+  recebida pelo MESMO fluxo, sem misturar itens. Ao receber, a linha vai para `closed` (não volta a `available`) e é reaproveitada.
+- **RPCs**: `liberar_mesa_secure(mesa, operador)` (botão "Liberar a mesa para novos clientes" no modal da mesa ocupada/conta pedida com
+  itens) e `reabrir_conta_aguardando_secure(conta)` ("Voltar a conta para a mesa", só caixa/gerente e só se a mesa física ainda estiver
+  livre; com clientes novos na mesa a conta é recebida separada — nunca se juntam duas sessões).
+- **Leituras**: `get_tables_secure` devolve mesas físicas + contas em aberto (`standby` vem no JSON); `get_tables_public_secure` (cliente),
+  `sync_store_tables_secure` (quantidade de mesas) e a contagem do Master só olham mesas físicas. `count_active_tables_secure` conta
+  `standby` como conta em aberto. `open_table_session` recusa conta aguardando. Trigger `trg_bloquear_item_em_conta_aguardando`: nada
+  entra numa conta aguardando, exceto taxa lançada pelo caixa (produto com `fee_type`).
+- **Tela** (`lib/contasAguardando.ts`, teste `contasAguardando.test.ts`): TablesView separa as contas (`separarContasAguardando`) numa
+  lista "Aguardando pagamento" no topo e num selo "N contas aguardando · R$" no cartão da mesa; a fila do Caixa mostra
+  "Mesa N · aguardando pagamento". Jurisdição do garçom = a da mesa física (`idDaMesaFisica`). Conta aguardando não tem
+  "Adicionar Pedido", "Trocar" nem "Trocar responsável". Precisa de internet (não entra na fila offline).
+- **Testado** em produção na ODARA (07/10): 2 contas aguardando + 3ª sessão na mesma mesa; as 3 recebidas, cada uma com a sua NFC-e de
+  homologação (nº 15, 16, 17), baixa `ok` e a sua venda no Estoque (taxa certa). Capturas em `docs/qa/2026-10-07-mesa-standby/`.
