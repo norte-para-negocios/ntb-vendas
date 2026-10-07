@@ -544,7 +544,7 @@ export const AdminModule: React.FC = () => {
       setStockMode(normalizarModo(store.stock_mode));
 
       // Fetch current tables to set correct count
-      const tables = await fetchTables(store.id);
+      const tables = (await fetchTables(store.id)).filter((t) => !t.standby);
       setTableCount(tables.length || 0);
 
       setPeriodMonths(store.contract_period_months);

@@ -1741,6 +1741,27 @@ export const cancelTableBillRequest = async (tableId: string) => {
   if (error) throw error;
 };
 
+// Conta aguardando pagamento (migration 172): a conta atual sai da mesa e espera o caixa; a mesa fica livre para novos
+// clientes (PIN novo). Precisa de internet: não entra na fila offline (mexe em duas mesas de uma vez).
+export const liberarMesa = async (tableId: string, operatorName: string): Promise<{ success: boolean; message?: string; standbyTableId?: string }> => {
+  const { data, error } = await supabase.rpc('liberar_mesa_secure', { p_table_id: tableId, p_operator_name: operatorName || null });
+  if (error) {
+    if (isNetworkError(error)) return { success: false, message: 'Sem internet. Liberar a mesa precisa de conexão.' };
+    if ((error as { code?: string }).code === 'PGRST202') return { success: false, message: 'O servidor ainda não tem esta função. Atualize o sistema.' };
+    return { success: false, message: error.message };
+  }
+  const r = (data ?? {}) as { success?: boolean; message?: string; standby_table_id?: string };
+  return { success: !!r.success, message: r.message, standbyTableId: r.standby_table_id };
+};
+
+// Volta a conta aguardando para a mesa (foi sem querer). Só funciona se a mesa ainda estiver livre.
+export const reabrirContaAguardando = async (standbyTableId: string): Promise<{ success: boolean; message?: string }> => {
+  const { data, error } = await supabase.rpc('reabrir_conta_aguardando_secure', { p_standby_id: standbyTableId });
+  if (error) return { success: false, message: isNetworkError(error) ? 'Sem internet.' : error.message };
+  const r = (data ?? {}) as { success?: boolean; message?: string };
+  return { success: !!r.success, message: r.message };
+};
+
 export const cancelPendingTableItems = async (tableId: string) => {
   await supabase.rpc('cancel_pending_table_items_secure', { p_table_id: tableId });
 };

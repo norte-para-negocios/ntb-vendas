@@ -14,7 +14,9 @@ export enum TableStatus {
   OCCUPIED = 'occupied',
   WAITING_BILL = 'waiting_bill',
   CLOSED = 'closed',
-  BLOCKED = 'blocked'
+  BLOCKED = 'blocked',
+  // Conta aguardando pagamento (migration 172): linha própria, a mesa física já está livre para outros clientes.
+  STANDBY = 'standby'
 }
 
 export enum OrderStatus {
@@ -185,6 +187,10 @@ export interface Table {
   floor_y?: number | null;
   // Área da planta (migration 154), ex.: "Salão", "Varanda". null = sem área.
   area?: string | null;
+  // Conta aguardando pagamento (migration 172): true = não é mesa física; standby_de = a mesa de onde saiu.
+  standby?: boolean;
+  standby_de?: string | null;
+  standby_em?: string | null;
 }
 
 export interface Category {

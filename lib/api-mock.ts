@@ -535,3 +535,9 @@ export const deleteStore = async (id: string): Promise<{ success: boolean; messa
   stores = stores.filter(s => s.id !== id);
   return { success: true };
 };
+
+// Conta aguardando pagamento (migration 172): no mock não há servidor.
+export const liberarMesa = async (_tableId: string, _operatorName: string): Promise<{ success: boolean; message?: string; standbyTableId?: string }> =>
+  ({ success: false, message: 'Indisponível no modo de demonstração.' });
+export const reabrirContaAguardando = async (_standbyTableId: string): Promise<{ success: boolean; message?: string }> =>
+  ({ success: false, message: 'Indisponível no modo de demonstração.' });

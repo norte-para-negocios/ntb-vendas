@@ -26,6 +26,7 @@ export const TABLE_STATUS_LABELS: Record<string, string> = {
     waiting_bill: 'Pediu Conta',
     blocked: 'Bloqueada',
     closed: 'Fechada',
+    standby: 'Aguardando pagamento',
 };
 
 export const getTableStatusLabel = (status: string): string => TABLE_STATUS_LABELS[status] || status;

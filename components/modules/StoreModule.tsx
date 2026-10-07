@@ -41,6 +41,8 @@ import { applySalesFilters, describeFilters, EMPTY_FILTERS, type SalesFilters } 
 import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
 import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
+import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
+import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
 import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
@@ -3023,6 +3025,8 @@ const TablesView: React.FC<{
     const [mesaCarrinho, setMesaCarrinho] = useState<CounterSaleLine[]>([]);
     const [enviandoPedidoMesa, setEnviandoPedidoMesa] = useState(false);
     const [tables, setTables] = useState<Table[]>([]);
+    // Contas aguardando pagamento (migration 172): ficam fora do mapa, numa lista própria; a mesa física já recebe clientes novos.
+    const [contasAguardando, setContasAguardando] = useState<Table[]>([]);
     const [activeOrders, setActiveOrders] = useState<Order[]>([]);
     // "Pedidos do Dia" (extensão do antigo "Pedidos Enviados", redesign
     // 2026-08-23) — mesas JÁ FECHADAS hoje, buscadas à parte porque
@@ -3414,7 +3418,7 @@ const TablesView: React.FC<{
     const [reprintingIds, setReprintingIds] = useState<Set<string>>(new Set());
     const sentHistoryItems = useMemo(() => {
         if (orderFlow !== 'direct_print') return [];
-        const tableNumberById = new Map(tables.map(t => [t.id, t.number]));
+        const tableNumberById = new Map([...tables, ...contasAguardando].map(t => [t.id, t.number]));
         const rows: {
             id: string;
             orderId: string;
@@ -3465,7 +3469,7 @@ const TablesView: React.FC<{
         closedTodayOrders.forEach(order => pushOrder(order, true));
         return rows.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
         // eslint-disable-next-line react-hooks/exhaustive-deps -- printedRefreshTick é só um gatilho de recálculo (lê localStorage via wasKitchenTicketPrinted), não um valor usado no corpo.
-    }, [orderFlow, activeOrders, closedTodayOrders, tables, storeId, printedRefreshTick, locaisInfo]);
+    }, [orderFlow, activeOrders, closedTodayOrders, tables, contasAguardando, storeId, printedRefreshTick, locaisInfo]);
 
     // Reimpressão manual (Critical #1 — corte de ativação): item que a
     // reconciliação automática do Caixa não pegou sozinha (o caso mais comum
@@ -3599,7 +3603,9 @@ NOTIFY pgrst, 'reload schema';`;
         const o = leituraFalhou(o0) && ordersBoasRef.current.length > 0 ? ordersBoasRef.current : o0;
         if (!leituraFalhou(t0)) tablesBoasRef.current = t0;
         if (!leituraFalhou(o0)) ordersBoasRef.current = o0;
-        setTables(t);
+        const { mesas: mesasFisicas, contas } = separarContasAguardando(t);
+        setTables(mesasFisicas);
+        setContasAguardando(contas);
         publicarMesas(storeId, t);
         // Mescla pedidos ainda só na fila offline (nunca sincronizados) —
         // sem isso, remontar este componente (ex. trocar de aba e voltar)
@@ -3669,7 +3675,7 @@ NOTIFY pgrst, 'reload schema';`;
     // SYNC MODAL WITH REALTIME TABLE DATA
     useEffect(() => {
         if (selectedTable) {
-            const updatedTable = tables.find(t => t.id === selectedTable.id);
+            const updatedTable = tables.find(t => t.id === selectedTable.id) ?? contasAguardando.find(t => t.id === selectedTable.id);
             if (updatedTable) {
                 // If important properties changed, update the selected modal
                 if (updatedTable.status !== selectedTable.status || 
@@ -3679,7 +3685,7 @@ NOTIFY pgrst, 'reload schema';`;
                 }
             }
         }
-    }, [tables, selectedTable]);
+    }, [tables, contasAguardando, selectedTable]);
 
     const getTableSummary = (tableId: string) => {
         const tableOrders = activeOrders.filter(o => o.table_id === tableId);
@@ -3702,7 +3708,7 @@ NOTIFY pgrst, 'reload schema';`;
         items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         itensComCancelados.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
-        const table = tables.find(t => t.id === tableId);
+        const table = tables.find(t => t.id === tableId) ?? contasAguardando.find(t => t.id === tableId);
         const hasFeeItem = contaTemTaxaPercentual(items);
         const isServiceFeeEnabled = !!(store.config?.charge_service_fee && !removedServiceFees.has(tableId)) && !hasFeeItem;
         const isServiceFeeRemovedForTable = !!(store.config?.charge_service_fee && removedServiceFees.has(tableId)) && !hasFeeItem;
@@ -3741,7 +3747,7 @@ NOTIFY pgrst, 'reload schema';`;
         // Interruptor 'Imprimir pré-conta automaticamente' (Configurações > Impressão): desligado, só o botão manual imprime.
         if (automatica && !preContaAutomaticaLigada((await fetchStoreById(store.id).catch(() => null) ?? store).config)) return;
         const summary = getTableSummary(tableId);
-        const table = tables.find(t => t.id === tableId);
+        const table = tables.find(t => t.id === tableId) ?? contasAguardando.find(t => t.id === tableId);
         if (!table || summary.allItems.length === 0) return;
         if (!automatica) registrarAcao(store.id, 'reimpressao.pre_conta', { entity: 'table', entityId: tableId, summary: `Imprimiu pré-conta da mesa ${table.number}`, details: { total: summary.total } });
 
@@ -3990,11 +3996,11 @@ NOTIFY pgrst, 'reload schema';`;
     // desta view.
     useEffect(() => {
         if (!autoOpenTableId || tables.length === 0) return;
-        const table = tables.find(t => t.id === autoOpenTableId);
+        const table = tables.find(t => t.id === autoOpenTableId) ?? contasAguardando.find(t => t.id === autoOpenTableId);
         if (table) handleOpenPayment(table);
         onAutoOpenTableHandled?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoOpenTableId, tables]);
+    }, [autoOpenTableId, tables, contasAguardando]);
 
     const handleAddPayment = () => {
         const amount = parseFloat(currentPaymentAmount.replace(',', '.'));
@@ -4302,6 +4308,31 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
+    // Conta aguardando pagamento (migration 172): a conta sai da mesa e espera o caixa; a mesa fica livre na hora.
+    const [liberandoMesa, setLiberandoMesa] = useState(false);
+    const handleLiberarMesa = async (table: Table) => {
+        if (isAberto) { avisarSoComLogin(); return; }
+        if (liberandoMesa) return;
+        setLiberandoMesa(true);
+        try {
+            const r = await liberarMesa(table.id, loggedUser.name);
+            if (!r.success) { toast.error(r.message || 'Não deu para liberar a mesa.'); return; }
+            toast.success(`Mesa ${table.number} livre. A conta ficou aguardando pagamento.`);
+            setSelectedTable(null);
+            loadData();
+        } finally {
+            setLiberandoMesa(false);
+        }
+    };
+    const handleReabrirConta = async (conta: Table) => {
+        if (isAberto) { avisarSoComLogin(); return; }
+        const r = await reabrirContaAguardando(conta.id);
+        if (!r.success) { toast.error(r.message || 'Não deu para voltar a conta para a mesa.'); return; }
+        toast.success(`A conta voltou para a mesa ${conta.number}.`);
+        setSelectedTable(null);
+        loadData();
+    };
+
     const handleDismissWaiter = async (tableId: string) => {
         try {
             await dismissWaiterRequest(tableId);
@@ -4352,7 +4383,7 @@ NOTIFY pgrst, 'reload schema';`;
         // checagem de jurisdição aqui garante que um bug futuro em QUALQUER
         // outro lugar que chame `setSelectedTable` sem passar pelo gate não
         // reabra esse buraco silenciosamente.
-        if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
+        if (!isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         // Guarda síncrona contra duplo toque (antes do botão re-renderizar):
         // duas createOrder imprimiriam duas comandas e duplicariam o pedido.
         if (isAddingItemRef.current) return;
@@ -4549,7 +4580,7 @@ NOTIFY pgrst, 'reload schema';`;
         if (isAberto) { avisarSoComLogin(); return; }
         if (!podeTrocarOuExcluir(loggedUser, store)) { toast.error('Você não tem permissão para excluir item.'); return; }
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
-        if (selectedTable && !isTableInJurisdiction(loggedUser, selectedTable.id)) return;
+        if (selectedTable && !isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
         const nomeItem = itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item';
         // Motivo obrigatório (migration 150): abre o diálogo de motivo; o cancelamento sai em confirmarCancelamentoItem.
@@ -4586,7 +4617,7 @@ NOTIFY pgrst, 'reload schema';`;
         if (isAberto) { avisarSoComLogin(); return; }
         if (!podeCancelarPedido) { toast.error('Você não tem permissão para cancelar o pedido.'); return; }
         if (!selectedTable || cancelandoPedido) return;
-        if (!isTableInJurisdiction(loggedUser, selectedTable.id)) return;
+        if (!isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
         if (itens.length === 0) { setShowCancelarPedido(false); return; }
         if (itens.some((i) => (i as any).fiscal_nota_id)) {
@@ -4699,6 +4730,36 @@ NOTIFY pgrst, 'reload schema';`;
                 )}
             </div>
 
+            {contasAguardando.length > 0 && (
+                <section className="mb-5" aria-label="Contas aguardando pagamento">
+                    <p className="eyebrow mb-2">Aguardando pagamento · {contasAguardando.length}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {contasAguardando.map((c) => {
+                            const resumo = getTableSummary(c.id);
+                            const naArea = isTableInJurisdiction(loggedUser, idDaMesaFisica(c));
+                            const minutos = c.standby_em ? Math.max(0, Math.floor((nowTick - new Date(c.standby_em).getTime()) / 60000)) : null;
+                            return (
+                                <Card
+                                    key={c.id}
+                                    hoverable={naArea}
+                                    onClick={() => { if (naArea) { setSelectedTable(c); setShowFullBill(false); setShowMenuMode(false); } }}
+                                    className={`flex items-center gap-3 p-4 max-sm:p-3.5 ${!naArea ? 'opacity-50 pointer-events-none grayscale' : ''}`}
+                                >
+                                    <span className="w-9 h-9 rounded-full bg-[var(--warn)]/12 text-[var(--warn)] flex items-center justify-center shrink-0"><Wallet size={17} /></span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[15px] font-semibold text-[var(--text)] truncate">Mesa {c.number} · {c.current_host_name || 'Cliente'}</p>
+                                        <p className="text-[13px] text-[var(--text-muted)] truncate">
+                                            {minutos === null ? 'Aguardando pagamento' : minutos < 1 ? 'Aguardando agora' : `Aguardando há ${formatDuration(minutos)}`}
+                                        </p>
+                                    </div>
+                                    <span className="text-[17px] font-semibold num text-[var(--text)] shrink-0">R$ {formatBRL(resumo.total)}</span>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
+
             {(() => {
                 // Redesign estilo Apple (2026-09-26): mesas ocupadas (ou chamando
                 // garçom) em cartões completos; livres/bloqueadas em blocos
@@ -4746,6 +4807,25 @@ NOTIFY pgrst, 'reload schema';`;
                         {isBlocked ? <Lock size={14} /> : <Unlock size={14} />}
                     </button>
                 );
+
+                // Selo da mesa física com as contas que saíram dela e ainda esperam o caixa (migration 172).
+                const renderSeloAguardando = (table: Table, inJurisdiction: boolean) => {
+                    const contas = contasDaMesa(contasAguardando, table.id);
+                    if (contas.length === 0) return null;
+                    const total = contas.reduce((a, c) => a + getTableSummary(c.id).total, 0);
+                    return (
+                        <button
+                            type="button"
+                            disabled={!inJurisdiction}
+                            onClick={(e) => { e.stopPropagation(); setSelectedTable(contas[0]); setShowFullBill(false); setShowMenuMode(false); }}
+                            className="inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 rounded-full bg-[var(--warn)]/12 text-[var(--warn)] text-[12px] font-semibold u-motion u-press disabled:pointer-events-none"
+                            title="Contas desta mesa aguardando pagamento"
+                        >
+                            <Wallet size={12} className="shrink-0" />
+                            <span className="truncate">{contas.length === 1 ? '1 conta aguardando' : `${contas.length} contas aguardando`} · R$ {formatBRL(total)}</span>
+                        </button>
+                    );
+                };
 
                 const renderTable = (table: Table, tableIdx: number) => {
                     const summary = getTableSummary(table.id);
@@ -4810,6 +4890,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     </span>
                                     {!isBlocked && renderPinChip(table, inJurisdiction)}
                                 </div>
+                                {renderSeloAguardando(table, inJurisdiction)}
                             </Card>
                             </TableMotionCard>
                         );
@@ -4840,6 +4921,9 @@ NOTIFY pgrst, 'reload schema';`;
 
                             {!inJurisdiction && (
                                 <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{TABLE_OUT_OF_JURISDICTION_LABEL}</p>
+                            )}
+                            {contasDaMesa(contasAguardando, table.id).length > 0 && (
+                                <div className="mt-1.5">{renderSeloAguardando(table, inJurisdiction)}</div>
                             )}
 
                             {/* Cliente embaixo do cabeçalho (pedido do dono, 2026-08-29). */}
@@ -5056,7 +5140,7 @@ NOTIFY pgrst, 'reload schema';`;
                 do garçom tem que ocupar a tela toda, não uma caixa central.
                 Este modal continua isOpen só pras Views 1/2 (ações rápidas e
                 comanda completa). */}
-            <Modal isOpen={!!selectedTable && !showMenuMode} onClose={() => setSelectedTable(null)} title={`Mesa ${selectedTable?.number ?? ''}`} size="lg">
+            <Modal isOpen={!!selectedTable && !showMenuMode} onClose={() => setSelectedTable(null)} title={selectedTable?.standby ? `Mesa ${selectedTable?.number ?? ''} · conta aguardando` : `Mesa ${selectedTable?.number ?? ''}`} size="lg">
                 <div className="space-y-4">
                     {/* Subtítulo: cliente + status (ponto), no lugar da antiga caixa "Status Atual". */}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 -mt-1 text-[15px] text-[var(--text-muted)]">
@@ -5064,7 +5148,7 @@ NOTIFY pgrst, 'reload schema';`;
                             <span className="font-medium text-[var(--text)] truncate">{selectedTable?.current_host_name || 'Lojista'}</span>
                         )}
                         <span className="inline-flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full" style={{ background: selectedTable?.status === 'available' ? 'var(--ok)' : selectedTable?.status === 'waiting_bill' ? 'var(--warn)' : 'var(--brand)' }} aria-hidden />
+                            <span className="w-2 h-2 rounded-full" style={{ background: selectedTable?.status === 'available' ? 'var(--ok)' : (selectedTable?.status === 'waiting_bill' || selectedTable?.status === 'standby') ? 'var(--warn)' : 'var(--brand)' }} aria-hidden />
                             {getTableStatusLabel(selectedTable?.status || 'occupied')}
                         </span>
                         {selectedTable?.waiter_requested && (
@@ -5135,7 +5219,8 @@ NOTIFY pgrst, 'reload schema';`;
                                              </div>
                                          );
                                      })()}
-                                     <div className="grid grid-cols-2 gap-3">
+                                     <div className={`grid gap-3 ${selectedTable?.standby ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                         {!selectedTable?.standby && (
                                          <Button
                                             size="lg"
                                             className="!h-14 !rounded-[16px] text-[16px] max-sm:text-[15px] max-sm:px-3"
@@ -5144,6 +5229,7 @@ NOTIFY pgrst, 'reload schema';`;
                                              <Plus size={20} className="shrink-0 max-sm:hidden" />
                                              Adicionar Pedido
                                          </Button>
+                                         )}
                                          <Button
                                             variant="secondary"
                                             size="lg"
@@ -5168,10 +5254,10 @@ NOTIFY pgrst, 'reload schema';`;
                                              <Button onClick={() => handleOpenPayment()} size="lg" className="w-full !h-12">
                                                 <Wallet size={18}/> Receber e finalizar
                                              </Button>
-                                         ) : selectedTable?.status === 'waiting_bill' ? (
+                                         ) : (selectedTable?.status === 'waiting_bill' || selectedTable?.standby) ? (
                                              <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
                                                  <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
-                                                 Conta pedida — aguardando o caixa
+                                                 {selectedTable?.standby ? 'Aguardando pagamento no caixa' : 'Conta pedida — aguardando o caixa'}
                                              </div>
                                          ) : (
                                              <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
@@ -5185,6 +5271,31 @@ NOTIFY pgrst, 'reload schema';`;
                                     className="mt-2 w-full h-10 rounded-[var(--r-md)] text-[14px] text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
                                 >
                                     Cancelar pedido de conta (foi sem querer)
+                                </button>
+                            )}
+                                         {/* Conta aguardando pagamento (migration 172): libera a mesa física para os próximos clientes. */}
+                                         {selectedTable && !isAberto && podeLiberarMesa(selectedTable, getTableSummary(selectedTable.id).allItems.length > 0) && (
+                                <button
+                                    type="button"
+                                    disabled={liberandoMesa}
+                                    onClick={() => handleLiberarMesa(selectedTable)}
+                                    className="mt-2 w-full flex items-center gap-3 px-4 min-h-12 py-2 rounded-[var(--r-md)] bg-[var(--surface-2)] text-left text-[15px] text-[var(--text)] hover:bg-[var(--border)] u-motion disabled:opacity-60"
+                                >
+                                    <Users size={17} className="text-[var(--text-muted)] shrink-0"/>
+                                    <span className="flex-1 min-w-0">
+                                        <span className="block font-medium">Liberar a mesa para novos clientes</span>
+                                        <span className="block text-[13px] text-[var(--text-muted)]">A conta fica aguardando pagamento no caixa</span>
+                                    </span>
+                                    <ChevronRight size={17} className="text-[var(--text-muted)] shrink-0"/>
+                                </button>
+                            )}
+                                         {selectedTable?.standby && canFinalize && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleReabrirConta(selectedTable)}
+                                    className="mt-2 w-full h-10 rounded-[var(--r-md)] text-[14px] text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"
+                                >
+                                    Voltar a conta para a mesa (só se a mesa ainda estiver livre)
                                 </button>
                             )}
                                          {canReassignJurisdiction && (
@@ -5387,7 +5498,7 @@ NOTIFY pgrst, 'reload schema';`;
 
                             <div className="grid grid-cols-3 gap-2 mb-3">
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowFullBill(false)}>Voltar</Button>
-                                {roleCan(loggedUser, store, 'trocar_mesa') ? (
+                                {roleCan(loggedUser, store, 'trocar_mesa') && !selectedTable?.standby ? (
                                 <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowMoveTableModal(true)}>
                                     <ArrowRightLeft size={16}/> Trocar
                                 </Button>
@@ -5405,10 +5516,10 @@ NOTIFY pgrst, 'reload schema';`;
                                 <Button onClick={() => handleOpenPayment()} size="lg" className="w-full !h-12">
                                     <Wallet size={18}/> Receber pagamento
                                 </Button>
-                            ) : selectedTable?.status === 'waiting_bill' ? (
+                            ) : (selectedTable?.status === 'waiting_bill' || selectedTable?.standby) ? (
                                 <div className="w-full flex items-center justify-center gap-2 text-[15px] font-medium text-[var(--text)] bg-[var(--surface-2)] rounded-full h-12">
                                     <span className="w-2 h-2 rounded-full bg-[var(--warn-fill)]" aria-hidden />
-                                    Conta pedida — aguardando o caixa
+                                    {selectedTable?.standby ? 'Aguardando pagamento no caixa' : 'Conta pedida — aguardando o caixa'}
                                 </div>
                             ) : (
                                 <Button onClick={() => selectedTable && handleRequestBill(selectedTable.id)} size="lg" className="w-full !h-12">
@@ -8012,13 +8123,14 @@ const CaixaViewMeu: React.FC<{
     // pra receber". Ordenada por tempo de espera, mais antigo primeiro.
     const queueItems = useMemo(() => {
         const tableItems = tables
-            .filter(t => t.status === TableStatus.WAITING_BILL)
+            // Conta aguardando pagamento (migration 172) entra na fila como a mesa que pediu a conta.
+            .filter(t => t.status === TableStatus.WAITING_BILL || t.status === TableStatus.STANDBY)
             // Pedido direto do dono (reunião 2026-09-10, min 18:00): na aba
             // Caixa, mesa fora da jurisdição não deve nem APARECER — "ele não
             // precisa nem ver isso aqui". Diferente de TablesView, onde
             // continua visível de propósito (lá o garçom precisa enxergar o
             // salão inteiro pra saber o que está ocupado).
-            .filter(t => isTableInJurisdiction(loggedUser, t.id))
+            .filter(t => isTableInJurisdiction(loggedUser, idDaMesaFisica(t)))
             .map(t => {
                 const tableOrders = activeOrders.filter(o => o.table_id === t.id);
                 const items = tableOrders.flatMap(o => (o.order_items || []).filter(i => i.status !== 'canceled'));
@@ -8028,7 +8140,7 @@ const CaixaViewMeu: React.FC<{
                 // escopo desta task — ver relatório): usa o pedido mais
                 // recente lançado na mesa como proxy de última atividade,
                 // a melhor aproximação disponível sem query/schema novos.
-                const waitingSince = tableOrders.reduce((latest, o) => {
+                const waitingSince = (t.standby && t.standby_em ? new Date(t.standby_em).getTime() : 0) || tableOrders.reduce((latest, o) => {
                     const ts = new Date(o.created_at).getTime();
                     return ts > latest ? ts : latest;
                 }, 0) || now;
@@ -8036,7 +8148,7 @@ const CaixaViewMeu: React.FC<{
                     key: `table-${t.id}`,
                     kind: 'table' as const,
                     id: t.id,
-                    label: `Mesa ${t.number}`,
+                    label: t.standby ? `Mesa ${t.number} · aguardando pagamento` : `Mesa ${t.number}`,
                     sublabel: t.current_host_name || undefined,
                     total,
                     waitingSince,
@@ -10721,7 +10833,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     };
 
     useEffect(() => { loadUsers(); }, [storeId]);
-    useEffect(() => { fetchTables(storeId).then(setStoreTables); }, [storeId]);
+    useEffect(() => { fetchTables(storeId).then((t) => setStoreTables(t.filter((m) => !m.standby))); }, [storeId]);
 
     const openModal = (user?: StoreUser) => {
         if (user) {
