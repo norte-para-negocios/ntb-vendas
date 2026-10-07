@@ -19,7 +19,8 @@ import { montarPayloadsPorPedido, registrarBaixa, carregarLinha, processarBaixa,
 // reenvia o que falhou e varre pedidos que o navegador não registrou.
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { motivoSemBaixa } from '@/lib/modoEstoque';
+import { motivoSemBaixa, ehProprio } from '@/lib/modoEstoque';
+import { enviarFechamentos } from '@/lib/fechamentoFaturamento';
 
 interface RequestBody {
   orderId?: string;
@@ -113,6 +114,17 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.error('Dual-write de venda pro Contabo falhou:', e);
       }
+    });
+  }
+
+  // Lojas de estoque próprio (migration 168): a venda fechada também vai ao Estoque (faturamento e lucro sem Omie). Roda para
+  // todo pedido ainda sem a marca faturamento_enviado_em, mesmo quando a baixa já foi enviada; o job de baixa reenvia o que falhar.
+  // Loja Omie ou sem estoque: nenhuma chamada nova.
+  const { data: lojaFat } = await admin.from('stores').select('stock_mode').eq('id', storeId).maybeSingle();
+  if (ehProprio(lojaFat?.stock_mode)) {
+    after(async () => {
+      try { await enviarFechamentos(admin, storeId!, orderIds); }
+      catch (e) { console.error('Fechamento de venda pro Estoque falhou:', e); }
     });
   }
 
