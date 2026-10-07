@@ -55,6 +55,7 @@ import { useConexaoEstoque, SeloConexao, PainelConexao, BaixasEstoque } from '@/
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
 import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
+import { LocaisEstoqueView } from '@/components/modules/LocaisEstoqueView';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ProducaoView } from '@/components/modules/ProducaoView';
 import { ResumoKds, ChipsLocal } from '@/components/modules/ProducaoCabecalho';
@@ -12075,6 +12076,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             {activeTab === 'regras_caixa' && <RegrasCaixaView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
             {activeTab === 'locais' && <LocaisPreparoView store={store} />}
+            {activeTab === 'locais_estoque' && <LocaisEstoqueView store={store} podeEditar={roleCan(loggedUser, store, 'editar_cardapio')} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
             {activeTab === 'precos' && podeEditarPrecosHorario && <PriceSchedulesView storeId={storeId} />}

@@ -5,7 +5,7 @@ export type AbaId =
   | 'shifts' | 'regras_caixa'
   | 'saude' | 'precos' | 'cupons' | 'link'
   | 'users' | 'permissoes'
-  | 'settings' | 'impressao' | 'locais' | 'fiscal' | 'integracoes' | 'notas';
+  | 'settings' | 'impressao' | 'locais' | 'locais_estoque' | 'fiscal' | 'integracoes' | 'notas';
 export type SecaoId = 'atendimento' | 'pedido_cliente' | 'notificacoes' | 'impressao' | 'aparencia' | 'aplicativo' | 'regras';
 
 export interface AbaDef { id: AbaId; label: string; sensitive?: boolean }
@@ -37,6 +37,7 @@ export const AREAS: AreaDef[] = [
     { id: 'settings', label: 'Geral' },
     { id: 'impressao', label: 'Impressão' },
     { id: 'locais', label: 'Locais de preparo' },
+    { id: 'locais_estoque', label: 'Locais de estoque' },
     { id: 'fiscal', label: 'Emissor fiscal', sensitive: true },
     { id: 'integracoes', label: 'Integrações' },
   ] },
@@ -127,6 +128,7 @@ const PALAVRAS_ABA: Record<AbaId, string[]> = {
   saude: ['saude', 'cardapio', 'problemas'], precos: ['preco', 'horario', 'happy hour', 'promocao'], cupons: ['cupom', 'cupons', 'desconto', 'promocao'], link: ['link', 'qr', 'qr code', 'cardapio'],
   users: ['pessoas', 'equipe', 'usuario', 'funcionario', 'garcom', 'senha'], permissoes: ['permissao', 'permissoes', 'funcao', 'gerente', 'garcom', 'caixa'],
   settings: ['geral', 'ajustes', 'configuracoes'], impressao: ['impressao', 'impressora', 'imprimir'], locais: ['locais', 'preparo', 'cozinha', 'bar', 'pizzaria', 'producao', 'setor'],
+  locais_estoque: ['locais de estoque', 'estoque', 'deposito', 'camara', 'saldo', 'consumo', 'baixa'],
   notas: ['nota', 'notas', 'nota fiscal', 'fiscal', 'nfce', 'nfe', 'danfe', 'cupom', 'cancelar nota', 'retransmitir', 'reemitir', 'xml', 'zip', 'sefaz'],
   fiscal: ['emissor', 'fiscal', 'certificado', 'csc', 'cscid', 'serie', 'ambiente', 'homologacao', 'producao', 'imposto', 'cst', 'csosn', 'sefaz', 'nfce', 'nfe'],
   integracoes: ['integracao', 'integracoes', 'estoque', 'ntb estoque', 'ordem de producao', 'omie', 'api', 'chave'],

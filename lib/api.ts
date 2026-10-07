@@ -3489,6 +3489,21 @@ export const salvarLocalEstoque = async (storeId: string, destino: string, local
   }
 };
 
+// Cria um local de estoque no Norte Estoque da loja (só no modo "Estoque próprio"; ver
+// app/api/integracao/locais-estoque-criar/route.ts).
+export const criarLocalEstoque = async (storeId: string, descricao: string): Promise<{ success: boolean; message?: string; codigo?: number | null; nome?: string }> => {
+  try {
+    const res = await fetch(resolverUrlApi('/api/integracao/locais-estoque-criar'), {
+      method: 'POST',
+      headers: cabecalhosApi(),
+      body: JSON.stringify({ storeId, descricao }),
+    });
+    return await res.json();
+  } catch (e: any) {
+    return { success: false, message: e?.message };
+  }
+};
+
 // Modo Aberto (30/09, migration 135): confere só a senha contra as contas da loja, sem
 // criar sessão. Bateu com uma conta = o pedido sai no nome dela.
 export type ResultadoSenhaEquipe =
