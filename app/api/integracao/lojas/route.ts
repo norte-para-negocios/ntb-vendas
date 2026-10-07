@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { stockModeFields } from '@/lib/modoEstoque';
 
 // Rota externa (não-sessão) pro ntb-estoque criar uma loja aqui
 // automaticamente ao criar uma loja de lá, com um clique só ("Criar no NTB
@@ -21,6 +22,8 @@ function generateSlug(text: string): string {
 interface RequestBody {
   nome?: string;
   cnpj?: string;
+  /** Modo de estoque da loja nova ('omie' | 'proprio' | 'nenhum'); ausente = 'omie'. */
+  stockMode?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -50,6 +53,7 @@ export async function POST(request: NextRequest) {
         contract_type: 'balcao_mesas',
         contract_period_months: 12,
         is_active: true,
+        ...stockModeFields(body.stockMode),
         config: { service_fee_rate: 0.1 },
       })
       .select('id, slug')

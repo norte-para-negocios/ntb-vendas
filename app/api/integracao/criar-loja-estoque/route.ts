@@ -13,6 +13,7 @@ interface RequestBody {
   storeId?: string;
   nome?: string;
   cnpj?: string;
+  stockMode?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -32,7 +33,8 @@ export async function POST(request: NextRequest) {
     const res = await fetch(`${estoqueUrl.replace(/\/$/, '')}/api/integracao/lojas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${segredo}` },
-      body: JSON.stringify({ nome: body.nome, cnpj: body.cnpj || undefined }),
+      // stockMode: 'proprio' faz o Estoque criar a loja sem Omie (modo estoque próprio); ausente = como sempre.
+      body: JSON.stringify({ nome: body.nome, cnpj: body.cnpj || undefined, modo: body.stockMode === 'proprio' || body.stockMode === 'nenhum' ? body.stockMode : undefined }),
     });
     resposta = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (!res.ok || !resposta.ok) {

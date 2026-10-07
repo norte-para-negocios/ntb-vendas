@@ -8,6 +8,7 @@ import { impressoraRecebe, type DocPrint } from '@/lib/printDocs';
 import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, OptionVariant, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
+import { stockModeFields, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
 import { enqueue } from './offline/queue';
 import { isNetworkError, checkRealConnectivity } from './offline/network';
@@ -2388,13 +2389,14 @@ export const saveOmieDiretoConfig = async (
 export const criarLojaNoEstoque = async (
   storeId: string,
   nome: string,
-  cnpj?: string
+  cnpj?: string,
+  stockMode?: ModoEstoque
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const res = await fetch(resolverUrlApi('/api/integracao/criar-loja-estoque'), {
       method: 'POST',
       headers: cabecalhosApi(),
-      body: JSON.stringify({ storeId, nome, cnpj }),
+      body: JSON.stringify({ storeId, nome, cnpj, stockMode }),
     });
     return await res.json();
   } catch (error: any) {
@@ -2575,6 +2577,8 @@ export const cancelarFiscalNota = async (params: {
 
 export interface CreateStoreParams {
   name: string;
+  /** Modo de estoque (migration 168). Ausente = não mexe (createStore grava 'omie' só quando a coluna existir: ver stockModeFields). */
+  stockMode?: ModoEstoque;
   cnpj: string;
   slug: string;
   contractType: 'balcao' | 'balcao_mesas';
@@ -2656,6 +2660,7 @@ export const createStore = async (params: CreateStoreParams): Promise<{ success:
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
         cover_url: params.coverUrl || null,
+        ...stockModeFields(params.stockMode),
         config: applyModulesConfigFields({ service_fee_rate: params.serviceFeeRate }, params),
       })
       .select()
@@ -2688,7 +2693,7 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
 
     const { data: newStore, error: createError } = await supabase
       .from('stores')
-      .insert({ name: `${originalStore.name} (1)`, cnpj: originalStore.cnpj, slug: newSlug, contract_type: originalStore.contract_type, contract_period_months: originalStore.contract_period_months, is_active: originalStore.is_active, logo_url: originalStore.logo_url, cover_url: originalStore.cover_url, config: originalStore.config })
+      .insert({ name: `${originalStore.name} (1)`, cnpj: originalStore.cnpj, slug: newSlug, contract_type: originalStore.contract_type, contract_period_months: originalStore.contract_period_months, is_active: originalStore.is_active, logo_url: originalStore.logo_url, cover_url: originalStore.cover_url, config: originalStore.config, ...stockModeFields(originalStore.stock_mode) })
       .select()
       .single();
 
@@ -2751,13 +2756,22 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
     // de módulos, ver applyModulesConfigFields), sem apagar outras flags
     // (require_pin_for_open, charge_service_fee, e as chaves antigas inertes)
     // que o lojista já pode ter configurado.
-    const { data: current } = await supabase.from('stores').select('config').eq('id', id).single();
+    const { data: current } = await supabase.from('stores').select('config, stock_mode').eq('id', id).single();
+    // Modo de estoque (migration 168): só mexe quando o formulário mandou um modo diferente do atual. Depois da primeira baixa
+    // a loja não troca de modo (o histórico ficaria em outro sistema).
+    let stockModeUpdate: { stock_mode?: ModoEstoque } = {};
+    if (params.stockMode !== undefined && normalizarModo(params.stockMode) !== normalizarModo(current?.stock_mode)) {
+      const { data: temBaixas } = await supabase.rpc('store_tem_baixas_secure', { p_store_id: id });
+      if (temBaixas) return { success: false, message: 'Esta loja já tem baixas de estoque: o modo de estoque não pode mais ser trocado.' };
+      stockModeUpdate = { stock_mode: normalizarModo(params.stockMode) };
+    }
     const { error } = await supabase
       .from('stores')
       .update({
         name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
         contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
         cover_url: params.coverUrl,
+        ...stockModeUpdate,
         config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate }, params),
       })
       .eq('id', id);

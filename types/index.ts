@@ -35,6 +35,8 @@ export interface Store {
   cnpj: string;
   is_active: boolean;
   is_test?: boolean;
+  /** Como a loja controla estoque (migration 168): 'omie' (padrão), 'proprio' (Norte Estoque sem Omie) ou 'nenhum'. */
+  stock_mode?: 'omie' | 'proprio' | 'nenhum';
   contract_type: 'balcao' | 'balcao_mesas';
   contract_period_months: number | null;
   activation_date: string;
