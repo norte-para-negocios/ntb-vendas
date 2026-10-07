@@ -56,3 +56,33 @@ assert.equal(parcial.filter((a) => a.tipo === 'sem_codigo_omie' && a.severidade 
 // integração desligada: continua o aviso baixo de sempre
 assert.equal(auditarCardapio({ categorias: [{ id: 'c', name: 'C' }], produtos: [1].map((n) => ({ id: String(n), name: 'P' + n, price: 5, category_id: 'c', available: true, order: n })) as any }, { integracaoLigada: false }).find((a) => a.tipo === 'sem_codigo_omie')?.severidade, 'baixa');
 console.log('cardapioIntegridade: ok');
+
+// Modo de estoque (migration 168).
+const doisSemCodigo = [1, 2].map((n) => ({ id: String(n), name: 'P' + n, price: 5, category_id: 'c', available: true, order: n })) as any;
+const cc = [{ id: 'c', name: 'C' }];
+// 'nenhum' não baixa estoque: nenhum alerta de código, nem com a integração "ligada".
+const nenhum = auditarCardapio({ categorias: cc, produtos: doisSemCodigo }, { integracaoLigada: true, modoEstoque: 'nenhum' });
+assert.equal(nenhum.filter((a) => a.tipo === 'sem_codigo_omie' || a.tipo === 'codigo_repetido').length, 0, 'nenhum: sem alerta de código');
+// 'proprio': textos sem "Omie" e código repetido acusado.
+const propLigada = auditarCardapio({ categorias: cc, produtos: doisSemCodigo }, { integracaoLigada: true, modoEstoque: 'proprio' });
+const aviso2 = propLigada.find((a) => a.tipo === 'sem_codigo_omie')!;
+assert.equal(aviso2.severidade, 'alta');
+assert.doesNotMatch(aviso2.texto, /omie/i);
+const repetidos = auditarCardapio({ categorias: cc, produtos: [
+  { id: '1', name: 'Chopp', price: 9, category_id: 'c', available: true, order: 1, omie_codigo: '90001' },
+  { id: '2', name: 'Chopp Pint', price: 14, category_id: 'c', available: true, order: 2, omie_codigo: '90001' },
+  { id: '3', name: 'Água', price: 5, category_id: 'c', available: true, order: 3, omie_codigo: '90002' },
+] as any }, { modoEstoque: 'proprio' });
+const rep = repetidos.filter((a) => a.tipo === 'codigo_repetido');
+assert.equal(rep.length, 1, 'um código repetido');
+assert.match(rep[0].texto, /90001/);
+assert.doesNotMatch(rep[0].texto, /omie/i);
+// Regressão: modo Omie (padrão) NÃO acusa código repetido e mantém o texto de sempre.
+const omieIgual = auditarCardapio({ categorias: cc, produtos: [
+  { id: '1', name: 'Chopp', price: 9, category_id: 'c', available: true, order: 1, omie_codigo: '90001' },
+  { id: '2', name: 'Chopp Pint', price: 14, category_id: 'c', available: true, order: 2, omie_codigo: '90001' },
+] as any });
+assert.equal(omieIgual.filter((a) => a.tipo === 'codigo_repetido').length, 0, 'omie: não muda');
+const omieLigada = auditarCardapio({ categorias: cc, produtos: doisSemCodigo }, { integracaoLigada: true });
+assert.match(omieLigada.find((a) => a.tipo === 'sem_codigo_omie')!.texto, /código do Omie/);
+console.log('cardapioIntegridade (modo): ok');

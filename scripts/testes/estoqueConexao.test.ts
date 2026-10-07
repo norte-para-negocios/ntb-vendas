@@ -46,3 +46,24 @@ assert.equal(resumirConexao({ status: 500, json: { error: 'x' } }, null).estado,
 // 200 sem a lista de locais não é uma resposta do Estoque.
 assert.equal(resumirConexao({ status: 200, json: { qualquer: 1 } }, null).estado, 'url_errada');
 console.log('ok');
+
+// Modo de estoque (migration 168): fora do Omie nenhuma mensagem cita o Omie e a chave do Omie não é cobrada.
+for (const modo of ['proprio', 'nenhum'] as const) {
+  let m = resumirConexao(ok(), { status: 200, json: { nome: 'ODARA', simulada: false, omieReal: false } }, modo);
+  assert.equal(m.estado, 'ok');
+  assert.equal(m.modo, modo);
+  assert.equal(m.omieReal, null, 'sem chave do Omie não é problema fora do Omie');
+  assert.doesNotMatch(m.mensagem, /omie/i);
+  m = resumirConexao(ok(), { status: 200, json: { nome: 'ODARA [TESTE]', simulada: true, omieReal: false } }, modo);
+  assert.equal(m.simulada, true);
+  assert.doesNotMatch(m.mensagem, /omie/i);
+  m = resumirConexao(ok(), null, modo);
+  assert.equal(m.versaoAntiga, true);
+  assert.doesNotMatch(m.mensagem, /omie/i);
+}
+// Regressão: sem o 3º argumento (loja Omie) a resposta é a mesma de sempre.
+r = resumirConexao(ok(), { status: 200, json: { nome: 'Loja', simulada: false, omieReal: false } });
+assert.equal(r.omieReal, false);
+assert.match(r.mensagem, /sem chave do Omie/i);
+assert.equal(r.modo, 'omie');
+console.log('estoqueConexao (modo): ok');

@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { listarLocais, statusLocal, categoriasPorLocal, textoMoverCategoria, type BaseLocal, type EstadoItem, type LocalPreparo } from '@/lib/locaisPreparo';
 import type { Category, PrinterConfig, PrintSector, Product, Store } from '@/types';
+import { modoDaLoja, nomeSistemaEstoque, usaEstoque } from '@/lib/modoEstoque';
 
 const nomeBase = (b: BaseLocal) => (b === 'bar' ? 'Bar' : 'Cozinha');
 
@@ -59,7 +60,9 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
   const locais = listarLocais(setoresLike);
   const nomeDoLocal = (chave: string) => locais.find((x) => x.chave === chave)?.nome ?? 'outro local';
   const porLocal = categoriasPorLocal(categorias, produtos, setoresLike);
-  const estoqueIntegrado = !!estoque?.configurado;
+  const sistemaEst = nomeSistemaEstoque(modoDaLoja(store));
+  // Loja sem estoque nunca mostra item de baixa de estoque nem aviso de local.
+  const estoqueIntegrado = usaEstoque(modoDaLoja(store)) && !!estoque?.configurado;
   const omieComLocais = estoqueIntegrado && estoque!.locais.length > 0;
   const impressorasDeTicket = impressoras.filter((p) => p.destination !== 'receipt');
 
@@ -164,7 +167,7 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
 
       {estoqueIntegrado && estoque!.erro && (
         <p className="text-xs text-[var(--warn)] bg-[var(--warn)]/10 rounded-[var(--r-md)] p-3">
-          Não consegui ler os locais do Omie agora ({estoque!.erro}). A escolha já salva continua valendo.
+          Não consegui ler os locais {sistemaEst === 'Omie' ? 'do Omie' : 'de estoque'} agora ({estoque!.erro}). A escolha já salva continua valendo.
         </p>
       )}
 
@@ -178,6 +181,7 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
             mapaEstoque: estoqueIntegrado ? estoque!.mapa : null,
             categoriasDoLocal: categoriasDoLocal.length,
             produtosDoLocal: produtosDoLocal.length,
+            sistema: sistemaEst,
           });
           const impressoraAtual = impressorasDeTicket.find((p) => p.is_active && (l.setorId ? p.sector_id === l.setorId : !p.sector_id && (p.destination === l.base || p.destination === 'all')));
           const emEdicao = editando === l.chave;
@@ -269,7 +273,7 @@ export const LocaisPreparoView: React.FC<{ store: Store }> = ({ store }) => {
                           <select
                             value={estoque!.mapa[l.chave] ? String(estoque!.mapa[l.chave]) : ''}
                             onChange={(e) => escolherEstoque(l, e.target.value)}
-                            aria-label={`Local de estoque (Omie) de ${l.nome}`}
+                            aria-label={`Local de estoque${sistemaEst === 'Omie' ? ' (Omie)' : ''} de ${l.nome}`}
                             className="mt-2 min-w-[220px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
                           >
                             <option value="">Escolha o local...</option>

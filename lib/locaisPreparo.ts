@@ -67,6 +67,8 @@ export interface DadosStatusLocal {
   mapaEstoque: Record<string, number> | null;
   categoriasDoLocal: number;
   produtosDoLocal: number;
+  /** Nome do sistema de estoque nos textos (padrão 'Omie'; lojas fora do Omie passam 'Estoque'). */
+  sistema?: string;
 }
 
 export function statusLocal(d: DadosStatusLocal): StatusLocal {
@@ -94,9 +96,11 @@ export function statusLocal(d: DadosStatusLocal): StatusLocal {
   else itens.push({ id: 'impressora', estado: 'aviso', texto: 'Sem impressora configurada: o pedido só aparece na tela.' });
 
   if (d.mapaEstoque !== null) {
-    if (d.mapaEstoque[local.chave]) itens.push({ id: 'estoque', estado: 'ok', texto: 'Baixa de estoque vinculada a um local do Omie.' });
-    else if (local.setorId !== null && d.mapaEstoque[local.base]) itens.push({ id: 'estoque', estado: 'aviso', texto: `Sem local do Omie próprio: a baixa usa o local da ${local.base === 'bar' ? 'Bar' : 'Cozinha'}.` });
-    else itens.push({ id: 'estoque', estado: 'falta', texto: 'Sem local de estoque do Omie: a venda não baixa estoque deste local.' });
+    const sis = d.sistema ?? 'Omie';
+    const doSis = sis === 'Omie' ? 'do Omie' : 'de estoque';
+    if (d.mapaEstoque[local.chave]) itens.push({ id: 'estoque', estado: 'ok', texto: sis === 'Omie' ? 'Baixa de estoque vinculada a um local do Omie.' : 'Baixa de estoque vinculada a um local de estoque.' });
+    else if (local.setorId !== null && d.mapaEstoque[local.base]) itens.push({ id: 'estoque', estado: 'aviso', texto: `Sem local ${sis === 'Omie' ? 'do Omie ' : 'de estoque '}próprio: a baixa usa o local da ${local.base === 'bar' ? 'Bar' : 'Cozinha'}.` });
+    else itens.push({ id: 'estoque', estado: 'falta', texto: sis === 'Omie' ? 'Sem local de estoque do Omie: a venda não baixa estoque deste local.' : 'Sem local de estoque: a venda não baixa estoque deste local.' });
   }
 
   return { itens, completo: itens.every((i) => i.estado === 'ok'), recebePedidos: recebe };

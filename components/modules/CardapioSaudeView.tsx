@@ -14,7 +14,7 @@ const TITULO: Record<Achado['severidade'], string> = { alta: 'Precisa corrigir',
 const VARIANTE: Record<Achado['severidade'], 'critical' | 'warning' | 'default'> = { alta: 'critical', media: 'warning', baixa: 'default' };
 const ORDEM: Achado['severidade'][] = ['alta', 'media', 'baixa'];
 
-const CardapioSaudeView: React.FC<{ storeId: string }> = ({ storeId }) => {
+const CardapioSaudeView: React.FC<{ storeId: string; modoEstoque?: string | null }> = ({ storeId, modoEstoque }) => {
     const [achados, setAchados] = useState<Achado[] | null>(null);
     const [erro, setErro] = useState(false);
     const [carregando, setCarregando] = useState(false);
@@ -36,7 +36,7 @@ const CardapioSaudeView: React.FC<{ storeId: string }> = ({ storeId }) => {
                     temCodigoOmie: (g.options ?? []).some((o) => !!o.omie_codigo || Object.values(o.variants ?? {}).some((v) => !!v?.omie_codigo)),
                 })),
             }));
-            setAchados(auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }, { integracaoLigada: integ.configurado && integ.ativo }));
+            setAchados(auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }, { integracaoLigada: integ.configurado && integ.ativo, modoEstoque }));
             setTotais({ produtos: produtos.filter((p) => p.available).length, categorias: m.categories.length });
         } catch (e) {
             console.error('Erro ao auditar o cardápio', e);
@@ -44,7 +44,7 @@ const CardapioSaudeView: React.FC<{ storeId: string }> = ({ storeId }) => {
         } finally {
             setCarregando(false);
         }
-    }, [storeId]);
+    }, [storeId, modoEstoque]);
 
     useEffect(() => { void carregar(); }, [carregar]);
 

@@ -55,13 +55,13 @@ export const PainelConexao: React.FC<{ configurado: boolean; ativo: boolean; tes
         <div data-testid="painel-conexao" className={`p-4 rounded-[var(--r-md)] ${falhou ? 'bg-[var(--err)]/10' : aviso ? 'bg-[var(--warn)]/10' : 'bg-[var(--surface-2)]'}`}>
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
-                    {modoTeste && <p className="text-[14px] font-semibold text-[var(--warn)]">MODO TESTE — nada vai para o Omie real</p>}
+                    {modoTeste && <p className="text-[14px] font-semibold text-[var(--warn)]">{teste?.modo && teste.modo !== 'omie' ? 'MODO TESTE — as saídas desta loja são simuladas' : 'MODO TESTE — nada vai para o Omie real'}</p>}
                     {!modoTeste && (
                         <p className="text-sm text-[var(--text)]">
                             {!teste ? (testando ? 'Testando a conexão com o Estoque…' : 'Conexão ainda não testada.') : teste.mensagem}
                         </p>
                     )}
-                    {modoTeste && <p className="text-sm text-[var(--text)]">A chave responde. As ordens de produção e saídas desta loja são simuladas no Estoque.</p>}
+                    {modoTeste && <p className="text-sm text-[var(--text)]">A chave responde. {teste?.modo && teste.modo !== 'omie' ? 'As saídas desta loja são simuladas no Estoque.' : 'As ordens de produção e saídas desta loja são simuladas no Estoque.'}</p>}
                     {teste?.estado === 'ok' && teste.nome && <p className="text-xs text-[var(--text-muted)] mt-0.5">Loja do Estoque: {teste.nome}{teste.locais ? ` · ${teste.locais} locais de estoque` : ''}</p>}
                     {teste?.estado === 'ok' && !ativo && <p className="text-xs text-[var(--text-muted)] mt-0.5">A integração está desativada: nenhuma venda baixa no Estoque.</p>}
                 </div>

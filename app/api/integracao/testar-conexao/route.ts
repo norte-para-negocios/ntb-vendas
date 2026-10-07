@@ -25,10 +25,11 @@ export async function GET(request: NextRequest) {
   const { data: secret } = await admin.from('store_ntb_estoque_secrets').select('ntb_estoque_url, ntb_estoque_api_key, ativo').eq('store_id', storeId).maybeSingle();
   if (!secret?.ntb_estoque_url || !secret.ntb_estoque_api_key) return NextResponse.json({ configurado: false });
 
+  const { data: loja } = await admin.from('stores').select('stock_mode').eq('id', storeId).maybeSingle();
   const raiz = secret.ntb_estoque_url.replace(/\/$/, '');
   const [locais, status] = await Promise.all([
     ler(`${raiz}/api/integracao/locais-estoque`, secret.ntb_estoque_api_key),
     ler(`${raiz}/api/integracao/status`, secret.ntb_estoque_api_key),
   ]);
-  return NextResponse.json({ configurado: true, ativo: !!secret.ativo, ...resumirConexao(locais, status) });
+  return NextResponse.json({ configurado: true, ativo: !!secret.ativo, ...resumirConexao(locais, status, loja?.stock_mode) });
 }

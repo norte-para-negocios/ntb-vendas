@@ -11,10 +11,12 @@ interface Args {
   sales: Order[] | null;
   /** Só calcula o status do cardápio para quem enxerga a Saúde do cardápio. */
   incluirCardapio: boolean;
+  /** stores.stock_mode: 'nenhum' não gera alerta de código; 'proprio' acusa código repetido. */
+  modoEstoque?: string | null;
 }
 
 // Cada fonte falha sozinha: o cartão daquela área só mostra o título (status null).
-export function useAdminStatus({ storeId, sales, incluirCardapio }: Args): Partial<Record<AreaId, Status | null>> {
+export function useAdminStatus({ storeId, sales, incluirCardapio, modoEstoque }: Args): Partial<Record<AreaId, Status | null>> {
   const [impressoras, setImpressoras] = useState<{ is_active: boolean }[] | null>(null);
   const [abertos, setAbertos] = useState<number | null>(null);
   const [pessoas, setPessoas] = useState<number | null>(null);
@@ -47,12 +49,12 @@ export function useAdminStatus({ storeId, sales, incluirCardapio }: Args): Parti
           temCodigoOmie: (g.options ?? []).some((o) => !!o.omie_codigo || Object.values(o.variants ?? {}).some((v) => !!v?.omie_codigo)),
         })),
       }));
-      const achados = auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }, { integracaoLigada: integ.configurado && integ.ativo });
+      const achados = auditarCardapio({ categorias: m.categories.map((c) => ({ id: c.id, name: c.name, order: c.order ?? null })), produtos }, { integracaoLigada: integ.configurado && integ.ativo, modoEstoque });
       setAlertas(achados.filter((a) => a.severidade === 'alta').length);
       setEstoqueSemVinculo(achados.some((a) => a.tipo === 'sem_codigo_omie' && a.severidade === 'alta'));
     }).catch(() => {});
     return () => { vivo = false; };
-  }, [storeId, incluirCardapio]);
+  }, [storeId, incluirCardapio, modoEstoque]);
 
   return useMemo(() => ({
     vendas: statusVendas(sales ? contarContasDeHoje(sales) : null),

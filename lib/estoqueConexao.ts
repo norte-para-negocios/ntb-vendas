@@ -4,6 +4,8 @@
 //   GET /api/integracao/status          (nome da loja, se é de teste/simulada, se tem chave Omie; só no Estoque novo)
 // Puro (sem rede) para ser testado: scripts/testes/estoqueConexao.test.ts.
 
+import { normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
+
 export type EstadoConexao = 'ok' | 'chave_invalida' | 'fora_do_ar' | 'url_errada' | 'erro_estoque';
 
 export interface LeituraEstoque { status: number | null; erroRede?: string; json?: unknown }
@@ -18,11 +20,22 @@ export interface ResumoConexao {
   nome: string | null;
   versaoAntiga: boolean;
   locais: number;
+  /** Modo de estoque da loja ('omie' quando não informado): fora do Omie nenhuma mensagem cita o Omie. */
+  modo: ModoEstoque;
 }
 
-const base: ResumoConexao = { estado: 'ok', mensagem: '', simulada: null, omieReal: null, nome: null, versaoAntiga: false, locais: 0 };
+const base: ResumoConexao = { estado: 'ok', mensagem: '', simulada: null, omieReal: null, nome: null, versaoAntiga: false, locais: 0, modo: 'omie' };
 
-export function resumirConexao(locais: LeituraEstoque, status: LeituraEstoque | null): ResumoConexao {
+export function resumirConexao(locais: LeituraEstoque, status: LeituraEstoque | null, modoLoja?: unknown): ResumoConexao {
+  const modo = normalizarModo(modoLoja);
+  const r = resumirConexaoOmie(locais, status);
+  if (modo === 'omie') return r;
+  // Estoque próprio / sem estoque: o Omie não existe para esta loja (nunca avisa de chave do Omie nem de "Omie real").
+  const mensagem = r.estado === 'ok' ? (r.simulada ? 'MODO TESTE — as saídas desta loja são simuladas.' : r.versaoAntiga ? 'Conexão ok (versão antiga do Estoque).' : 'Conexão ok.') : r.mensagem;
+  return { ...r, mensagem, omieReal: null, modo };
+}
+
+function resumirConexaoOmie(locais: LeituraEstoque, status: LeituraEstoque | null): ResumoConexao {
   if (locais.status === null) return { ...base, estado: 'fora_do_ar', mensagem: `Estoque fora do ar ou URL inacessível${locais.erroRede ? ` (${locais.erroRede})` : ''}.` };
   if (locais.status === 401 || locais.status === 403) return { ...base, estado: 'chave_invalida', mensagem: 'A chave de integração foi recusada pelo Estoque. Gere uma nova no Estoque (Loja → Integração com NTB Vendas) e cole aqui.' };
   if (locais.status === 404) return { ...base, estado: 'url_errada', mensagem: 'O endereço respondeu, mas não é o NTB Estoque (rota de integração não encontrada). Confira a URL.' };

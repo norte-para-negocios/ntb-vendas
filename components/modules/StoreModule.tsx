@@ -56,6 +56,7 @@ import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
 import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
 import { LocaisEstoqueView } from '@/components/modules/LocaisEstoqueView';
+import { modoDaLoja, usaEstoque, ehOmie, nomeSistemaEstoque, rotuloCodigo, rotuloCodigoCurto } from '@/lib/modoEstoque';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ProducaoView } from '@/components/modules/ProducaoView';
 import { ResumoKds, ChipsLocal } from '@/components/modules/ProducaoCabecalho';
@@ -8952,6 +8953,12 @@ const parseOptionalInt = (value: string): number | null => {
 const SCHEDULE_DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store) => void, podeEditar?: boolean, podeEsgotar?: boolean, operadorId?: string | null }> = ({ store, onStoreUpdate, podeEditar = true, podeEsgotar = false, operadorId = null }) => {
+    // Modo de estoque (migration 168): loja fora do Omie nunca vê a palavra "Omie"; sem estoque não mostra vínculo nenhum.
+    const modoEst = modoDaLoja(store);
+    const nomeEst = nomeSistemaEstoque(modoEst);
+    const rotCodigoCurto = rotuloCodigoCurto(modoEst);
+    const usaEst = usaEstoque(modoEst);
+    const noOmie = ehOmie(modoEst);
     const storeId = store.id;
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -9494,7 +9501,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 try {
                     await setProductOmieCodigo(productId, storeId, pOmieCodeInput.trim() || null);
                 } catch (omieError: any) {
-                    toast.error('Produto salvo, mas houve erro ao vincular o código Omie: ' + omieError.message);
+                    toast.error(`Produto salvo, mas houve erro ao vincular o código do ${nomeEst}: ` + omieError.message);
                 }
             } else if (!isNewProduct && modoOmie === 'none' && editingProduct?.omie_codigo) {
                 // Lojista trocou de "vinculado" pra "sem Omie" explicitamente
@@ -9502,7 +9509,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 try {
                     await setProductOmieCodigo(productId, storeId, null);
                 } catch (omieError: any) {
-                    toast.error('Produto salvo, mas houve erro ao desvincular o código Omie: ' + omieError.message);
+                    toast.error(`Produto salvo, mas houve erro ao desvincular o código do ${nomeEst}: ` + omieError.message);
                 }
             }
 
@@ -10161,7 +10168,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             <div className="flex flex-col gap-3 p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
                                 <p className="text-[13px] text-[var(--text-muted)]">
                                     O prato não tem preço único: o cliente escolhe <b>uma</b> opção e paga o preço dela (ex.: Moqueca ou Ensopado).
-                                    Coloque o <b>código do Omie</b> de cada escolha: é ele que dá baixa no estoque.
+                                    {usaEst && <>Coloque o <b>código do {nomeEst}</b> de cada escolha: é ele que dá baixa no estoque.</>}
                                 </p>
                                 <Input label="Nome da escolha" placeholder="Ex.: Moqueca ou Ensopado" value={pVarNome} onChange={e => setPVarNome(e.target.value)} />
                                 <div className="flex flex-col gap-2">
@@ -10169,7 +10176,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         <div key={v.tempId} className="grid grid-cols-[1fr_110px_110px_auto] max-sm:grid-cols-2 gap-2 items-end">
                                             <Input label={i === 0 ? 'Escolha' : undefined} placeholder="Ex.: Moqueca" value={v.name} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, name: e.target.value } : x))} />
                                             <Input label={i === 0 ? 'Preço (R$)' : undefined} type="number" inputMode="decimal" step="0.01" min="0" placeholder="0,00" value={v.price} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, price: e.target.value } : x))} />
-                                            <Input label={i === 0 ? 'Cód. Omie' : undefined} placeholder="Ex.: 90193" value={v.omie_codigo} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, omie_codigo: e.target.value } : x))} />
+                                            <Input label={i === 0 ? rotCodigoCurto : undefined} placeholder="Ex.: 90193" value={v.omie_codigo} onChange={e => setPVars(prev => prev.map(x => x.tempId === v.tempId ? { ...x, omie_codigo: e.target.value } : x))} />
                                             <Button type="button" variant="ghost" size="sm" aria-label="Remover escolha" onClick={() => setPVars(prev => prev.filter(x => x.tempId !== v.tempId))} disabled={pVars.length <= 2}><Trash2 size={15} /></Button>
                                         </div>
                                     ))}
@@ -10258,7 +10265,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         )}
                         {pFeeType !== '' && (
                             <p className="text-xs text-[var(--text-muted)]">
-                                Só quem tem permissão de caixa lança, no pagamento da mesa. Vincule ao código do Omie abaixo pra ir na nota fiscal e no estoque.
+                                Só quem tem permissão de caixa lança, no pagamento da mesa. {usaEst ? `Vincule ao código do ${nomeEst} abaixo pra ir na nota fiscal e no estoque.` : 'Esta loja não controla estoque: o item só entra na nota fiscal.'}
                                 {pFeeType === 'percent' ? ' O valor é calculado sobre os itens da conta e substitui a taxa de serviço automática.' : ''}
                             </p>
                         )}
@@ -10270,11 +10277,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         de escopo, mesma decisão de sempre — ver AGENTS.md);
                         "Vincular a um código já existente" funciona nos dois
                         modos, já que é só gravar/trocar um texto. */}
-                    <div className={`flex-col gap-2 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] ${pModoVar ? 'hidden' : 'flex'}`}>
-                        <span className="text-sm font-semibold text-[var(--text)]">Vínculo com Omie</span>
+                    <div className={`flex-col gap-2 p-3 bg-[var(--surface-2)] rounded-lg border border-[var(--border)] ${pModoVar || !usaEst ? 'hidden' : 'flex'}`}>
+                        <span className="text-sm font-semibold text-[var(--text)]">{noOmie ? 'Vínculo com Omie' : 'Vínculo com o estoque'}</span>
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'none'} onChange={() => setPOmieMode('none')} />
-                            <span className="text-sm text-[var(--text)]">Sem Omie (só neste cardápio)</span>
+                            <span className="text-sm text-[var(--text)]">{noOmie ? 'Sem Omie (só neste cardápio)' : 'Sem vínculo (só neste cardápio)'}</span>
                         </label>
                         {/* 2026-09-22, achado real: "Sem Omie" aqui é sobre o PRODUTO —
                             produto consolidado em variação (pizza, Na Chapa, Moqueca,
@@ -10286,13 +10293,13 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                             A checagem ignora "Sem borda"/"Sem segundo sabor"/etc. */}
                         {pOmieMode === 'none' && pOptionGroups.some(g => g.options.some(o => o.omie_codigo.trim() && !o.name.trim().toLowerCase().startsWith('sem '))) && (
                             <p className="ml-6 text-xs text-[var(--info)] bg-[var(--info)]/10 rounded-lg px-2.5 py-1.5">
-                                Este produto não tem código Omie próprio, mas as variações abaixo (em "Adicionais deste
+                                Este produto não tem código {nomeEst === 'Omie' ? 'Omie ' : ''}próprio, mas as variações abaixo (em "Adicionais deste
                                 produto") já têm — é assim que a baixa de estoque funciona pra ele.
                             </p>
                         )}
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'link'} onChange={() => setPOmieMode('link')} />
-                            <span className="text-sm text-[var(--text)]">Vincular a um código Omie já existente</span>
+                            <span className="text-sm text-[var(--text)]">{noOmie ? 'Vincular a um código Omie já existente' : 'Vincular a um código do estoque já existente'}</span>
                         </label>
                         {pOmieMode === 'link' && (
                             <div className="ml-6 flex flex-col gap-2">
@@ -10317,7 +10324,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                     </div>
                                 )}
                                 <Input
-                                    label="Código Omie selecionado"
+                                    label={`${rotuloCodigo(modoEst)} selecionado`}
                                     placeholder="Ou digite o código direto (ex: 90386)"
                                     value={pOmieCodeInput}
                                     onChange={e => setPOmieCodeInput(e.target.value)}
@@ -10327,7 +10334,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         {!editingProduct && (
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'create'} onChange={() => setPOmieMode('create')} />
-                                <span className="text-sm text-[var(--text)]">Criar produto novo no Omie (via NTB Estoque)</span>
+                                <span className="text-sm text-[var(--text)]">{noOmie ? 'Criar produto novo no Omie (via NTB Estoque)' : 'Criar produto novo no Norte Estoque'}</span>
                             </label>
                         )}
                     </div>
@@ -10487,7 +10494,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 </label>
                                 {group.options.some(o => o.variants && Object.keys(o.variants).length > 0) && (
                                     <p className="text-xs text-[var(--text-muted)]">
-                                        Algumas opções têm preço/código Omie por {Array.from(new Set(group.options.flatMap(o => Object.keys(o.variants || {})))).join(' / ')} —
+                                        Algumas opções têm preço/código {noOmie ? 'Omie ' : ''}por {Array.from(new Set(group.options.flatMap(o => Object.keys(o.variants || {})))).join(' / ')} —
                                         configurado pela equipe Norte e mantido ao salvar. Não renomeie essas escolhas.
                                     </p>
                                 )}
@@ -10529,9 +10536,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                     apagava esse campo em silêncio a cada Salvar — ver comentário
                                                                     de DraftOption acima). Visível e editável aqui; vazio = essa
                                                                     variação não baixa estoque no Omie ao ser vendida. */}
-                                                                <Input placeholder="Cód. Omie" value={opt.omie_codigo}
+                                                                <Input placeholder={rotCodigoCurto} value={opt.omie_codigo}
                                                                     onChange={e => updateOption(group.tempId, opt.tempId, { omie_codigo: e.target.value })}
-                                                                    title="Código Omie desta variação — vazio não baixa estoque" className="w-28" />
+                                                                    title={`${rotuloCodigo(modoEst)} desta variação — vazio não baixa estoque`} className="w-28" />
                                                                 <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                                                                     <input type="checkbox" checked={opt.available} onChange={e => updateOption(group.tempId, opt.tempId, { available: e.target.checked })}/> Disponível
                                                                 </label>
@@ -10632,7 +10639,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                         />
                                         <div>
                                             <p className="text-sm font-medium text-[var(--text)]">{p.name}</p>
-                                            <p className="text-xs text-[var(--text-muted)]">R$ {formatBRL(p.price)}{p.omie_codigo ? ` · Omie ${p.omie_codigo}` : ''}</p>
+                                            <p className="text-xs text-[var(--text-muted)]">R$ {formatBRL(p.price)}{p.omie_codigo ? ` · ${rotCodigoCurto} ${p.omie_codigo}` : ''}</p>
                                         </div>
                                     </div>
                                     {groupBaseId !== p.id && (
@@ -11679,7 +11686,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             : loggedUser.role === 'owner' || loggedUser.role === 'universal' || loggedUser.role === 'manager', // ver_permissoes: gerente vê (só leitura), dono edita
     };
     // `sales` só chega depois que Resumo/Histórico carregam; antes disso o cartão de Vendas mostra só a descrição.
-    const adminStatus = useAdminStatus({ storeId, sales: salesLoaded ? sales : null, incluirCardapio: navCtx.can?.('editar_cardapio') === true });
+    const adminStatus = useAdminStatus({ storeId, sales: salesLoaded ? sales : null, incluirCardapio: navCtx.can?.('editar_cardapio') === true, modoEstoque: store.stock_mode });
     const [secaoAlvo, setSecaoAlvo] = useState<string | null>(null);
     const irPara = React.useCallback((id: AbaId, alvo?: string) => { setActiveTab(id); setSecaoAlvo(alvo ?? null); }, []);
     // Depois da troca de aba (crossfade de 120 ms), rola até o ajuste achado na busca e o destaca.
@@ -11797,7 +11804,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
 
             {activeTab === 'notas' && <FiscalNotasView storeId={storeId} storeName={store.name} onConfigurarEmissor={() => irPara('fiscal')} />}
 
-            {activeTab === 'integracoes' && <IntegracoesView storeId={storeId} podeEditarEstoque={roleCan(loggedUser, store, 'editar_cardapio')} operador={loggedUser.name} />}
+            {activeTab === 'integracoes' && <IntegracoesView storeId={storeId} podeEditarEstoque={roleCan(loggedUser, store, 'editar_cardapio')} operador={loggedUser.name} modoEstoque={store.stock_mode} />}
 
             {activeTab === 'fiscal' && (
                 <>
@@ -12072,7 +12079,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             )}
 
             {activeTab === 'permissoes' && navCtx.can?.('ver_permissoes') && <RolePermissionsView store={store} loggedUser={loggedUser} onStoreUpdate={onStoreUpdate} />}
-            {activeTab === 'saude' && roleCan(loggedUser, store, 'editar_cardapio') && <CardapioSaudeView storeId={storeId} />}
+            {activeTab === 'saude' && roleCan(loggedUser, store, 'editar_cardapio') && <CardapioSaudeView storeId={storeId} modoEstoque={store.stock_mode} />}
             {activeTab === 'regras_caixa' && <RegrasCaixaView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
             {activeTab === 'locais' && <LocaisPreparoView store={store} />}
@@ -12624,7 +12631,7 @@ const RETRYABLE_FISCAL_STATUSES = ['erro', 'rejeitada', 'pendente'];
 // Administração → Configurações → Integrações. Antes: "Integração com o NTB Estoque" morava na tela de
 // Cardápio e "Integração direta com a Omie" dentro do Emissor fiscal; ambas são configuração, não operação.
 // URL/chave nunca voltam do banco (write-only), só o toggle `ativo` e se já está configurada.
-const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; operador: string }> = ({ storeId, podeEditarEstoque, operador }) => {
+const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; operador: string; modoEstoque?: string | null }> = ({ storeId, podeEditarEstoque, operador, modoEstoque = 'omie' }) => {
     const [ntbEstoqueStatus, setNtbEstoqueStatus] = useState<NtbEstoqueIntegracaoStatus>({ configurado: false, ativo: false });
     // Estado REAL da ligação (a chave responde? a loja do Estoque é de teste?) e baixas que não fecharam.
     const conexaoEstoque = useConexaoEstoque(storeId, ntbEstoqueStatus.configurado);
@@ -12755,7 +12762,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
             {/* Integração direta com a Omie (2026-09-05) — só pra loja que NÃO usa
                 ntb-estoque; se a loja tiver ntb-estoque configurado E ativo, esse
                 caminho nunca é usado (ver app/api/fiscal/emitir/route.ts). */}
-            <Collapsible
+            {ehOmie(modoEstoque) && <Collapsible
                 title="Integração direta com a Omie"
                 defaultOpen={false}
                 badge={omieDiretoConfigurado ? <Badge color="bg-[var(--ok)]/10 text-[var(--ok)]" dot>Configurado</Badge> : undefined}
@@ -12785,7 +12792,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
                         Salvar Integração Direta com a Omie
                     </Button>
                 </div>
-            </Collapsible>
+            </Collapsible>}
         </div>
     );
 };

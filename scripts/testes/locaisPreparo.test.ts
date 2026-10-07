@@ -79,3 +79,15 @@ for (const l of locaisTodos) {
 }
 assert.equal(statusLocal({ local: pizzaria, impressoras: [], mapaEstoque: null, categoriasDoLocal: 1, produtosDoLocal: 0 }).itens.find((i) => i.id === 'impressora')!.texto, 'Sem impressora própria: o pedido sai na impressora padrão da Cozinha.');
 console.log('locaisPreparo: ok');
+
+// Modo de estoque: fora do Omie o checklist nunca cita o Omie; sem o campo `sistema`, os textos são os de sempre.
+{
+  const base = { local: { chave: 'kitchen', nome: 'Cozinha', base: 'kitchen', setorId: null } as any, impressoras: [], mapaEstoque: {} as Record<string, number>, categoriasDoLocal: 1, produtosDoLocal: 0 };
+  const comOmie = statusLocal(base).itens.find((i) => i.id === 'estoque')!;
+  assert.match(comOmie.texto, /Omie/);
+  const semOmie = statusLocal({ ...base, sistema: 'Estoque' }).itens.find((i) => i.id === 'estoque')!;
+  assert.doesNotMatch(semOmie.texto, /omie/i);
+  const ligado = statusLocal({ ...base, mapaEstoque: { kitchen: 8000000000901 }, sistema: 'Estoque' }).itens.find((i) => i.id === 'estoque')!;
+  assert.doesNotMatch(ligado.texto, /omie/i);
+  console.log('locaisPreparo (modo): ok');
+}

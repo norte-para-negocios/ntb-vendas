@@ -1,7 +1,9 @@
 // Auditoria de integridade do cardápio (04/10/2026). Funções puras, sem I/O:
 // usadas pela tela "Saúde do cardápio" e espelhadas em scripts/auditoria/cardapio.py.
+import { normalizarModo } from '@/lib/modoEstoque';
+
 export interface Achado {
-  tipo: 'sem_categoria' | 'categoria_vazia' | 'preco_zero' | 'nome_duplicado' | 'ordem_repetida' | 'grupo_obrigatorio_vazio' | 'sem_codigo_omie' | 'sem_posicao';
+  tipo: 'sem_categoria' | 'categoria_vazia' | 'preco_zero' | 'nome_duplicado' | 'ordem_repetida' | 'grupo_obrigatorio_vazio' | 'sem_codigo_omie' | 'sem_posicao' | 'codigo_repetido';
   severidade: 'alta' | 'media' | 'baixa';
   texto: string;
 }
@@ -17,10 +19,14 @@ const PESO = { alta: 0, media: 1, baixa: 2 } as const;
 export interface OpcoesAuditoria {
   /** A integração com o NTB Estoque está ligada (configurada e ativa) nesta loja. */
   integracaoLigada?: boolean;
+  /** Modo de estoque da loja (stock_mode): 'omie' (padrão), 'proprio' (sem Omie nos textos, acusa código repetido) ou 'nenhum' (sem alerta de código). */
+  modoEstoque?: string | null;
 }
 
 export function auditarCardapio(d: { categorias: { id: string; name: string; order?: number | null }[]; produtos: ProdutoAudit[] }, opts: OpcoesAuditoria = {}): Achado[] {
   const out: Achado[] = [];
+  const modo = normalizarModo(opts.modoEstoque);
+  const cod = modo === 'omie' ? 'do Omie' : 'do estoque';
   const ativos = d.produtos.filter((p) => p.available);
   const norm = (s: string) => s.trim().toLowerCase();
 
@@ -44,16 +50,25 @@ export function auditarCardapio(d: { categorias: { id: string; name: string; ord
   catPos.forEach((l) => { if (l.length > 1) out.push({ tipo: 'ordem_repetida', severidade: 'baixa', texto: `Categorias na mesma posição: ${l.map((n) => `"${n}"`).join(', ')}.` }); });
 
   // Produto com grupos só pede código no produto se nenhuma opção/variante carrega o código.
-  const semCodigo = ativos.filter((p) => !p.fee_type && !p.omie_codigo && !(p.grupos ?? []).some((g) => g.temCodigoOmie));
-  const comCodigo = ativos.filter((p) => !p.fee_type).length - semCodigo.length;
-  if (semCodigo.length > 0 && comCodigo === 0 && opts.integracaoLigada) {
-    // Integração ligada e nenhum produto vinculado: a loja acha que baixa estoque e NÃO baixa. Não é detalhe.
-    out.push({ tipo: 'sem_codigo_omie', severidade: 'alta', texto: `A integração com o Estoque está ligada, mas nenhum produto está vinculado ao código do Omie (${semCodigo.length} produtos): nenhuma venda desta loja baixa estoque. Vincule os produtos no Cardápio (Vincular ao Estoque).` });
-  } else if (semCodigo.length > 0 && comCodigo === 0) {
-    // Loja inteira sem código = loja sem integração com o estoque; um aviso só, não um por produto.
-    out.push({ tipo: 'sem_codigo_omie', severidade: 'baixa', texto: `Nenhum produto tem código do Omie (${semCodigo.length} produtos): a loja não está ligada ao estoque, a venda não baixa estoque.` });
-  } else {
-    semCodigo.forEach((p) => out.push({ tipo: 'sem_codigo_omie', severidade: 'media', texto: `"${p.name}" não tem código do Omie (a venda não baixa estoque).` }));
+  // Loja sem controle de estoque ('nenhum') não baixa nada: nenhum alerta de código.
+  if (modo !== 'nenhum') {
+    const semCodigo = ativos.filter((p) => !p.fee_type && !p.omie_codigo && !(p.grupos ?? []).some((g) => g.temCodigoOmie));
+    const comCodigo = ativos.filter((p) => !p.fee_type).length - semCodigo.length;
+    if (semCodigo.length > 0 && comCodigo === 0 && opts.integracaoLigada) {
+      // Integração ligada e nenhum produto vinculado: a loja acha que baixa estoque e NÃO baixa. Não é detalhe.
+      out.push({ tipo: 'sem_codigo_omie', severidade: 'alta', texto: `A integração com o Estoque está ligada, mas nenhum produto está vinculado ao código ${cod} (${semCodigo.length} produtos): nenhuma venda desta loja baixa estoque. Vincule os produtos no Cardápio (Vincular ao Estoque).` });
+    } else if (semCodigo.length > 0 && comCodigo === 0) {
+      // Loja inteira sem código = loja sem integração com o estoque; um aviso só, não um por produto.
+      out.push({ tipo: 'sem_codigo_omie', severidade: 'baixa', texto: `Nenhum produto tem código ${cod} (${semCodigo.length} produtos): a loja não está ligada ao estoque, a venda não baixa estoque.` });
+    } else {
+      semCodigo.forEach((p) => out.push({ tipo: 'sem_codigo_omie', severidade: 'media', texto: `"${p.name}" não tem código ${cod} (a venda não baixa estoque).` }));
+    }
+    // Estoque próprio: dois produtos com o mesmo código baixam o MESMO item do estoque (quase sempre engano de cadastro).
+    if (modo === 'proprio') {
+      const porCodigo = new Map<string, ProdutoAudit[]>();
+      ativos.filter((p) => !p.fee_type && p.omie_codigo).forEach((p) => { const k = String(p.omie_codigo).trim(); porCodigo.set(k, [...(porCodigo.get(k) ?? []), p]); });
+      porCodigo.forEach((l, k) => { if (l.length > 1) out.push({ tipo: 'codigo_repetido', severidade: 'media', texto: `O código ${k} está em ${l.length} produtos (${l.map((p) => `"${p.name}"`).join(', ')}): todos baixam o mesmo item do estoque.` }); });
+    }
   }
   return out.sort((a, b) => PESO[a.severidade] - PESO[b.severidade]);
 }
