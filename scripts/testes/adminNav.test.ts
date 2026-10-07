@@ -82,7 +82,7 @@ const abasBusca = (q: string) => buscarAjustes(q, BUSCAVEIS).filter((a) => a.sec
 assert.equal(abasBusca('nota fiscal')[0], 'notas');
 assert.equal(abasBusca('certificado')[0], 'fiscal');
 assert.equal(abasBusca('csc')[0], 'fiscal');
-assert.equal(abasBusca('estoque')[0], 'integracoes');
+assert.ok(abasBusca('estoque').includes('integracoes') && abasBusca('estoque').includes('locais_estoque'), 'estoque acha Integrações e Locais de estoque');
 assert.ok(abasBusca('danfe').includes('notas'));
 assert.ok(abasBusca('cancelar nota').includes('notas'));
 assert.ok(abasBusca('omie').includes('integracoes'));
