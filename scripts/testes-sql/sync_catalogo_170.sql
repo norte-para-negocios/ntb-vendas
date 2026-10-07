@@ -82,6 +82,13 @@ begin
   select count(*) into n from products where store_id = s and omie_codigo = '90020';
   assert n = 1, 'produto não duplica';
 
+  -- reconciliação enfileira só o que falta
+  delete from sync_estoque_outbox where store_id = s;
+  update products set estoque_sync_at = now() where store_id = s;
+  n := enfileirar_catalogo_pendente(s);
+  assert n >= 1, 'enfileira categoria/grupo sem vínculo (' || n || ')';
+  assert not exists (select 1 from sync_estoque_outbox where store_id = s and entidade = 'produto'), 'produto já carimbado não reenfileira';
+
   -- 6) loja não-proprio recusa
   begin
     perform aplicar_catalogo_estoque('00000000-0000-0000-0000-00000000b170', '{}'::jsonb);

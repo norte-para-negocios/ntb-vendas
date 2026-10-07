@@ -51,6 +51,14 @@ export async function register() {
     console.log('Baixa de estoque (reenvio): desligada neste processo (DISABLE_BAIXA_RETRY=1 ou DISABLE_FISCAL_RETRANSMISSAO=1).');
     return;
   }
+  // Catálogo Vendas <-> Estoque (migration 170, lojas stock_mode='proprio'): entrega o outbox, liga lojas pendentes e reconcilia.
+  const { ciclarCatalogoEstoque } = await import('./lib/catalogoSync');
+  const intervaloCatalogoMs = Number(process.env.CATALOGO_SYNC_INTERVALO_MS) || 2 * 60 * 1000;
+  setInterval(() => {
+    ciclarCatalogoEstoque().catch((e) => console.error('Erro no ciclo do catálogo:', e));
+  }, intervaloCatalogoMs);
+  console.log(`Catálogo Vendas -> Estoque: ciclo agendado a cada ${Math.round(intervaloCatalogoMs / 1000)} s.`);
+
   const { ciclarBaixasDeEstoque } = await import('./lib/baixaEstoqueRetry');
   const intervaloMs = Number(process.env.BAIXA_RETRY_INTERVALO_MS) || 2 * 60 * 1000;
   setInterval(() => {

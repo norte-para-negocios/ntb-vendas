@@ -365,9 +365,32 @@ begin
   update products set estoque_sync_at = now() where store_id = p_store and id = any(select jsonb_array_elements_text(coalesce(p_mapa -> 'entregues', '[]'::jsonb))::uuid);
 end $$;
 
+
+-- Reconciliação: enfileira o que o Estoque ainda não recebeu ou que mudou depois da última entrega.
+create or replace function public.enfileirar_catalogo_pendente(p_store uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int := 0; k int;
+begin
+  insert into sync_estoque_outbox (store_id, entidade, ref, operacao)
+  select p_store, 'produto', id::text, 'upsert' from products
+   where store_id = p_store and fee_type is null and coalesce(btrim(name), '') <> ''
+     and (estoque_sync_at is null or updated_at > estoque_sync_at)
+  on conflict (store_id, entidade, ref) where status = 'pending' do nothing;
+  get diagnostics k = row_count; n := n + k;
+  insert into sync_estoque_outbox (store_id, entidade, ref, operacao)
+  select p_store, 'categoria', id::text, 'upsert' from categories where store_id = p_store and estoque_grupo_id is null
+  on conflict (store_id, entidade, ref) where status = 'pending' do nothing;
+  get diagnostics k = row_count; n := n + k;
+  insert into sync_estoque_outbox (store_id, entidade, ref, operacao)
+  select p_store, 'grupo', id::text, 'upsert' from category_groups where store_id = p_store and estoque_grupo_id is null
+  on conflict (store_id, entidade, ref) where status = 'pending' do nothing;
+  get diagnostics k = row_count; n := n + k;
+  return n;
+end $$;
+
 do $$ declare f text; begin
   foreach f in array array[
-    'grupo_variacao_do_produto(uuid)', 'catalogo_para_estoque(uuid,uuid[],uuid[],uuid[])',
+    'enfileirar_catalogo_pendente(uuid)', 'grupo_variacao_do_produto(uuid)', 'catalogo_para_estoque(uuid,uuid[],uuid[],uuid[])',
     'aplicar_catalogo_estoque(uuid,jsonb)', 'aplicar_mapa_estoque(uuid,jsonb)'
   ] loop
     execute format('revoke all on function public.%s from public, anon, authenticated', f);

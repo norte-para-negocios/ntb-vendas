@@ -38,6 +38,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Integração com o NTB Estoque está desativada.' }, { status: 400 });
   }
 
+  // Estoque próprio: o produto chega ao Estoque sozinho (outbox, migration 170) e o código volta pelo mesmo caminho;
+  // criar por aqui também geraria o produto em duplicata.
+  const { data: lojaModo } = await admin.from('stores').select('stock_mode').eq('id', body.storeId).maybeSingle();
+  if (lojaModo?.stock_mode === 'proprio') {
+    return NextResponse.json({ success: true, automatico: true, message: 'Em estoque próprio o produto é enviado ao Estoque automaticamente.' });
+  }
+
   let resposta: { ok?: boolean; codigo?: string; codigoProduto?: number; error?: string };
   try {
     const res = await fetch(`${secret.ntb_estoque_url.replace(/\/$/, '')}/api/integracao/produtos`, {
