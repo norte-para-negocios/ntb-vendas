@@ -1748,7 +1748,7 @@ export const AdminModule: React.FC = () => {
               </div>
             {editingId ? (
               <>
-                  <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false} badge={certBadge()}>
+                  <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={true} badge={certBadge()}>
                     <div className="space-y-4">
                       <div className="space-y-3">
                           <label className="text-sm font-semibold text-[var(--text)] flex items-center gap-2"><Lock size={14}/> Certificado Digital (fiscal)</label>
@@ -1969,7 +1969,7 @@ export const AdminModule: React.FC = () => {
           <SecaoLoja id="integracoes" ativa={secaoLoja} titulo="Integrações" descricao="Ligação com o Norte Estoque e outros sistemas.">
             {editingId ? (
               <>
-                  <Collapsible title="Integração com o NTB Estoque" defaultOpen={false} badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}>
+                  <Collapsible title="Integração com o NTB Estoque" defaultOpen={true} badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}>
                       {/* Integração com o NTB Estoque (Ordem de Produção automática) —
                           pedido explícito do usuário (2026-08-16): poder escolher/configurar
                           a integração já na tela de criação/edição de loja do Master Admin,

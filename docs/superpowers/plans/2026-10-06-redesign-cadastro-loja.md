@@ -1,4 +1,4 @@
-# Redesign do cadastro de loja (Norte Vendas + Norte Estoque) — PLANO (não implementado)
+# Redesign do cadastro de loja (Norte Vendas + Norte Estoque) — Vendas IMPLEMENTADO em 06/10/2026 (branch redesign-loja); Estoque e itens 3–5 seguem como plano
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development ou superpowers:executing-plans. Este documento é só o PLANO pedido pelo dono em 06/10/2026 (parte do spec `ntb estoque/docs/superpowers/specs/2026-10-06-modos-de-loja-estoque-proprio-design.md`, seção 4b). Nada daqui foi implementado além do seletor de modo de estoque já existente no modal atual (commit `feat(estoque): seletor do modo de estoque…`).
 
@@ -58,3 +58,13 @@ Cobrança/planos (só campo informativo), importação de lojas em lote, permiss
 3. Modo de estoque com baixas existentes nunca troca (servidor recusa, tela explica).
 4. Loja de teste e loja real nunca se confundem (selo visível; produção fiscal exige confirmação).
 5. Modal em 390 px: sem rolagem horizontal, botão Salvar sempre alcançável.
+
+
+## Implementado em 06/10/2026 (Vendas)
+
+- `Modal size="xl"` (70% x 90%, máx. 1180 px; celular = folha quase cheia) em `components/ui.tsx`; os demais tamanhos não mudaram.
+- `components/modules/admin/LojaModalShell.tsx` (navegação por seções, painel com rolagem, rodapé fixo, seções sempre montadas) e `PreparoImpressaoSection.tsx`.
+- Seções: Identidade, Contrato, Operação, **Preparo e impressão**, Estoque, Fiscal, Integrações; criar e editar usam o mesmo componente; estado e handlers continuam em `AdminModule.tsx`.
+- **Preparo e impressão:** Cozinha e Bar + locais criados pelo admin (`print_sectors`); cada local é *Acompanhamento* (tela) ou *Impressão direta*, guardado em `stores.config.locais_preparo_modo` (chave do local → modo). Loja nova: locais pendentes são criados depois da loja. Sem mexer nos modos o `config` fica byte-idêntico (testado: salvar sem tocar mantém o config).
+- Runtime: `modoDoLocal` (default derivado de `order_flow` + módulos KDS) e `listarLocaisComTela(…, modos)` escondem a tela de acompanhamento dos locais em *Impressão direta*. `order_flow` e `kitchen_kds/bar_kds` são derivados dos modos quando o admin os altera. **Limite conhecido:** o fluxo geral (`order_flow`) do `StoreModule` continua sendo da loja inteira; em loja *mista* o local em impressão direta só perde a tela, e o que imprime depende das impressoras cadastradas para o local (Configurações → Impressão).
+- Testes: `scripts/testes/locaisPreparoModo.test.ts`.
