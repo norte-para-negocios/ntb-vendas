@@ -5298,7 +5298,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     Voltar a conta para a mesa (só se a mesa ainda estiver livre)
                                 </button>
                             )}
-                                         {canReassignJurisdiction && (
+                                         {canReassignJurisdiction && !selectedTable?.standby && (
                                              <button
                                                 type="button"
                                                 onClick={handleOpenReassign}
