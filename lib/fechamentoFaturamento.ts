@@ -2,6 +2,7 @@
 // 'proprio', para o Estoque montar faturamento e lucro sem o Omie. Servidor apenas (service role).
 // Parte pura (montarFechamento) é testada em scripts/testes/fechamentoFaturamento.test.ts.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveServiceFeeRate } from './calc';
 
 export interface PedidoFechamento {
   id: string; order_type: string | null; customer_name: string | null; created_at: string; updated_at: string;
@@ -55,8 +56,13 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
   }
   let taxa = arred(out.filter((_, idx) => linhas[idx]?.product?.fee_type).reduce((s, l) => s + l.valor, 0));
   // Taxa de serviço automática (loja configurada para cobrar, sem a taxa lançada como item): entra como item, como na NFC-e.
+  // Vale o que o cliente PAGOU: com o total do pagamento, taxa = total - itens (respeita "Tirar a taxa" e taxa editada;
+  // teto de 30% contra lixo). Sem total gravado, usa o percentual.
   if (taxaAutomatica && !temTaxaLancada && subtotal > 0) {
-    const valorTaxa = arred(subtotal * taxaAutomatica.percentual / 100);
+    const pagoTotal = typeof detalhes.total === 'number' && Number.isFinite(detalhes.total) ? (detalhes.total as number) : null;
+    const valorTaxa = pagoTotal != null
+      ? arred(Math.max(0, Math.min(pagoTotal - subtotal, subtotal * 0.3)))
+      : arred(subtotal * taxaAutomatica.percentual / 100);
     if (valorTaxa > 0) {
       seq++;
       out.push({ linha: seq, codigo: taxaAutomatica.codigo, nome: taxaAutomatica.nome, quantidade: 1, valorUnitario: valorTaxa, desconto: 0, valor: valorTaxa, ncm: null });
@@ -101,8 +107,15 @@ export async function enviarFechamentos(admin: SupabaseClient, storeId: string, 
     admin.from('products').select('name, omie_codigo, fee_percent').eq('store_id', storeId).eq('fee_type', 'percent').maybeSingle(),
   ]);
   const cobraTaxa = !!(loja?.config as { charge_service_fee?: boolean } | null)?.charge_service_fee;
-  const taxaAuto: TaxaAutomatica | null = cobraTaxa && feeProduct?.omie_codigo
-    ? { codigo: feeProduct.omie_codigo, nome: feeProduct.name ?? 'Taxa de Serviço', percentual: feeProduct.fee_percent != null ? Number(feeProduct.fee_percent) : 10 } : null;
+  // Loja que cobra a taxa mas não tem o produto "Taxa de Serviço" cadastrado: a taxa entra mesmo assim (sem código),
+  // com o percentual da loja. Antes ela sumia do faturamento, embora o cliente tivesse pago.
+  const taxaAuto: TaxaAutomatica | null = cobraTaxa
+    ? {
+        codigo: feeProduct?.omie_codigo ?? '',
+        nome: feeProduct?.name ?? 'Taxa de Serviço',
+        percentual: feeProduct?.fee_percent != null ? Number(feeProduct.fee_percent) : resolveServiceFeeRate(loja?.config as { service_fee_rate?: unknown } | null) * 100,
+      }
+    : null;
 
   let enviados = 0, falhas = 0;
   for (const p of (pedidos ?? []) as unknown as (Omit<PedidoFechamento, 'mesa'> & { table: { number: number | string } | { number: number | string }[] | null })[]) {

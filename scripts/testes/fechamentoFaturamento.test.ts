@@ -60,4 +60,18 @@ assert.equal(cortesia.pagamentos.length, 0);
 assert.equal(cortesia.itens[0].codigo, '');
 assert.equal(cortesia.itens[0].nome, 'Produto não identificado');
 
+// A taxa vale o que o cliente pagou: total 33,60 sobre itens 28 = taxa 5,60 (taxa editada para 20%).
+const paga = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CASH', amount: 33.6 }], total: 33.6 } }), [item()], [], taxa);
+assert.equal(paga.taxa, 5.6);
+assert.equal(paga.valor, 33.6);
+// "Tirar a taxa": total = itens -> sem taxa (nenhum item de taxa).
+const tirada = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CASH', amount: 28 }], total: 28 } }), [item()], [], taxa);
+assert.equal(tirada.taxa, 0);
+assert.equal(tirada.itens.length, 1);
+// Loja que cobra sem o produto de taxa cadastrado: a taxa entra sem código (antes sumia do faturamento).
+const semProduto = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CASH', amount: 30.8 }], total: 30.8 } }), [item()], [], { codigo: '', nome: 'Taxa de Serviço', percentual: 10 });
+assert.equal(semProduto.taxa, 2.8);
+assert.equal(semProduto.itens[1].codigo, '');
+assert.equal(semProduto.valor, 30.8);
+
 console.log('fechamentoFaturamento: ok');
