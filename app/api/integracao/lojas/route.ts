@@ -86,3 +86,24 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json({ error: 'Não foi possível gerar um slug único. Tente de novo.' }, { status: 500 });
 }
+
+// Atualização vinda do Norte Estoque (nome, CNPJ, ativa), autenticada pela chave da própria loja
+// (a mesma guardada em store_ntb_estoque_secrets). Achado do QA de 07/10: editar num sistema não mudava o outro.
+export async function PATCH(request: NextRequest) {
+  const auth = request.headers.get('authorization') ?? '';
+  const chave = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!chave) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const body = (await request.json().catch(() => null)) as { nome?: string; cnpj?: string | null; ativo?: boolean } | null;
+  if (!body) return NextResponse.json({ error: 'Corpo inválido' }, { status: 400 });
+  const admin = getSupabaseAdmin();
+  const { data: sec } = await admin.from('store_ntb_estoque_secrets').select('store_id').eq('ntb_estoque_api_key', chave);
+  if (!sec || sec.length !== 1) return NextResponse.json({ error: 'Chave de integração inválida' }, { status: 401 });
+  const upd: Record<string, unknown> = {};
+  if (typeof body.nome === 'string' && body.nome.trim()) upd.name = body.nome.trim();
+  if (typeof body.cnpj === 'string' && body.cnpj.replace(/\D/g, '').length >= 11) upd.cnpj = body.cnpj.trim();
+  if (typeof body.ativo === 'boolean') upd.is_active = body.ativo;
+  if (!Object.keys(upd).length) return NextResponse.json({ ok: true, alterado: false });
+  const { error } = await admin.from('stores').update(upd).eq('id', sec[0].store_id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, alterado: true });
+}

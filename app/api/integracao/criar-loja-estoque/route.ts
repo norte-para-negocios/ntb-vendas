@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${segredo}` },
       // stockMode: 'proprio' faz o Estoque criar a loja sem Omie (modo estoque próprio); ausente = como sempre.
-      body: JSON.stringify({ nome: body.nome, cnpj: body.cnpj || undefined, stockMode: body.stockMode === 'proprio' || body.stockMode === 'nenhum' ? body.stockMode : undefined }),
+      body: JSON.stringify({ nome: body.nome, cnpj: body.cnpj || undefined, stockMode: body.stockMode === 'proprio' || body.stockMode === 'nenhum' ? body.stockMode : undefined, vendasStoreId: body.storeId }),
     });
     resposta = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (!res.ok || !resposta.ok) {

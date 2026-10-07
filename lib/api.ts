@@ -2800,6 +2800,11 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
       if (syncErr) console.error('Error clearing tables:', syncErr);
     }
 
+    // Nome/CNPJ/ativa mudam também no Norte Estoque ligado (best-effort; achado do QA de 07/10).
+    fetch('/api/integracao/loja-atualizada', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storeId: id }),
+    }).catch(() => {});
+
     return { success: true };
   } catch (error: any) {
     return { success: false, message: error.message };
