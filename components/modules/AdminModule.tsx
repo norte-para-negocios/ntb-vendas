@@ -3,12 +3,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 import { SPRING_TAP } from '@/lib/motion';
+import { resolveLocaisModo, fluxoDosLocais, type LocaisModo } from '@/lib/storeModules';
 import { ALL_ON, resolveStoreModules, resolveOrderFlow, isCounterPaymentFirst, isDefaultStoreModules, StoreModules, OrderFlow, STORE_PROFILE_PRESETS } from '@/lib/storeModules';
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
+import { LojaModalShell, SecaoLoja, type SecaoNav } from '@/components/modules/admin/LojaModalShell';
+import { PreparoImpressaoSection, type LocalPendente } from '@/components/modules/admin/PreparoImpressaoSection';
+import { Building2, FileSignature, Plug, Printer as PrinterIcon, Boxes, ScrollText } from 'lucide-react';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { ROTULO_MODO, MODOS_ESTOQUE, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
-import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchSalesHistory } from '@/lib/api';
+import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchSalesHistory } from '@/lib/api';
 import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { formatBRL, getOrderDisplayTotal } from '@/lib/calc';
@@ -213,6 +217,20 @@ export const AdminModule: React.FC = () => {
   // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): config.client_ordering,
   // ausente = true. Só grava `false`; ligar de volta remove a chave.
   const [clientOrdering, setClientOrdering] = useState(true);
+  // Cadastro em seções (06/10/2026): seção ativa, modo por local de preparo e locais criados antes de a loja existir.
+  const [secaoLoja, setSecaoLoja] = useState('identidade');
+  const [modosLocais, setModosLocais] = useState<LocaisModo>({});
+  const [modosLocaisAlterados, setModosLocaisAlterados] = useState(false);
+  const [locaisPendentes, setLocaisPendentes] = useState<LocalPendente[]>([]);
+  // Quando o admin muda o modo de um local, o fluxo geral e as telas KDS acompanham (derivados dos modos de todos os locais).
+  const handleModosLocaisChange = (completo: LocaisModo) => {
+      setModosLocais(completo);
+      setModosLocaisAlterados(true);
+      setOrderFlow(fluxoDosLocais(Object.values(completo)));
+      setModKitchenKds(completo.kitchen === 'acompanhamento');
+      setModBarKds(completo.bar === 'acompanhamento');
+  };
+
   // Subprojeto 4 (2026-08-25) — checklist de onboarding pra loja em
   // direct_print: `null` = ainda não checou (loja nova, editingId ainda
   // não existe) ou não se aplica; número = quantos membros da equipe já
@@ -379,6 +397,23 @@ export const AdminModule: React.FC = () => {
   // cobria a `<div className="min-h-screen ...">` final, deixando a tela de
   // login fora do Context, springando normalmente mesmo com
   // prefers-reduced-motion ativo.
+  // Navegação do cadastro de loja: nome, resumo curto do estado e marca de atenção.
+  const modosResumo = (() => {
+      const vals = Object.values(modosLocais);
+      if (vals.length === 0) return orderFlow === 'direct_print' ? 'Impressão direta' : 'Acompanhamento na tela';
+      const imp = vals.filter((v) => v === 'impressao').length;
+      return imp === 0 ? 'Acompanhamento na tela' : imp === vals.length ? 'Impressão direta' : 'Misto por local';
+  })();
+  const secoesLoja: SecaoNav[] = [
+      { id: 'identidade', label: 'Identidade', icon: Building2, resumo: name.trim() || 'Nome, CNPJ e link', alerta: !name.trim() || !slug.trim() },
+      { id: 'contrato', label: 'Contrato', icon: ScrollText, resumo: `${isActive ? 'Ativa' : 'Bloqueada'} · ${periodMonths === null ? 'sem prazo' : `${periodMonths} meses`}` },
+      { id: 'operacao', label: 'Operação', icon: LayoutGrid, resumo: contractType === 'balcao_mesas' ? `Balcão + ${tableCount} mesas` : 'Só balcão' },
+      { id: 'preparo', label: 'Preparo e impressão', icon: PrinterIcon, resumo: modosResumo },
+      { id: 'estoque', label: 'Estoque', icon: Boxes, resumo: ROTULO_MODO[stockMode].titulo },
+      { id: 'fiscal', label: 'Fiscal', icon: FileSignature, resumo: emiteNotaFiscal ? 'Emite NFC-e' : 'Não emite nota' },
+      { id: 'integracoes', label: 'Integrações', icon: Plug, resumo: editingId ? (ntbEstoqueStatus.configurado ? 'Estoque ligado' : 'Sem integração') : 'Depois de salvar' },
+  ];
+
   if (!isAuthenticated) {
       return (
         <MotionConfig reducedMotion="user">
@@ -417,6 +452,10 @@ export const AdminModule: React.FC = () => {
       setOrderFlow('kds');
       setCounterPaymentFirst(false);
       setClientOrdering(true);
+      setSecaoLoja('identidade');
+      setModosLocais({});
+      setModosLocaisAlterados(false);
+      setLocaisPendentes([]);
       setLogoFile(null);
       setLogoPreview(null);
       setCoverFile(null);
@@ -491,6 +530,10 @@ export const AdminModule: React.FC = () => {
 
   const handleEditStore = async (store: Store) => {
       setEditingId(store.id);
+      setSecaoLoja('identidade');
+      setModosLocais(resolveLocaisModo(store));
+      setModosLocaisAlterados(false);
+      setLocaisPendentes([]);
       setName(store.name);
       setCnpj(store.cnpj || '');
       setSlug(store.slug);
@@ -826,6 +869,11 @@ export const AdminModule: React.FC = () => {
               orderFlow,
               counterPaymentFirst,
               clientOrdering,
+              // Modo por local de preparo: só vai quando o admin mexeu (senão o config fica como está). Locais ainda não
+              // criados (chave provisória 'setor:tmp-...') entram depois, quando ganham id de verdade.
+              locaisModo: modosLocaisAlterados
+                  ? Object.fromEntries(Object.entries(modosLocais).filter(([k]) => !k.startsWith('setor:tmp-')))
+                  : undefined,
           };
 
           let result;
@@ -838,6 +886,20 @@ export const AdminModule: React.FC = () => {
           }
 
           if(result.success) {
+              // Locais de preparo criados no cadastro de uma loja nova (a loja só passa a existir agora).
+              if (!editingId && storeId && locaisPendentes.length > 0) {
+                  const traduzido: LocaisModo = { ...Object.fromEntries(Object.entries(modosLocais).filter(([k]) => !k.startsWith('setor:tmp-'))) };
+                  for (const pend of locaisPendentes) {
+                      const criado = await createPrintSector(storeId, pend.name, pend.base);
+                      if (!criado) { toast.error(`Loja salva, mas não foi possível criar o local "${pend.name}". Crie em Configurações → Locais de preparo.`); continue; }
+                      const modoPend = modosLocais[`setor:${pend.tmpId}`];
+                      if (modoPend) traduzido[`setor:${criado.id}`] = modoPend;
+                  }
+                  if (modosLocaisAlterados) {
+                      const extra = await updateStore(storeId, { ...params, locaisModo: traduzido });
+                      if (!extra.success) toast.error('Loja salva, mas o modo dos locais de preparo não foi gravado: ' + extra.message);
+                  }
+              }
               if (storeId) {
                   const fiscalResult = await updateStoreFiscalConfig(storeId, { modeloEmissaoAutomatica: emiteNotaFiscal ? 'nfce' : 'nenhuma' });
                   if (!fiscalResult.success) {
@@ -1215,19 +1277,26 @@ export const AdminModule: React.FC = () => {
       </main>
 
       {/* MODAL: NOVA/EDITAR LOJA */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Loja" : "Nova Loja"}>
-          <div className="space-y-6">
-              {/* Form Content */}
-              <div className="flex items-center justify-between bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] shadow-sm">
-                  <div>
-                      <span className="block font-bold text-[var(--text)]">Status do Contrato</span>
-                      <span className="text-xs text-[var(--text-muted)]">Define se a loja está acessível</span>
-                  </div>
-                  <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold u-motion u-press-sm shadow-sm ${isActive ? 'bg-[var(--ok-fill)] text-white shadow-[var(--ok)]/20' : 'bg-[var(--err-fill)] text-white shadow-[var(--err)]/20'}`}>
-                      {isActive ? <CheckCircle size={16}/> : <XCircle size={16}/>} {isActive ? 'LOJA ATIVA' : 'BLOQUEADA'}
-                  </button>
-              </div>
-
+      {/* MODAL: NOVA/EDITAR LOJA — janela larga (70% x 90%) com navegação por seções (06/10/2026) */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Loja" : "Nova Loja"} size="xl">
+        <LojaModalShell
+          secoes={secoesLoja}
+          ativa={secaoLoja}
+          onAtiva={setSecaoLoja}
+          erro={errorMsg}
+          rodape={
+            <>
+              <Button variant="outline" className="sm:min-w-[120px]" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+              <Button className="sm:min-w-[220px]" onClick={handleSaveStore} isLoading={isLoading}>
+                <Save className="mr-2" size={18} /> {editingId ? 'Atualizar Loja' : 'Salvar e Ativar Loja'}
+              </Button>
+            </>
+          }
+        >
+          {/* ===== Identidade ===== */}
+          <SecaoLoja id="identidade" ativa={secaoLoja} titulo="Identidade" descricao="Como a loja aparece para o cliente e para a equipe.">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-5">
               {/* Logo Upload */}
               <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-[var(--text)]">Logotipo da Loja</label>
@@ -1248,7 +1317,6 @@ export const AdminModule: React.FC = () => {
                       </div>
                   </div>
               </div>
-
               {/* Cover (Capa) Upload — mesmo padrão do Logo acima, Task 1 do
                   redesign iFood (migration 047, `cover_url`). */}
               <div className="flex flex-col gap-2">
@@ -1270,11 +1338,33 @@ export const AdminModule: React.FC = () => {
                       </div>
                   </div>
               </div>
-
+              </div>
               <div className="space-y-4">
                 <Input label="Nome do Estabelecimento" placeholder="Ex: Hamburgueria Top" value={name} onChange={handleNameChange} />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <Input label="CNPJ" placeholder="00.000.000/0000-00" value={cnpj} onChange={e => setCnpj(e.target.value)} />
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-semibold text-[var(--text)]">Link de Acesso (Slug)</label>
+                    <div className="flex items-center group">
+                        <span className="bg-[var(--surface-2)] border border-r-0 border-[var(--border)] rounded-l-lg px-3 py-2 text-sm text-[var(--text-muted)]">site.com/c/</span>
+                        <input className="w-full rounded-r-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[var(--brand)]/30 outline-none max-sm:text-base" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
+                    </div>
+                </div>
+              </div>
+            </div>
+          </SecaoLoja>
+
+          {/* ===== Contrato ===== */}
+          <SecaoLoja id="contrato" ativa={secaoLoja} titulo="Contrato" descricao="Se a loja está acessível e por quanto tempo.">
+              <div className="flex items-center justify-between bg-[var(--surface-2)] p-4 rounded-xl border border-[var(--border)] shadow-sm">
+                  <div>
+                      <span className="block font-bold text-[var(--text)]">Status do Contrato</span>
+                      <span className="text-xs text-[var(--text-muted)]">Define se a loja está acessível</span>
+                  </div>
+                  <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold u-motion u-press-sm shadow-sm ${isActive ? 'bg-[var(--ok-fill)] text-white shadow-[var(--ok)]/20' : 'bg-[var(--err-fill)] text-white shadow-[var(--err)]/20'}`}>
+                      {isActive ? <CheckCircle size={16}/> : <XCircle size={16}/>} {isActive ? 'LOJA ATIVA' : 'BLOQUEADA'}
+                  </button>
+              </div>
+            <div className="max-w-[360px]">
                      <div className="flex flex-col gap-1.5">
                          {periodMonths === null ? (
                              <>
@@ -1296,39 +1386,56 @@ export const AdminModule: React.FC = () => {
                              Contrato sem prazo (infinito)
                          </label>
                      </div>
-                </div>
-                <Input type="number" label="Taxa de Serviço (%)" value={serviceFeeRatePercent} onChange={e => setServiceFeeRatePercent(Number(e.target.value) || 0)} min="0" max="100" step="0.1" />
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-semibold text-[var(--text)]">Link de Acesso (Slug)</label>
-                    <div className="flex items-center group">
-                        <span className="bg-[var(--surface-2)] border border-r-0 border-[var(--border)] rounded-l-lg px-3 py-2 text-sm text-[var(--text-muted)]">site.com/c/</span>
-                        <input className="w-full rounded-r-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[var(--brand)]/30 outline-none max-sm:text-base" placeholder="minha-loja" value={slug} onChange={e => setSlug(generateSlug(e.target.value))} />
-                    </div>
-                </div>
-              </div>
+            </div>
+          </SecaoLoja>
 
-              {/* Toggle simples de emissão fiscal — mapeia pro
-                  store_fiscal_config.modelo_emissao_automatica já existente
-                  (nfce quando ligado, nenhuma quando desligado). Disponível
-                  já na criação, não só editando (config detalhada continua
-                  só em "Editar Loja", ver seção abaixo). */}
-              <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
-                  <div>
-                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Emite nota fiscal?</h4>
-                      <p className="text-xs text-[var(--text-muted)]">Se ligado, a loja emite NFC-e automaticamente ao fechar mesa/balcão.</p>
+          {/* ===== Operação ===== */}
+          <SecaoLoja id="operacao" ativa={secaoLoja} titulo="Operação" descricao="Tipo de loja, mesas, telas disponíveis e como o dinheiro entra.">
+              <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
+                          <Coffee size={24} /> <span className="font-bold text-sm">Apenas Balcão</span>
+                      </button>
+                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao_mesas' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao_mesas')}>
+                          <LayoutGrid size={24} /> <span className="font-bold text-sm">Balcão + Mesas</span>
+                      </button>
                   </div>
-                  <button
-                      type="button"
-                      role="switch"
-                      aria-checked={emiteNotaFiscal}
-                      aria-label="Emite nota fiscal?"
-                      onClick={() => setEmiteNotaFiscal(prev => !prev)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${emiteNotaFiscal ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
-                  >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emiteNotaFiscal ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
+                  {contractType === 'balcao_mesas' && (
+                      <div className="bg-[var(--info)]/10 p-4 rounded-xl border border-[var(--info)]/20">
+                        <div className="flex justify-between items-center mb-2"><label className="text-sm font-bold text-[var(--info)]">Mesas</label></div>
+                        <input
+                            type="number"
+                            min="1"
+                            value={tableCount}
+                            onChange={e => setTableCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40 max-sm:text-base"
+                        />
+                        {/* Achado real (2026-08-27): o texto antigo aqui dizia o
+                            OPOSTO do que sync_store_tables_secure realmente faz —
+                            reduzir o número apaga as mesas de número mais alto de
+                            verdade (migration 030). Corrigido pra avisar o que
+                            realmente acontece, não o contrário. */}
+                        {editingId && <p className="text-xs text-[var(--warn)] mt-2">Atenção: reduzir o número de mesas APAGA as mesas de número mais alto que excederem o novo total.</p>}
+                      </div>
+                  )}
+                  {/* Achado real ao vivo (reunião com o Ramon, 2026-08-27): trocar
+                      uma loja existente pra "Apenas Balcão" remove as mesas já
+                      cadastradas (ver updateStore, lib/api.ts) — evita a
+                      ambiguidade "contrato diz balcão mas as mesas continuam no
+                      banco" que o usuário encontrou testando ao vivo. Bloqueado
+                      no servidor se alguma mesa estiver ocupada/aguardando
+                      pagamento agora; aviso aqui é só pra não pegar o Master de
+                      surpresa quando isso acontecer sem erro nenhum. */}
+                  {editingId && contractType === 'balcao' && (
+                      <p className="text-xs text-[var(--warn)] flex items-start gap-1.5">
+                          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                          Ao salvar, as mesas já cadastradas nesta loja serão removidas (só se nenhuma estiver ocupada agora).
+                      </p>
+                  )}
               </div>
-
+            <div className="max-w-[260px]">
+                <Input type="number" label="Taxa de Serviço (%)" value={serviceFeeRatePercent} onChange={e => setServiceFeeRatePercent(Number(e.target.value) || 0)} min="0" max="100" step="0.1" />
+            </div>
               {/* Módulos desta loja (Task 1, plano 2026-08-22-perfis-de-loja-e-caixa)
                   — quais telas essa loja tem, no painel do lojista (/loja).
                   Disponível já na criação (loja nova nasce com tudo ligado +
@@ -1407,28 +1514,81 @@ export const AdminModule: React.FC = () => {
                       ))}
                   </div>
 
+                  {/* Cardápio do cliente (QR da mesa) — pedido do Ramon/Sertão
+                      (2026-09-26). Mesma chave que o lojista liga/desliga em
+                      Configurações gerais (StoreSettingsView). */}
                   <div className="pt-3 border-t border-[var(--border)] space-y-2">
-                      <label className="text-xs font-semibold text-[var(--text)]">Fluxo de pedidos</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="text-xs font-semibold text-[var(--text)]">Cardápio do cliente (QR da mesa)</label>
+                      <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[var(--surface-2)] p-3">
+                          <span className="min-w-0">
+                              <span className="block text-xs font-semibold text-[var(--text)]">Clientes podem fazer pedido pelo celular</span>
+                              <span className="block text-[11px] text-[var(--text-muted)]">
+                                  {clientOrdering
+                                      ? 'O cliente entra na mesa com o PIN, pede e pede a conta pelo celular.'
+                                      : 'Só consulta: o cliente vê o cardápio e os preços, sem PIN, carrinho nem pedido.'}
+                              </span>
+                          </span>
                           <button
                               type="button"
-                              role="radio"
-                              aria-checked={orderFlow === 'kds'}
-                              onClick={() => setOrderFlow('kds')}
-                              className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${orderFlow === 'kds' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                              role="switch"
+                              aria-checked={clientOrdering}
+                              aria-label="Clientes podem fazer pedido pelo celular"
+                              onClick={() => setClientOrdering(!clientOrdering)}
+                              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${clientOrdering ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                           >
-                              Acompanhamento na tela (KDS)
-                          </button>
-                          <button
-                              type="button"
-                              role="radio"
-                              aria-checked={orderFlow === 'direct_print'}
-                              onClick={() => setOrderFlow('direct_print')}
-                              className={`text-left px-3 py-2 rounded-lg border text-xs u-motion u-press-sm transition-colors ${orderFlow === 'direct_print' ? 'bg-[var(--brand)]/10 border-[var(--brand)]/30 text-[var(--brand)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                          >
-                              Envia direto para impressão
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${clientOrdering ? 'translate-x-6' : 'translate-x-1'}`} />
                           </button>
                       </div>
+                  </div>
+              </div>
+              {/* Fix round 2 (Group D1): "Caixa" é o único switch deste
+                  grupo que RESTRINGE em vez de REVELAR — por isso ganhou
+                  card e frase próprios, em vez de dividir a grade "Módulos
+                  desta loja" acima (onde "desligado" sempre significou "a
+                  loja não tem essa tela", nunca "restringi quem pode usar
+                  uma tela que já existe"). Texto pensado pro dono/gerente
+                  do restaurante: fala de "quem fecha a conta", não de
+                  "módulo caixa" nem de "permissão". Ver canFinalizeBill em
+                  lib/storeModules.ts pro mecanismo (default off preserva o
+                  comportamento de hoje pras 7 lojas reais). */}
+              <div className="p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] space-y-3">
+                  <div>
+                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Wallet size={14}/> Quem fecha a conta</h4>
+                      <p className="text-xs text-[var(--text-muted)]">
+                          Hoje, qualquer pessoa da equipe com acesso a Mesas pode receber o pagamento e fechar a conta de um cliente.
+                          Ligue esta opção se você quiser que só quem tiver a permissão &ldquo;Caixa&rdquo; marcada (na aba Equipe) possa
+                          finalizar o pagamento — o resto da equipe continua vendo as mesas e podendo pedir a conta, só não consegue
+                          mais receber e encerrar sozinho.
+                      </p>
+                  </div>
+                  <button
+                      type="button"
+                      role="switch"
+                      aria-checked={modCaixa}
+                      aria-label="Restringir fechamento de conta a quem tem permissão de Caixa"
+                      onClick={() => setModCaixa(!modCaixa)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold u-motion u-press-sm transition-colors w-full sm:w-auto ${modCaixa ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
+                  >
+                      <Wallet size={14} className="shrink-0" />
+                      {modCaixa ? 'Restrito a quem tem permissão de Caixa' : 'Qualquer um com acesso a Mesas pode fechar a conta'}
+                  </button>
+              </div>
+          </SecaoLoja>
+
+          {/* ===== Preparo e impressão ===== */}
+          <SecaoLoja id="preparo" ativa={secaoLoja} titulo="Preparo e impressão" descricao="Os locais onde o pedido é preparado e como cada um recebe o pedido: tela de acompanhamento ou impressão direta.">
+            <PreparoImpressaoSection
+              storeId={editingId}
+              orderFlow={orderFlow}
+              modKitchenKds={modKitchenKds}
+              modBarKds={modBarKds}
+              modos={modosLocais}
+              onModosChange={handleModosLocaisChange}
+              pendentes={locaisPendentes}
+              onPendentesChange={setLocaisPendentes}
+            />
+            <div className="rounded-[var(--r-lg)] border border-[var(--border)] bg-[var(--surface-2)]/50 p-4 space-y-3">
+              <h5 className="text-[14px] font-semibold text-[var(--text)]">Balcão</h5>
                       {/* Pedido do André (2026-09-11): "seria legal ter uma configuração
                           pro ADM definir essa ordem, se pgto antes ou depois do envio a
                           cozinha". Fica aqui (Master Admin) e não no painel do lojista
@@ -1461,40 +1621,9 @@ export const AdminModule: React.FC = () => {
                               Precisa do módulo Caixa ligado pra funcionar — é ele que tem a tela de receber pagamento. Sem ele, o balcão continua cobrando na entrega.
                           </p>
                       )}
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                          {orderFlow === 'direct_print'
-                              ? 'Ao enviar, o pedido vai direto pra impressão — sem tela de acompanhamento de cozinha/bar.'
-                              : 'Pedido enviado aparece na tela da Cozinha/Bar até ser preparado e entregue.'}
-                      </p>
-                  </div>
-
-                  {/* Cardápio do cliente (QR da mesa) — pedido do Ramon/Sertão
-                      (2026-09-26). Mesma chave que o lojista liga/desliga em
-                      Configurações gerais (StoreSettingsView). */}
-                  <div className="pt-3 border-t border-[var(--border)] space-y-2">
-                      <label className="text-xs font-semibold text-[var(--text)]">Cardápio do cliente (QR da mesa)</label>
-                      <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[var(--surface-2)] p-3">
-                          <span className="min-w-0">
-                              <span className="block text-xs font-semibold text-[var(--text)]">Clientes podem fazer pedido pelo celular</span>
-                              <span className="block text-[11px] text-[var(--text-muted)]">
-                                  {clientOrdering
-                                      ? 'O cliente entra na mesa com o PIN, pede e pede a conta pelo celular.'
-                                      : 'Só consulta: o cliente vê o cardápio e os preços, sem PIN, carrinho nem pedido.'}
-                              </span>
-                          </span>
-                          <button
-                              type="button"
-                              role="switch"
-                              aria-checked={clientOrdering}
-                              aria-label="Clientes podem fazer pedido pelo celular"
-                              onClick={() => setClientOrdering(!clientOrdering)}
-                              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${clientOrdering ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
-                          >
-                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${clientOrdering ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                      </div>
-                  </div>
-
+            </div>
+            {orderFlow === 'direct_print' && (
+              <div className="space-y-3">
                   {/* Removido (redesign 2026-08-23): existia um seletor "Onde
                       imprime" (neste aparelho / numa estação de impressão) —
                       o único equipamento fixo da operação passou a ser o do
@@ -1544,40 +1673,11 @@ export const AdminModule: React.FC = () => {
                       </>
                   )}
               </div>
+            )}
+          </SecaoLoja>
 
-              {/* Fix round 2 (Group D1): "Caixa" é o único switch deste
-                  grupo que RESTRINGE em vez de REVELAR — por isso ganhou
-                  card e frase próprios, em vez de dividir a grade "Módulos
-                  desta loja" acima (onde "desligado" sempre significou "a
-                  loja não tem essa tela", nunca "restringi quem pode usar
-                  uma tela que já existe"). Texto pensado pro dono/gerente
-                  do restaurante: fala de "quem fecha a conta", não de
-                  "módulo caixa" nem de "permissão". Ver canFinalizeBill em
-                  lib/storeModules.ts pro mecanismo (default off preserva o
-                  comportamento de hoje pras 7 lojas reais). */}
-              <div className="p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] space-y-3">
-                  <div>
-                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Wallet size={14}/> Quem fecha a conta</h4>
-                      <p className="text-xs text-[var(--text-muted)]">
-                          Hoje, qualquer pessoa da equipe com acesso a Mesas pode receber o pagamento e fechar a conta de um cliente.
-                          Ligue esta opção se você quiser que só quem tiver a permissão &ldquo;Caixa&rdquo; marcada (na aba Equipe) possa
-                          finalizar o pagamento — o resto da equipe continua vendo as mesas e podendo pedir a conta, só não consegue
-                          mais receber e encerrar sozinho.
-                      </p>
-                  </div>
-                  <button
-                      type="button"
-                      role="switch"
-                      aria-checked={modCaixa}
-                      aria-label="Restringir fechamento de conta a quem tem permissão de Caixa"
-                      onClick={() => setModCaixa(!modCaixa)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold u-motion u-press-sm transition-colors w-full sm:w-auto ${modCaixa ? 'bg-[var(--ok)]/10 border-[var(--ok)]/30 text-[var(--ok)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)]'}`}
-                  >
-                      <Wallet size={14} className="shrink-0" />
-                      {modCaixa ? 'Restrito a quem tem permissão de Caixa' : 'Qualquer um com acesso a Mesas pode fechar a conta'}
-                  </button>
-              </div>
-
+          {/* ===== Estoque ===== */}
+          <SecaoLoja id="estoque" ativa={secaoLoja} titulo="Estoque" descricao="Como a loja controla o estoque e onde ficam o cadastro de produtos e as baixas.">
               {/* Criar no NTB Estoque também — só em "Nova Loja" (loja já
                   existente usa a seção completa de integração em "Editar
                   Loja", mais abaixo). Cria a loja lá, gera a chave, e já
@@ -1603,7 +1703,6 @@ export const AdminModule: React.FC = () => {
                   {editingId && <p className="text-xs text-[var(--text-muted)]">Só dá para trocar o modo antes da primeira baixa de estoque da loja.</p>}
                   {!editingId && stockMode === 'proprio' && <p className="text-xs text-[var(--text-muted)]">A loja será criada também no Norte Estoque, já em modo de estoque próprio, e a integração é ligada automaticamente.</p>}
               </div>
-
               {!editingId && stockMode === 'omie' && (
                   <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
                       <div>
@@ -1622,11 +1721,33 @@ export const AdminModule: React.FC = () => {
                       </button>
                   </div>
               )}
+          </SecaoLoja>
 
-              <hr className="border-[var(--border)]" />
-
-              {editingId && (
-                  <>
+          {/* ===== Fiscal ===== */}
+          <SecaoLoja id="fiscal" ativa={secaoLoja} titulo="Fiscal" descricao="Emissão de nota, certificado digital e dados do emissor.">
+              {/* Toggle simples de emissão fiscal — mapeia pro
+                  store_fiscal_config.modelo_emissao_automatica já existente
+                  (nfce quando ligado, nenhuma quando desligado). Disponível
+                  já na criação, não só editando (config detalhada continua
+                  só em "Editar Loja", ver seção abaixo). */}
+              <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
+                  <div>
+                      <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><FileText size={14}/> Emite nota fiscal?</h4>
+                      <p className="text-xs text-[var(--text-muted)]">Se ligado, a loja emite NFC-e automaticamente ao fechar mesa/balcão.</p>
+                  </div>
+                  <button
+                      type="button"
+                      role="switch"
+                      aria-checked={emiteNotaFiscal}
+                      aria-label="Emite nota fiscal?"
+                      onClick={() => setEmiteNotaFiscal(prev => !prev)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${emiteNotaFiscal ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
+                  >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emiteNotaFiscal ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+              </div>
+            {editingId ? (
+              <>
                   <Collapsible title="Certificado e Configuração Fiscal" defaultOpen={false} badge={certBadge()}>
                     <div className="space-y-4">
                       <div className="space-y-3">
@@ -1836,7 +1957,18 @@ export const AdminModule: React.FC = () => {
                       </div>
                     </div>
                   </Collapsible>
+              </>
+            ) : (
+              <p className="text-[13px] text-[var(--text-muted)] rounded-[var(--r-lg)] border border-dashed border-[var(--border)] p-4">
+                O certificado digital, o CSC e as séries ficam disponíveis assim que a loja for salva. Salve a loja e abra &ldquo;Editar Loja&rdquo; para configurar.
+              </p>
+            )}
+          </SecaoLoja>
 
+          {/* ===== Integrações ===== */}
+          <SecaoLoja id="integracoes" ativa={secaoLoja} titulo="Integrações" descricao="Ligação com o Norte Estoque e outros sistemas.">
+            {editingId ? (
+              <>
                   <Collapsible title="Integração com o NTB Estoque" defaultOpen={false} badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}>
                       {/* Integração com o NTB Estoque (Ordem de Produção automática) —
                           pedido explícito do usuário (2026-08-16): poder escolher/configurar
@@ -1889,55 +2021,14 @@ export const AdminModule: React.FC = () => {
                           </Button>
                       </div>
                   </Collapsible>
-                  </>
-              )}
-              <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao')}>
-                          <Coffee size={24} /> <span className="font-bold text-sm">Apenas Balcão</span>
-                      </button>
-                      <button className={`flex flex-col items-center justify-center p-3 gap-2 rounded-xl border-2 u-motion u-press-sm ${contractType === 'balcao_mesas' ? 'border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`} onClick={() => setContractType('balcao_mesas')}>
-                          <LayoutGrid size={24} /> <span className="font-bold text-sm">Balcão + Mesas</span>
-                      </button>
-                  </div>
-                  {contractType === 'balcao_mesas' && (
-                      <div className="bg-[var(--info)]/10 p-4 rounded-xl border border-[var(--info)]/20">
-                        <div className="flex justify-between items-center mb-2"><label className="text-sm font-bold text-[var(--info)]">Mesas</label></div>
-                        <input
-                            type="number"
-                            min="1"
-                            value={tableCount}
-                            onChange={e => setTableCount(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40 max-sm:text-base"
-                        />
-                        {/* Achado real (2026-08-27): o texto antigo aqui dizia o
-                            OPOSTO do que sync_store_tables_secure realmente faz —
-                            reduzir o número apaga as mesas de número mais alto de
-                            verdade (migration 030). Corrigido pra avisar o que
-                            realmente acontece, não o contrário. */}
-                        {editingId && <p className="text-xs text-[var(--warn)] mt-2">Atenção: reduzir o número de mesas APAGA as mesas de número mais alto que excederem o novo total.</p>}
-                      </div>
-                  )}
-                  {/* Achado real ao vivo (reunião com o Ramon, 2026-08-27): trocar
-                      uma loja existente pra "Apenas Balcão" remove as mesas já
-                      cadastradas (ver updateStore, lib/api.ts) — evita a
-                      ambiguidade "contrato diz balcão mas as mesas continuam no
-                      banco" que o usuário encontrou testando ao vivo. Bloqueado
-                      no servidor se alguma mesa estiver ocupada/aguardando
-                      pagamento agora; aviso aqui é só pra não pegar o Master de
-                      surpresa quando isso acontecer sem erro nenhum. */}
-                  {editingId && contractType === 'balcao' && (
-                      <p className="text-xs text-[var(--warn)] flex items-start gap-1.5">
-                          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                          Ao salvar, as mesas já cadastradas nesta loja serão removidas (só se nenhuma estiver ocupada agora).
-                      </p>
-                  )}
-              </div>
-              {errorMsg && <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
-              <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20" onClick={handleSaveStore} isLoading={isLoading}>
-                  <Save className="mr-2" size={20} /> {editingId ? 'Atualizar Loja' : 'Salvar e Ativar Loja'}
-              </Button>
-          </div>
+              </>
+            ) : (
+              <p className="text-[13px] text-[var(--text-muted)] rounded-[var(--r-lg)] border border-dashed border-[var(--border)] p-4">
+                A ligação com o Norte Estoque é criada junto com a loja (seção Estoque). Depois de salva, a chave e o teste de conexão aparecem aqui.
+              </p>
+            )}
+          </SecaoLoja>
+        </LojaModalShell>
       </Modal>
 
       {/* MODAL: NOVO/EDITAR USUÁRIO */}
