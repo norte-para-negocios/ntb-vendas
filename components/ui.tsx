@@ -223,7 +223,9 @@ export const Modal: React.FC<{
   // não pode mudar 1px (revisão visual concluída essa semana). Verificado
   // de novo depois deste fix: dialog do ProductModal do cliente segue
   // medindo exatamente 448px.
-  size?: 'sm' | 'md' | 'lg';
+  // 'xl' (opt-in, 06/10/2026): janela de trabalho com ~70% da largura e ~90% da altura (cadastro de loja do Master Admin);
+  // o corpo NÃO tem padding nem rolagem próprios: quem usa decide (navegação lateral + painel com rolagem + rodapé fixo).
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   // Task 10 (2026-09-26): no celular a janela 'center' vira folha que sobe
   // de baixo e fecha arrastando. `phoneSheet={false}` mantém o movimento
   // antigo (fade+scale com SPRING_SHEET em qualquer tela) — usado pelo
@@ -232,10 +234,11 @@ export const Modal: React.FC<{
 }> = ({ isOpen, onClose, title, children, width, variant = 'center', hideTitle = false, size = 'sm', phoneSheet = true }) => {
   // `width` continua aceito como override explícito (compat, nenhum call
   // site usa hoje); na ausência dele, `size` decide a largura.
-  const SIZE_WIDTH_CLASSES: Record<'sm' | 'md' | 'lg', string> = {
+  const SIZE_WIDTH_CLASSES: Record<'sm' | 'md' | 'lg' | 'xl', string> = {
     sm: 'max-w-md',
     md: 'max-w-[640px]',
     lg: 'sm:max-w-[85vw] xl:max-w-[1100px]',
+    xl: 'sm:w-[min(70vw,1180px)] sm:min-w-[min(94vw,880px)] sm:max-w-[1180px] max-sm:h-[96dvh]',
   };
   const resolvedWidth = width ?? SIZE_WIDTH_CLASSES[size];
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -474,7 +477,7 @@ export const Modal: React.FC<{
               setTimeout(() => { justDraggedRef.current = false; }, 150);
               if (info.velocity.y > 500 || info.offset.y > window.innerHeight * 0.3) onClose();
             }}
-            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)] overflow-hidden flex flex-col u-modal-h`}
+            className={`w-full ${resolvedWidth} bg-[var(--surface)] rounded-t-[var(--r-xl)] sm:rounded-[var(--r-xl)] overflow-hidden flex flex-col u-modal-h ${size === 'xl' ? 'sm:h-[90dvh]' : ''}`}
             style={{ boxShadow: 'var(--shadow-modal)' }}
           >
             <div
@@ -497,7 +500,7 @@ export const Modal: React.FC<{
               </button>
             </div>
             </div>
-            <div className="px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]">{children}</div>
+            <div className={size === 'xl' ? 'flex-1 min-h-0 flex flex-col overflow-hidden' : 'px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain min-h-0 sm:max-h-[80vh]'}>{children}</div>
           </motion.div>
         </motion.div>
       )}
