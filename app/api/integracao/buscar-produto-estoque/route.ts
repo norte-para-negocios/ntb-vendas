@@ -27,10 +27,10 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (!secret) {
-    return NextResponse.json({ success: false, message: 'Loja sem integração com o NTB Estoque configurada.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Loja sem integração com o Norte Estoque configurada.' }, { status: 400 });
   }
   if (!secret.ativo) {
-    return NextResponse.json({ success: false, message: 'Integração com o NTB Estoque está desativada.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Integração com o Norte Estoque está desativada.' }, { status: 400 });
   }
 
   try {
@@ -40,10 +40,10 @@ export async function GET(request: NextRequest) {
     );
     const resposta = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (!res.ok || !resposta.ok) {
-      return NextResponse.json({ success: false, message: resposta.error || 'Falha ao buscar produtos no NTB Estoque.' }, { status: 502 });
+      return NextResponse.json({ success: false, message: resposta.error || 'Falha ao buscar produtos no Norte Estoque.' }, { status: 502 });
     }
     return NextResponse.json({ success: true, produtos: resposta.produtos ?? [] });
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: 'Não foi possível contatar o NTB Estoque: ' + e.message }, { status: 502 });
+    return NextResponse.json({ success: false, message: 'Não foi possível contatar o Norte Estoque: ' + e.message }, { status: 502 });
   }
 }

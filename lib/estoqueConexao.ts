@@ -37,11 +37,11 @@ export function resumirConexao(locais: LeituraEstoque, status: LeituraEstoque | 
 
 function resumirConexaoOmie(locais: LeituraEstoque, status: LeituraEstoque | null): ResumoConexao {
   if (locais.status === null) return { ...base, estado: 'fora_do_ar', mensagem: `Estoque fora do ar ou URL inacessível${locais.erroRede ? ` (${locais.erroRede})` : ''}.` };
-  if (locais.status === 401 || locais.status === 403) return { ...base, estado: 'chave_invalida', mensagem: 'A chave de integração foi recusada pelo Estoque. Gere uma nova no Estoque (Loja → Integração com NTB Vendas) e cole aqui.' };
-  if (locais.status === 404) return { ...base, estado: 'url_errada', mensagem: 'O endereço respondeu, mas não é o NTB Estoque (rota de integração não encontrada). Confira a URL.' };
+  if (locais.status === 401 || locais.status === 403) return { ...base, estado: 'chave_invalida', mensagem: 'A chave de integração foi recusada pelo Estoque. Gere uma nova no Estoque (Loja → Integração com Norte Vendas) e cole aqui.' };
+  if (locais.status === 404) return { ...base, estado: 'url_errada', mensagem: 'O endereço respondeu, mas não é o Norte Estoque (rota de integração não encontrada). Confira a URL.' };
   if (locais.status !== 200) return { ...base, estado: 'erro_estoque', mensagem: `O Estoque respondeu com erro (HTTP ${locais.status}).` };
   const lista = (locais.json as { locais?: unknown } | null)?.locais;
-  if (!Array.isArray(lista)) return { ...base, estado: 'url_errada', mensagem: 'O endereço respondeu, mas não parece ser o NTB Estoque. Confira a URL.' };
+  if (!Array.isArray(lista)) return { ...base, estado: 'url_errada', mensagem: 'O endereço respondeu, mas não parece ser o Norte Estoque. Confira a URL.' };
 
   const st = status?.status === 200 ? (status.json as { nome?: unknown; simulada?: unknown; omieReal?: unknown } | null) : null;
   if (!st || typeof st.simulada !== 'boolean') {

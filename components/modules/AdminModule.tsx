@@ -782,13 +782,13 @@ export const AdminModule: React.FC = () => {
   const handleSaveNtbEstoqueIntegracaoAdmin = async () => {
       if (!editingId) return; // só disponível editando loja existente
       if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
-          return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
+          return toast.error('Preencha a URL e a chave de API do Norte Estoque.');
       }
       setIsSavingNtbEstoque(true);
       try {
           const result = await saveNtbEstoqueIntegracaoConfig(editingId, { url: ntbEstoqueUrlInput, apiKey: ntbEstoqueApiKeyInput, ativo: true });
           if (!result.success) throw new Error(result.message);
-          toast.success('Integração com o NTB Estoque configurada!');
+          toast.success('Integração com o Norte Estoque configurada!');
           setNtbEstoqueUrlInput('');
           setNtbEstoqueApiKeyInput('');
           setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(editingId));
@@ -916,9 +916,9 @@ export const AdminModule: React.FC = () => {
               if (!editingId && storeId && criarLaTambem) {
                   const estoqueResult = await criarLojaNoEstoque(storeId, trimmedName, cnpj, stockMode);
                   if (!estoqueResult.success) {
-                      toast.error('Loja criada aqui, mas falhou criar no NTB Estoque: ' + estoqueResult.message);
+                      toast.error('Loja criada aqui, mas falhou criar no Norte Estoque: ' + estoqueResult.message);
                   } else {
-                      toast.success('Loja criada no NTB Estoque também!');
+                      toast.success('Loja criada no Norte Estoque também!');
                   }
               }
               toast.success(editingId ? 'Loja atualizada com sucesso!' : 'Loja criada com sucesso!');
@@ -1711,14 +1711,14 @@ export const AdminModule: React.FC = () => {
               {!editingId && stockMode === 'omie' && (
                   <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
                       <div>
-                          <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><ArrowRight size={14}/> Criar no NTB Estoque também?</h4>
+                          <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><ArrowRight size={14}/> Criar no Norte Estoque também?</h4>
                           <p className="text-xs text-[var(--text-muted)]">Cria a loja correspondente lá e já liga a integração — sem precisar mexer em chave nenhuma.</p>
                       </div>
                       <button
                           type="button"
                           role="switch"
                           aria-checked={criarNoEstoqueTambem}
-                          aria-label="Criar no NTB Estoque também?"
+                          aria-label="Criar no Norte Estoque também?"
                           onClick={() => setCriarNoEstoqueTambem(prev => !prev)}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full flex-shrink-0 transition-colors ${criarNoEstoqueTambem ? 'bg-[var(--ok-fill)]' : 'bg-[var(--border)]'}`}
                       >
@@ -1974,13 +1974,13 @@ export const AdminModule: React.FC = () => {
           <SecaoLoja id="integracoes" ativa={secaoLoja} titulo="Integrações" descricao="Ligação com o Norte Estoque e outros sistemas.">
             {editingId ? (
               <>
-                  <Collapsible title="Integração com o NTB Estoque" defaultOpen={true} badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}>
+                  <Collapsible title="Integração com o Norte Estoque" defaultOpen={true} badge={ntbEstoqueStatus.configurado ? <Badge color="bg-[var(--ok)]/10 border border-[var(--ok)]/30 text-[var(--ok)]">Configurado</Badge> : undefined}>
                       {/* Integração com o NTB Estoque (Ordem de Produção automática) —
                           pedido explícito do usuário (2026-08-16): poder escolher/configurar
                           a integração já na tela de criação/edição de loja do Master Admin,
                           sem precisar entrar no painel do lojista. */}
                       <div className="space-y-4">
-                          <p className="text-xs text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
+                          <p className="text-xs text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no Norte Estoque, consumindo os ingredientes da receita.</p>
 
                           <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
                               <div>
@@ -2006,7 +2006,7 @@ export const AdminModule: React.FC = () => {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <Input
-                                  label="URL do NTB Estoque"
+                                  label="URL do Norte Estoque"
                                   placeholder="https://app-estoque.norteparanegocios.com.br"
                                   value={ntbEstoqueUrlInput}
                                   onChange={e => setNtbEstoqueUrlInput(e.target.value)}
@@ -2014,15 +2014,15 @@ export const AdminModule: React.FC = () => {
                               <Input
                                   label="Chave de API"
                                   type="password"
-                                  placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
+                                  placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no Norte Estoque'}
                                   value={ntbEstoqueApiKeyInput}
                                   onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
                               />
                           </div>
-                          <p className="text-xs text-[var(--text-muted)]">A chave é gerada na tela "Lojas" do NTB Estoque (seção "Integração com NTB Vendas"). Ela nunca é exibida de volta depois de salva aqui — deixe em branco se não quiser trocá-la.</p>
+                          <p className="text-xs text-[var(--text-muted)]">A chave é gerada na tela "Lojas" do Norte Estoque (seção "Integração com Norte Vendas"). Ela nunca é exibida de volta depois de salva aqui — deixe em branco se não quiser trocá-la.</p>
 
                           <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracaoAdmin} isLoading={isSavingNtbEstoque}>
-                              Salvar Integração com o NTB Estoque
+                              Salvar Integração com o Norte Estoque
                           </Button>
                       </div>
                   </Collapsible>

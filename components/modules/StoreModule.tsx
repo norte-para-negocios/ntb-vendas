@@ -9495,9 +9495,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             if (isNewProduct && modoOmie === 'create') {
                 const estoqueResult = await criarProdutoNoEstoque(storeId, productId, pName, priceNum, pNcm.trim() || null);
                 if (!estoqueResult.success) {
-                    toast.error('Produto criado aqui, mas falhou criar no NTB Estoque: ' + estoqueResult.message);
+                    toast.error('Produto criado aqui, mas falhou criar no Norte Estoque: ' + estoqueResult.message);
                 } else {
-                    toast.success('Produto criado no NTB Estoque também!');
+                    toast.success('Produto criado no Norte Estoque também!');
                 }
             } else if (modoOmie === 'link') {
                 try {
@@ -10306,7 +10306,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         {pOmieMode === 'link' && (
                             <div className="ml-6 flex flex-col gap-2">
                                 <Input
-                                    placeholder="Buscar produto no NTB Estoque por nome..."
+                                    placeholder="Buscar produto no Norte Estoque por nome..."
                                     value={pOmieSearchTerm}
                                     onChange={e => setPOmieSearchTerm(e.target.value)}
                                 />
@@ -10336,7 +10336,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                         {!editingProduct && (
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="radio" name="omieMode" className="accent-[var(--brand)]" checked={pOmieMode === 'create'} onChange={() => setPOmieMode('create')} />
-                                <span className="text-sm text-[var(--text)]">{noOmie ? 'Criar produto novo no Omie (via NTB Estoque)' : 'Criar produto novo no Norte Estoque'}</span>
+                                <span className="text-sm text-[var(--text)]">{noOmie ? 'Criar produto novo no Omie (via Norte Estoque)' : 'Criar produto novo no Norte Estoque'}</span>
                             </label>
                         )}
                     </div>
@@ -12659,13 +12659,13 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
     const handleSaveNtbEstoqueIntegracao = async () => {
         if (!podeEditarEstoque) { toast.error('Seu perfil não pode alterar esta integração.'); return; }
         if (!ntbEstoqueUrlInput && !ntbEstoqueApiKeyInput) {
-            return toast.error('Preencha a URL e a chave de API do NTB Estoque.');
+            return toast.error('Preencha a URL e a chave de API do Norte Estoque.');
         }
         setIsSavingNtbEstoque(true);
         try {
             const result = await saveNtbEstoqueIntegracaoConfig(storeId, { url: ntbEstoqueUrlInput, apiKey: ntbEstoqueApiKeyInput, ativo: true });
             if (!result.success) throw new Error(result.message);
-            toast.success('Integração com o NTB Estoque configurada!');
+            toast.success('Integração com o Norte Estoque configurada!');
             setNtbEstoqueUrlInput('');
             setNtbEstoqueApiKeyInput('');
             setNtbEstoqueStatus(await fetchNtbEstoqueIntegracaoStatus(storeId));
@@ -12714,12 +12714,12 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
         <div className="space-y-3">
             <SincronizacaoCatalogo storeId={storeId} />
             <Collapsible
-                title="Integração com o NTB Estoque"
+                title="Integração com o Norte Estoque"
                 defaultOpen={true}
                 badge={<SeloConexao configurado={ntbEstoqueStatus.configurado} teste={conexaoEstoque.teste} testando={conexaoEstoque.testando} />}
             >
                 <div className="space-y-4">
-                    <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no NTB Estoque, consumindo os ingredientes da receita.</p>
+                    <p className="text-sm text-[var(--text-muted)]">Cada venda fechada cria automaticamente uma Ordem de Produção no Norte Estoque, consumindo os ingredientes da receita.</p>
 
                     <PainelConexao configurado={ntbEstoqueStatus.configurado} ativo={ntbEstoqueStatus.ativo} teste={conexaoEstoque.teste} testando={conexaoEstoque.testando} onTestar={conexaoEstoque.testar} />
 
@@ -12743,7 +12743,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input
-                            label="URL do NTB Estoque"
+                            label="URL do Norte Estoque"
                             placeholder="https://app-estoque.norteparanegocios.com.br"
                             value={ntbEstoqueUrlInput}
                             disabled={!podeEditarEstoque}
@@ -12752,7 +12752,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
                         <Input
                             label="Chave de API"
                             type="password"
-                            placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no NTB Estoque'}
+                            placeholder={ntbEstoqueStatus.configurado ? '••••••••  (preencher só pra trocar)' : 'Chave de integração da loja no Norte Estoque'}
                             value={ntbEstoqueApiKeyInput}
                             disabled={!podeEditarEstoque}
                             onChange={e => setNtbEstoqueApiKeyInput(e.target.value)}
@@ -12761,7 +12761,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
                     <p className="text-xs text-[var(--text-muted)]">A chave nunca é exibida de volta depois de salva — deixe em branco se não quiser trocá-la.</p>
 
                     <Button variant="secondary" className="w-full" onClick={handleSaveNtbEstoqueIntegracao} isLoading={isSavingNtbEstoque} disabled={!podeEditarEstoque}>
-                        Salvar integração com o NTB Estoque
+                        Salvar integração com o Norte Estoque
                     </Button>
                 </div>
             </Collapsible>
@@ -12784,8 +12784,8 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
             >
                 <div className="space-y-3">
                     <p className="text-sm text-[var(--text-muted)]">
-                        Pra lojas que não usam o NTB Estoque: registra a NFC-e autorizada direto na Omie, sem passar por outra integração.
-                        Se a loja tiver integração com o NTB Estoque ativa, ela sempre tem prioridade sobre esta.
+                        Pra lojas que não usam o Norte Estoque: registra a NFC-e autorizada direto na Omie, sem passar por outra integração.
+                        Se a loja tiver integração com o Norte Estoque ativa, ela sempre tem prioridade sobre esta.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input

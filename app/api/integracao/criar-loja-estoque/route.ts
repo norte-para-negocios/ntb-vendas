@@ -38,10 +38,10 @@ export async function POST(request: NextRequest) {
     });
     resposta = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (!res.ok || !resposta.ok) {
-      return NextResponse.json({ success: false, message: resposta.error || 'Falha ao criar loja no NTB Estoque.' }, { status: 502 });
+      return NextResponse.json({ success: false, message: resposta.error || 'Falha ao criar loja no Norte Estoque.' }, { status: 502 });
     }
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: 'Não foi possível contatar o NTB Estoque: ' + e.message }, { status: 502 });
+    return NextResponse.json({ success: false, message: 'Não foi possível contatar o Norte Estoque: ' + e.message }, { status: 502 });
   }
 
   const admin = getSupabaseAdmin();
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     { onConflict: 'store_id' }
   );
   if (error) {
-    return NextResponse.json({ success: false, message: 'Loja criada no NTB Estoque, mas falhou salvar a integração aqui: ' + error.message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Loja criada no Norte Estoque, mas falhou salvar a integração aqui: ' + error.message }, { status: 500 });
   }
 
   return NextResponse.json({ success: true, lojaEstoqueId: resposta.lojaId });

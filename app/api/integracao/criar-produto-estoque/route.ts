@@ -32,10 +32,10 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (!secret) {
-    return NextResponse.json({ success: false, message: 'Loja sem integração com o NTB Estoque configurada.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Loja sem integração com o Norte Estoque configurada.' }, { status: 400 });
   }
   if (!secret.ativo) {
-    return NextResponse.json({ success: false, message: 'Integração com o NTB Estoque está desativada.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Integração com o Norte Estoque está desativada.' }, { status: 400 });
   }
 
   // Estoque próprio: o produto chega ao Estoque sozinho (outbox, migration 170) e o código volta pelo mesmo caminho;
@@ -54,10 +54,10 @@ export async function POST(request: NextRequest) {
     });
     resposta = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (!res.ok || !resposta.ok) {
-      return NextResponse.json({ success: false, message: resposta.error || 'Falha ao criar produto no NTB Estoque.' }, { status: 502 });
+      return NextResponse.json({ success: false, message: resposta.error || 'Falha ao criar produto no Norte Estoque.' }, { status: 502 });
     }
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: 'Não foi possível contatar o NTB Estoque: ' + e.message }, { status: 502 });
+    return NextResponse.json({ success: false, message: 'Não foi possível contatar o Norte Estoque: ' + e.message }, { status: 502 });
   }
 
   const { error } = await admin
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     .eq('id', body.productId)
     .eq('store_id', body.storeId);
   if (error) {
-    return NextResponse.json({ success: false, message: 'Produto criado no NTB Estoque, mas falhou salvar o código aqui: ' + error.message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Produto criado no Norte Estoque, mas falhou salvar o código aqui: ' + error.message }, { status: 500 });
   }
 
   return NextResponse.json({ success: true, omieCodigo: resposta.codigo });
