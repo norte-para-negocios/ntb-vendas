@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 const fonte = readFileSync('app/api/fiscal/emitir/route.ts', 'utf8');
 assert.match(fonte, /const emissoesEmAndamento = new Map/);
 assert.match(fonte, /await anterior;/);
-assert.match(fonte, /finally \{\s*liberar\(\);/);
+assert.match(fonte, /finally \{[^}]*liberar_trava_emissao[\s\S]*?\n\s*liberar\(\);/);
 
 // Mesma lógica da trava, isolada: 2 chamadas da mesma chave nunca rodam ao mesmo tempo; chaves diferentes seguem em paralelo.
 const mapa = new Map<string, Promise<unknown>>();
