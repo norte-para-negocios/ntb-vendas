@@ -98,4 +98,11 @@ const cupomGrande = montarFechamento(pedido({ coupon_discount: 999 }), [item()],
 assert.equal(cupomGrande.desconto, 28);
 assert.equal(cupomGrande.valor, 0);
 
+// Pizza meio a meio: o produto não tem código; os sabores (opções com código) vão como componentes da linha.
+const meio = montarFechamento(pedido(), [item({ quantity: 1, price_at_time: 59, product: { name: 'Pizza Meio a Meio', omie_codigo: null, ncm: null, fee_type: null },
+  selected_options: [{ omie_codigo: '90013' }, { omie_codigo: '90014' }, { omie_codigo: null }, { omie_codigo: '90013' }] })], []);
+assert.equal(meio.itens[0].codigo, '');
+assert.deepEqual(meio.itens[0].componentes, ['90013', '90014'], 'sem vazio nem repetido');
+assert.equal('componentes' in p.itens[0], false, 'item sem opção não manda componentes');
+
 console.log('fechamentoFaturamento: ok');

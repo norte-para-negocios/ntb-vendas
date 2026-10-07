@@ -12,6 +12,8 @@ export interface PedidoFechamento {
 }
 export interface ItemFechamento {
   quantity: number; status: string; price_at_time: number; notes?: string | null;
+  /** Snapshot das opções escolhidas: o código de cada uma é componente da baixa (pizza meio a meio, variação, borda). */
+  selected_options?: { omie_codigo?: string | null }[] | null;
   product: { name: string; omie_codigo: string | null; ncm: string | null; fee_type: string | null } | null;
 }
 export interface NotaFechamento { chave_acesso: string | null; numero: number | null; serie: number | null; status: string; created_at: string }
@@ -21,7 +23,7 @@ export interface PayloadFechamento {
   pedidoRef: string; data: string; hora: string; tipo: 'mesa' | 'balcao'; mesa: string | null; cancelado: boolean;
   valor: number; desconto: number; taxa: number; operador: string | null;
   nota: { chave: string | null; numero: number | null; serie: number | null; status: string | null } | null;
-  itens: { linha: number; codigo: string; nome: string; quantidade: number; valorUnitario: number; desconto: number; valor: number; ncm: string | null }[];
+  itens: { linha: number; codigo: string; nome: string; quantidade: number; valorUnitario: number; desconto: number; valor: number; ncm: string | null; componentes?: string[] }[];
   pagamentos: { sequencia: number; metodo: string; valor: number; bandeira: string | null }[];
 }
 
@@ -51,9 +53,13 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
     seq++;
     const valor = arred(it.quantity * it.price_at_time);
     if (it.product?.fee_type) temTaxaLancada = true; else subtotal += valor;
+    // Códigos das opções: o Estoque liga o custo de cada um (que baixou como produto próprio) a esta linha no Lucro.
+    const componentes = [...new Set((Array.isArray(it.selected_options) ? it.selected_options : [])
+      .map((o) => (o?.omie_codigo ?? '').trim()).filter(Boolean))];
     out.push({
       linha: seq, codigo: it.product?.omie_codigo ?? '', nome: it.product?.name ?? 'Produto não identificado', quantidade: it.quantity,
       valorUnitario: it.price_at_time, desconto: 0, valor, ncm: it.product?.ncm ?? null,
+      ...(componentes.length ? { componentes } : {}),
     });
   }
   // Cupom de desconto: rateado nos itens que não são taxa, na proporção do valor (a última linha absorve o arredondamento).
@@ -119,7 +125,7 @@ export async function enviarFechamentos(admin: SupabaseClient, storeId: string, 
 
   const [{ data: pedidos }, { data: itens }, { data: notas }, { data: loja }, { data: feeProduct }] = await Promise.all([
     admin.from('orders').select('id, order_type, customer_name, created_at, updated_at, payment_details, coupon_discount, table:tables(number)').in('id', orderIds),
-    admin.from('order_items').select('order_id, quantity, status, price_at_time, notes, product:products(name, omie_codigo, ncm, fee_type)').in('order_id', orderIds),
+    admin.from('order_items').select('order_id, quantity, status, price_at_time, notes, selected_options, product:products(name, omie_codigo, ncm, fee_type)').in('order_id', orderIds),
     admin.from('fiscal_notas').select('order_id, chave_acesso, numero, serie, status, created_at').in('order_id', orderIds),
     admin.from('stores').select('config').eq('id', storeId).maybeSingle(),
     admin.from('products').select('name, omie_codigo, fee_percent').eq('store_id', storeId).eq('fee_type', 'percent').maybeSingle(),
