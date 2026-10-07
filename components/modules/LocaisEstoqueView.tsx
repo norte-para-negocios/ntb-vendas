@@ -138,9 +138,8 @@ export const LocaisEstoqueView: React.FC<{ store: Store; podeEditar: boolean }> 
             const atual = mapa[p.chave];
             return (
               <li key={p.chave} className="flex flex-wrap items-center gap-3 px-3 py-3 max-sm:flex-col max-sm:items-stretch">
-                <span className="shrink-0">{atual ? <CheckCircle2 size={18} className="text-[var(--ok)]" aria-label="Ligado" /> : <AlertTriangle size={18} className="text-[var(--warn)]" aria-label="Sem local" />}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium text-[var(--text)] flex items-center gap-1.5">{p.nome} <ArrowRight size={13} className="text-[var(--text-muted)]" aria-hidden /> <span className="text-[var(--text-muted)] font-normal">{atual ? nomeDoLocalEstoque(atual) : 'sem local escolhido'}</span></p>
+                  <p className="text-[14px] font-medium text-[var(--text)] flex items-center gap-1.5"><span className="shrink-0 mr-1">{atual ? <CheckCircle2 size={18} className="text-[var(--ok)]" aria-label="Ligado" /> : <AlertTriangle size={18} className="text-[var(--warn)]" aria-label="Sem local" />}</span>{p.nome} <ArrowRight size={13} className="text-[var(--text-muted)]" aria-hidden /> <span className="text-[var(--text-muted)] font-normal">{atual ? nomeDoLocalEstoque(atual) : 'sem local escolhido'}</span></p>
                 </div>
                 <select
                   value={atual ? String(atual) : ''}
