@@ -1,6 +1,7 @@
 // lib/omieEnvioServidor.ts — envio da NFC-e autorizada ao Omie e registro do resultado na nota (migration 157).
 // Servidor apenas (service role). Regras de interpretação em lib/omieEnvio.ts (testadas).
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ehOmie } from '@/lib/modoEstoque';
 import { incluirNfceDireto, type IncluirNfcePayload } from '@/lib/omie/nota-fiscal';
 import { interpretarEnvioNfceEstoque, interpretarErroEnvioNfce, ENVIO_OMIE_OK, type ResultadoEnvioOmie } from '@/lib/omieEnvio';
 
@@ -18,6 +19,10 @@ export async function registrarEnvioOmie(admin: SupabaseClient, notaId: string |
  */
 export async function enviarNfceAutorizadaAoOmie(admin: SupabaseClient, storeId: string, notaId: string | null, payload: IncluirNfcePayload): Promise<ResultadoEnvioOmie | null> {
   try {
+    // Modo de estoque (migration 168): o envio ao Omie só existe para loja 'omie'. Estoque próprio e sem estoque nunca falam com o Omie.
+    const { data: lojaModo } = await admin.from('stores').select('stock_mode').eq('id', storeId).maybeSingle();
+    if (!ehOmie(lojaModo?.stock_mode)) return null;
+
     const { data: ntbEstoqueSecret } = await admin
       .from('store_ntb_estoque_secrets')
       .select('ntb_estoque_url, ntb_estoque_api_key, ativo')

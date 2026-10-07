@@ -18,6 +18,9 @@ export const ehOmie = (m: unknown) => normalizarModo(m) === 'omie';
 /** A loja baixa estoque nas vendas (Omie ou próprio). 'nenhum' não baixa, não cria baixa e não mostra alerta de código. */
 export const usaEstoque = (m: unknown) => normalizarModo(m) !== 'nenhum';
 
+/** Motivo para NÃO baixar estoque numa venda desta loja, ou null quando baixa normalmente (omie e proprio). */
+export const motivoSemBaixa = (m: unknown): string | null => (usaEstoque(m) ? null : 'Loja sem controle de estoque');
+
 /** Nome do sistema de estoque para os textos da tela: lojas fora do Omie nunca veem a palavra "Omie". */
 export const nomeSistemaEstoque = (m: unknown) => (ehOmie(m) ? 'Omie' : 'Estoque');
 

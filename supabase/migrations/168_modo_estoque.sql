@@ -17,4 +17,25 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.store_tem_baixas_secure(uuid) to anon, authenticated;
 
+-- Loja sem controle de estoque ('nenhum') nunca entra na varredura de baixas: nenhuma linha de outbox é criada para ela.
+-- Mesmo corpo da migration 156, só acrescenta o filtro do modo (loja 'omie' e 'proprio' continuam entrando).
+create or replace function public.listar_pedidos_sem_baixa_secure(p_limite integer, p_store_id uuid default null)
+returns table (order_id uuid, store_id uuid) language sql security definer set search_path = public as $$
+  select o.id, o.store_id
+    from orders o
+    join store_ntb_estoque_secrets s on s.store_id = o.store_id and s.ativo
+    join stores st on st.id = o.store_id and st.stock_mode <> 'nenhum'
+   where (p_store_id is null or o.store_id = p_store_id)
+     and o.status = 'delivered'
+     and o.updated_at >= (select desde from integracao_baixas_marco where id = 1)
+     and o.updated_at < now() - interval '3 minutes'
+     and o.updated_at > now() - interval '48 hours'
+     and coalesce(o.total, 0) > 0
+     and (o.payment_details ->> 'op_enviada_em') is null
+     and not (jsonb_typeof(o.payment_details -> 'total') = 'number' and (o.payment_details ->> 'total')::numeric <= 0)
+     and not exists (select 1 from integracao_baixas b where b.order_id = o.id)
+   order by o.updated_at
+   limit greatest(1, least(coalesce(p_limite, 20), 100));
+$$;
+
 notify pgrst, 'reload schema';

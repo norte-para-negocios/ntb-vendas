@@ -19,6 +19,7 @@ import { montarPayloadsPorPedido, registrarBaixa, carregarLinha, processarBaixa,
 // reenvia o que falhou e varre pedidos que o navegador não registrou.
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { motivoSemBaixa } from '@/lib/modoEstoque';
 
 interface RequestBody {
   orderId?: string;
@@ -118,6 +119,12 @@ export async function POST(request: NextRequest) {
   if (!pendentesDeOp.length) {
     return NextResponse.json({ skipped: true, reason: 'Ordem de produção já enviada para este pedido' });
   }
+
+  // Modo de estoque (migration 168): loja 'nenhum' só vende e emite nota. Nada de baixa, de outbox nem de chamada ao Estoque.
+  // (O histórico no Contabo acima continua valendo.) Coluna ausente (banco antigo) = 'omie', como sempre.
+  const { data: lojaModo } = await admin.from('stores').select('stock_mode').eq('id', storeId).maybeSingle();
+  const semBaixa = motivoSemBaixa(lojaModo?.stock_mode);
+  if (semBaixa) return NextResponse.json({ skipped: true, reason: semBaixa });
 
   const { data: secret } = await admin
     .from('store_ntb_estoque_secrets')
