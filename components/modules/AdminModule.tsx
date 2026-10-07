@@ -7,6 +7,7 @@ import { ALL_ON, resolveStoreModules, resolveOrderFlow, isCounterPaymentFirst, i
 import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, AlertCircle, LayoutGrid, LayoutDashboard, ChefHat, Wine, UtensilsCrossed, BarChart3, Wallet, Coffee, Lock, User, RefreshCw, Trash2, Edit2, Upload, Image, Copy, ArrowRight, FileText } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
+import { ROTULO_MODO, MODOS_ESTOQUE, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
 import { createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchSalesHistory } from '@/lib/api';
 import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
@@ -178,6 +179,8 @@ export const AdminModule: React.FC = () => {
   const [cnpj, setCnpj] = useState('');
   const [slug, setSlug] = useState('');
   const [contractType, setContractType] = useState<'balcao' | 'balcao_mesas'>('balcao');
+  // Como a loja controla estoque (migration 168): Omie (padrão, como sempre), Estoque próprio ou sem estoque.
+  const [stockMode, setStockMode] = useState<ModoEstoque>('omie');
   const [tableCount, setTableCount] = useState<number>(10);
   const [periodMonths, setPeriodMonths] = useState<number | null>(12);
   const [isActive, setIsActive] = useState(true);
@@ -390,6 +393,7 @@ export const AdminModule: React.FC = () => {
       setCnpj('');
       setSlug('');
       setContractType('balcao');
+      setStockMode('omie');
       setTableCount(10);
       setPeriodMonths(12);
       setIsActive(true);
@@ -491,6 +495,7 @@ export const AdminModule: React.FC = () => {
       setCnpj(store.cnpj || '');
       setSlug(store.slug);
       setContractType(store.contract_type);
+      setStockMode(normalizarModo(store.stock_mode));
 
       // Fetch current tables to set correct count
       const tables = await fetchTables(store.id);
@@ -805,6 +810,7 @@ export const AdminModule: React.FC = () => {
               cnpj,
               slug: trimmedSlug,
               contractType,
+              stockMode,
               tableCount,
               periodMonths,
               isActive,
@@ -838,8 +844,10 @@ export const AdminModule: React.FC = () => {
                       toast.error('Loja salva, mas houve um erro ao salvar a opção de nota fiscal: ' + fiscalResult.message);
                   }
               }
-              if (!editingId && storeId && criarNoEstoqueTambem) {
-                  const estoqueResult = await criarLojaNoEstoque(storeId, trimmedName, cnpj);
+              // Loja em modo Estoque próprio sempre nasce ligada ao Norte Estoque (a baixa passa por ele); sem estoque nunca cria lá.
+              const criarLaTambem = stockMode === 'proprio' || (stockMode === 'omie' && criarNoEstoqueTambem);
+              if (!editingId && storeId && criarLaTambem) {
+                  const estoqueResult = await criarLojaNoEstoque(storeId, trimmedName, cnpj, stockMode);
                   if (!estoqueResult.success) {
                       toast.error('Loja criada aqui, mas falhou criar no NTB Estoque: ' + estoqueResult.message);
                   } else {
@@ -1574,7 +1582,29 @@ export const AdminModule: React.FC = () => {
                   existente usa a seção completa de integração em "Editar
                   Loja", mais abaixo). Cria a loja lá, gera a chave, e já
                   salva a integração aqui, tudo automático. */}
-              {!editingId && (
+              {/* Como a loja controla estoque (migration 168). Troca depois da primeira baixa é recusada pelo servidor. */}
+              <div className="space-y-2" role="radiogroup" aria-label="Como a loja controla estoque">
+                  <h4 className="font-bold text-sm text-[var(--text)]">Estoque da loja</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {MODOS_ESTOQUE.map((m) => (
+                          <button
+                              key={m}
+                              type="button"
+                              role="radio"
+                              aria-checked={stockMode === m}
+                              onClick={() => setStockMode(m)}
+                              className={`text-left p-3 rounded-xl border-2 u-motion u-press-sm ${stockMode === m ? 'border-[var(--brand)] bg-[var(--brand)]/5' : 'border-[var(--border)]'}`}
+                          >
+                              <span className={`block text-sm font-bold ${stockMode === m ? 'text-[var(--brand)]' : 'text-[var(--text)]'}`}>{ROTULO_MODO[m].titulo}</span>
+                              <span className="block text-xs text-[var(--text-muted)] mt-1">{ROTULO_MODO[m].descricao}</span>
+                          </button>
+                      ))}
+                  </div>
+                  {editingId && <p className="text-xs text-[var(--text-muted)]">Só dá para trocar o modo antes da primeira baixa de estoque da loja.</p>}
+                  {!editingId && stockMode === 'proprio' && <p className="text-xs text-[var(--text-muted)]">A loja será criada também no Norte Estoque, já em modo de estoque próprio, e a integração é ligada automaticamente.</p>}
+              </div>
+
+              {!editingId && stockMode === 'omie' && (
                   <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
                       <div>
                           <h4 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><ArrowRight size={14}/> Criar no NTB Estoque também?</h4>
