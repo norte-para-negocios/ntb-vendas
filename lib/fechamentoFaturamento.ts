@@ -7,6 +7,8 @@ import { resolveServiceFeeRate } from './calc';
 export interface PedidoFechamento {
   id: string; order_type: string | null; customer_name: string | null; created_at: string; updated_at: string;
   payment_details: Record<string, unknown> | null; mesa: string | number | null;
+  /** Cupom de desconto do pedido (orders.coupon_discount, migration 143). */
+  coupon_discount?: number | string | null;
 }
 export interface ItemFechamento {
   quantity: number; status: string; price_at_time: number; notes?: string | null;
@@ -54,15 +56,31 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
       valorUnitario: it.price_at_time, desconto: 0, valor, ncm: it.product?.ncm ?? null,
     });
   }
+  // Cupom de desconto: rateado nos itens que não são taxa, na proporção do valor (a última linha absorve o arredondamento).
+  // Os relatórios do Estoque somam os itens, então o desconto tem que sair deles, não só do cabeçalho.
+  const idxProdutos = out.map((_, idx) => idx).filter((idx) => !linhas[idx]?.product?.fee_type && out[idx].valor > 0);
+  const desconto = arred(Math.min(Math.max(0, Number(pedido.coupon_discount) || 0), subtotal));
+  if (desconto > 0 && subtotal > 0) {
+    let restante = desconto;
+    idxProdutos.forEach((idx, n) => {
+      const l = out[idx];
+      const d = n === idxProdutos.length - 1 ? arred(Math.min(restante, l.valor)) : arred(desconto * l.valor / subtotal);
+      restante = arred(restante - d);
+      l.desconto = d;
+      l.valor = arred(l.valor - d);
+    });
+  }
+  const base = arred(subtotal - desconto);
+
   let taxa = arred(out.filter((_, idx) => linhas[idx]?.product?.fee_type).reduce((s, l) => s + l.valor, 0));
   // Taxa de serviço automática (loja configurada para cobrar, sem a taxa lançada como item): entra como item, como na NFC-e.
   // Vale o que o cliente PAGOU: com o total do pagamento, taxa = total - itens (respeita "Tirar a taxa" e taxa editada;
   // teto de 30% contra lixo). Sem total gravado, usa o percentual.
-  if (taxaAutomatica && !temTaxaLancada && subtotal > 0) {
+  if (taxaAutomatica && !temTaxaLancada && base > 0) {
     const pagoTotal = typeof detalhes.total === 'number' && Number.isFinite(detalhes.total) ? (detalhes.total as number) : null;
     const valorTaxa = pagoTotal != null
-      ? arred(Math.max(0, Math.min(pagoTotal - subtotal, subtotal * 0.3)))
-      : arred(subtotal * taxaAutomatica.percentual / 100);
+      ? arred(Math.max(0, Math.min(pagoTotal - base, base * 0.3)))
+      : arred(base * taxaAutomatica.percentual / 100);
     if (valorTaxa > 0) {
       seq++;
       out.push({ linha: seq, codigo: taxaAutomatica.codigo, nome: taxaAutomatica.nome, quantidade: 1, valorUnitario: valorTaxa, desconto: 0, valor: valorTaxa, ncm: null });
@@ -78,7 +96,7 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
   return {
     pedidoRef: pedido.id, data, hora, tipo: pedido.order_type === 'counter' || pedido.mesa == null ? 'balcao' : 'mesa',
     mesa: pedido.mesa != null ? String(pedido.mesa) : null, cancelado: false,
-    valor: arred(out.reduce((s, l) => s + l.valor, 0)), desconto: 0, taxa,
+    valor: arred(out.reduce((s, l) => s + l.valor, 0)), desconto, taxa,
     operador: typeof detalhes.operador_nome === 'string' ? detalhes.operador_nome : null,
     nota: nota ? { chave: nota.chave_acesso, numero: nota.numero, serie: nota.serie, status: nota.status } : null,
     itens: out, pagamentos,
@@ -100,7 +118,7 @@ export async function enviarFechamentos(admin: SupabaseClient, storeId: string, 
   if (!secret?.ativo) return { enviados: 0, falhas: 0 };
 
   const [{ data: pedidos }, { data: itens }, { data: notas }, { data: loja }, { data: feeProduct }] = await Promise.all([
-    admin.from('orders').select('id, order_type, customer_name, created_at, updated_at, payment_details, table:tables(number)').in('id', orderIds),
+    admin.from('orders').select('id, order_type, customer_name, created_at, updated_at, payment_details, coupon_discount, table:tables(number)').in('id', orderIds),
     admin.from('order_items').select('order_id, quantity, status, price_at_time, notes, product:products(name, omie_codigo, ncm, fee_type)').in('order_id', orderIds),
     admin.from('fiscal_notas').select('order_id, chave_acesso, numero, serie, status, created_at').in('order_id', orderIds),
     admin.from('stores').select('config').eq('id', storeId).maybeSingle(),

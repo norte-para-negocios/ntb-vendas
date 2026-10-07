@@ -74,4 +74,28 @@ assert.equal(semProduto.taxa, 2.8);
 assert.equal(semProduto.itens[1].codigo, '');
 assert.equal(semProduto.valor, 30.8);
 
+// Cupom de desconto do pedido (orders.coupon_discount): sai do faturamento, rateado nos itens (o relatório soma os itens).
+// Itens 28 + 22 = 50, cupom 5 -> 2,80 na cerveja e 2,20 na caipirinha; valor 45. Antes o cupom era ignorado e o
+// faturamento ficava R$ 5 acima do que o cliente pagou.
+const cupom = montarFechamento(pedido({ coupon_discount: 5 }), [item(), item({ quantity: 1, price_at_time: 22, product: { name: 'Caipirinha', omie_codigo: '90005', ncm: null, fee_type: null } })], []);
+assert.equal(cupom.desconto, 5);
+assert.equal(cupom.valor, 45);
+assert.equal(cupom.itens[0].desconto, 2.8);
+assert.equal(cupom.itens[0].valor, 25.2);
+assert.equal(cupom.itens[1].desconto, 2.2);
+assert.equal(cupom.itens[1].valor, 19.8);
+// Arredondamento: a última linha absorve a sobra, o rateio fecha exato com o cupom.
+const tres = montarFechamento(pedido({ coupon_discount: 10 }), [item({ quantity: 1, price_at_time: 10 }), item({ quantity: 1, price_at_time: 10 }), item({ quantity: 1, price_at_time: 10 })], []);
+assert.equal(Math.round(tres.itens.reduce((s, l) => s + l.desconto, 0) * 100) / 100, 10);
+assert.equal(tres.valor, 20);
+// Cupom + taxa paga: total 49,50 = itens 50 - cupom 5 + taxa 4,50 -> a taxa é 4,50 (não 0, nem 4,50 - 5).
+const cupomTaxa = montarFechamento(pedido({ coupon_discount: 5, payment_details: { methods: [{ method: 'PIX', amount: 49.5 }], total: 49.5 } }),
+  [item(), item({ quantity: 1, price_at_time: 22, product: { name: 'Caipirinha', omie_codigo: '90005', ncm: null, fee_type: null } })], [], taxa);
+assert.equal(cupomTaxa.taxa, 4.5);
+assert.equal(cupomTaxa.valor, 49.5);
+// Cupom maior que os itens nunca deixa item negativo.
+const cupomGrande = montarFechamento(pedido({ coupon_discount: 999 }), [item()], []);
+assert.equal(cupomGrande.desconto, 28);
+assert.equal(cupomGrande.valor, 0);
+
 console.log('fechamentoFaturamento: ok');
