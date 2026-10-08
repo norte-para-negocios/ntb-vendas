@@ -4,11 +4,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const chamadas: { url: string; body: any }[] = [];
+const todas: { url: string; body: any }[] = [];
+// Só as gravações (o teste rápido de conexão antes de gravar, HEAD /rest/v1/, fica de fora).
+const chamadas = new Proxy(todas, { get: (alvo, k) => (k === 'length' ? alvo.filter((c) => c.url.includes('/rpc/')).length : (Reflect.get(alvo.filter((c) => c.url.includes('/rpc/')), k))), set: (alvo, k, v) => { if (k === 'length') alvo.length = v; return true; } }) as { url: string; body: any }[];
 let roteiro: (url: string) => { status: number; body: unknown } | 'rede' = () => ({ status: 200, body: { success: true, order_id: 'o1' } });
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  chamadas.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+  todas.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
   const r = roteiro(url);
   if (r === 'rede') throw new TypeError('Failed to fetch');
   return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'content-type': 'application/json' } });
