@@ -222,7 +222,8 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       // close_counter_order_secure acima: sem `data.success` pra checar,
       // C1 não se aplica aqui (confirmado lendo a migration antes de mexer).
       const payload = action.payload as any;
-      const { error } = await supabase.rpc('open_table_manually_secure', payload);
+      // Mesa de funcionário (migration 174) vai pela v2; a de sempre continua na função antiga.
+      const { error } = await supabase.rpc(payload?.p_funcionario ? 'open_table_manually_v2' : 'open_table_manually_secure', payload);
       if (error) throw error;
       break;
     }

@@ -1731,14 +1731,22 @@ export const fetchExceptionsReport = async (storeId: string, from: Date, to: Dat
 // "falsamente online". Como só existe um call-site hoje
 // (`StoreModule.tsx`), mudar o retorno de `void` pra `{queued: boolean}`
 // é seguro — nenhum outro lugar depende do formato antigo.
-export const openTableManually = async (tableId: string, storeId: string, hostName: string): Promise<{ queued: boolean }> => {
+// `funcionario` (migration 174): abre a mesa marcada como consumo de funcionário (sem a taxa automática).
+export const openTableManually = async (tableId: string, storeId: string, hostName: string, funcionario?: string | null): Promise<{ queued: boolean }> => {
+  const func = funcionario?.trim() || null;
+  const payload = func
+    ? { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName, p_funcionario: func }
+    : { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName };
   try {
-    const { error } = await supabase.rpc('open_table_manually_secure', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
-    if (error) throw error;
+    const { error } = await supabase.rpc(func ? 'open_table_manually_v2' : 'open_table_manually_secure', payload);
+    if (error) {
+      if (func && (error as { code?: string }).code === 'PGRST202') throw new Error('O servidor ainda não tem a mesa de funcionário. Atualize o sistema.');
+      throw error;
+    }
     return { queued: false };
   } catch (e) {
     if (!isNetworkError(e)) throw e;
-    await enqueue('open_table_manually', { p_table_id: tableId, p_store_id: storeId, p_host_name: hostName });
+    await enqueue('open_table_manually', payload);
     return { queued: true };
   }
 };
@@ -2046,6 +2054,9 @@ export interface CashShiftSummary {
   canceled_items_count?: number;
   refunded_count?: number;
   refunded_total?: number;
+  /** Consumo de funcionário (migration 174): já incluso no faturado, mostrado à parte. */
+  staff_count?: number;
+  staff_total?: number;
   accounts?: CashShiftConta[];
   products?: { nome: string; categoria: string; quantidade: number; total: number }[];
   movements?: { tipo: 'sangria' | 'suprimento'; valor: number; motivo: string | null; quando: string }[];
@@ -2054,7 +2065,7 @@ export interface CashShiftSummary {
 export interface CashShiftConta {
   quando: string; mesa: string | null; tipo: 'mesa' | 'balcao'; operador: string | null;
   itens: number; desconto: number; taxa: number; outras: number; excesso: number; cortesia: number; recebido: number;
-  cancelado: number; estornada: boolean; formas: { method: string; brand: string | null; amount: number }[];
+  cancelado: number; estornada: boolean; funcionario?: string | null; formas: { method: string; brand: string | null; amount: number }[];
 }
 
 // Task 13 (fix offline): mesmo padrão de `fetchOpenCashShift` acima — só

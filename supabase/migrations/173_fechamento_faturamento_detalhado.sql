@@ -7,6 +7,7 @@
 --  3) 30 contas fechadas em zero (tudo cancelado) contavam como "conta paga" e derrubavam o ticket médio.
 --  4) cupom de desconto não era descontado da base, escondendo a taxa da conta com cupom.
 --  5) venda estornada (status canceled) continuava somando.
+--  7) consumo de funcionário (mesa aberta como funcionário, migration 174) aparece à parte.
 --  6) a mesma conta contava 2x quando um dos pedidos da mesa ganhava marcas internas depois do pagamento
 --     (op_enviada_em, faturamento_enviado_em...): o agrupamento usava o payment_details inteiro. Turno de 02/10:
 --     mesa 22 (R$ 487,08) somada duas vezes. Agora a chave é só o que identifica o pagamento (_chave_conta_paga),
@@ -126,6 +127,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
       'table_id', t2.table_id, 'mesa', (select tb.number::text from tables tb where tb.id = t2.table_id),
       'tipo', t2.tipo, 'estornada', t2.estornada, 'quando', t2.quando, 'operador', t2.pd->>'operador_nome', 'pd', t2.pd,
+      'funcionario', t2.pd->>'funcionario',
       'itens', t2.itens, 'qtd_itens', t2.qtd_itens, 'desconto', t2.desconto, 'outras', t2.outras,
       'cancel_valor', t2.cancel_valor, 'cancel_qtd', t2.cancel_qtd, 'bruto', t2.bruto, 'recebido', t2.recebido, 'cortesia', t2.cortesia,
       'taxa', case when t2.recebido > 0 then round(t2.taxa_auto_ok + t2.taxa_item, 2) else 0 end,
@@ -136,17 +138,17 @@ begin
   -- Formas de pagamento e bandeiras (cortesia fica em totals_by_method como COURTESY, mostrada à parte).
   select coalesce(jsonb_object_agg(method, total), '{}'::jsonb) into v_totals_by_method
   from (select m->>'method' as method, sum((m->>'amount')::numeric) as total
-          from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric), jsonb_array_elements(c.pd->'methods') m
+          from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, funcionario text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric), jsonb_array_elements(c.pd->'methods') m
          where not c.estornada group by 1) t;
 
   select coalesce(jsonb_object_agg(brand, total), '{}'::jsonb) into v_totals_by_brand
   from (select m->>'brand' as brand, sum((m->>'amount')::numeric) as total
-          from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric), jsonb_array_elements(c.pd->'methods') m
+          from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, funcionario text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric), jsonb_array_elements(c.pd->'methods') m
          where not c.estornada and m->>'method' in ('CREDIT', 'DEBIT') and m->>'brand' is not null group by 1) t;
 
   select coalesce(jsonb_object_agg(k, total), '{}'::jsonb) into v_totals_by_card
   from (select (m->>'method') || '|' || coalesce(m->>'brand', '') as k, sum((m->>'amount')::numeric) as total
-          from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric), jsonb_array_elements(c.pd->'methods') m
+          from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, funcionario text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric), jsonb_array_elements(c.pd->'methods') m
          where not c.estornada and m->>'method' in ('CREDIT', 'DEBIT') group by 1) t;
 
   select
@@ -166,17 +168,19 @@ begin
     coalesce(sum(cancel_valor) filter (where not estornada), 0) as cancel_valor,
     coalesce(sum(cancel_qtd) filter (where not estornada), 0) as cancel_qtd,
     count(*) filter (where estornada) as estornadas,
+    count(*) filter (where not estornada and funcionario is not null and bruto > 0) as func_qtd,
+    coalesce(sum(recebido) filter (where not estornada and funcionario is not null), 0) as func_valor,
     coalesce(sum(bruto) filter (where estornada), 0) as estornadas_valor
-  into v_res from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric);
+  into v_res from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, funcionario text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric);
 
   select coalesce(jsonb_agg(jsonb_build_object(
       'quando', quando, 'mesa', mesa, 'tipo', tipo, 'operador', operador, 'itens', itens, 'desconto', desconto,
       'taxa', taxa, 'outras', outras, 'excesso', excesso, 'cortesia', cortesia, 'recebido', recebido,
-      'cancelado', cancel_valor, 'estornada', estornada,
+      'cancelado', cancel_valor, 'estornada', estornada, 'funcionario', funcionario,
       'formas', (select coalesce(jsonb_agg(jsonb_build_object('method', m->>'method', 'brand', m->>'brand', 'amount', (m->>'amount')::numeric)), '[]'::jsonb)
                    from jsonb_array_elements(pd->'methods') m)
     ) order by quando), '[]'::jsonb)
-    into v_contas from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric) where bruto > 0 or estornada;
+    into v_contas from jsonb_to_recordset(v_rows) as c(tipo text, mesa text, funcionario text, estornada boolean, quando timestamptz, operador text, pd jsonb, itens numeric, qtd_itens numeric, desconto numeric, outras numeric, cancel_valor numeric, cancel_qtd numeric, bruto numeric, recebido numeric, cortesia numeric, taxa numeric, excesso numeric) where bruto > 0 or estornada;
 
   select coalesce(jsonb_agg(jsonb_build_object('nome', nome, 'categoria', categoria, 'quantidade', qtd, 'total', total)
            order by categoria, total desc, nome), '[]'::jsonb)
@@ -243,6 +247,9 @@ begin
     'canceled_items_count', v_res.cancel_qtd,
     'refunded_count', v_res.estornadas,
     'refunded_total', round(v_res.estornadas_valor, 2),
+    -- 174: consumo de funcionário (já incluso no faturado; mostrado à parte)
+    'staff_count', v_res.func_qtd,
+    'staff_total', round(v_res.func_valor, 2),
     'accounts', v_contas,
     'products', v_produtos,
     'movements', v_movimentos

@@ -36,6 +36,11 @@ export function FaturamentoDoTurno({ resumo }: { resumo: CashShiftSummary }) {
           {d.cortesiaParcial > 0.005 && <Linha rotulo="Cortesia em conta paga" valor={d.cortesiaParcial} sinal="− " />}
           <Linha rotulo="Total faturado" valor={d.faturado} forte />
         </div>
+        {d.funcionarios.qtd > 0 && (
+          <p className="text-[13px] text-[var(--text-muted)]">
+            Consumo de funcionários (já incluso): R$ {formatBRL(d.funcionarios.total)} em {d.funcionarios.qtd} {d.funcionarios.qtd === 1 ? 'conta' : 'contas'}.
+          </p>
+        )}
         {d.cortesia.total > 0.005 && (
           <p className="text-[13px] text-[var(--warn)]">
             Cortesia: R$ {formatBRL(d.cortesia.total)} em {d.cortesia.contas} {d.cortesia.contas === 1 ? 'conta' : 'contas'}. Não entra no faturamento.
@@ -95,7 +100,7 @@ export function FaturamentoDoTurno({ resumo }: { resumo: CashShiftSummary }) {
                   {d.contas.map((c, i) => (
                     <tr key={i} className={c.estornada ? 'opacity-60 line-through' : ''}>
                       <td className="px-3 py-2 num whitespace-nowrap">{hora(c.quando)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{c.tipo === 'balcao' ? 'Balcão' : `Mesa ${c.mesa ?? '?'}`}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{c.tipo === 'balcao' ? 'Balcão' : `Mesa ${c.mesa ?? '?'}`}{c.funcionario ? <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-[var(--info)]/10 text-[var(--info)] text-[11px] font-semibold">Funcionário</span> : null}</td>
                       <td className="px-3 py-2 text-[var(--text-muted)]">
                         {(c.formas as { method: string; brand?: string | null }[]).map((f) => `${getPaymentMethodLabel(f.method)}${f.brand ? ` ${getCardBrandLabel(f.brand)}` : ''}`).join(' + ') || '—'}
                       </td>

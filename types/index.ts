@@ -191,6 +191,8 @@ export interface Table {
   standby?: boolean;
   standby_de?: string | null;
   standby_em?: string | null;
+  // Mesa de funcionário (migration 174): nome de quem consome; null = mesa normal.
+  funcionario?: string | null;
 }
 
 export interface Category {

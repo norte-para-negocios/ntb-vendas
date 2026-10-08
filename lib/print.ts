@@ -921,7 +921,9 @@ export function buildCashClosingText(opts: {
     if (dt.outras > 0.005) lines.push(linha('(+) Outras taxas', dt.outras));
     if (dt.excesso > 0.005) lines.push(linha('(+) Pago a mais (gorjeta)', dt.excesso));
     if (dt.cortesiaParcial > 0.005) lines.push(linha('(-) Cortesia em conta paga', -dt.cortesiaParcial));
-    lines.push(linha('= Total faturado', dt.faturado), simples);
+    lines.push(linha('= Total faturado', dt.faturado));
+    if (dt.funcionarios.qtd > 0) lines.push(esqDir(`  Consumo funcionarios (${dt.funcionarios.qtd})`, formatBRL(dt.funcionarios.total), W));
+    lines.push(simples);
   }
 
   if (opts.cartoes.length > 0) {
@@ -982,7 +984,7 @@ export function buildCashClosingText(opts: {
     lines.push(dupla, centralizar('CONTAS DO TURNO', W), simples);
     dt.contas.forEach((c) => {
       const h = new Date(c.quando).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      const onde = c.tipo === 'balcao' ? 'Balcao' : `Mesa ${c.mesa ?? '?'}`;
+      const onde = `${c.tipo === 'balcao' ? 'Balcao' : `Mesa ${c.mesa ?? '?'}`}${c.funcionario ? ' FUNC' : ''}`;
       const formas = c.formas.map((f) => rotuloFormaCurta(f.method)).join('+') || '-';
       lines.push(esqDir(`${h} ${onde} ${formas}`.slice(0, W - 11), c.estornada ? 'ESTORNADA' : formatBRL(c.recebido), W));
       const partes = [`itens ${formatBRL(c.itens)}`];
@@ -1019,8 +1021,9 @@ export interface DetalheFechamento {
   cortesiaParcial: number; faturado: number;
   cortesia: { total: number; contas: number };
   cancelados: { qtd: number; total: number }; zeradas: number; estornadas: { qtd: number; total: number };
+  funcionarios: { qtd: number; total: number };
   movimentos: { tipo: 'sangria' | 'suprimento'; valor: number; motivo: string | null; quando: string }[];
-  contas: { quando: string; mesa: string | null; tipo: 'mesa' | 'balcao'; itens: number; desconto: number; taxa: number; outras: number; excesso: number; cortesia: number; recebido: number; cancelado: number; estornada: boolean; formas: { method: string }[] }[];
+  contas: { quando: string; mesa: string | null; tipo: 'mesa' | 'balcao'; funcionario?: string | null; itens: number; desconto: number; taxa: number; outras: number; excesso: number; cortesia: number; recebido: number; cancelado: number; estornada: boolean; formas: { method: string }[] }[];
   produtos: { nome: string; categoria: string; quantidade: number; total: number }[];
 }
 

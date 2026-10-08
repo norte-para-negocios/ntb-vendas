@@ -2705,3 +2705,25 @@ Pedido do dono: "se alguém pediu conta, a mesa fica em stand-by, porém já pod
   "Adicionar Pedido", "Trocar" nem "Trocar responsável". Precisa de internet (não entra na fila offline).
 - **Testado** em produção na ODARA (07/10): 2 contas aguardando + 3ª sessão na mesma mesa; as 3 recebidas, cada uma com a sua NFC-e de
   homologação (nº 15, 16, 17), baixa `ok` e a sua venda no Estoque (taxa certa). Capturas em `docs/qa/2026-10-07-mesa-standby/`.
+
+## Faturamento certo e fechamento destrinchado (08/10/2026, migration 173)
+
+Achados nos dados reais do Sertão: a taxa de 10% sumia dos relatórios (payment_details.total não inclui a taxa em várias contas;
+turno 04/10 mostrava 418,95 de taxa contra 666,88 reais), a cortesia entrava no total vendido, contas fechadas em zero (tudo
+cancelado) contavam como venda e a mesma conta somava 2x quando um pedido da mesa ganhava marcas internas (op_enviada_em...).
+- **Regra única** (`lib/faturamento.ts`, teste `faturamento.test.ts`, espelho de `fetch_cash_shift_summary_secure` da 173):
+  valor da venda = soma das formas de pagamento SEM cortesia; conta = `_chave_conta_paga` (payment_id, senão mesa + formas + total
+  + operador + turno; nunca o payment_details inteiro). Cada conta fecha: itens − desconto + taxa + outras taxas + pago a mais −
+  cortesia = recebido. Taxa automática vai até o % da loja; acima disso é "pago a mais" (gorjeta/troco não dado).
+- `getOrderDisplayTotal` passou a usar essa regra; relatórios usam `fetchVendasPorConta` (pedidos da mesma conta juntos). "Pedidos
+  do Dia" continua com `fetchSalesHistory` cru (pedido a pedido).
+- Caixa: `FaturamentoDoTurno` (fechamento, histórico de turnos e Relatórios), botão "Reimprimir fechamento" no histórico,
+  impressão térmica com faturamento, cortesia, cancelamentos, sangrias, contas e produtos (`dadosDoFechamento` em `lib/caixaResumo.ts`).
+- Nota fiscal já estava certa (taxa como item 90875 no XML do Sertão).
+
+## Mesa de funcionário (08/10/2026, migration 174)
+
+`open_table_manually_v2(mesa, loja, nome, funcionario)`: abre a mesa marcada (`tables.funcionario`, `table_sessions.funcionario`) e
+sem a taxa automática (`service_fee_removed = true`; o caixa pode religar). A marca some quando a mesa volta a livre/fechada (trigger).
+O pagamento grava `payment_details.funcionario`; o fechamento do turno mostra "Consumo de funcionários" (`staff_count/staff_total`),
+o Histórico mostra o selo. Limite: liberar a mesa (conta aguardando, 172) não leva a marca para a conta aguardando.

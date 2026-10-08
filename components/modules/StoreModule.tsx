@@ -87,7 +87,7 @@ import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
-import { decomporVenda, configTaxaDaLoja } from '@/lib/faturamento';
+import { decomporVenda, configTaxaDaLoja, cortesiaDaVenda } from '@/lib/faturamento';
 import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
@@ -3041,7 +3041,9 @@ const TablesView: React.FC<{
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const tableVisualMemo: TableVisualMemo = useRef(new Map<string, { status: string; color: string }>());
     const [hostNameInput, setHostNameInput] = useState('');
-    useEffect(() => { setHostNameInput(''); }, [selectedTable?.id]);
+    // Mesa de funcionário (migration 174): marca a mesa e o pagamento; a taxa automática começa desligada.
+    const [mesaFuncionario, setMesaFuncionario] = useState(false);
+    useEffect(() => { setHostNameInput(''); setMesaFuncionario(false); }, [selectedTable?.id]);
     const [showFullBill, setShowFullBill] = useState(false);
     
     // Menu Mode State
@@ -4128,6 +4130,8 @@ NOTIFY pgrst, 'reload schema';`;
                 operador_id: loggedUser.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal && vendaTemCobranca({ total: summary.total }) } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
+                // Consumo de funcionário (migration 174): separado no fechamento do turno e no histórico.
+                ...(selectedTable.funcionario ? { funcionario: selectedTable.funcionario } : {}),
             };
 
             // Destinatário (Task 17) — opcional mesmo em modelo NF-e; deixado
@@ -4932,6 +4936,9 @@ NOTIFY pgrst, 'reload schema';`;
                             {/* Cliente embaixo do cabeçalho (pedido do dono, 2026-08-29). */}
                             {isOccupied && (
                                 <div className="flex items-center gap-1 text-[13px] text-[var(--text-muted)] mt-0.5 min-w-0">
+                                    {table.funcionario && (
+                                        <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-[var(--info)]/10 text-[var(--info)] text-[11px] font-semibold">Funcionário</span>
+                                    )}
                                     <span className="truncate">{table.current_host_name || 'Lojista'}</span>
                                     {watchedTables.has(table.id) && (
                                         <span title="Cliente acompanhando o pedido agora" className="shrink-0 text-[var(--info)] flex items-center">
@@ -5150,6 +5157,9 @@ NOTIFY pgrst, 'reload schema';`;
                         {selectedTable?.status !== 'available' && (
                             <span className="font-medium text-[var(--text)] truncate">{selectedTable?.current_host_name || 'Lojista'}</span>
                         )}
+                        {selectedTable?.funcionario && selectedTable?.status !== 'available' && (
+                            <span className="px-2 py-0.5 rounded-full bg-[var(--info)]/10 text-[var(--info)] text-[13px] font-semibold">Mesa de funcionário</span>
+                        )}
                         <span className="inline-flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full" style={{ background: selectedTable?.status === 'available' ? 'var(--ok)' : (selectedTable?.status === 'waiting_bill' || selectedTable?.status === 'standby') ? 'var(--warn)' : 'var(--brand)' }} aria-hidden />
                             {getTableStatusLabel(selectedTable?.status || 'occupied')}
@@ -5317,9 +5327,21 @@ NOTIFY pgrst, 'reload schema';`;
                              )}
                              {selectedTable?.status === 'available' && (
                                 <>
+                                <label className="flex items-center gap-3 min-h-[48px] px-4 rounded-[var(--r-md)] bg-[var(--surface-2)] cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="w-5 h-5 accent-[var(--brand)]"
+                                        checked={mesaFuncionario}
+                                        onChange={e => setMesaFuncionario(e.target.checked)}
+                                    />
+                                    <span className="flex-1">
+                                        <span className="block text-[15px] font-semibold text-[var(--text)]">Mesa de funcionário</span>
+                                        <span className="block text-[13px] text-[var(--text-muted)]">Fica marcada como consumo de funcionário, sem a taxa de serviço</span>
+                                    </span>
+                                </label>
                                 <Input
-                                    label="Nome do cliente (opcional)"
-                                    placeholder="Ex.: Família Silva"
+                                    label={mesaFuncionario ? 'Nome do funcionário' : 'Nome do cliente (opcional)'}
+                                    placeholder={mesaFuncionario ? `Ex.: ${loggedUser.name}` : 'Ex.: Família Silva'}
                                     maxLength={40}
                                     value={hostNameInput}
                                     onChange={e => setHostNameInput(e.target.value)}
@@ -5327,6 +5349,7 @@ NOTIFY pgrst, 'reload schema';`;
                                 <Button size="lg" className="w-full !h-14 !rounded-[16px] text-[17px]" onClick={async () => {
                                     if(selectedTable) {
                                         const hostName = hostNameInput.trim() || loggedUser.name;
+                                        const funcionario = mesaFuncionario ? hostName : null;
                                         const previousTable = selectedTable;
 
                                         // 1. UPDATE LOCAL STATE IMMEDIATELY (Visual Feedback) — atualiza o
@@ -5334,14 +5357,14 @@ NOTIFY pgrst, 'reload schema';`;
                                         // card por trás continua mostrando "Disponível" até sincronizar de
                                         // verdade (achado real, WhatsApp 2026-09-09: offline, parecia que o
                                         // clique não tinha feito nada).
-                                        const optimisticTable = { ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: hostName };
+                                        const optimisticTable = { ...selectedTable, status: TableStatus.OCCUPIED, current_host_name: hostName, funcionario, ...(funcionario ? { service_fee_removed: true } : {}) };
                                         setSelectedTable(optimisticTable);
                                         setTables(prev => prev.map(t => t.id === optimisticTable.id ? optimisticTable : t));
 
                                         try {
                                             // 2. CALL API (grava a sessão de ocupação também, senão mesas abertas
                                             // pelo lojista nunca entram na métrica de tempo médio)
-                                            const { queued } = await openTableManually(selectedTable.id, store.id, hostName);
+                                            const { queued } = await openTableManually(selectedTable.id, store.id, hostName, funcionario);
 
                                             // 3. REFRESH DATA — só quando a mesa abriu de verdade no servidor
                                             // agora (`!queued`). Se caiu na fila offline, `loadData()` cairia no
@@ -5363,11 +5386,11 @@ NOTIFY pgrst, 'reload schema';`;
                                             // Reverte o update otimista em caso de falha
                                             setSelectedTable(previousTable);
                                             setTables(prev => prev.map(t => t.id === previousTable.id ? previousTable : t));
-                                            toast.error("Erro ao abrir mesa. Tente novamente.");
+                                            toast.error(e instanceof Error && /funcion/.test(e.message) ? e.message : "Erro ao abrir mesa. Tente novamente.");
                                         }
                                     }
                                 }}>
-                                    Abrir Mesa Manualmente
+                                    {mesaFuncionario ? 'Abrir mesa de funcionário' : 'Abrir Mesa Manualmente'}
                                 </Button>
                                 </>
                             )}
@@ -12552,6 +12575,12 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                                             <Badge color="bg-[var(--warn)]/12 text-[var(--warn)]">Balcão</Badge>
                                                         ) : (
                                                             <Badge color="bg-[var(--surface-2)] text-[var(--text)]">Mesa</Badge>
+                                                        )}
+                                                        {(order.payment_details as { funcionario?: string } | null)?.funcionario && (
+                                                            <Badge color="bg-[var(--info)]/10 text-[var(--info)] ml-1">Funcionário</Badge>
+                                                        )}
+                                                        {getOrderDisplayTotal(order) <= 0 && cortesiaDaVenda(order as never) > 0 && (
+                                                            <Badge color="bg-[var(--warn)]/12 text-[var(--warn)] ml-1">Cortesia</Badge>
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3 font-medium text-[var(--text)]">

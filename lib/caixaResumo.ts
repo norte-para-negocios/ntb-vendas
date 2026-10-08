@@ -70,6 +70,7 @@ export function detalheDoResumo(r: CashShiftSummary): DetalheFechamento | null {
     cortesia: { total: n(r.courtesy_total), contas: n(r.courtesy_count) },
     cancelados: { qtd: n(r.canceled_items_count), total: n(r.canceled_items_total) }, zeradas: n(r.zeroed_count),
     estornadas: { qtd: n(r.refunded_count), total: n(r.refunded_total) },
+    funcionarios: { qtd: n(r.staff_count), total: n(r.staff_total) },
     movimentos: (r.movements ?? []).map((m) => ({ ...m, valor: n(m.valor) })),
     contas: (r.accounts ?? []).map((c) => ({ ...c, itens: n(c.itens), desconto: n(c.desconto), taxa: n(c.taxa), outras: n(c.outras), excesso: n(c.excesso), cortesia: n(c.cortesia), recebido: n(c.recebido), cancelado: n(c.cancelado), formas: c.formas ?? [] })),
     produtos: (r.products ?? []).map((p) => ({ ...p, quantidade: n(p.quantidade), total: n(p.total) })),
