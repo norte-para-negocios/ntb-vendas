@@ -42,8 +42,8 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   if ((ehLeitura || ehSenhaPedido) && off && Date.now() - off < OFFLINE_FLAG_MS && url.includes('/rest/v1/') && !url.endsWith('/rest/v1/')) {
     return Promise.reject(new TypeError('Failed to fetch (offline detectado)'));
   }
-  // Qualquer resposta do servidor prova que a rede está de pé: limpa o aviso.
-  const limpaAviso = (r: Response) => { delete (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt; return r; };
+  // Qualquer resposta do servidor prova que a rede está de pé: limpa o aviso e anota o último contato.
+  const limpaAviso = (r: Response) => { const g = globalThis as { __ntbOfflineAt?: number; __ntbUltimoOk?: number }; delete g.__ntbOfflineAt; g.__ntbUltimoOk = Date.now(); return r; };
   if (!url.includes('/rest/v1/')) return fetch(input, init);
   // Login: teto próprio (o spinner nunca fica infinito), sem bloquear por aviso de offline.
   const ehLogin = url.includes('/rest/v1/rpc/authenticate_') || ehSenhaPedido;
@@ -53,6 +53,16 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   // (20 a 70 s) e a mesa "voltava a ficar livre" na tela. Nada foi enviado, então não há risco de duplicar.
   if (!ehLeitura && !ehLogin) {
     if (off && Date.now() - off < OFFLINE_FLAG_MS) return Promise.reject(new TypeError('Failed to fetch (offline detectado)'));
+    // Sem contato com o servidor há mais de 3 s (a internet pode ter acabado de cair): teste rápido ANTES de mandar.
+    // Sem resposta em 1,5 s = não manda (vai para a fila do aparelho); antes a gravação saía e ficava pendurada até o
+    // tempo-limite do sistema (achado 08/10/2026 no fechamento de mesa). Com internet o vigia mantém o contato recente.
+    const ultimoOk = (globalThis as { __ntbUltimoOk?: number }).__ntbUltimoOk ?? 0;
+    if (Date.now() - ultimoOk > 3000) {
+      return pingRapido().then((ok) => {
+        if (!ok) { (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now(); throw new TypeError('Failed to fetch (servidor sem resposta)'); }
+        return fetch(input, init).then(limpaAviso);
+      });
+    }
     return fetch(input, init).then(limpaAviso);
   }
   const controller = new AbortController();
@@ -67,6 +77,16 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   };
   return fetch(input, { ...init, signal: controller.signal }).then(limpaAviso, marcaSemInternet).finally(() => clearTimeout(timer));
 };
+
+async function pingRapido(): Promise<boolean> {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 1500);
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/`, { method: 'HEAD', signal: c.signal, cache: 'no-store', headers: { apikey: supabaseKey } });
+    (globalThis as { __ntbUltimoOk?: number }).__ntbUltimoOk = Date.now();
+    return true;
+  } catch { return false; } finally { clearTimeout(t); }
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey, { global: { fetch: fetchComFalhaRapida } });
 

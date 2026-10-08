@@ -171,10 +171,11 @@ export const updateStoreCoverUrl = async (storeId: string, coverUrl: string | nu
 export type MotivoFalhaLogin = 'network' | 'locked' | 'wrong' | 'store_inactive';
 export const authenticateStoreUser = async (email: string, password: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string; reason?: MotivoFalhaLogin }> => {
   try {
-    const chamada = supabase.rpc('authenticate_store_user_secure', {
+    // Promise.resolve: dispara o login UMA vez (o construtor do supabase executa de novo a cada `then`, e contaria 2 tentativas).
+    const chamada = Promise.resolve(supabase.rpc('authenticate_store_user_secure', {
       p_email: email,
       p_password: password,
-    });
+    }));
     // Servidor sem responder em 3 s e a senha confere com a guardada neste aparelho: entra na hora, sem internet
     // (08/10/2026). Sem senha guardada, continua esperando o servidor como sempre.
     const corrida = await Promise.race([chamada, new Promise<'lento'>((ok) => setTimeout(() => ok('lento'), 3000))]);
@@ -1933,7 +1934,16 @@ export interface CashShift {
 // tratamento de sempre, ver openCashShift abaixo).
 export const fetchOpenCashShift = async (storeId: string, operatorUserId: string | null): Promise<CashShift | null> => {
   try {
-    const { data, error } = await supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId });
+    // Servidor sem responder em 1,5 s e com turno guardado no aparelho: usa o guardado (08/10/2026: receber a conta logo
+    // depois de a internet cair esperava 6 s só por isto). Sem cópia guardada, espera o servidor.
+    // Promise.resolve: dispara a chamada UMA vez (o construtor do supabase executa de novo a cada `then`).
+    const chamada = Promise.resolve(supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId }));
+    const corrida = await Promise.race([chamada, new Promise<'lento'>((ok) => setTimeout(() => ok('lento'), 1500))]);
+    if (corrida === 'lento') {
+      const guardado = await getCachedCashShift(storeId, operatorUserId).catch(() => null);
+      if (guardado?.shift) return guardado.shift as CashShift;
+    }
+    const { data, error } = corrida === 'lento' ? await chamada : corrida;
     if (error) throw error;
     const shift = (data as CashShift) || null;
     // Fire-and-forget: cacheia o resultado real (inclusive `null`, que
@@ -3144,15 +3154,21 @@ export const setImpressaoPausada = async (storeId: string, pausada: boolean): Pr
 };
 
 // Existe impressora física ativa que recebe este tipo de documento? (respeita a config "documentos" da impressora)
+// Impressoras de rede/USB guardadas no aparelho (sem internet, ou servidor demorando mais de 1,5 s).
+const impressorasDoAparelho = (storeId: string) => readCachedPrinters(storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb'));
+async function lerComTeto<T>(chamada: PromiseLike<{ data: T | null; error: unknown }>): Promise<{ data: T | null; error: unknown }> {
+  return Promise.race([Promise.resolve(chamada), new Promise<{ data: null; error: TypeError }>((ok) => setTimeout(() => ok({ data: null, error: new TypeError('Failed to fetch (sem resposta em 1,5 s)') }), 1500))]);
+}
 export const hasActivePrinterForDoc = async (storeId: string, doc: DocPrint): Promise<boolean> => {
-  const { data, error } = await supabase
+  const { data, error } = await lerComTeto(supabase
     .from('printer_configs')
     .select('destination, documentos')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .in('connection_type', ['network', 'usb']);
-  if (error) { console.error('hasActivePrinterForDoc falhou:', error); return false; }
-  const lista = (data || []) as { destination: string; documentos?: string[] | null }[];
+    .in('connection_type', ['network', 'usb']));
+  // Sem internet (08/10/2026): antes respondia "não tem impressora" e o comprovante ia para a janela do navegador em vez
+  // da impressora do caixa. Agora decide pelas impressoras guardadas no aparelho.
+  const lista = (error ? impressorasDoAparelho(storeId) : (data || [])) as { destination: string; documentos?: string[] | null }[];
   // Se alguma impressora já teve "documentos" configurado, o operador assumiu o controle de onde sai cada coisa:
   // um documento sem impressora marcada NÃO deve abrir a janela de impressão do navegador a cada venda.
   return lista.some((p) => impressoraRecebe(p, doc)) || lista.some((p) => p.documentos && p.documentos.length > 0);
@@ -3162,16 +3178,17 @@ export const hasActivePrinterForDestination = async (
   storeId: string,
   destination: 'receipt' | 'kitchen' | 'bar',
 ): Promise<boolean> => {
-  const { data, error } = await supabase
+  const { data, error } = await lerComTeto(supabase
     .from('printer_configs')
     .select('id')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .in('connection_type', ['network', 'usb'])
     .in('destination', [destination, 'all'])
-    .limit(1);
-  if (error) { console.error('hasActivePrinterForDestination falhou:', error); return false; }
-  return (data || []).length > 0;
+    .limit(1));
+  // Sem internet: decide pelas impressoras guardadas no aparelho (antes dizia "não tem").
+  if (error) return impressorasDoAparelho(storeId).some((p) => p.destination === destination || p.destination === 'all');
+  return ((data as unknown[]) || []).length > 0;
 };
 
 // Achado ao vivo, loja Sertão (2026-09-15): a reunião de 2026-09-10 pedia

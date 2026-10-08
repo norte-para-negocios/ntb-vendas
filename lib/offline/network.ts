@@ -50,6 +50,7 @@ async function pingUmaVez(timeoutMs: number): Promise<boolean> {
       cache: 'no-store',
       headers: { apikey: supabaseKeyForConnectivityCheck },
     });
+    (globalThis as { __ntbUltimoOk?: number }).__ntbUltimoOk = Date.now();
     return true;
   } catch {
     return false;
