@@ -3936,3 +3936,18 @@ export const toggleItemPriority = async (itemId: string): Promise<{ success: boo
   if (error || data === false) return { success: false };
   return { success: true };
 };
+
+/** Diagnóstico do login sem internet: este computador tem a senha guardada desta conta? (08/10/2026) */
+export async function situacaoLoginSemInternet(email: string, senha: string): Promise<'sem-copia' | 'senha-diferente' | 'ok'> {
+  const e = email.trim().toLowerCase();
+  const loja = lerLoginsGuardados().find((x) => x.email === e);
+  const univ = lerLoginsUniversaisGuardados().find((x) => x.email === e);
+  if (!loja && !univ) return 'sem-copia';
+  for (const g of [loja, univ]) if (g && (await derivarSenha(senha, g.salt)) === g.hash) return 'ok';
+  return 'senha-diferente';
+}
+/** Já existe cópia da senha desta conta neste computador? */
+export function temCopiaDeLogin(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return lerLoginsGuardados().some((x) => x.email === e) || lerLoginsUniversaisGuardados().some((x) => x.email === e);
+}
