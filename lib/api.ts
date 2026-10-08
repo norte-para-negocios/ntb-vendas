@@ -1,3 +1,4 @@
+import { agruparPorConta } from './faturamento';
 import type { PriceSchedule } from '@/lib/priceSchedule';
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
 import { cabecalhosApi } from '@/lib/atorAtual';
@@ -1282,6 +1283,17 @@ export const fetchSalesHistory = async (
   return (data as any) || [];
 };
 
+/**
+ * Vendas fechadas UMA linha por conta paga (pedidos da mesma conta juntos, ver lib/faturamento.ts). É o que todo
+ * relatório de faturamento usa; `fetchSalesHistory` cru continua para quem precisa do pedido individual (Pedidos do Dia).
+ */
+export const fetchVendasPorConta = async (
+  storeId: string,
+  startDate?: string,
+  endDate?: string,
+  onError?: (error: unknown) => void,
+): Promise<Order[]> => agruparPorConta(await fetchSalesHistory(storeId, startDate, endDate, onError));
+
 export const fetchCanceledSales = async (storeId: string, startDate?: string, endDate?: string): Promise<VendasCanceladas | null> => {
   const { data, error } = await supabase.rpc('fetch_canceled_sales_secure', {
     p_store_id: storeId,
@@ -2017,6 +2029,32 @@ export interface CashShiftSummary {
   service_fee_count?: number;
   /** Cada produto-taxa lançado no turno (migration 139). Ausente antes dela. */
   fees_by_product?: Record<string, { tipo: 'fixed' | 'percent'; quantidade: number; total: number }>;
+  // Migration 173 (08/10/2026): faturamento destrinchado. Ausentes antes dela.
+  // itens - desconto + taxa + outras taxas + pago a mais - cortesia (parcial) = payments_total.
+  items_total?: number;
+  items_count?: number;
+  discount_total?: number;
+  other_fees_total?: number;
+  overpaid_total?: number;
+  /** Cortesia do turno (não é faturamento). courtesy_partial_total = só a das contas que também tiveram pagamento. */
+  courtesy_total?: number;
+  courtesy_partial_total?: number;
+  courtesy_count?: number;
+  /** Contas fechadas em zero (tudo cancelado). */
+  zeroed_count?: number;
+  canceled_items_total?: number;
+  canceled_items_count?: number;
+  refunded_count?: number;
+  refunded_total?: number;
+  accounts?: CashShiftConta[];
+  products?: { nome: string; categoria: string; quantidade: number; total: number }[];
+  movements?: { tipo: 'sangria' | 'suprimento'; valor: number; motivo: string | null; quando: string }[];
+}
+
+export interface CashShiftConta {
+  quando: string; mesa: string | null; tipo: 'mesa' | 'balcao'; operador: string | null;
+  itens: number; desconto: number; taxa: number; outras: number; excesso: number; cortesia: number; recebido: number;
+  cancelado: number; estornada: boolean; formas: { method: string; brand: string | null; amount: number }[];
 }
 
 // Task 13 (fix offline): mesmo padrão de `fetchOpenCashShift` acima — só

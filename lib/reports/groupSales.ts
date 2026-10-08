@@ -6,11 +6,11 @@ import { localDayAndMinutes } from '../priceSchedule';
 export type GroupBy = 'hour' | 'operator' | 'category' | 'method';
 export interface GroupRow { key: string; label: string; total: number; orders: number; ticket: number }
 
+import { valorFaturado, chaveContaPaga, CORTESIA } from '../faturamento';
+
 type Pd = { operador_nome?: string; methods?: { method: string; amount: number }[] } | null;
-const receivedOf = (o: Order): number => {
-  const m = (o.payment_details as Pd)?.methods;
-  return Array.isArray(m) ? m.reduce((s, x) => s + Number(x.amount), 0) : 0;
-};
+// Valor da conta = o que foi pago, sem cortesia (lib/faturamento.ts). Conta zerada/100% cortesia não é venda.
+const receivedOf = (o: Order): number => valorFaturado(o as never);
 
 export function groupSales(orders: Order[], by: GroupBy): GroupRow[] {
   const acc = new Map<string, { label: string; cents: number; orders: number }>();
@@ -32,10 +32,11 @@ export function groupSales(orders: Order[], by: GroupBy): GroupRow[] {
       return;
     }
     const pd = o.payment_details as Pd;
-    const conta = `${o.table_id ?? o.id}|${JSON.stringify(pd?.methods ?? [])}`;
+    const conta = chaveContaPaga(o as never);
     if (seen.has(conta)) return;
     seen.add(conta);
     const valor = receivedOf(o);
+    if (valor <= 0) return;
     if (by === 'hour') {
       const h = Math.floor(localDayAndMinutes(new Date(o.created_at), 'America/Bahia').minutes / 60);
       add(String(h).padStart(2, '0'), `${h}h`, valor, 1);
@@ -43,7 +44,7 @@ export function groupSales(orders: Order[], by: GroupBy): GroupRow[] {
       const nome = pd?.operador_nome || 'Sem operador';
       add(nome, nome, valor, 1);
     } else {
-      (pd?.methods ?? []).forEach((m) => add(m.method, getPaymentMethodLabel(m.method), Number(m.amount), 1));
+      (pd?.methods ?? []).filter((m) => m.method !== CORTESIA).forEach((m) => add(m.method, getPaymentMethodLabel(m.method), Number(m.amount), 1));
     }
   });
 

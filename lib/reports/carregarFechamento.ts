@@ -1,5 +1,5 @@
 // lib/reports/carregarFechamento.ts — busca tudo do dia (as mesmas funções de sempre) e devolve FechamentoData.
-import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchSalesHistory, fetchExceptionsReport, fetchMenu } from '../api';
+import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchVendasPorConta, fetchExceptionsReport, fetchMenu } from '../api';
 import { limitesDoDia, limitesDoPeriodo, rotuloPeriodo, turnosDoPeriodo, turnoParcial } from './dia';
 import type { FechamentoData, FechamentoTurno } from './fechamentoXlsx';
 
@@ -10,7 +10,7 @@ export async function carregarFechamento(p: { storeId: string; storeName: string
   const [ini, fim] = p.ate ? limitesDoPeriodo(p.dia, ate) : limitesDoDia(p.dia);
   const [turnosRows, vendas, exc, menu] = await Promise.all([
     fetchCashShiftsHistory(p.storeId, 200),
-    fetchSalesHistory(p.storeId, ini.toISOString(), fim.toISOString()),
+    fetchVendasPorConta(p.storeId, ini.toISOString(), fim.toISOString()),
     fetchExceptionsReport(p.storeId, ini, fim),
     fetchMenu(p.storeId, false, true),
   ]);

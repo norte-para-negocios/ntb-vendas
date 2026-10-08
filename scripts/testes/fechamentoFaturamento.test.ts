@@ -44,7 +44,7 @@ assert.equal(comNota.nota?.chave?.length, 44);
 
 // Taxa de serviço automática vira item quando a loja cobra e não há taxa lançada; não duplica se já foi lançada.
 const taxa = { codigo: '90875', nome: 'Taxa de Serviço', percentual: 10 };
-const auto = montarFechamento(pedido(), [item()], [], taxa);
+const auto = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CREDIT', amount: 30.8, brand: 'elo' }], operador_nome: 'Ana' } }), [item()], [], taxa);
 assert.equal(auto.itens.length, 2);
 assert.equal(auto.itens[1].codigo, '90875');
 assert.equal(auto.itens[1].valor, 2.8);
@@ -104,5 +104,21 @@ const meio = montarFechamento(pedido(), [item({ quantity: 1, price_at_time: 59, 
 assert.equal(meio.itens[0].codigo, '');
 assert.deepEqual(meio.itens[0].componentes, ['90013', '90014'], 'sem vazio nem repetido');
 assert.equal('componentes' in p.itens[0], false, 'item sem opção não manda componentes');
+
+// Taxa sai do que foi PAGO mesmo quando payment_details.total não inclui a taxa (Sertão 08/10: total 159,90, pago 170).
+const totalSemTaxa = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CREDIT', amount: 30.8 }], total: 28 } }), [item()], [], taxa);
+assert.equal(totalSemTaxa.taxa, 2.8);
+assert.equal(totalSemTaxa.valor, 30.8);
+
+// Cortesia não é faturamento: 100% cortesia chega com valor 0 e sem pagamento; parcial sai dos itens e da taxa.
+const toda = montarFechamento(pedido({ payment_details: { methods: [{ method: 'COURTESY', amount: 30.8 }], total: 30.8 } }), [item()], [], taxa);
+assert.equal(toda.valor, 0);
+assert.equal(toda.taxa, 0);
+assert.equal(toda.cortesia, 30.8);
+assert.equal(toda.pagamentos.length, 0);
+const parcial = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CASH', amount: 30 }, { method: 'COURTESY', amount: 0.8 }], total: 30.8 } }), [item()], [], taxa);
+assert.equal(parcial.valor, 30);
+assert.equal(parcial.pagamentos.length, 1);
+assert.equal(Math.round((parcial.itens.reduce((s, l) => s + l.valor, 0)) * 100) / 100, 30);
 
 console.log('fechamentoFaturamento: ok');

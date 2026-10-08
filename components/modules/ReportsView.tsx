@@ -1,15 +1,16 @@
 // components/modules/ReportsView.tsx
 'use client';
+import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import React, { useState } from 'react';
 import { Download, FileSpreadsheet, BarChart3, ListChecks, Printer } from 'lucide-react';
 import { printRelatorioDia, printTabela } from '@/lib/print';
 import { montarPainel } from '@/lib/reports/painelDia';
 import { Button, Card, Input } from '@/components/ui';
 import { toast } from '@/components/Toast';
-import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchSalesHistory, fetchMenu, type CashShiftSummary, type CashShiftHistoryRow } from '@/lib/api';
+import { fetchCashShiftsHistory, fetchCashShiftSummary, fetchVendasPorConta, fetchMenu, type CashShiftSummary, type CashShiftHistoryRow } from '@/lib/api';
 import { groupSales, type GroupBy, type GroupRow } from '@/lib/reports/groupSales';
 import { salesOfShift } from '@/lib/reports/shiftSales';
-import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResumo';
+import { completarFormas, completarCartoes, ticketMedio, formasSemCortesia } from '@/lib/caixaResumo';
 import { formatBRL } from '@/lib/calc';
 import type { Order } from '@/types';
 import { buildFechamentoWorkbook, fechamentoFileName } from '@/lib/reports/fechamentoXlsx';
@@ -30,7 +31,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
     setCarregandoAnalise(true);
     try {
       const [ini, fim] = limitesDoDia(dia);
-      const [vendas, menu] = await Promise.all([fetchSalesHistory(storeId, ini.toISOString(), fim.toISOString()), agrupar === 'category' ? fetchMenu(storeId, false, true) : Promise.resolve(null)]);
+      const [vendas, menu] = await Promise.all([fetchVendasPorConta(storeId, ini.toISOString(), fim.toISOString()), agrupar === 'category' ? fetchMenu(storeId, false, true) : Promise.resolve(null)]);
       const rows = groupSales(vendas, agrupar);
       setLinhas(menu ? rows.map((r) => ({ ...r, label: r.key === '_sem' ? r.label : menu.categories.find((c) => c.id === r.key)?.name ?? r.label })) : rows);
     } catch (e) {
@@ -53,7 +54,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
     setFormaAberta(null);
     try {
       const [ini, fim] = limitesDoDia(dia);
-      const [rows, vendas] = await Promise.all([fetchCashShiftsHistory(storeId, 200), fetchSalesHistory(storeId, ini.toISOString(), fim.toISOString())]);
+      const [rows, vendas] = await Promise.all([fetchCashShiftsHistory(storeId, 200), fetchVendasPorConta(storeId, ini.toISOString(), fim.toISOString())]);
       setTurnos(turnosDoPeriodo(rows, ini, fim));
       setVendasDia(vendas);
     } catch (e) {
@@ -118,10 +119,20 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
         linhas: [
           ['Contas pagas', String(r.payments_count ?? 0)],
           ['Ticket médio', ticket != null ? brl(ticket) : '—'],
-          ...completarFormas(r.totals_by_method).map((f) => [f.label, brl(f.total)]),
+          ...(r.items_total != null ? [
+            ['Itens vendidos', brl(Number(r.items_total) || 0)],
+            ...(Number(r.discount_total) > 0.005 ? [['(−) Descontos e cupons', brl(Number(r.discount_total))]] : []),
+            [`(+) Taxa de serviço (${r.service_fee_count ?? 0} contas)`, brl(Number(r.service_fee_total) || 0)],
+            ...(Number(r.other_fees_total) > 0.005 ? [['(+) Outras taxas', brl(Number(r.other_fees_total))]] : []),
+            ...(Number(r.overpaid_total) > 0.005 ? [['(+) Pago a mais (gorjeta)', brl(Number(r.overpaid_total))]] : []),
+            ...(Number(r.courtesy_partial_total) > 0.005 ? [['(−) Cortesia em conta paga', brl(Number(r.courtesy_partial_total))]] : []),
+            ...(Number(r.courtesy_total) > 0.005 ? [[`Cortesia (${r.courtesy_count ?? 0} contas, fora do faturamento)`, brl(Number(r.courtesy_total))]] : []),
+            ...(Number(r.canceled_items_count) > 0 ? [[`Itens cancelados (${r.canceled_items_count})`, brl(Number(r.canceled_items_total) || 0)]] : []),
+          ] : [['Taxa de serviço', brl(Number(r.service_fee_total) || 0)]]),
+          ...formasSemCortesia(r.totals_by_method).map((f) => [f.label, brl(f.total)]),
           ...completarCartoes(r.totals_by_card ?? {}).map((c) => [c.label, brl(c.total)]),
         ],
-        rodapeLinha: ['TOTAL RECEBIDO', brl(Number(r.payments_total) || 0)],
+        rodapeLinha: ['TOTAL FATURADO', brl(Number(r.payments_total) || 0)],
       }, metaDoDia());
       if (!ok) toast.error('Não consegui abrir a impressão.');
     } catch (e) {
@@ -266,6 +277,7 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
                 ))}
               </div>
             )}
+            <FaturamentoDoTurno resumo={turnoAberto.resumo} />
             {formaAberta && (() => {
               const lista = salesOfShift(vendasDia, turnoAberto.id, formaAberta);
               return (

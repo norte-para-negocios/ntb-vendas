@@ -21,7 +21,7 @@ export interface TaxaAutomatica { codigo: string; nome: string; percentual: numb
 
 export interface PayloadFechamento {
   pedidoRef: string; data: string; hora: string; tipo: 'mesa' | 'balcao'; mesa: string | null; cancelado: boolean;
-  valor: number; desconto: number; taxa: number; operador: string | null;
+  valor: number; desconto: number; taxa: number; /** Cortesia (já descontada dos itens e da taxa; 08/10/2026). */ cortesia?: number; operador: string | null;
   nota: { chave: string | null; numero: number | null; serie: number | null; status: string | null } | null;
   itens: { linha: number; codigo: string; nome: string; quantidade: number; valorUnitario: number; desconto: number; valor: number; ncm: string | null; componentes?: string[] }[];
   pagamentos: { sequencia: number; metodo: string; valor: number; bandeira: string | null }[];
@@ -79,30 +79,54 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
   const base = arred(subtotal - desconto);
 
   let taxa = arred(out.filter((_, idx) => linhas[idx]?.product?.fee_type).reduce((s, l) => s + l.valor, 0));
+  let idxTaxaAuto = -1;
   // Taxa de serviço automática (loja configurada para cobrar, sem a taxa lançada como item): entra como item, como na NFC-e.
   // Vale o que o cliente PAGOU: com o total do pagamento, taxa = total - itens (respeita "Tirar a taxa" e taxa editada;
   // teto de 30% contra lixo). Sem total gravado, usa o percentual.
   if (taxaAutomatica && !temTaxaLancada && base > 0) {
-    const pagoTotal = typeof detalhes.total === 'number' && Number.isFinite(detalhes.total) ? (detalhes.total as number) : null;
+    // Vale o que foi PAGO (soma das formas, cortesia inclusa aqui; ela sai logo abaixo): payment_details.total às vezes
+    // não inclui a taxa (achado 08/10/2026 no Sertão).
+    const formasPg = Array.isArray(detalhes.methods) ? (detalhes.methods as { amount?: number }[]) : null;
+    const pagoTotal = formasPg && formasPg.length > 0
+      ? formasPg.reduce((s2, m) => s2 + (Number(m.amount) || 0), 0)
+      : typeof detalhes.total === 'number' && Number.isFinite(detalhes.total) ? (detalhes.total as number) : null;
     const valorTaxa = pagoTotal != null
       ? arred(Math.max(0, Math.min(pagoTotal - base, base * 0.3)))
       : arred(base * taxaAutomatica.percentual / 100);
     if (valorTaxa > 0) {
       seq++;
+      idxTaxaAuto = out.length;
       out.push({ linha: seq, codigo: taxaAutomatica.codigo, nome: taxaAutomatica.nome, quantidade: 1, valorUnitario: valorTaxa, desconto: 0, valor: valorTaxa, ncm: null });
       taxa = valorTaxa;
     }
   }
 
   const metodos = Array.isArray(detalhes.methods) ? (detalhes.methods as { method?: string; amount?: number; brand?: string | null }[]) : [];
-  const pagamentos = metodos.filter((m) => m && Number(m.amount) > 0).map((m, i) => ({
+  // Cortesia não é faturamento (08/10/2026): sai dos itens e da taxa na proporção do valor, como o cupom acima,
+  // e não vai como pagamento. Venda 100% cortesia chega ao Estoque com valor 0 (a baixa de estoque continua pela OP).
+  const cortesia = arred(metodos.filter((m) => m?.method === 'COURTESY').reduce((s2, m) => s2 + (Number(m.amount) || 0), 0));
+  const totalAntes = arred(out.reduce((s2, l) => s2 + l.valor, 0));
+  if (cortesia > 0 && totalAntes > 0) {
+    const tirar = Math.min(cortesia, totalAntes);
+    const idxComValor = out.map((_, idx) => idx).filter((idx) => out[idx].valor > 0);
+    let restante = tirar;
+    idxComValor.forEach((idx, n) => {
+      const l = out[idx];
+      const d = n === idxComValor.length - 1 ? arred(Math.min(restante, l.valor)) : arred(tirar * l.valor / totalAntes);
+      restante = arred(restante - d);
+      l.desconto = arred(l.desconto + d);
+      l.valor = arred(l.valor - d);
+    });
+    taxa = arred(out.filter((_, idx) => linhas[idx]?.product?.fee_type || idx === idxTaxaAuto).reduce((s2, l) => s2 + l.valor, 0));
+  }
+  const pagamentos = metodos.filter((m) => m && Number(m.amount) > 0 && m.method !== 'COURTESY').map((m, i) => ({
     sequencia: i + 1, metodo: String(m.method ?? 'OUTRO'), valor: arred(Number(m.amount)), bandeira: m.brand ?? null,
   }));
 
   return {
     pedidoRef: pedido.id, data, hora, tipo: pedido.order_type === 'counter' || pedido.mesa == null ? 'balcao' : 'mesa',
     mesa: pedido.mesa != null ? String(pedido.mesa) : null, cancelado: false,
-    valor: arred(out.reduce((s, l) => s + l.valor, 0)), desconto, taxa,
+    valor: arred(out.reduce((s, l) => s + l.valor, 0)), desconto: arred(desconto + cortesia), taxa, cortesia,
     operador: typeof detalhes.operador_nome === 'string' ? detalhes.operador_nome : null,
     nota: nota ? { chave: nota.chave_acesso, numero: nota.numero, serie: nota.serie, status: nota.status } : null,
     itens: out, pagamentos,

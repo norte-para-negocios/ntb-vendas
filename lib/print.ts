@@ -271,6 +271,12 @@ async function openThermalPrint(title: string, bodyHtml: string, paperWidthMm?: 
   return printHtmlDocument(title, thermalStyles(paperWidthMm), bodyHtml);
 }
 
+/** Texto pronto (ex.: fechamento de caixa) na impressora deste aparelho, quando a loja não tem impressora de rede/USB para ele. */
+export function printPlainTextThermal(title: string, text: string, paperWidthMm?: 48 | 58 | 80): Promise<boolean> {
+  const body = `<pre style="font-family:monospace;font-size:11px;white-space:pre-wrap;margin:0">${escapeHtml(text)}</pre>`;
+  return openThermalPrint(title, body, paperWidthMm, text, true);
+}
+
 // Pedido de CANCELAMENTO: mesmo pedido, mas avisa a cozinha/bar que o que estava
 // feito/na fila foi cancelado (quem cancelou e o motivo).
 export interface CancelamentoTicket { por?: string | null; motivo?: string | null }
@@ -868,6 +874,10 @@ export function buildCashClosingText(opts: {
   taxaServico?: { quantidade: number; total: number } | null;
   /** Taxas de valor fixo lançadas como item (rolha, troca...) — migration 139. */
   outrasTaxas?: { label: string; quantidade: number; total: number }[];
+  /** Fechamento destrinchado (migration 173, pedido do Joaquim 08/10): faturamento, cortesia, cancelamentos, contas e produtos. */
+  detalhe?: DetalheFechamento | null;
+  /** Reimpressão: data/hora em que foi reimpresso (aparece no cabeçalho). */
+  reimpressoEm?: Date | null;
   paperWidthMm?: number | null;
 }): string {
   const W = colunasDoPapel(opts.paperWidthMm);
@@ -879,7 +889,9 @@ export function buildCashClosingText(opts: {
   wrapLine(opts.storeName.toUpperCase(), W).forEach((t) => lines.push(centralizar(t, W)));
   lines.push(centralizar('POSICAO DO CAIXA', W), dupla);
   wrapLine(`Operador: ${opts.operador}`, W).forEach((t) => lines.push(t));
-  lines.push(`Aberto:  ${dh(opts.abertoEm)}`, `Fechado: ${dh(opts.fechadoEm)}`, simples);
+  lines.push(`Aberto:  ${dh(opts.abertoEm)}`, `Fechado: ${dh(opts.fechadoEm)}`);
+  if (opts.reimpressoEm) lines.push(`REIMPRESSAO ${dh(opts.reimpressoEm)}`);
+  lines.push(simples);
 
   const totalVendas = opts.formas.reduce((s, f) => s + f.total, 0);
   lines.push('*** Resumo do Caixa ***', linha('Fundo de Caixa', opts.fundo));
@@ -891,9 +903,25 @@ export function buildCashClosingText(opts: {
   opts.formas.forEach((f) => lines.push(linha(f.label, f.total)));
   lines.push(linha('TOTAL', totalVendas), simples);
 
+  const dt = opts.detalhe;
+  if (dt && dt.cortesia.total > 0.005) {
+    lines.push(esqDir(`Cortesia (${dt.cortesia.contas} conta${dt.cortesia.contas === 1 ? '' : 's'})`, formatBRL(dt.cortesia.total), W), 'Cortesia NAO entra no faturamento.', simples);
+  }
+
   if (opts.vendas) {
     lines.push('*** Resumo de Vendas ***', esqDir('Contas pagas', String(opts.vendas.contas), W), linha('Total vendido', opts.vendas.total));
     lines.push(opts.vendas.ticketMedio != null ? linha('Ticket medio', opts.vendas.ticketMedio) : esqDir('Ticket medio', '-', W), simples);
+  }
+
+  if (dt) {
+    // A conta fecha: itens - descontos + taxa + outras taxas + pago a mais - cortesia = total faturado.
+    lines.push('*** Faturamento ***', esqDir(`Itens vendidos (${dt.qtdItens})`, formatBRL(dt.itens), W));
+    if (dt.desconto > 0.005) lines.push(linha('(-) Descontos/cupons', -dt.desconto));
+    lines.push(esqDir(`(+) Taxa de servico (${dt.taxaQtd})`, formatBRL(dt.taxa), W));
+    if (dt.outras > 0.005) lines.push(linha('(+) Outras taxas', dt.outras));
+    if (dt.excesso > 0.005) lines.push(linha('(+) Pago a mais (gorjeta)', dt.excesso));
+    if (dt.cortesiaParcial > 0.005) lines.push(linha('(-) Cortesia em conta paga', -dt.cortesiaParcial));
+    lines.push(linha('= Total faturado', dt.faturado), simples);
   }
 
   if (opts.cartoes.length > 0) {
@@ -928,9 +956,73 @@ export function buildCashClosingText(opts: {
     lines.push(simples);
   }
 
+  if (dt && (dt.cancelados.qtd > 0 || dt.zeradas > 0 || dt.estornadas.qtd > 0)) {
+    lines.push('*** Cancelamentos ***');
+    if (dt.cancelados.qtd > 0) lines.push(esqDir(`Itens cancelados (${dt.cancelados.qtd})`, formatBRL(dt.cancelados.total), W));
+    if (dt.zeradas > 0) lines.push(esqDir('Contas fechadas em zero', String(dt.zeradas), W));
+    if (dt.estornadas.qtd > 0) lines.push(esqDir(`Vendas estornadas (${dt.estornadas.qtd})`, formatBRL(dt.estornadas.total), W));
+    lines.push('Nada disso entra no faturamento.', simples);
+  }
+
+  if (dt && dt.movimentos.length > 0) {
+    lines.push('*** Sangrias e suprimentos ***');
+    dt.movimentos.forEach((m) => {
+      const h = new Date(m.quando).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      lines.push(linha(`${h} ${m.tipo === 'sangria' ? 'Sangria' : 'Suprimento'}`, m.tipo === 'sangria' ? -Math.abs(m.valor) : m.valor));
+      if (m.motivo) wrapLine(`  ${m.motivo}`, W).forEach((t) => lines.push(t));
+    });
+    lines.push(simples);
+  }
+
   lines.push('*** Conferencia ***', linha('Dinheiro no caixa', opts.dinheiroEsperado));
   if (opts.dinheiroContado !== null) lines.push(linha('Dinheiro contado', opts.dinheiroContado));
   if (opts.diferenca !== null) lines.push(linha('Diferença', opts.diferenca));
+  if (dt && dt.contas.length > 0) {
+    // Uma linha por conta (hora, mesa, forma, valor) e embaixo a decomposição quando tem taxa/cortesia/desconto.
+    lines.push(dupla, centralizar('CONTAS DO TURNO', W), simples);
+    dt.contas.forEach((c) => {
+      const h = new Date(c.quando).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const onde = c.tipo === 'balcao' ? 'Balcao' : `Mesa ${c.mesa ?? '?'}`;
+      const formas = c.formas.map((f) => rotuloFormaCurta(f.method)).join('+') || '-';
+      lines.push(esqDir(`${h} ${onde} ${formas}`.slice(0, W - 11), c.estornada ? 'ESTORNADA' : formatBRL(c.recebido), W));
+      const partes = [`itens ${formatBRL(c.itens)}`];
+      if (c.desconto > 0.005) partes.push(`desc -${formatBRL(c.desconto)}`);
+      if (c.taxa > 0.005) partes.push(`taxa ${formatBRL(c.taxa)}`);
+      if (c.outras > 0.005) partes.push(`outras ${formatBRL(c.outras)}`);
+      if (c.excesso > 0.005) partes.push(`a mais ${formatBRL(c.excesso)}`);
+      if (c.cortesia > 0.005) partes.push(`cortesia -${formatBRL(c.cortesia)}`);
+      if (c.cancelado > 0.005) partes.push(`canc. ${formatBRL(c.cancelado)}`);
+      wrapLine(`  ${partes.join(' | ')}`, W).forEach((t) => lines.push(t));
+    });
+    lines.push(simples);
+  }
+
+  if (dt && dt.produtos.length > 0) {
+    lines.push(centralizar('PRODUTOS VENDIDOS', W), simples);
+    let cat = '';
+    dt.produtos.forEach((p) => {
+      if (p.categoria !== cat) { cat = p.categoria; lines.push(`[${cat}]`); }
+      const qtd = Number.isInteger(p.quantidade) ? String(p.quantidade) : formatBRL(p.quantidade);
+      const nome = `${qtd}x ${p.nome}`;
+      const wrapped = wrapLine(nome, W - 11);
+      wrapped.forEach((t, i) => lines.push(i === wrapped.length - 1 ? esqDir(t, formatBRL(p.total), W) : t));
+    });
+    lines.push(simples);
+  }
+
   lines.push(dupla, centralizar('SEM VALOR FISCAL', W), '\n\n\n');
   return lines.join('\n');
 }
+
+export interface DetalheFechamento {
+  itens: number; qtdItens: number; desconto: number; taxa: number; taxaQtd: number; outras: number; excesso: number;
+  cortesiaParcial: number; faturado: number;
+  cortesia: { total: number; contas: number };
+  cancelados: { qtd: number; total: number }; zeradas: number; estornadas: { qtd: number; total: number };
+  movimentos: { tipo: 'sangria' | 'suprimento'; valor: number; motivo: string | null; quando: string }[];
+  contas: { quando: string; mesa: string | null; tipo: 'mesa' | 'balcao'; itens: number; desconto: number; taxa: number; outras: number; excesso: number; cortesia: number; recebido: number; cancelado: number; estornada: boolean; formas: { method: string }[] }[];
+  produtos: { nome: string; categoria: string; quantidade: number; total: number }[];
+}
+
+const rotuloFormaCurta = (m: string): string =>
+  ({ CASH: 'Din', PIX: 'Pix', CREDIT: 'Cred', DEBIT: 'Deb', COURTESY: 'Cort' } as Record<string, string>)[m] ?? m.slice(0, 4);

@@ -186,7 +186,8 @@ export const StoreDashboardView: React.FC<{
             return sum + Math.round(getOrderDisplayTotal(o) * 100);
         }, 0);
         const total = totalCents / 100;
-        const count = orders.length;
+        // Conta fechada em zero (tudo cancelado) ou 100% cortesia não é venda (08/10/2026, lib/faturamento.ts).
+        const count = orders.filter(o => getOrderDisplayTotal(o) > 0).length;
         const ticket = count > 0 ? Math.round(totalCents / count) / 100 : 0;
         const tableOrders = orders.filter(o => o.order_type === 'table').length;
         return { total, count, ticket, tableOrders };
@@ -342,6 +343,7 @@ export const StoreDashboardView: React.FC<{
     const paymentMethods = useMemo(() => {
         const map = new Map<string, number>();
         periodSales.forEach(o => {
+            if (getOrderDisplayTotal(o) <= 0) return; // conta zerada/100% cortesia não é venda
             const method = getPaymentMethodLabel(o.payment_method);
             map.set(method, (map.get(method) || 0) + 1);
         });
@@ -361,7 +363,8 @@ export const StoreDashboardView: React.FC<{
         const map = new Map<string, { key: string, name: string, qty: number }>();
         periodSales.forEach(o => {
             o.order_items?.forEach(i => {
-                if (!i.product) return;
+                // Item cancelado e taxa (serviço, rolha...) não são produto vendido.
+                if (!i.product || i.status === 'canceled' || i.product.fee_type) return;
                 const key = `${i.product_id}::${optionsSignature(i.selected_options)}`;
                 const existing = map.get(key) || { key, name: getOrderItemDisplayName(i), qty: 0 };
                 existing.qty += i.quantity;
@@ -381,7 +384,7 @@ export const StoreDashboardView: React.FC<{
         const quantities = (list: typeof periodSales) => {
             const map = new Map<string, { key: string; name: string; qty: number }>();
             list.forEach(o => o.order_items?.forEach(i => {
-                if (!i.product) return;
+                if (!i.product || i.status === 'canceled' || i.product.fee_type) return;
                 const key = `${i.product_id}::${optionsSignature(i.selected_options)}`;
                 const existing = map.get(key) || { key, name: getOrderItemDisplayName(i), qty: 0 };
                 existing.qty += i.quantity;

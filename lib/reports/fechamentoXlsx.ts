@@ -5,11 +5,10 @@ import type { CashShiftSummary } from '../api';
 import { EXCEPTION_LABELS, type ExceptionEvent } from '../excecoes';
 import { montarPainel, type PainelDia } from './painelDia';
 import { getPaymentMethodLabel, getCardBrandLabel } from '../labels';
-import { getOrderDisplayTotal } from '../calc';
-import { subtotalItensAtivos } from '../itensVenda';
+import { agruparPorConta, decomporVenda, type ConfigTaxa } from '../faturamento';
 
 export interface FechamentoTurno { id?: string; /** O turno sai do período: totais só das vendas do período. */ parcial?: boolean; operador: string; abertoEm: string; fechadoEm: string | null; fundo: number; contado: number | null; resumo: CashShiftSummary }
-export interface FechamentoData { /** Título da faixa (padrão: Relatório do dia). */ titulo?: string; painel?: PainelDia; nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[] }
+export interface FechamentoData { /** Título da faixa (padrão: Relatório do dia). */ titulo?: string; painel?: PainelDia; nomeCategoria?: (id: string) => string | undefined; loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; turnos: FechamentoTurno[]; vendas: Order[]; excecoes: ExceptionEvent[]; /** Taxa da loja (configTaxaDaLoja); sem ela, 10%. */ configTaxa?: ConfigTaxa }
 
 const FONT = 'Calibri';
 const BRL = '"R$" #,##0.00';
@@ -81,39 +80,29 @@ export async function buildFechamentoWorkbook(d: FechamentoData): Promise<Workbo
   });
   }
 
-  // 5. Vendas (um pedido por linha). "Total dos itens" = só itens ATIVOS (orders.total do banco NÃO desconta item cancelado, por isso não é usado).
-  // A taxa de serviço e o recebido da conta ficam na linha do 1º pedido da conta pra não somar em dobro.
+  // 5. Vendas: UMA linha por conta paga (pedidos da mesma conta juntos), decomposta igual ao fechamento do turno
+  // (lib/faturamento.ts): itens - desconto + taxa + outras taxas + pago a mais - cortesia = recebido. Item cancelado não entra.
   const vd = wb.addWorksheet('Vendas');
   headerRow(vd, [
     { header: 'Data', width: 18, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'Mesa/Balcão', width: 12 }, { header: 'Cliente / lançado por', width: 24 }, { header: 'Operador', width: 18 },
-    { header: 'Forma', width: 20 }, { header: 'Bandeira', width: 14 }, { header: 'Total dos itens', width: 16, fmt: BRL }, { header: 'Taxa de serviço', width: 16, fmt: BRL },
-    { header: 'Recebido da conta', width: 18, fmt: BRL }, { header: 'Status', width: 12 },
+    { header: 'Forma', width: 20 }, { header: 'Bandeira', width: 14 }, { header: 'Total dos itens', width: 16, fmt: BRL }, { header: 'Desconto', width: 12, fmt: BRL },
+    { header: 'Taxa de serviço', width: 16, fmt: BRL }, { header: 'Outras taxas', width: 14, fmt: BRL }, { header: 'Pago a mais', width: 13, fmt: BRL },
+    { header: 'Cortesia', width: 12, fmt: BRL }, { header: 'Recebido', width: 14, fmt: BRL }, { header: 'Status', width: 12 },
   ]);
   type Pd = { operador_nome?: string; methods?: { method: string; brand?: string; amount: number }[] };
-  const chaveDaConta = (o: Order): string => `${(o as any).table_id ?? o.id}|${JSON.stringify(((o.payment_details ?? {}) as Pd).methods ?? [])}`;
-  const itensDaConta = new Map<string, { itens: number; total: number }>();
-  d.vendas.forEach((o) => {
-    const k = chaveDaConta(o);
-    const cur = itensDaConta.get(k);
-    if (cur) cur.itens += subtotalItensAtivos(o); else itensDaConta.set(k, { itens: subtotalItensAtivos(o), total: getOrderDisplayTotal(o as never) });
-  });
-  const contasVistas = new Set<string>();
-  d.vendas.forEach((o) => {
+  const contasVd = agruparPorConta(d.vendas as never[]) as Order[];
+  contasVd.forEach((o) => {
     const pd = (o.payment_details ?? {}) as Pd;
     const methods = Array.isArray(pd.methods) ? pd.methods : [];
-    const chave = chaveDaConta(o);
-    const primeira = !contasVistas.has(chave);
-    const recebidoConta = primeira ? methods.reduce((s, m) => s + Number(m.amount), 0) : 0;
-    const c = itensDaConta.get(chave)!;
-    const taxa = primeira ? Math.max(0, Math.round((c.total - c.itens) * 100) / 100) : 0;
-    contasVistas.add(chave);
+    const dc = decomporVenda(o as never, d.configTaxa);
+    const status = o.status === 'canceled' ? 'Cancelada' : dc.bruto <= 0 ? 'Zerada (tudo cancelado)' : dc.recebido <= 0 ? 'Cortesia' : 'Entregue';
     vd.addRow([
       horaBahia(o.created_at), o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as any).tables?.number ?? ''}`, safeCell(o.customer_name ?? ''), safeCell(pd.operador_nome ?? ''),
       methods.map((m) => getPaymentMethodLabel(m.method)).join(' + '), methods.map((m) => (m.brand ? getCardBrandLabel(m.brand) : '')).filter(Boolean).join(' + '),
-      subtotalItensAtivos(o), taxa > 0.005 ? taxa : 0, recebidoConta, o.status === 'canceled' ? 'Cancelada' : 'Entregue',
+      dc.itens, dc.desconto, dc.taxa, dc.outras, dc.excesso, dc.cortesia, dc.recebido, status,
     ]);
   });
-  if (d.vendas.length > 0) vd.autoFilter = { from: 'A1', to: `J${d.vendas.length + 1}` };
+  if (contasVd.length > 0) vd.autoFilter = { from: 'A1', to: `N${contasVd.length + 1}` };
 
   // 6. Itens
   const it = wb.addWorksheet('Itens');

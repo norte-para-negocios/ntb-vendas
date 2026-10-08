@@ -12,7 +12,7 @@ import { PreparoImpressaoSection, type LocalPendente } from '@/components/module
 import { Building2, FileSignature, Plug, Printer as PrinterIcon, Boxes, ScrollText } from 'lucide-react';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { ROTULO_MODO, MODOS_ESTOQUE, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
-import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchSalesHistory } from '@/lib/api';
+import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchVendasPorConta } from '@/lib/api';
 import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { cobrancaTaxaDoCadastro, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
@@ -360,7 +360,7 @@ export const AdminModule: React.FC = () => {
       const todayIso = startOfDay(new Date()).toISOString();
       try {
           const results = await Promise.all(storeList.map(async s => {
-              const orders = await fetchSalesHistory(s.id, todayIso);
+              const orders = await fetchVendasPorConta(s.id, todayIso);
               const total = orders.reduce((sum, o) => sum + getOrderDisplayTotal(o), 0);
               return [s.id, total] as const;
           }));

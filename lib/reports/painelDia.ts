@@ -1,8 +1,8 @@
 // lib/reports/painelDia.ts — análise do dia (pura, sem I/O): alimenta o Excel e o relatório impresso.
+import { agruparPorConta, chaveContaPaga, decomporVenda, valorFaturado, CORTESIA } from '../faturamento';
 import type { Order } from '@/types';
 import type { FechamentoData } from './fechamentoXlsx';
 import { groupSales, type GroupRow } from './groupSales';
-import { getOrderDisplayTotal } from '../calc';
 import { salesOfShift } from './shiftSales';
 import { completarFormas, completarCartoes, ticketMedio } from '../caixaResumo';
 
@@ -66,9 +66,8 @@ export function montarPainel(d: FechamentoData, nomeCategoria: (id: string) => s
       Object.entries(pg.formas).forEach(([k, v]) => { formasTot[k] = (formasTot[k] ?? 0) + v; });
       Object.entries(pg.cartoes).forEach(([k, v]) => { cartoesTot[k] = (cartoesTot[k] ?? 0) + v; });
       contas += pg.contas; recebido += pg.recebido;
-      // Taxa automática (total da conta − itens) ou taxa lançada como item (produto-taxa): uma OU outra por conta; o maior dos dois evita contar em dobro.
-      const taxaItens = doTurno.filter((o) => o.status !== 'canceled').reduce((s2, o) => s2 + (o.order_items ?? []).filter((i) => i.product?.fee_type && i.status !== ('canceled' as never)).reduce((x, i) => x + Number(i.price_at_time) * i.quantity, 0), 0);
-      taxa += Math.max(taxaItens, taxaDasVendas(doTurno));
+      // Taxa automática e taxa lançada como item, uma vez por conta (lib/faturamento.ts).
+      taxa += taxaDasVendas(doTurno);
       sangria += Number(t.resumo.total_sangria ?? 0);
       suprimento += Number(t.resumo.total_suprimento ?? 0);
       return;
@@ -94,19 +93,11 @@ export function montarPainel(d: FechamentoData, nomeCategoria: (id: string) => s
   };
 }
 
-// Taxa de serviço cobrada: total da conta (payment_details.total) menos os itens, uma vez por conta (mesmo agrupamento de somarPagamentos).
+// Taxa de serviço das vendas: mesma decomposição do fechamento do turno no banco (lib/faturamento.ts, migration 173),
+// uma vez por conta. Cortesia, conta zerada e 100% cortesia não geram taxa.
 function taxaDasVendas(vendas: Order[]): number {
-  const contas = new Map<string, { total: number; itens: number }>();
-  vendas.filter((o) => o.status !== 'canceled').forEach((o) => {
-    const methods = (o.payment_details as Pd)?.methods;
-    if (!Array.isArray(methods) || methods.length === 0) return;
-    const chave = `${o.table_id ?? o.id}|${JSON.stringify(methods)}`;
-    const itens = (o.order_items ?? []).filter((i) => i.status !== ('canceled' as never)).reduce((s, i) => s + Number(i.price_at_time) * i.quantity, 0);
-    const cur = contas.get(chave);
-    if (cur) cur.itens += itens; else contas.set(chave, { total: getOrderDisplayTotal(o as never), itens });
-  });
-  let taxa = 0;
-  contas.forEach((c) => { const f = Math.round((c.total - c.itens) * 100) / 100; if (f > 0.005) taxa += f; });
+  const taxa = agruparPorConta(vendas.filter((o) => o.status !== 'canceled') as never[])
+    .reduce((s, o) => s + decomporVenda(o).taxa, 0);
   return Math.round(taxa * 100) / 100;
 }
 
@@ -124,13 +115,14 @@ function somarPagamentos(vendas: Order[]) {
   vendas.filter((o) => o.status !== 'canceled').forEach((o) => {
     const methods = (o.payment_details as Pd)?.methods;
     if (!Array.isArray(methods) || methods.length === 0) return;
-    const conta = `${o.table_id ?? o.id}|${JSON.stringify(methods)}`;
+    const conta = chaveContaPaga(o as never);
     if (vistas.has(conta)) return;
     vistas.add(conta);
-    contas += 1;
+    // Cortesia não é faturamento: aparece na forma "Cortesia", mas fora do recebido e da contagem de contas.
+    if (valorFaturado(o as never) > 0) contas += 1;
     methods.forEach((m) => {
       const v = Number(m.amount) || 0;
-      recebido += v;
+      if (m.method !== CORTESIA) recebido += v;
       formas[m.method] = (formas[m.method] ?? 0) + v;
       if (m.brand && (m.method === 'CREDIT' || m.method === 'DEBIT')) { const k = `${m.method}|${m.brand}`; cartoes[k] = (cartoes[k] ?? 0) + v; }
     });

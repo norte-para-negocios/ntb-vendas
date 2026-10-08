@@ -64,7 +64,8 @@ const textos = (ws: ExcelJS.Worksheet) => { const out: string[] = []; ws.eachRow
   ] as any };
   const rb = await ler(await buildFechamentoWorkbook(dupla));
   const vd = rb.getWorksheet('Vendas')!;
-  assert.equal(Number(vd.getRow(2).getCell(9).value) + Number(vd.getRow(3).getCell(9).value), 487.08, 'recebido da conta aparece uma vez');
+  assert.equal(vd.rowCount, 2, 'mesma conta em 2 pedidos = UMA linha');
+  assert.equal(Number(vd.getRow(2).getCell(13).value), 487.08, 'recebido da conta aparece uma vez');
 
   // Item CANCELADO não entra no total (achado do portão 04/10: 131,60 contra 111,70 dos itens e 122,87 recebidos).
   // orders.total do banco NÃO desconta o item cancelado; o Excel recalcula pelos itens ativos.
@@ -76,10 +77,21 @@ const textos = (ws: ExcelJS.Worksheet) => { const out: string[] = []; ws.eachRow
   ] as any };
   const rc = await ler(await buildFechamentoWorkbook(cancelada));
   const vc = rc.getWorksheet('Vendas')!;
-  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((c) => vc.getRow(1).getCell(c).value).slice(6), ['Total dos itens', 'Taxa de serviço', 'Recebido da conta', 'Status'], 'cabeçalho deixa claro itens, taxa e recebido');
+  assert.deepEqual(Array.from({ length: 14 }, (_, i) => vc.getRow(1).getCell(i + 1).value).slice(6), ['Total dos itens', 'Desconto', 'Taxa de serviço', 'Outras taxas', 'Pago a mais', 'Cortesia', 'Recebido', 'Status'], 'cabeçalho destrinchado');
   assert.equal(Number(vc.getRow(2).getCell(7).value), 111.7, 'Total dos itens = só itens ativos (60 + 31,70 + 20), sem o cancelado');
-  assert.equal(Number(vc.getRow(2).getCell(8).value), 11.17, 'taxa = recebido - itens ativos');
-  assert.equal(Number(vc.getRow(2).getCell(9).value), 122.87, 'recebido da conta');
+  assert.equal(Number(vc.getRow(2).getCell(9).value), 11.17, 'taxa = recebido - itens ativos');
+  assert.equal(Number(vc.getRow(2).getCell(13).value), 122.87, 'recebido da conta');
+
+  // Cortesia: fora do recebido, coluna própria (ODARA 07/10: 7,00 + taxa, tudo cortesia).
+  const cort: FechamentoData = { ...base, turnos: [], excecoes: [], vendas: [
+    { id: 'k1', table_id: 'tk', status: 'delivered', order_type: 'table', total: 7, created_at: '2026-10-04T22:00:00Z', tables: { number: 3 },
+      payment_details: { total: 7.7, methods: [{ method: 'COURTESY', amount: 7.7 }] }, order_items: [item('Água', 1, 7)] },
+  ] as any };
+  const vk = (await ler(await buildFechamentoWorkbook(cort))).getWorksheet('Vendas')!;
+  assert.equal(Number(vk.getRow(2).getCell(12).value), 7.7, 'cortesia na coluna própria');
+  assert.equal(Number(vk.getRow(2).getCell(13).value), 0, 'cortesia não é recebido');
+  assert.equal(Number(vk.getRow(2).getCell(9).value), 0, 'cortesia não gera taxa');
+  assert.equal(vk.getRow(2).getCell(14).value, 'Cortesia');
   const ic = rc.getWorksheet('Itens')!;
   let somaItens = 0; ic.eachRow((row, n) => { if (n > 1) somaItens += Number((row.getCell(6).value as any)?.result ?? row.getCell(6).value); });
   assert.equal(Math.round(somaItens * 100) / 100, 111.7, 'aba Itens soma o mesmo total e não lista o cancelado');

@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -82,11 +82,14 @@ import { descreverHoraDoPedido } from '@/lib/tempo';
 import { definirAtor, cabecalhosApi } from '@/lib/atorAtual';
 import { grupoViraVariacoes, validarVariacoes, variacoesParaGrupo, type Variacao } from '@/lib/variacoes';
 import { registrarAcao } from '@/lib/auditoria';
-import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText } from '@/lib/print';
+import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText, printPlainTextThermal } from '@/lib/print';
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
+import { decomporVenda, configTaxaDaLoja } from '@/lib/faturamento';
+import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
+import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
 import { visibleOptionGroups } from '@/lib/optionRules';
@@ -7778,7 +7781,36 @@ const CaixaViewMeu: React.FC<{
         }
     };
 
+    const [historyOperador, setHistoryOperador] = useState<string>('');
+    const [reimprimindoFechamento, setReimprimindoFechamento] = useState(false);
+    // Reimprimir a posição do caixa de um turno já fechado (pedido do Joaquim 08/10): mesma impressão do fechamento,
+    // com "REIMPRESSAO" no cabeçalho. Vai para a impressora marcada para "Fechamento de caixa"; sem ela, abre a
+    // impressão deste aparelho.
+    const handleReimprimirFechamento = async () => {
+        if (!historySummary) return;
+        setReimprimindoFechamento(true);
+        try {
+            const dados = dadosDoFechamento(historySummary, { storeName: store.name, operador: historyOperador || 'Operador', reimpressoEm: new Date() });
+            registrarAcao(store.id, 'reimpressao.fechamento_caixa', { entity: 'cash_shift', entityId: historySummary.shift.id, summary: `Reimprimiu o fechamento de caixa de ${historyOperador || 'operador'}` });
+            const temImpressora = await hasActivePrinterForDoc(store.id, 'fechamento_caixa');
+            if (temImpressora) {
+                await enqueueReceiptPrintJobs(store.id, `Fechamento de caixa (reimpressão) - ${historyOperador}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${historySummary.shift.id}:reimp:${Date.now()}`, 'fechamento_caixa');
+                toast.success('Fechamento enviado para a impressora.');
+            } else {
+                const mm = store.config?.printer_paper_width_mm;
+                const ok = await printPlainTextThermal('Fechamento de caixa', buildCashClosingText({ ...dados, paperWidthMm: mm }), mm === 58 || mm === 48 ? mm : 80);
+                if (!ok) toast.error('Não consegui imprimir. Confira a impressora.');
+            }
+        } catch (e) {
+            console.error('reimprimir fechamento falhou:', e);
+            toast.error('Não consegui imprimir. Confira a impressora.');
+        } finally {
+            setReimprimindoFechamento(false);
+        }
+    };
+
     const handleViewHistorySummary = async (row: CashShiftHistoryRow) => {
+        setHistoryOperador(row.operator_name || row.notes || '');
         setIsLoadingHistorySummary(true);
         try {
             const summary = await fetchCashShiftSummary(row.id);
@@ -7841,6 +7873,10 @@ const CaixaViewMeu: React.FC<{
                                         </div>
                                     </div>
                                 )}
+                                <Button variant="secondary" className="w-full" onClick={handleReimprimirFechamento} isLoading={reimprimindoFechamento}>
+                                    <Printer size={16} className="mr-2" /> Reimprimir fechamento
+                                </Button>
+                                <FaturamentoDoTurno resumo={historySummary} />
                                 <div className="space-y-1.5">
                                     <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                         Total por forma de pagamento
@@ -7849,7 +7885,7 @@ const CaixaViewMeu: React.FC<{
                                         <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
                                     ) : (
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {completarFormas(historySummary.totals_by_method).map(({ key: method, total }) => (
+                                            {formasSemCortesia(historySummary.totals_by_method).map(({ key: method, total }) => (
                                                 <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
@@ -8038,28 +8074,13 @@ const CaixaViewMeu: React.FC<{
                 toast.success('Caixa fechado.');
                 // Posição do caixa impressa sozinha ao fechar (pedido do Ramon, 2026-09-29). Nunca impede o fechamento.
                 if (closeSummary) try {
-                    const resumo = closeSummary;
-                    const dados = {
+                    const dados = dadosDoFechamento(closeSummary, {
                         storeName: store.name,
                         operador: loggedUser.name,
-                        abertoEm: new Date(shift.opened_at),
                         fechadoEm: new Date(),
-                        fundo: Number(shift.opening_float) || 0,
-                        formas: completarFormas(resumo.totals_by_method).map(({ label, total }) => ({ label, total })),
-                        cartoes: resumo.totals_by_card
-                            ? completarCartoes(resumo.totals_by_card)
-                            : Object.entries(resumo.totals_by_brand).map(([b, total]) => ({ label: getCardBrandLabel(b), total: Number(total) || 0 })),
-                        vendas: resumo.payments_count != null ? { contas: Number(resumo.payments_count) || 0, total: Number(resumo.payments_total) || 0, ticketMedio: ticketMedio(resumo.payments_total, resumo.payments_count) } : null,
-                        sangria: Number(resumo.total_sangria) || 0,
-                        suprimento: Number(resumo.total_suprimento) || 0,
-                        dinheiroEsperado: Number(resumo.expected_cash) || 0,
-                        dinheiroContado: closingCountedValue,
-                        diferenca: result.difference ?? (closingCountedValue - (Number(resumo.expected_cash) || 0)),
-                        taxaServico: resumo.service_fee_total != null ? { quantidade: Number(resumo.service_fee_count) || 0, total: Number(resumo.service_fee_total) || 0 } : null,
-                        outrasTaxas: Object.entries(resumo.fees_by_product ?? {})
-                            .filter(([, t]) => t.tipo === 'fixed')
-                            .map(([label, t]) => ({ label, quantidade: Number(t.quantidade) || 0, total: Number(t.total) || 0 })),
-                    };
+                        contado: closingCountedValue,
+                        diferenca: result.difference ?? (closingCountedValue - (Number(closeSummary.expected_cash) || 0)),
+                    });
                     enqueueReceiptPrintJobs(store.id, `Fechamento de caixa - ${loggedUser.name}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${shift.id}`, 'fechamento_caixa')
                         .catch((e) => console.error('enqueueReceiptPrintJobs (fechamento de caixa) falhou:', e));
                 } catch (e) {
@@ -8821,6 +8842,7 @@ const CaixaViewMeu: React.FC<{
                                         </div>
                                     </div>
                                 )}
+                                <FaturamentoDoTurno resumo={closeSummary} />
                                 <div className="space-y-1.5">
                                     <h4 className="text-[13px] font-semibold text-[var(--text-muted)]">
                                         Total por forma de pagamento
@@ -8829,7 +8851,7 @@ const CaixaViewMeu: React.FC<{
                                         <p className="text-sm text-[var(--text-muted)]">Nenhum pagamento registrado neste turno.</p>
                                     ) : (
                                         <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
-                                            {completarFormas(closeSummary.totals_by_method).map(({ key: method, total }) => (
+                                            {formasSemCortesia(closeSummary.totals_by_method).map(({ key: method, total }) => (
                                                 <div key={method} className="flex items-center justify-between px-3 py-2 text-sm">
                                                     <span className="text-[var(--text)]">{getPaymentMethodLabel(method)}</span>
                                                     <span className="num font-bold text-[var(--text)]">R$ {formatBRL(total)}</span>
@@ -11436,7 +11458,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
         if (!opts?.silent) setIsLoading(true);
         let wasNetworkError = false;
         const [data, sessions, ratingsData] = await Promise.all([
-            fetchSalesHistory(storeId, undefined, undefined, (e) => { if (isNetworkError(e)) wasNetworkError = true; }),
+            fetchVendasPorConta(storeId, undefined, undefined, (e) => { if (isNetworkError(e)) wasNetworkError = true; }),
             fetchTableSessions(storeId),
             fetchOrderRatings(storeId),
         ]);
@@ -11673,11 +11695,9 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // itens) — o pedido não grava a taxa histórica exata como campo
     // próprio, então isso é a melhor aproximação disponível a partir do
     // valor realmente cobrado (getOrderDisplayTotal).
-    const calcOrderServiceFee = (order: Order): number => {
-        const itemsTotal = subtotalItensAtivos(order);
-        const fee = Number((getOrderDisplayTotal(order) - itemsTotal).toFixed(2));
-        return fee > 0.005 ? fee : 0;
-    };
+    // 08/10/2026: mesma decomposição do fechamento do turno (lib/faturamento.ts) — taxa automática e taxa lançada
+    // como item, sem cortesia, cupom descontado da base.
+    const calcOrderServiceFee = (order: Order): number => decomporVenda(order as never, configTaxaDaLoja(store.config)).taxa;
 
     // Fix round 3 (Group C1): mesmo motivo de printTableBill acima — sem
     // await/catch, um throw dentro do executor de printHtmlDocument
@@ -11735,9 +11755,13 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     // nunca recalculados.
     const handleReprintReceipt = async (order: Order) => {
         registrarAcao(store.id, 'reimpressao.comprovante_historico', { entity: 'order', entityId: order.id, summary: 'Reimprimiu comprovante pelo Histórico de vendas' });
-        const itemsTotal = subtotalItensAtivos(order);
-        const total = getOrderDisplayTotal(order);
-        const feeAmount = Number((total - itemsTotal).toFixed(2));
+        const dc = decomporVenda(order as never, configTaxaDaLoja(store.config));
+        // A taxa de serviço lançada como item sai na linha "Taxa de serviço", não repetida na lista de itens.
+        const itensDoComprovante = itensAtivos(order).filter(i => i.product?.fee_type !== 'percent');
+        const itemsTotal = itensDoComprovante.reduce((s2, i) => s2 + i.price_at_time * i.quantity, 0);
+        // Total da conta como foi cobrada (com a cortesia, que aparece nas formas de pagamento logo abaixo).
+        const total = dc.bruto;
+        const feeAmount = dc.taxa;
         const methods = order.payment_details?.methods;
         try {
             const receiptOpts = {
@@ -11745,14 +11769,14 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 cnpj: store.cnpj,
                 paperWidthMm: store.config?.printer_paper_width_mm,
                 label: `${order.order_type === 'table' ? `MESA ${order.tables?.number || '?'}` : `BALCÃO - ${order.customer_name || 'Cliente'}`} - REIMPRESSÃO`,
-                items: itensAtivos(order).map(item => ({
+                items: itensDoComprovante.map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
                     client: parseItemNote(item.notes || '').client,
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: itemsTotal,
-                serviceFee: order.order_type === 'table' ? {
+                serviceFee: (order.order_type === 'table' || feeAmount > 0.005) ? {
                     charged: feeAmount > 0.005,
                     rate: resolveServiceFeeRate(store.config),
                     amount: Math.max(0, feeAmount),
@@ -12637,30 +12661,28 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                             // divergiam no mesmo modal. Agora uma fonte só, usada nos dois
                             // lugares; cai no total de produtos (sem taxa) só quando a venda é
                             // antiga o bastante pra não ter payment_details.methods gravado.
-                            const itemsTotal = subtotalItensAtivos(selectedOrderDetails);
+                            // 08/10/2026: decomposição igual ao fechamento do turno (lib/faturamento.ts). Cada linha
+                            // explica uma parte do valor; a cortesia aparece mas não entra no total faturado.
                             const methods = selectedOrderDetails.payment_details?.methods;
-                            const totalPago = getOrderDisplayTotal(selectedOrderDetails);
-                            // Achado real (WhatsApp do usuário, 2026-08-27): a diferença entre
-                            // "Itens do Pedido" e "Total Pago" já existia (é a taxa de serviço),
-                            // mas nunca aparecia ESCRITA neste modal — só dava pra perceber
-                            // subtraindo os dois números na mão. Mesmo texto/valor que o
-                            // comprovante impresso já mostra (printBillReceipt), reaproveitado
-                            // aqui em vez de duplicar a lógica.
-                            const feeAmount = Number((totalPago - itemsTotal).toFixed(2));
+                            const dc = decomporVenda(selectedOrderDetails as never, configTaxaDaLoja(store.config));
+                            const itemsTotal = dc.itens;
+                            const totalPago = dc.recebido;
+                            const linhaValor = (rotulo: string, valor: number, sinal = '') => (
+                                <div key={rotulo} className="flex justify-between text-sm">
+                                    <span className="text-[var(--text-muted)]">{rotulo}</span>
+                                    <span className="font-medium text-[var(--text)] num">{sinal}R$ {formatBRL(valor)}</span>
+                                </div>
+                            );
                             return (
                                 <>
-                                    {feeAmount > 0.01 && (
-                                        <div className="flex justify-between text-sm -mt-2">
-                                            <span className="text-[var(--text-muted)]">Subtotal</span>
-                                            <span className="text-[var(--text-muted)]">R$ {formatBRL(itemsTotal)}</span>
-                                        </div>
-                                    )}
-                                    {feeAmount > 0.01 && (
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-[var(--text-muted)]">Taxa de Serviço ({formatServiceFeeRate(resolveServiceFeeRate(store.config))} opcional)</span>
-                                            <span className="font-medium text-[var(--text)]">R$ {formatBRL(feeAmount)}</span>
-                                        </div>
-                                    )}
+                                    <div className="space-y-1 -mt-2">
+                                        {linhaValor('Itens', dc.itens)}
+                                        {dc.desconto > 0.005 && linhaValor('Desconto (cupom)', dc.desconto, '− ')}
+                                        {dc.taxa > 0.005 && linhaValor(`Taxa de serviço (${formatServiceFeeRate(resolveServiceFeeRate(store.config))})`, dc.taxa, '+ ')}
+                                        {dc.outras > 0.005 && linhaValor('Outras taxas (rolha, troca...)', dc.outras, '+ ')}
+                                        {dc.excesso > 0.005 && linhaValor('Pago a mais (gorjeta / troco não dado)', dc.excesso, '+ ')}
+                                        {dc.cortesia > 0.005 && linhaValor('Cortesia (não entra no faturamento)', dc.cortesia, '− ')}
+                                    </div>
                                     <div>
                                         <h4 className="font-bold text-[var(--text)] mb-2 border-b border-[var(--border)] pb-1">Pagamento</h4>
                                         <div className="text-sm space-y-1">
@@ -12684,7 +12706,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                                     </div>
 
                                     <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
-                                        <span className="font-bold text-lg text-[var(--text)]">Total Pago</span>
+                                        <span className="font-bold text-lg text-[var(--text)]">{dc.cortesia > 0.005 ? 'Total faturado' : 'Total Pago'}</span>
                                         <span className="font-black text-2xl text-[var(--brand)]">
                                             R$ {formatBRL(totalPago)}
                                         </span>

@@ -1,3 +1,4 @@
+import { valorFaturado, type VendaLike } from './faturamento';
 import { scheduledPrice, type PriceSchedule } from './priceSchedule';
 // Fonte única da fórmula de taxa de serviço e split de conta, antes
 // duplicada em 7+ lugares entre StoreModule.tsx e ClientModule.tsx.
@@ -266,15 +267,13 @@ export function calculateCartTotal(cart: { product: { price: number; promo_price
 // antigas o bastante pra não ter isso gravado — nunca `orders.total`, que
 // tem exatamente o mesmo problema que `payment_details.total` resolve.
 export function getOrderDisplayTotal(order: {
+  id?: string;
   payment_details?: { total?: number } | null;
   order_items?: { price_at_time: number; quantity: number; status?: string }[];
 }): number {
-  if (order.payment_details && typeof order.payment_details.total === 'number') {
-    return order.payment_details.total;
-  }
-  return (order.order_items || [])
-    .filter(i => i.status !== 'canceled')
-    .reduce((sum, i) => sum + i.price_at_time * i.quantity, 0);
+  // 08/10/2026 (lib/faturamento.ts): o valor é o que foi PAGO (formas de pagamento), sem cortesia. payment_details.total
+  // não serve: em várias contas do Sertão ele não inclui os 10%, e a cortesia entrava como venda.
+  return valorFaturado({ id: order.id ?? '', ...order } as VendaLike);
 }
 
 // Formatação BRL (vírgula decimal) pra valores em real — antes disso todo
