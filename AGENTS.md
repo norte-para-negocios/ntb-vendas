@@ -2727,3 +2727,20 @@ cancelado) contavam como venda e a mesma conta somava 2x quando um pedido da mes
 sem a taxa automática (`service_fee_removed = true`; o caixa pode religar). A marca some quando a mesa volta a livre/fechada (trigger).
 O pagamento grava `payment_details.funcionario`; o fechamento do turno mostra "Consumo de funcionários" (`staff_count/staff_total`),
 o Histórico mostra o selo. Limite: liberar a mesa (conta aguardando, 172) não leva a marca para a conta aguardando.
+
+## Sem internet de verdade (08/10/2026)
+
+Cenário: Wi-Fi/cabo da loja de pé, internet fora. O app tem que mostrar tudo certo, imprimir pela rede local e sincronizar
+depois. Medido com o servidor "pendurado" (Playwright, scripts no scratchpad da sessão): antes, o pedido levava ~40 s ou
+travava (nomes "Carregando…" para sempre, cardápio "Não foi possível carregar", senha "não dá pra conferir", mesa voltava a
+"Livre"); depois: abrir mesa 0,4 s, cardápio ≤2 s, senha ≤3 s, confirmar <0,1 s, login 3,7 s.
+- `lib/offline/network.ts` `vigiarConexao`: ping a cada 6 s com internet / 3 s sem; mantém `__ntbOfflineAt` e chama runSync na volta.
+- `lib/supabaseClient.ts`: com o aviso ligado, leituras (fetch_/get_/count_/list_), senha do pedido e ESCRITAS falham na hora
+  como rede (escrita não é mandada: quem grava põe na fila; não duplica). Leitura que falha/estoura (6 s) liga o aviso.
+- Pedido do garçom: teste de conexão com teto de 1,5 s, senão fila + impressão local (locais de preparo da cópia
+  `printSectorsDoAparelho`). Senha: servidor em 2 s, senão confere no aparelho (30 dias); sem cópia da senha, sai no nome
+  escolhido marcado "senha não conferida" (auditoria `pedido.senha_nao_conferida`).
+- Login: servidor em 3 s, senão confere com o login guardado no aparelho (`ntb-login-offline-v1`, PBKDF2 com sal, 30 dias).
+- Tela de mesas: cópia do aparelho + fila aplicada (`aplicarFilaNasMesas`); TablesView guarda cardápio e nomes ao abrir com
+  internet (a cada 10 min); `fetchMenu` do lançamento usa a cópia se a rede passar de 1,5 s.
+- Impressão sem internet só no app Windows (`window.electronApp`): rede (IP:9100) ou USB de outro PC pelo compartilhamento do Windows.

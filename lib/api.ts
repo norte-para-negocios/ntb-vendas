@@ -1,3 +1,4 @@
+import { mesasComFila } from './offline/pendingOrders';
 import { agruparPorConta } from './faturamento';
 import type { PriceSchedule } from '@/lib/priceSchedule';
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
@@ -170,12 +171,20 @@ export const updateStoreCoverUrl = async (storeId: string, coverUrl: string | nu
 export type MotivoFalhaLogin = 'network' | 'locked' | 'wrong' | 'store_inactive';
 export const authenticateStoreUser = async (email: string, password: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string; reason?: MotivoFalhaLogin }> => {
   try {
-    const { data, error } = await supabase.rpc('authenticate_store_user_secure', {
+    const chamada = supabase.rpc('authenticate_store_user_secure', {
       p_email: email,
       p_password: password,
     });
+    // Servidor sem responder em 3 s e a senha confere com a guardada neste aparelho: entra na hora, sem internet
+    // (08/10/2026). Sem senha guardada, continua esperando o servidor como sempre.
+    const corrida = await Promise.race([chamada, new Promise<'lento'>((ok) => setTimeout(() => ok('lento'), 3000))]);
+    if (corrida === 'lento') {
+      const local = await entrarSemInternet(email, password);
+      if (local) return local;
+    }
+    const { data, error } = corrida === 'lento' ? await chamada : corrida;
 
-    if (error || data == null) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    if (error || data == null) return (await entrarSemInternet(email, password)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
     if (!data.success) {
       return {
         success: false,
@@ -194,13 +203,42 @@ export const authenticateStoreUser = async (email: string, password: string): Pr
       must_change_password: data.mustChangePass,
       store,
     };
+    if (!user.must_change_password) await guardarLoginSemInternet(email, password, user);
 
     return { success: true, user };
   } catch (error: any) {
     console.error('Auth Store User Error:', error);
-    return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    return (await entrarSemInternet(email, password)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
   }
 };
+
+// Entrar SEM internet (08/10/2026, "até quando vou entrar numa conta fala que tô sem conexão"): quem já entrou neste
+// aparelho com internet nos últimos 30 dias entra de novo sem internet, com a senha conferida no próprio aparelho
+// (PBKDF2 com sal, nunca a senha). Vale só para o mesmo e-mail + senha; a senha trocada no servidor passa a valer no
+// próximo login com internet.
+const CHAVE_LOGIN_OFFLINE = 'ntb-login-offline-v1';
+type LoginGuardado = { email: string; salt: string; hash: string; user: StoreUser & { store: Store }; em: number };
+function lerLoginsGuardados(): LoginGuardado[] {
+  try {
+    const l = JSON.parse(localStorage.getItem(CHAVE_LOGIN_OFFLINE) || '[]');
+    return Array.isArray(l) ? l.filter((x: LoginGuardado) => Date.now() - x.em < VALIDADE_SENHA_OFFLINE_MS) : [];
+  } catch { return []; }
+}
+async function guardarLoginSemInternet(email: string, senha: string, user: StoreUser & { store: Store }) {
+  try {
+    const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+    const hash = await derivarSenha(senha, salt);
+    if (!hash) return;
+    const e = email.trim().toLowerCase();
+    const outros = lerLoginsGuardados().filter((x) => x.email !== e);
+    localStorage.setItem(CHAVE_LOGIN_OFFLINE, JSON.stringify([...outros, { email: e, salt, hash, user, em: Date.now() }].slice(-30)));
+  } catch { /* sem armazenamento: segue sem login offline */ }
+}
+async function entrarSemInternet(email: string, senha: string): Promise<{ success: true; user: StoreUser & { store: Store }; offline: true } | null> {
+  const g = lerLoginsGuardados().find((x) => x.email === email.trim().toLowerCase());
+  if (!g || (await derivarSenha(senha, g.salt)) !== g.hash) return null;
+  return { success: true, user: g.user, offline: true };
+}
 
 export const updateStoreUserPassword = async (userId: string, newPassword: string) => {
   const { error } = await supabase.rpc('update_store_user_password_secure', { p_user_id: userId, p_new_password: newPassword });
@@ -491,7 +529,20 @@ function normalizeCategoriesAgainstGroups(categories: Category[], groups: Catego
   return categories.map(c => (c.group_id && !groupIds.has(c.group_id)) ? { ...c, group_id: null } : c);
 }
 
-export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<{ categories: Category[]; products: Product[]; categoryGroups: CategoryGroup[]; error?: 'network' }> => {
+type MenuResultado = { categories: Category[]; products: Product[]; categoryGroups: CategoryGroup[]; error?: 'network' };
+// Cardápio do lançamento (garçom/balcão): se a rede demorar mais de 1,5 s e o aparelho tem o cardápio guardado, mostra o
+// guardado na hora (08/10/2026: logo depois de a internet cair, abrir o cardápio levava 6-8 s). A busca da rede continua
+// e atualiza a cópia guardada. A edição do cardápio (includeUnavailable) sempre espera a rede.
+export const fetchMenu = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<MenuResultado> => {
+  const daRede = fetchMenuDaRede(storeId, onlyAvailable, includeUnavailable);
+  if (!onlyAvailable || includeUnavailable) return daRede;
+  const cached = await getCachedMenu(storeId).catch(() => null);
+  if (!cached) return daRede;
+  const doAparelho: MenuResultado = { categories: normalizeCategoriesAgainstGroups(cached.categories as Category[], []), products: cached.products as Product[], categoryGroups: [] };
+  return Promise.race([daRede, new Promise<MenuResultado>((ok) => setTimeout(() => ok(doAparelho), 1500))]);
+};
+
+const fetchMenuDaRede = async (storeId: string, onlyAvailable = true, includeUnavailable = false): Promise<MenuResultado> => {
   try {
     const categoriesQuery = supabase.from('categories').select('*').eq('store_id', storeId).order('order');
     const categoryGroupsQuery = supabase.from('category_groups').select('*').eq('store_id', storeId).order('order');
@@ -819,6 +870,10 @@ export const updateCategoryGroupAssignment = async (categoryId: string, groupId:
 };
 
 // Setores de produção (migration 087): ex. Pizzaria, além de Cozinha/Bar.
+/** Locais de preparo guardados no aparelho (sem ir ao servidor): pedido feito sem internet imprime na hora. */
+export const printSectorsDoAparelho = (storeId: string): PrintSector[] => {
+  try { return JSON.parse(localStorage.getItem(`ntb-sectors-cache:${storeId}`) || '[]'); } catch { return []; }
+};
 export const fetchPrintSectors = async (storeId: string): Promise<PrintSector[]> => {
   const { data, error } = await supabase.from('print_sectors').select('*').eq('store_id', storeId).order('created_at');
   if (error) {
@@ -990,7 +1045,7 @@ export const fetchTables = async (storeId: string): Promise<Table[]> => {
   if (error) {
     console.error(error);
     const cached = await getCachedTables(storeId);
-    if (cached) return marcarFalha([...(cached.tables as Table[])]);
+    if (cached) return marcarFalha(await mesasComFila([...(cached.tables as Table[])]));
     return marcarFalha([] as Table[]);
   }
   const tables = (data as any) || [];
@@ -1638,7 +1693,12 @@ export const createOrder = async (
   try {
     // Garçom: confirma a conexão de verdade antes de esperar a resposta do servidor
     // (Wi-Fi sem internet deixaria o app pendurado); sem conexão vai direto pra fila local.
-    if (addedByRole === 'garcom' && !(await checkRealConnectivity())) throw new TypeError('Failed to fetch (sem conexão)');
+    // 08/10/2026: se o teste de conexão não responder em 1,5 s, o pedido vai para a fila do aparelho (e sai na impressora
+    // pela rede local). Nada foi mandado ao servidor, então não duplica; a fila sobe sozinha quando a conexão responder.
+    if (addedByRole === 'garcom') {
+      const online = await Promise.race([checkRealConnectivity(), new Promise<boolean>((ok) => setTimeout(() => ok(false), 1500))]);
+      if (!online) throw new TypeError('Failed to fetch (sem conexão)');
+    }
     const data = await chamarCriarPedido(rpcPayload);
     if (!data?.success) throw new Error(data?.message || 'Erro ao criar pedido.');
     return { success: true, orderId: data.order_id };
@@ -3595,14 +3655,15 @@ export const criarLocalEstoque = async (storeId: string, descricao: string): Pro
 // Modo Aberto (30/09, migration 135): confere só a senha contra as contas da loja, sem
 // criar sessão. Bateu com uma conta = o pedido sai no nome dela.
 export type ResultadoSenhaEquipe =
-  | { success: true; user_id: string; name: string; role: string }
+  | { success: true; user_id: string; name: string; role: string; /** Sem internet e senha nunca conferida neste aparelho. */ semConferencia?: boolean }
   | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline'; seconds?: number };
 
 // Cache local das senhas JÁ conferidas neste aparelho (nunca a senha: PBKDF2 com salt aleatório por entrada): sem
 // internet o pedido não pode travar na conferência. Vale 12 h e só para quem já passou pela conferência online aqui;
 // ao conferir online, a senha antiga da mesma pessoa deixa de valer. Senha nova offline continua recusada.
 const CHAVE_SENHAS_OFFLINE = 'ntb-senhas-conferidas-v2';
-const VALIDADE_SENHA_OFFLINE_MS = 12 * 60 * 60 * 1000;
+// 30 dias (era 12 h): a senha confere no aparelho sem internet se a pessoa já a digitou ali com internet.
+const VALIDADE_SENHA_OFFLINE_MS = 30 * 24 * 60 * 60 * 1000;
 type SenhaConferida = { salt: string; hash: string; storeId: string; user_id: string; name: string; role: string; em: number };
 const hex = (b: ArrayBuffer | Uint8Array) => Array.from(b instanceof Uint8Array ? b : new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
 async function derivarSenha(senha: string, saltHex: string): Promise<string | null> {
@@ -3648,6 +3709,9 @@ export const verificarSenhaEquipe = async (storeId: string, senha: string): Prom
 // sem internet o garçom ainda escolhe o nome e a senha é conferida contra o cache (12 h) daquela pessoa.
 export type PessoaEquipe = { id: string; name: string; role: string };
 const CHAVE_EQUIPE_PEDIDO = 'ntb-equipe-pedido-v1';
+function lerEquipePedidoCache(storeId: string): PessoaEquipe[] {
+  try { const c = JSON.parse(localStorage.getItem(`${CHAVE_EQUIPE_PEDIDO}:${storeId}`) || '[]'); return Array.isArray(c) ? c : []; } catch { return []; }
+}
 export const fetchEquipePedido = async (storeId: string): Promise<PessoaEquipe[]> => {
   const lerCache = (): PessoaEquipe[] => { try { const c = JSON.parse(localStorage.getItem(`${CHAVE_EQUIPE_PEDIDO}:${storeId}`) || '[]'); return Array.isArray(c) ? c : []; } catch { return []; } };
   try {
@@ -3659,7 +3723,11 @@ export const fetchEquipePedido = async (storeId: string): Promise<PessoaEquipe[]
 };
 
 export const verificarLoginEquipe = async (storeId: string, userId: string, senha: string): Promise<ResultadoSenhaEquipe> => {
-  const { data, error } = await supabase.rpc('verify_store_staff_login_secure', { p_store_id: storeId, p_user_id: userId, p_password: senha });
+  // Servidor que não responde em 2 s (internet acabou de cair) = confere no aparelho, sem deixar o garçom esperando.
+  const { data, error } = await Promise.race([
+    supabase.rpc('verify_store_staff_login_secure', { p_store_id: storeId, p_user_id: userId, p_password: senha }),
+    new Promise<{ data: null; error: TypeError }>((ok) => setTimeout(() => ok({ data: null, error: new TypeError('Failed to fetch (sem resposta em 2 s)') }), 2000)),
+  ]) as { data: unknown; error: any };
   // Servidor ainda sem a migration 166: confere pela senha (função antiga) e exige que seja a MESMA pessoa escolhida.
   if (error?.code === 'PGRST202') {
     const r = await verificarSenhaEquipe(storeId, senha);
@@ -3668,7 +3736,13 @@ export const verificarLoginEquipe = async (storeId: string, userId: string, senh
   if (error || !data) {
     if (error && !isNetworkError(error)) return { success: false, error: 'invalid' };
     const dela = lerSenhasConferidas().find((c) => c.storeId === storeId && c.user_id === userId);
-    if (dela && (await derivarSenha(senha, dela.salt)) === dela.hash) return { success: true, user_id: dela.user_id, name: dela.name, role: dela.role };
+    if (dela) {
+      return (await derivarSenha(senha, dela.salt)) === dela.hash ? { success: true, user_id: dela.user_id, name: dela.name, role: dela.role } : { success: false, error: 'invalid' };
+    }
+    // Sem internet e a senha dessa pessoa nunca foi conferida neste aparelho: o pedido NÃO pode parar (08/10/2026).
+    // Sai no nome escolhido, marcado como "senha não conferida", e fica registrado na auditoria.
+    const pessoa = lerEquipePedidoCache(storeId).find((p) => p.id === userId);
+    if (pessoa) return { success: true, user_id: pessoa.id, name: pessoa.name, role: pessoa.role, semConferencia: true };
     return { success: false, error: 'offline' };
   }
   const r = data as ResultadoSenhaEquipe;

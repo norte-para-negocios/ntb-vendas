@@ -50,13 +50,15 @@ async function main() {
   const { OFFLINE_FLAG_MS } = await import('../../lib/supabaseClient');
   assert.ok(OFFLINE_FLAG_MS <= 10000, `aviso de offline curto (${OFFLINE_FLAG_MS} ms)`);
 
-  // 4) Com o aviso ligado, ESCRITA e LOGIN ainda tentam a rede (pedido e senha nunca bloqueados pelo aviso);
-  //    só leitura falha na hora (mesas usam o último dado bom).
+  // 4) Com o aviso ligado: LOGIN ainda tenta a rede; ESCRITA não é mandada e falha na hora como rede (08/10/2026: quem
+  //    grava põe na fila do aparelho e o vigia da conexão manda quando a internet volta; antes ficava pendurada 20-70 s
+  //    e a mesa "voltava a ficar livre"). Nada foi enviado, então não duplica. Leitura falha na hora (último dado bom).
   g.__ntbOfflineAt = Date.now();
   roteiro = () => ({ body: { success: true } });
   chamadas.length = 0;
-  await supabase.rpc('create_order_secure', {});
-  assert.ok(chamadas.some((u) => u.includes('create_order_secure')), 'pedido foi para a rede mesmo com o aviso de offline');
+  const escrita = await supabase.rpc('create_order_secure', {});
+  assert.equal(chamadas.filter((u) => u.includes('create_order_secure')).length, 0, 'pedido com aviso de offline não vai para a rede (vai para a fila)');
+  assert.ok(escrita.error && isNetworkError(escrita.error), 'e falha como rede, para quem grava enfileirar');
   chamadas.length = 0;
   await supabase.rpc('authenticate_store_user_secure', { p_email: 'x', p_password: 'y' });
   assert.ok(chamadas.some((u) => u.includes('authenticate_store_user_secure')), 'login foi para a rede mesmo com o aviso');

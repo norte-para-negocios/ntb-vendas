@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -88,6 +88,7 @@ import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert 
 import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
 import { decomporVenda, configTaxaDaLoja, cortesiaDaVenda } from '@/lib/faturamento';
+import { mesasComFila } from '@/lib/offline/pendingOrders';
 import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
@@ -2950,6 +2951,20 @@ const TablesView: React.FC<{
         fetchEquipePedido(storeId).then((l) => { if (vivo) setEquipePedido(l); });
         return () => { vivo = false; };
     }, [senhaPedido.aberto, isAberto, storeId]);
+    // Sem internet tudo tem que continuar funcionando (08/10/2026): ao abrir a tela de Mesas COM internet, já guarda no
+    // aparelho o cardápio e os nomes da equipe (e renova a cada 10 min). Antes, um aparelho recém-ligado que perdesse a
+    // internet mostrava "Não foi possível carregar o cardápio" e o garçom não conseguia lançar nada.
+    useEffect(() => {
+        let vivo = true;
+        const guardar = () => {
+            if ((globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt) return;
+            fetchMenu(storeId).catch(() => {});
+            fetchEquipePedido(storeId).then((l) => { if (vivo && l.length) setEquipePedido(l); }).catch(() => {});
+        };
+        const t0 = setTimeout(guardar, 2000);
+        const iv = setInterval(guardar, 10 * 60 * 1000);
+        return () => { vivo = false; clearTimeout(t0); clearInterval(iv); };
+    }, [storeId]);
     // Subprojeto 3 (2026-08-25) — "trocar responsável" rápido: mesmo padrão
     // de acesso já usado pra decidir quem vê a aba Administração (onde a
     // edição completa de jurisdição já vivia, dentro de Gestão de
@@ -3604,7 +3619,9 @@ NOTIFY pgrst, 'reload schema';`;
         if (seq < loadDataAplicado.current) return;
         loadDataAplicado.current = seq;
         // Leitura que falhou (rede lenta, timeout) nunca troca uma lista boa por cache velho ou vazio: mesas não somem.
-        const t = leituraFalhou(t0) && tablesBoasRef.current.length > 0 ? tablesBoasRef.current : t0;
+        // Sem internet a lista boa é a última do servidor; a fila do aparelho (mesa aberta / pedido lançado sem internet)
+        // é aplicada por cima, senão a mesa "voltava a ficar livre" na tela (08/10/2026).
+        const t = leituraFalhou(t0) && tablesBoasRef.current.length > 0 ? await mesasComFila(tablesBoasRef.current) : t0;
         const o = leituraFalhou(o0) && ordersBoasRef.current.length > 0 ? ordersBoasRef.current : o0;
         if (!leituraFalhou(t0)) tablesBoasRef.current = t0;
         if (!leituraFalhou(o0)) ordersBoasRef.current = o0;
@@ -4402,6 +4419,7 @@ NOTIFY pgrst, 'reload schema';`;
         try {
             // Uma chamada só: o servidor grava o pedido inteiro numa transação,
             // e a Estação de Impressão agrupa por pedido + destino.
+            const tDbg = performance.now(); const dbg = (m: string) => { try { if (localStorage.getItem('ntb-debug-tempo')) console.log(`[tempo] ${m} ${Math.round(performance.now() - tDbg)}ms`); } catch { /* */ } };
             const result = await createOrder(mesa.id, storeId, linhas.map(l => ({
                 product: l.product, quantity: l.qty, notes: l.notes, selectedOptions: l.selectedOptions,
             })), nomeAutor, 'garcom', nomeAutor);
@@ -4410,9 +4428,14 @@ NOTIFY pgrst, 'reload schema';`;
             // Estação de Impressão (que lê o servidor) não vai ver nada agora. Imprime
             // a comanda direto na impressora de rede do destino e deixa uma marca pra
             // não sair em dobro quando o pedido sincronizar.
+            dbg('createOrder');
             if (result.orderId && String(result.orderId).startsWith('local_')) {
                 const menuCache: any = await getCachedMenu(storeId).catch(() => null);
-                const setores = await fetchPrintSectors(storeId).catch(() => []);
+                dbg('menuCache');
+                // Pedido salvo no aparelho = sem internet: os locais vêm da cópia guardada (ir ao servidor aqui
+                // segurava a impressão por até 7 s, achado 08/10/2026).
+                const setores = printSectorsDoAparelho(storeId);
+                dbg('setores');
                 let impressas = 0;
                 for (const l of linhas) {
                     const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === l.product.category_id);
@@ -4435,6 +4458,7 @@ NOTIFY pgrst, 'reload schema';`;
                     const sig = `${mesa.number}|${l.product.id}|${l.qty}|${notasNoBanco}`;
                     impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Mesa ${mesa.number}`, content: conteudo, sig }).catch(() => 0);
                 }
+                dbg('impressao');
                 if (impressas > 0) toast.info('Sem internet: pedido impresso direto na impressora.');
                 else toast.warning('Sem internet: o pedido foi salvo, mas o papel do pedido não saiu na impressora. Ele sai quando a internet voltar.');
             }
@@ -5725,7 +5749,12 @@ NOTIFY pgrst, 'reload schema';`;
                         if (r.success) {
                             try { if (isAberto) localStorage.setItem(chaveUltimoLancador, r.user_id); } catch { /* sem armazenamento */ }
                             setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
-                            toast.success(`Pedido no nome de ${r.name}.`);
+                            if (r.semConferencia) {
+                                toast.success(`Sem internet: pedido no nome de ${r.name} (senha não conferida).`);
+                                registrarAcao(storeId, 'pedido.senha_nao_conferida', { entity: 'store_user', entityId: r.user_id, summary: `Pedido lançado sem internet no nome de ${r.name}, sem conferir a senha` });
+                            } else {
+                                toast.success(`Pedido no nome de ${r.name}.`);
+                            }
                             await confirmarPedidoMesa({ name: r.name });
                             return;
                         }
@@ -6476,7 +6505,7 @@ const CounterView: React.FC<{
                 // não vê nada agora — mesma saída da mesa: imprime a comanda
                 // direto na impressora de rede de cada destino.
                 const menuCache: any = await getCachedMenu(storeId).catch(() => null);
-                const setores = await fetchPrintSectors(storeId).catch(() => []);
+                const setores = printSectorsDoAparelho(storeId); // sem internet: cópia do aparelho, na hora
                 let impressas = 0;
                 for (const l of itens) {
                     const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === l.product.category_id);

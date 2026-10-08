@@ -1,5 +1,5 @@
 import { getPendingActions, markDone, markFailed, getFailedActions, resetActionAttempts, discardAction } from './queue';
-import { checkRealConnectivity, isNetworkError } from './network';
+import { checkRealConnectivity, isNetworkError, vigiarConexao } from './network';
 import { chamarCriarPedido } from './criarPedido';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
@@ -482,5 +482,6 @@ export function startOfflineSync(): void {
   started = true;
   window.addEventListener('online', () => { runSync(); });
   setInterval(() => { runSync(); }, 30000);
+  vigiarConexao(() => { runSync(); });
   runSync(); // roda uma vez já no início, caso já existam ações pendentes de uma sessão anterior
 }

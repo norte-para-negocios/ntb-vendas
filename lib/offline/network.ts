@@ -64,8 +64,31 @@ export async function checkRealConnectivity(): Promise<boolean> {
   if (off && Date.now() - off < OFFLINE_FLAG_MS) return false;
   if (Date.now() - ultimoOkAt < 3000) return true;
   // Duas tentativas antes de declarar offline: um engasgo isolado do Wi-Fi do salão não pode derrubar o app.
-  const ok = (await pingUmaVez(5000)) || (await pingUmaVez(5000));
+  const ok = (await pingUmaVez(2500)) || (await pingUmaVez(2500));
   if (ok) { delete (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt; ultimoOkAt = Date.now(); }
   else (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
   return ok;
+}
+
+// Vigia da conexão (08/10/2026, "sem internet o app fica muito lento"): enquanto está sem internet, pinga a cada 3 s.
+// Mantém o aviso "sem internet" vivo (as leituras falham na hora e o app usa o aparelho) e percebe a volta em
+// segundos, chamando `aoVoltar` (sincroniza a fila). Com internet não faz nada (as próprias requisições detectam a queda).
+let vigiando = false;
+export function vigiarConexao(aoVoltar: () => void): void {
+  if (vigiando || typeof window === 'undefined') return;
+  vigiando = true;
+  let ticks = 0;
+  setInterval(async () => {
+    const g = globalThis as { __ntbOfflineAt?: number };
+    ticks++;
+    // Com internet: confere a cada ~9 s, para perceber a queda ANTES de o garçom tocar em algo (senão a 1ª tela
+    // depois da queda ainda esperava o tempo-limite). Sem internet: a cada 3 s, para perceber a volta.
+    if (!g.__ntbOfflineAt && ticks % 2 !== 0) return;
+    if (!g.__ntbOfflineAt && Date.now() - ultimoOkAt < 8000) return;
+    if (await pingUmaVez(2500)) {
+      const voltou = !!g.__ntbOfflineAt;
+      delete g.__ntbOfflineAt; ultimoOkAt = Date.now();
+      if (voltou) aoVoltar();
+    } else g.__ntbOfflineAt = Date.now();
+  }, 3000);
 }

@@ -70,3 +70,30 @@ export async function buildPendingOrdersForStore(storeId: string): Promise<unkno
   }
   return orders;
 }
+
+// Sem internet a tela de mesas vem da cópia guardada no aparelho, que não sabe do que ainda está na fila (08/10/2026:
+// mesa aberta e com pedido sem internet voltava a aparecer "Livre"). Aplica a fila por cima, na ordem em que foi feita:
+// abrir mesa -> ocupada; pedido numa mesa livre -> ocupada; fechar a conta -> livre.
+type MesaLike = { id: string; status?: string; current_host_name?: string | null; funcionario?: string | null; service_fee_removed?: boolean };
+type AcaoLike = { type: string; payload: unknown };
+export function aplicarFilaNasMesas<T extends MesaLike>(mesas: T[], acoes: AcaoLike[]): T[] {
+  const porId = new Map(mesas.map((m) => [m.id, { ...m }]));
+  for (const a of acoes) {
+    const p = (a.payload ?? {}) as Record<string, any>;
+    if (a.type === 'open_table_manually') {
+      const m = porId.get(p.p_table_id);
+      if (m) { m.status = 'occupied'; m.current_host_name = p.p_host_name ?? m.current_host_name; if (p.p_funcionario) { m.funcionario = p.p_funcionario; m.service_fee_removed = true; } }
+    } else if (a.type === 'create_order' && p.p_table_id) {
+      const m = porId.get(p.p_table_id);
+      if (m && (m.status === 'available' || !m.status)) m.status = 'occupied';
+    } else if (a.type === 'close_table_session') {
+      const m = porId.get(p.tableId);
+      if (m) { m.status = 'available'; m.current_host_name = null; m.funcionario = null; }
+    }
+  }
+  return mesas.map((m) => porId.get(m.id) as T);
+}
+
+export async function mesasComFila<T extends MesaLike>(mesas: T[]): Promise<T[]> {
+  try { return aplicarFilaNasMesas(mesas, await getPendingActions()); } catch { return mesas; }
+}
