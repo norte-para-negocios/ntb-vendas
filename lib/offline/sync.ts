@@ -216,6 +216,16 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       if (!data?.success) throw new Error(data?.message || 'Erro ao sincronizar.');
       break;
     }
+    case 'request_table_bill': {
+      const { error } = await supabase.rpc('request_table_bill_secure', { p_table_id: (action.payload as any).p_table_id });
+      if (error) throw error;
+      break;
+    }
+    case 'cancel_table_bill_request': {
+      const { error } = await supabase.rpc('cancel_table_bill_request_secure', { p_table_id: (action.payload as any).p_table_id });
+      if (error) throw error;
+      break;
+    }
     case 'open_table_manually': {
       // open_table_manually_secure retorna `void` (não `jsonb`, ver
       // supabase/migrations/030_fecha_rls_tables.sql) — mesmo caso de
@@ -397,6 +407,10 @@ export function descreverAcaoFila(action: QueuedAction): string {
         refCurta(p.p_shift_id) && `turno ${refCurta(p.p_shift_id)}`,
         p.p_reason || false,
       ]);
+    case 'request_table_bill':
+      return comDetalhe('Pedido de conta', [refCurta(p.p_table_id) && `mesa ${refCurta(p.p_table_id)}`]);
+    case 'cancel_table_bill_request':
+      return comDetalhe('Cancelamento do pedido de conta', [refCurta(p.p_table_id) && `mesa ${refCurta(p.p_table_id)}`]);
     case 'open_table_manually':
       return comDetalhe('Abertura de mesa', [
         refCurta(p.p_table_id) && `mesa ${refCurta(p.p_table_id)}`,

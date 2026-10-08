@@ -1811,14 +1811,25 @@ export const openTableManually = async (tableId: string, storeId: string, hostNa
   }
 };
 
-export const requestTableBill = async (tableId: string) => {
+// Sem internet: vai para a fila do aparelho e sobe quando a conexão voltar (08/10/2026). `queued` = ficou na fila.
+export const requestTableBill = async (tableId: string): Promise<{ queued: boolean }> => {
   const { error } = await supabase.rpc('request_table_bill_secure', { p_table_id: tableId });
-  if (error) throw error;
+  if (error) {
+    if (!isNetworkError(error)) throw error;
+    await enqueue('request_table_bill', { p_table_id: tableId });
+    return { queued: true };
+  }
+  return { queued: false };
 };
 
-export const cancelTableBillRequest = async (tableId: string) => {
+export const cancelTableBillRequest = async (tableId: string): Promise<{ queued: boolean }> => {
   const { error } = await supabase.rpc('cancel_table_bill_request_secure', { p_table_id: tableId });
-  if (error) throw error;
+  if (error) {
+    if (!isNetworkError(error)) throw error;
+    await enqueue('cancel_table_bill_request', { p_table_id: tableId });
+    return { queued: true };
+  }
+  return { queued: false };
 };
 
 // Conta aguardando pagamento (migration 172): a conta atual sai da mesa e espera o caixa; a mesa fica livre para novos

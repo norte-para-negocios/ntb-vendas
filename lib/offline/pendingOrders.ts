@@ -86,6 +86,12 @@ export function aplicarFilaNasMesas<T extends MesaLike>(mesas: T[], acoes: AcaoL
     } else if (a.type === 'create_order' && p.p_table_id) {
       const m = porId.get(p.p_table_id);
       if (m && (m.status === 'available' || !m.status)) m.status = 'occupied';
+    } else if (a.type === 'request_table_bill') {
+      const m = porId.get(p.p_table_id);
+      if (m && m.status !== 'available') m.status = 'waiting_bill';
+    } else if (a.type === 'cancel_table_bill_request') {
+      const m = porId.get(p.p_table_id);
+      if (m && m.status === 'waiting_bill') m.status = 'occupied';
     } else if (a.type === 'close_table_session') {
       const m = porId.get(p.tableId);
       if (m) { m.status = 'available'; m.current_host_name = null; m.funcionario = null; }

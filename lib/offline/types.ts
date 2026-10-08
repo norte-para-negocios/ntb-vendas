@@ -15,7 +15,10 @@ export type QueuedActionType =
   | 'open_cash_shift'
   | 'close_cash_shift'
   | 'register_cash_movement'
-  | 'open_table_manually';
+  | 'open_table_manually'
+  // Pedir conta / cancelar o pedido de conta sem internet (08/10/2026).
+  | 'request_table_bill'
+  | 'cancel_table_bill_request';
 
 export interface QueuedAction {
   id: string; // uuid gerado no client — idempotency key, e também serve

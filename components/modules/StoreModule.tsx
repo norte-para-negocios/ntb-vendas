@@ -4305,12 +4305,12 @@ NOTIFY pgrst, 'reload schema';`;
         // Pedir conta é do garçom (a conta e o pagamento é que são do caixa): vale também na tela livre de Mesas.
         try {
             const jaPediuConta = tables.find((t) => t.id === tableId)?.status === TableStatus.WAITING_BILL;
-            await requestTableBill(tableId);
+            const { queued } = await requestTableBill(tableId);
             setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: TableStatus.WAITING_BILL } : t));
             if (selectedTable && selectedTable.id === tableId) {
                 setSelectedTable(prev => prev ? { ...prev, status: TableStatus.WAITING_BILL } : null);
             }
-            toast.success('Conta pedida — o caixa foi avisado.');
+            toast.success(queued ? 'Sem internet: conta pedida. O caixa recebe o aviso quando a conexão voltar.' : 'Conta pedida — o caixa foi avisado.');
             // Pré-conta sai sozinha na(s) impressora(s) configurada(s) para ela (ex.: no bar).
             if (!jaPediuConta) void printTableBill(tableId, true);
         } catch (e) {
@@ -4321,7 +4321,7 @@ NOTIFY pgrst, 'reload schema';`;
     const handleCancelBillRequest = async (tableId: string) => {
         if (isAberto) { avisarSoComLogin(); return; }
         try {
-            await cancelTableBillRequest(tableId);
+            await cancelTableBillRequest(tableId); // sem internet vai para a fila do aparelho
             setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: TableStatus.OCCUPIED } : t));
             if (selectedTable && selectedTable.id === tableId) {
                 setSelectedTable(prev => prev ? { ...prev, status: TableStatus.OCCUPIED } : null);
