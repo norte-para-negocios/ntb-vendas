@@ -182,6 +182,8 @@ export const authenticateStoreUser = async (email: string, password: string): Pr
     if (corrida === 'lento') {
       const local = await entrarSemInternet(email, password);
       if (local) return local;
+      // É a conta universal guardada neste aparelho: devolve "sem conexão" já, e a tela entra pela universal sem esperar.
+      if (await entrarUniversalSemInternet(email, password)) return { success: false, reason: 'network', message: 'Sem conexão com o servidor.' };
     }
     const { data, error } = corrida === 'lento' ? await chamada : corrida;
 
@@ -322,11 +324,16 @@ export const deleteStoreTeamMember = async (userId: string) => {
 };
 
 export const fetchAllStores = async (): Promise<Store[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await lerComTeto(supabase
     .from('stores')
     .select('*')
-    .order('created_at', { ascending: false });
-  if (error) { console.error('Error fetching stores:', error); return []; }
+    .order('created_at', { ascending: false })) as { data: Store[] | null; error: unknown };
+  // Sem internet: lista de lojas guardada no aparelho (conta universal escolhe a loja sem internet, 08/10/2026).
+  if (error) {
+    console.error('Error fetching stores:', error);
+    try { return JSON.parse(localStorage.getItem('ntb-lojas-cache-v1') || '[]'); } catch { return []; }
+  }
+  try { localStorage.setItem('ntb-lojas-cache-v1', JSON.stringify(data || [])); } catch { /* sem cache */ }
   return data || [];
 };
 
@@ -3409,6 +3416,32 @@ export const printOfflineOrderTicket = async (params: { storeId: string; destina
 // Marcas de itens impressos sem internet nas últimas 12h: assinatura
 // (mesa|produto|qtd|obs) -> ids das marcas (da impressora com mais marcas).
 // `null` = não deu pra consultar (quem chama NÃO deve imprimir nessa rodada).
+// Itens que JÁ saíram em algum papel de pedido nas últimas 3 h, de QUALQUER computador da loja (chaves item:/grupo: da
+// fila). Achado 08/10/2026 no Sertão: a chave do grupo junta os ids dos itens; quando um item do grupo é cancelado, o
+// outro computador monta o grupo com os que sobraram, a chave muda e o banco não reconhece como repetido -> a cozinha
+// recebeu de novo 3 pratos 51 min depois. Conferir item por item fecha esse buraco. `null` = não deu pra consultar.
+export const fetchItensJaImpressos = async (storeId: string, destination: string): Promise<Set<string> | null> => {
+  const desde = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+  const { data, error } = await supabase.from('print_jobs').select('dedupe_key').eq('store_id', storeId).gte('created_at', desde)
+    .or(`dedupe_key.like.item:%:${destination}:%,dedupe_key.like.grupo:${destination}:%`);
+  if (error) return null;
+  return itensDasChavesDeImpressao((data || []).map((r) => String(r.dedupe_key || '')), destination);
+};
+/** Parte pura: tira os ids de item das chaves "item:<id>:<destino>:<impressora>" e "grupo:<destino>:<impressora>:<id,id>". */
+export function itensDasChavesDeImpressao(chaves: string[], destination: string): Set<string> {
+  const ids = new Set<string>();
+  for (const k of chaves) {
+    if (k.startsWith('item:')) {
+      const [, id, dest] = k.split(':');
+      if (id && dest === destination) ids.add(id);
+    } else if (k.startsWith(`grupo:${destination}:`)) {
+      const partes = k.split(':');
+      (partes[3] || '').split(',').forEach((id) => { if (id) ids.add(id); });
+    }
+  }
+  return ids;
+}
+
 export const fetchOfflinePrintedSigs = async (storeId: string): Promise<Map<string, string[]> | null> => {
   const desde = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
   const { data, error } = await supabase.from('print_jobs').select('dedupe_key').eq('store_id', storeId).like('dedupe_key', 'offline:%').gte('created_at', desde);
@@ -3601,8 +3634,12 @@ export const retryPrintJob = async (id: string): Promise<{ success: boolean; mes
 // padrão write-only via RPC do resto da autenticação).
 export const authenticateUniversalUser = async (email: string, password: string): Promise<{ success: boolean; user?: UniversalUser; mustChangePass?: boolean; message?: string; reason?: MotivoFalhaLogin }> => {
   try {
-    const { data, error } = await supabase.rpc('authenticate_universal_user_secure', { p_email: email, p_password: password });
-    if (error) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    const chamada = Promise.resolve(supabase.rpc('authenticate_universal_user_secure', { p_email: email, p_password: password }));
+    // Sem resposta em 3 s e a senha confere com a guardada neste aparelho: entra sem internet (08/10/2026).
+    const corrida = await Promise.race([chamada, new Promise<'lento'>((ok) => setTimeout(() => ok('lento'), 3000))]);
+    if (corrida === 'lento') { const local = await entrarUniversalSemInternet(email, password); if (local) return local; }
+    const { data, error } = corrida === 'lento' ? await chamada : corrida;
+    if (error) return (await entrarUniversalSemInternet(email, password)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
     if (!data?.success) {
       return {
         success: false,
@@ -3610,12 +3647,37 @@ export const authenticateUniversalUser = async (email: string, password: string)
         message: data?.locked ? 'Muitas tentativas incorretas. Tente novamente em alguns minutos.' : 'Usuário ou senha incorretos.',
       };
     }
+    if (!data.mustChangePass) await guardarLoginUniversalSemInternet(email, password, data.user);
     return { success: true, user: data.user, mustChangePass: data.mustChangePass };
   } catch (error: any) {
     console.error('Auth Universal User Error:', error);
-    return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    return (await entrarUniversalSemInternet(email, password)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
   }
 };
+
+// Conta universal sem internet: mesmo esquema do login da loja (senha conferida no aparelho, PBKDF2 com sal, 30 dias).
+const CHAVE_LOGIN_UNIVERSAL_OFFLINE = 'ntb-login-universal-offline-v1';
+type LoginUniversalGuardado = { email: string; salt: string; hash: string; user: UniversalUser; em: number };
+function lerLoginsUniversaisGuardados(): LoginUniversalGuardado[] {
+  try {
+    const l = JSON.parse(localStorage.getItem(CHAVE_LOGIN_UNIVERSAL_OFFLINE) || '[]');
+    return Array.isArray(l) ? l.filter((x: LoginUniversalGuardado) => Date.now() - x.em < VALIDADE_SENHA_OFFLINE_MS) : [];
+  } catch { return []; }
+}
+async function guardarLoginUniversalSemInternet(email: string, senha: string, user: UniversalUser) {
+  try {
+    const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+    const hash = await derivarSenha(senha, salt);
+    if (!hash) return;
+    const e = email.trim().toLowerCase();
+    localStorage.setItem(CHAVE_LOGIN_UNIVERSAL_OFFLINE, JSON.stringify([...lerLoginsUniversaisGuardados().filter((x) => x.email !== e), { email: e, salt, hash, user, em: Date.now() }].slice(-10)));
+  } catch { /* sem armazenamento */ }
+}
+export async function entrarUniversalSemInternet(email: string, senha: string): Promise<{ success: true; user: UniversalUser; mustChangePass: false } | null> {
+  const g = lerLoginsUniversaisGuardados().find((x) => x.email === email.trim().toLowerCase());
+  if (!g || (await derivarSenha(senha, g.salt)) !== g.hash) return null;
+  return { success: true, user: g.user, mustChangePass: false };
+}
 
 export const updateUniversalUserPassword = async (userId: string, newPassword: string) => {
   const { error } = await supabase.rpc('update_universal_user_password_secure', { p_user_id: userId, p_new_password: newPassword });

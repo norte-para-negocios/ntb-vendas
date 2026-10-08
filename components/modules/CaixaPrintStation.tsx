@@ -103,7 +103,7 @@ import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { impressoraRecebe } from '@/lib/printDocs';
 import { montarPreConta, chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
-import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
+import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, fetchItensJaImpressos, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from '@/lib/print';
 import { particionarPorIdade, MAX_IDADE_AUTOIMPRESSAO_MIN } from '@/lib/impressaoIdade';
 import { PrinterConfig } from '@/types';
@@ -693,7 +693,15 @@ async function reconcileDestination(
     );
   }
   puladosPorIdadeRef.current[destination] = idsPulados;
-  const toPrint = recentes.filter((it) => !jaImpressoOffline(it));
+  // Item que já saiu em papel de QUALQUER computador (chaves da fila no servidor), mesmo que o grupo dele tenha mudado
+  // depois (item cancelado): nunca sai de novo sozinho. Sem conseguir consultar, não imprime nesta rodada.
+  const jaImpressosServidor = await fetchItensJaImpressos(storeId, destination).catch(() => null);
+  if (jaImpressosServidor === null) return true;
+  const toPrint = recentes.filter((it) => {
+    if (jaImpressosServidor.has(it.id)) { printedIds.add(it.id); return false; }
+    return !jaImpressoOffline(it);
+  });
+  savePrintedIds(storeId, destination, printedIds);
 
   // Itens do MESMO pedido confirmado (mesmo order_id e mesmo created_at, porque
   // o servidor grava o pedido inteiro numa transação) e das MESMAS impressoras
@@ -1397,11 +1405,17 @@ export const CaixaPrintStationIndicator: React.FC<{ status: CaixaPrintStationSta
             </p>
           )}
 
-          {status.persistentReconcileFailure && (
+          {status.persistentReconcileFailure && ((globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt ? (
+            // Sem internet (08/10/2026): a fila do servidor não é lida, mas o pedido lançado NESTE computador sai direto
+            // na impressora pela rede da loja. Não é caso de chamar o suporte.
+            <div className="p-3 rounded-lg bg-[var(--warn)]/10 border border-[var(--warn)]/30 text-sm text-[var(--text)]">
+              <b>Sem internet.</b> Os pedidos lançados neste computador saem direto na impressora pela rede da loja. Pedidos feitos em outros aparelhos saem quando a internet voltar.
+            </div>
+          ) : (
             <div className="p-3 rounded-lg bg-[var(--err)]/10 border border-[var(--err)]/30 text-sm text-[var(--err)] font-semibold">
               Falha ao buscar pedidos no servidor por tempo demais — avise o suporte. A impressão automática pode estar cega.
             </div>
-          )}
+          ))}
 
           {hasFailures ? (
             <div className="space-y-2">
