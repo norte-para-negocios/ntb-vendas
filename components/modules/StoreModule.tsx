@@ -2969,14 +2969,15 @@ const TablesView: React.FC<{
     const isAberto = loggedUser.role === 'open';
     const avisarSoComLogin = () => toast.info('Só com login: saia do modo Aberto e entre com a sua conta.');
     // Senha de quem está lançando o pedido no modo Aberto (só a senha; ver migration 135).
-    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean; userId: string }>({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
+    // 08/10/2026 (pedido do dono): ao confirmar, só a SENHA — ela identifica a pessoa e o pedido sai no nome dela. Qualquer
+    // pessoa da loja (garçom, caixa, gerente, dono) e a conta universal confirmam. Os nomes só aparecem sem internet,
+    // quando a senha nunca foi usada neste computador (`mostrarNomes`), para o pedido não travar.
+    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean; userId: string; mostrarNomes?: boolean }>({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
     // Quem lança escolhe o NOME e digita a senha (migration 166). Com login (não é o modo Aberto) o nome já é o da pessoa logada.
     const [equipePedido, setEquipePedido] = useState<PessoaEquipe[]>([]);
     const chaveUltimoLancador = `ntb-ultimo-lancador:${storeId}`;
     const pedirSenhaDoPedido = () => {
-        let ultimo = '';
-        try { ultimo = localStorage.getItem(chaveUltimoLancador) || ''; } catch { /* sem armazenamento */ }
-        setSenhaPedido({ aberto: true, senha: '', erro: '', verificando: false, userId: isAberto ? ultimo : (loggedUser.role === 'universal' ? '' : loggedUser.id) });
+        setSenhaPedido({ aberto: true, senha: '', erro: '', verificando: false, userId: '', mostrarNomes: false });
     };
     useEffect(() => {
         if (!senhaPedido.aberto || !isAberto) return;
@@ -5778,19 +5779,23 @@ NOTIFY pgrst, 'reload schema';`;
                     onSubmit={async (e) => {
                         e.preventDefault();
                         const senha = senhaPedido.senha;
-                        const comNomes = isAberto || loggedUser.role === 'universal';
-                        if (comNomes && !senhaPedido.userId) { setSenhaPedido((x) => ({ ...x, erro: 'Toque no seu nome.' })); return; }
+                        if (senhaPedido.mostrarNomes && !senhaPedido.userId) { setSenhaPedido((x) => ({ ...x, erro: 'Toque no seu nome.' })); return; }
                         if (!senha) { setSenhaPedido((x) => ({ ...x, erro: 'Digite a sua senha.' })); return; }
                         setSenhaPedido((x) => ({ ...x, verificando: true, erro: '' }));
-                        const r = senhaPedido.userId ? await verificarLoginEquipe(storeId, senhaPedido.userId, senha) : await verificarSenhaEquipe(storeId, senha);
-                        // Com login (não é o modo Aberto): a senha tem que ser da PRÓPRIA pessoa logada, nunca de outra (R3).
-                        if (r.success && !isAberto && loggedUser.role !== 'universal' && r.user_id !== loggedUser.id) {
-                            setSenhaPedido((x) => ({ ...x, verificando: false, erro: 'Essa senha não é a sua. Digite a sua própria senha.', senha: '' }));
-                            return;
+                        // A senha identifica a pessoa (senha única por loja, migration 158). Conta universal: a senha dela.
+                        let r: Awaited<ReturnType<typeof verificarSenhaEquipe>>;
+                        if (senhaPedido.userId) {
+                            r = await verificarLoginEquipe(storeId, senhaPedido.userId, senha);
+                        } else {
+                            r = await verificarSenhaEquipe(storeId, senha);
+                            if (!r.success && r.error !== 'locked' && r.error !== 'ambiguous' && loggedUser.role === 'universal' && loggedUser.email) {
+                                const u = await authenticateUniversalUser(loggedUser.email, senha);
+                                if (u.success && u.user) r = { success: true, user_id: u.user.id, name: u.user.name, role: 'universal' };
+                            }
                         }
                         if (r.success) {
-                            try { if (isAberto) localStorage.setItem(chaveUltimoLancador, r.user_id); } catch { /* sem armazenamento */ }
-                            setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
+                            try { localStorage.setItem(chaveUltimoLancador, r.user_id); } catch { /* sem armazenamento */ }
+                            setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false, userId: '', mostrarNomes: false });
                             if (r.semConferencia) {
                                 toast.success(`Sem internet: pedido no nome de ${r.name} (senha não conferida).`);
                                 registrarAcao(storeId, 'pedido.senha_nao_conferida', { entity: 'store_user', entityId: r.user_id, summary: `Pedido lançado sem internet no nome de ${r.name}, sem conferir a senha` });
@@ -5800,16 +5805,21 @@ NOTIFY pgrst, 'reload schema';`;
                             await confirmarPedidoMesa({ name: r.name });
                             return;
                         }
+                        if (r.error === 'offline') {
+                            // Sem internet e essa senha nunca foi usada aqui: mostra os nomes para o pedido não travar.
+                            if (equipePedido.length === 0) fetchEquipePedido(storeId).then((l) => setEquipePedido(l)).catch(() => {});
+                            setSenhaPedido((x) => ({ ...x, verificando: false, mostrarNomes: true, erro: 'Sem internet e essa senha ainda não foi usada neste computador. Toque no seu nome e confirme de novo.' }));
+                            return;
+                        }
                         const erro =
-                            r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Troque a sua senha ou entre com o seu login.' :
+                            r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Troque a sua senha.' :
                             r.error === 'locked' ? `Muitas tentativas erradas. Espere ${r.seconds ?? 60} segundos.` :
-                            r.error === 'offline' ? 'Sem internet: não dá pra conferir a senha agora.' :
                             (senhaPedido.userId ? 'Nome ou senha incorretos.' : 'Senha não encontrada.');
                         setSenhaPedido((x) => ({ ...x, verificando: false, erro, senha: '' }));
                     }}
                 >
-                    <p className="text-sm text-[var(--text-muted)]">{isAberto ? <>Toque no <b>seu nome</b> e digite a <b>sua</b> senha. O pedido sai no seu nome.</> : <>Digite a <b>sua</b> senha de login. O pedido sai no seu nome.</>}</p>
-                    {isAberto && (
+                    <p className="text-sm text-[var(--text-muted)]">Digite a <b>sua</b> senha. O pedido sai no seu nome.</p>
+                    {senhaPedido.mostrarNomes && (
                         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Quem está lançando">
                             {equipePedido.length === 0 && <p className="text-sm text-[var(--text-muted)]">Carregando os nomes…</p>}
                             {equipePedido.map((p) => (
@@ -5829,7 +5839,7 @@ NOTIFY pgrst, 'reload schema';`;
                     <Input
                         label="Sua senha"
                         type="password"
-                        autoFocus={!isAberto || Boolean(senhaPedido.userId)}
+                        autoFocus
                         autoComplete="off"
                         value={senhaPedido.senha}
                         onChange={(e) => setSenhaPedido((x) => ({ ...x, senha: e.target.value, erro: '' }))}

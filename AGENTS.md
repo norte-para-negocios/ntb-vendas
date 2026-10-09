@@ -2744,3 +2744,10 @@ travava (nomes "Carregando…" para sempre, cardápio "Não foi possível carreg
 - Tela de mesas: cópia do aparelho + fila aplicada (`aplicarFilaNasMesas`); TablesView guarda cardápio e nomes ao abrir com
   internet (a cada 10 min); `fetchMenu` do lançamento usa a cópia se a rede passar de 1,5 s.
 - Impressão sem internet só no app Windows (`window.electronApp`): rede (IP:9100) ou USB de outro PC pelo compartilhamento do Windows.
+
+## Confirmar pedido só com a senha (08/10/2026, pedido do dono)
+A janela "Quem está lançando?" pede só a senha: `verificarSenhaEquipe` identifica a pessoa (senha única por loja, 158) e o
+pedido sai no nome dela. Qualquer pessoa da loja confirma, logada ou não (caiu a regra R3 "só a própria senha"); conta
+universal confirma com a senha dela (`authenticateUniversalUser`). Sem internet e senha nunca usada no aparelho: aparecem os
+nomes (fallback `verificarLoginEquipe` -> "senha não conferida"). O portão (fluxo-completo, seção 3) ainda testa a R3 antiga:
+atualizar o passo "senha de OUTRO é recusada" antes de rodar o portão de novo.

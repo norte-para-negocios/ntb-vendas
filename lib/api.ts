@@ -3781,7 +3781,11 @@ export const registrarSenhaConferida = async (storeId: string, senha: string, us
   } catch { /* sem cache, segue */ }
 };
 export const verificarSenhaEquipe = async (storeId: string, senha: string): Promise<ResultadoSenhaEquipe> => {
-  const { data, error } = await supabase.rpc('verify_store_staff_password_secure', { p_store_id: storeId, p_password: senha });
+  // Servidor sem responder em 2 s = confere no aparelho (internet acabou de cair), sem deixar ninguém esperando.
+  const { data, error } = await Promise.race([
+    Promise.resolve(supabase.rpc('verify_store_staff_password_secure', { p_store_id: storeId, p_password: senha })),
+    new Promise<{ data: null; error: TypeError }>((ok) => setTimeout(() => ok({ data: null, error: new TypeError('Failed to fetch (sem resposta em 2 s)') }), 2000)),
+  ]) as { data: unknown; error: any };
   if (error || !data) {
     if (error && !isNetworkError(error)) return { success: false, error: 'invalid' };
     for (const x of lerSenhasConferidas().filter((c) => c.storeId === storeId)) {
