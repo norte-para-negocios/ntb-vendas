@@ -7,6 +7,7 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const lanPeer = require('./lan-peer');
 const printEngine = require('./print-engine');
 const engineSession = require('./engine-session');
 const updateGuard = require('./update-guard');
@@ -628,6 +629,13 @@ app.whenReady().then(() => {
 
   // Impressão direta pela rede local (IP:porta), sem passar pelo servidor:
   // usado quando a internet cai (a fila de impressão fica no servidor).
+  // Rede local entre os computadores da loja (lan-peer.js): sem internet, cada um passa a própria fila para os outros.
+  ipcMain.handle('ntb-lan-iniciar', (_event, params) => {
+    try { return lanPeer.iniciar({ storeId: params?.storeId, peerId: params?.peerId }); } catch (e) { return { ok: false, reason: String(e?.message || e) }; }
+  });
+  ipcMain.handle('ntb-lan-publicar', (_event, params) => lanPeer.publicar(params || {}));
+  ipcMain.handle('ntb-lan-ler', () => lanPeer.ler());
+
   ipcMain.handle('ntb-print-direct-network', async (_event, params) => {
     const { ip, port, content, raw } = params || {};
     if (!ip || typeof content !== 'string') return { ok: false, reason: 'parâmetros ausentes' };

@@ -89,6 +89,8 @@ import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
 import { decomporVenda, configTaxaDaLoja, cortesiaDaVenda } from '@/lib/faturamento';
 import { mesasComFila } from '@/lib/offline/pendingOrders';
+import { iniciarRedeLocal } from '@/lib/offline/rede';
+import { getPendingActions } from '@/lib/offline/queue';
 import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
@@ -1063,6 +1065,10 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   useEffect(() => {
     startOfflineSync();
   }, []);
+  // Rede local entre os computadores da loja (08/10/2026): sem internet, todos trocam as filas pelo Wi-Fi/cabo.
+  useEffect(() => {
+    if (user.store?.id) void iniciarRedeLocal(user.store.id, getPendingActions);
+  }, [user.store?.id]);
 
   // Indicador visual de status offline/sincronização (Task 9) — mesma
   // justificativa do efeito acima: StoreLayout sobrevive à troca de aba, é o
@@ -2985,6 +2991,12 @@ const TablesView: React.FC<{
         fetchEquipePedido(storeId).then((l) => { if (vivo) setEquipePedido(l); });
         return () => { vivo = false; };
     }, [senhaPedido.aberto, isAberto, storeId]);
+    // Sem internet, as ações dos outros computadores (rede local) chegam a cada 2 s: recarrega a tela a cada 3 s.
+    useEffect(() => {
+        const iv = setInterval(() => { if ((globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt) loadData(); }, 1500);
+        return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [storeId]);
     // Sem internet tudo tem que continuar funcionando (08/10/2026): ao abrir a tela de Mesas COM internet, já guarda no
     // aparelho o cardápio e os nomes da equipe (e renova a cada 10 min). Antes, um aparelho recém-ligado que perdesse a
     // internet mostrava "Não foi possível carregar o cardápio" e o garçom não conseguia lançar nada.
@@ -4126,6 +4138,31 @@ NOTIFY pgrst, 'reload schema';`;
                 if (pendingCount > 0) {
                     toast.error(`Ainda tem ${pendingCount} item(ns) em preparo — marque como entregue ou cancele antes de fechar a mesa.`);
                     return;
+                }
+            }
+
+            // Sem internet, pedido lançado em OUTRO computador chega pela rede local em alguns segundos: antes de receber,
+            // confere se chegou item novo desta mesa que ainda não está na tela (senão fecharia a conta sem ele).
+            if ((globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt) {
+                const naFila = ((await buildPendingOrdersForStore(store.id)) as Order[])
+                    .filter((o) => o.table_id === selectedTable.id)
+                    .reduce((n, o) => n + (o.order_items?.length ?? 0), 0);
+                const naTela = activeOrders
+                    .filter((o) => o.table_id === selectedTable.id && /^(local_|pending_order_)/.test(String(o.id)))
+                    .reduce((n, o) => n + (o.order_items?.length ?? 0), 0);
+                if (naFila > naTela) {
+                    toast.error('Chegou pedido novo desta mesa de outro computador. Confira a conta e receba de novo.');
+                    void loadData();
+                    return;
+                }
+                if (summary.total <= 0.001) {
+                    const seguir = await confirm({
+                        title: 'Mesa sem itens neste computador',
+                        message: 'Sem internet, o pedido feito em outro computador leva alguns segundos para aparecer aqui. Fechar a mesa sem cobrar nada?',
+                        confirmLabel: 'Fechar sem cobrar',
+                        cancelLabel: 'Esperar',
+                    });
+                    if (!seguir) { void loadData(); return; }
                 }
             }
 

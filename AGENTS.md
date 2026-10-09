@@ -2751,3 +2751,11 @@ pedido sai no nome dela. Qualquer pessoa da loja confirma, logada ou não (caiu 
 universal confirma com a senha dela (`authenticateUniversalUser`). Sem internet e senha nunca usada no aparelho: aparecem os
 nomes (fallback `verificarLoginEquipe` -> "senha não conferida"). O portão (fluxo-completo, seção 3) ainda testa a R3 antiga:
 atualizar o passo "senha de OUTRO é recusada" antes de rodar o portão de novo.
+
+## Rede local entre os computadores (08/10/2026, sem computador central)
+Sem internet, os apps do Windows da mesma loja trocam a fila "sem internet" pela rede da loja: `desktop/electron/lan-peer.js` (UDP 47611
+para se achar, HTTP 47610-47615 `GET /acoes` com `x-ntb-loja`; regra de firewall no instalador) e `lib/offline/rede.ts` (junta as filas, ordem
+entre computadores: ação espera ação anterior da MESMA mesa ainda na fila de outro PC vivo; PC sumido há mais de 2 min tem as ações seguras
+subidas por quem está vivo; quem sobe anuncia o id). Troca a cada 1 s e na hora que a fila muda. A tela de mesas usa a fila de todos
+(`filaDeTodos`). Antes de receber sem internet: se chegou item da mesa que não está na tela, recusa; mesa zerada pede confirmação
+("o pedido de outro computador leva alguns segundos"). Navegador comum: só fila local, como antes. Teste: `scripts/testes/redeLocal.test.ts`.

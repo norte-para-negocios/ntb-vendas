@@ -1,4 +1,10 @@
 import { getPendingActions } from './queue';
+import { acoesDosOutros, idsJaSubidos, juntarFilas } from './rede';
+
+// Minha fila + a dos outros computadores da loja (rede local, sem internet), sem repetir e sem o que já subiu.
+async function filaDeTodos() {
+  return juntarFilas(await getPendingActions(), acoesDosOutros(), idsJaSubidos());
+}
 import { getCachedMenu } from './cache';
 
 // Achado real (WhatsApp, 2026-09-10, testado ao vivo no app desktop
@@ -23,7 +29,7 @@ import { getCachedMenu } from './cache';
 // fica correta de qualquer jeito, já que `getTableSummary` só soma todos
 // os `order_items` de todas as orders da mesa).
 export async function buildPendingOrdersForStore(storeId: string): Promise<unknown[]> {
-  const [actions, cachedMenu] = await Promise.all([getPendingActions(), getCachedMenu(storeId)]);
+  const [actions, cachedMenu] = await Promise.all([filaDeTodos(), getCachedMenu(storeId)]);
   const productsById = new Map<string, unknown>(
     ((cachedMenu?.products as { id: string }[]) || []).map((p) => [p.id, p])
   );
@@ -101,5 +107,5 @@ export function aplicarFilaNasMesas<T extends MesaLike>(mesas: T[], acoes: AcaoL
 }
 
 export async function mesasComFila<T extends MesaLike>(mesas: T[]): Promise<T[]> {
-  try { return aplicarFilaNasMesas(mesas, await getPendingActions()); } catch { return mesas; }
+  try { return aplicarFilaNasMesas(mesas, await filaDeTodos()); } catch { return mesas; }
 }

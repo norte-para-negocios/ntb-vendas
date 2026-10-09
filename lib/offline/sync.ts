@@ -1,5 +1,6 @@
 import { getPendingActions, markDone, markFailed, getFailedActions, resetActionAttempts, discardAction } from './queue';
 import { checkRealConnectivity, isNetworkError, vigiarConexao } from './network';
+import { acoesDosOutros, anotarSubida, idsJaSubidos, planejarSincronizacao } from './rede';
 import { chamarCriarPedido } from './criarPedido';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
@@ -290,7 +291,14 @@ export async function runSync(): Promise<void> {
     } catch { /* sem rearmar: segue */ }
 
     const idMap = new Map<string, string>();
-    const actions = await getPendingActions(); // já vem ordenado por createdAt
+    // Rede local (08/10/2026): ordem entre os computadores da loja. O que outro computador já subiu sai da minha fila sem
+    // ir de novo; ação que depende de ação anterior da mesma mesa ainda na fila de outro computador vivo espera; ações
+    // seguras de computador que sumiu são subidas por mim.
+    const minhasPendentes = await getPendingActions();
+    const plano = planejarSincronizacao(minhasPendentes, acoesDosOutros(), idsJaSubidos(), Date.now());
+    for (const feita of plano.jaFeitas) await markDone(feita.id);
+    const minhasIds = new Set(minhasPendentes.map((a) => a.id));
+    const actions = plano.subir; // já em ordem de tempo
     for (const action of actions) {
       // Sequencial de propósito (Global Constraint: nunca em paralelo —
       // evita condição de corrida entre ações da mesma mesa).
@@ -305,7 +313,8 @@ export async function runSync(): Promise<void> {
       if (action.attempts >= MAX_ATTEMPTS) continue;
       try {
         await processAction(action, idMap);
-        await markDone(action.id);
+        if (minhasIds.has(action.id)) await markDone(action.id);
+        anotarSubida(action.id);
       } catch (e) {
         // Falta de rede não é falha da ação: não gasta tentativa, encerra a rodada e tenta de novo no próximo ciclo.
         if (isNetworkError(e)) break;
@@ -314,6 +323,8 @@ export async function runSync(): Promise<void> {
         // Global Constraint: uma falha nunca trava as ações seguintes.
       }
     }
+    // Ficou ação esperando outro computador subir a dele: tenta de novo em 3 s (não em 30).
+    if (plano.esperando.length > 0) setTimeout(() => { void runSync(); }, 3000);
     const remaining = await getPendingActions();
     const failedCount = remaining.filter((a) => a.attempts >= MAX_ATTEMPTS).length;
     notify({ syncing: false, pending: remaining.length, failed: failedCount });

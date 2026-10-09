@@ -74,4 +74,10 @@ contextBridge.exposeInMainWorld('electronApp', {
   localPrinters: () => ipcRenderer.invoke('ntb-local-printers'),
   encryptSecret: (texto) => ipcRenderer.invoke('ntb-secret-encrypt', texto),
   decryptSecret: (b64) => ipcRenderer.invoke('ntb-secret-decrypt', b64),
+  // Rede local entre os computadores da loja (08/10/2026): ver electron/lan-peer.js e lib/offline/rede.ts.
+  lan: {
+    iniciar: (params) => ipcRenderer.invoke('ntb-lan-iniciar', params),
+    publicar: (params) => ipcRenderer.invoke('ntb-lan-publicar', params),
+    ler: () => ipcRenderer.invoke('ntb-lan-ler'),
+  },
 });

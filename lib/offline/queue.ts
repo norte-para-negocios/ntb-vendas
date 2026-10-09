@@ -14,6 +14,7 @@ export async function enqueue(type: QueuedActionType, payload: Record<string, un
     attempts: 0,
   };
   await db.put('queue', action);
+  try { window.dispatchEvent(new Event('ntb-fila-mudou')); } catch { /* fora do navegador */ }
   return action.id;
 }
 
