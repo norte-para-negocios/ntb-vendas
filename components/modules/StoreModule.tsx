@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -179,6 +179,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                     const senha = await window.electronApp!.decryptSecret!(c.senhaCifrada).catch(() => null);
                     if (!senha) continue;
                     const r = await authenticateStoreUser(c.email, senha).catch(() => null);
+                    if (r?.success && r.user) void ativarNotaSemInternet(r.user.store_id, c.email, senha);
                     if (r && !r.success && r.reason === 'wrong') await authenticateUniversalUser(c.email, senha).catch(() => null);
                 }
             })();
@@ -203,6 +204,8 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     // em vez de entrar direto numa loja, mostra um seletor com todas as
     // lojas ativas. Ver supabase/migrations/015_universal_login.sql.
     const [universalUser, setUniversalUser] = useState<UniversalUser | null>(null);
+    // Senha digitada da universal, só em memória: baixa o kit da nota sem internet da loja escolhida.
+    const senhaUniversalRef = useRef<string | null>(null);
     const [stores, setStores] = useState<Store[]>([]);
     const [storeFilter, setStoreFilter] = useState('');
     const [isLoadingStores, setIsLoadingStores] = useState(false);
@@ -223,6 +226,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
             } else {
                 await guardarConta({ email: emailUsado, name: result.user.name, roleLabel: rotuloDoPapel(result.user.role, result.user.permissions), photoUrl: (result.user as any).photo_url ?? null }, senhaUsada, lembrar);
                 await registrarSenhaConferida(result.user.store_id, senhaUsada, { id: result.user.id, name: result.user.name, role: result.user.role });
+                void ativarNotaSemInternet(result.user.store_id, emailUsado, senhaUsada);
                 onLogin(result.user);
             }
             setIsLoading(false);
@@ -267,6 +271,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 setIsUniversalChange(true);
             } else {
                 await guardarConta({ email: emailUsado, name: universalResult.user.name, roleLabel: rotuloDoPapel('universal') }, senhaUsada, lembrar);
+                senhaUniversalRef.current = senhaUsada;
                 setUniversalUser(universalResult.user);
             }
         } else {
@@ -318,6 +323,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
 
     const handleSelectStore = (store: Store) => {
         if (!universalUser) return;
+        if (senhaUniversalRef.current) void ativarNotaSemInternet(store.id, universalUser.email, senhaUniversalRef.current);
         onLogin({
             id: universalUser.id,
             store_id: store.id,
@@ -1069,6 +1075,18 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   useEffect(() => {
     if (user.store?.id) void iniciarRedeLocal(user.store.id, getPendingActions);
   }, [user.store?.id]);
+  // Nota fiscal sem internet (08/10/2026): quem já estava logado e só atualizou o app recebe o kit sozinho, usando a
+  // senha lembrada neste computador ("Entrar sem senha"). Sem senha lembrada, o kit chega no próximo login digitado.
+  useEffect(() => {
+    const storeId = user.store?.id;
+    if (!storeId || !window.electronApp?.fiscal || !window.electronApp.decryptSecret) return;
+    void (async () => {
+      if (await notaSemInternetPronta(storeId)) return;
+      const conta = lerContasSalvas().find((c) => c.email?.toLowerCase() === String(user.email || '').toLowerCase() && c.senhaCifrada);
+      const senha = conta?.senhaCifrada ? await window.electronApp!.decryptSecret!(conta.senhaCifrada).catch(() => null) : null;
+      if (senha) await ativarNotaSemInternet(storeId, user.email, senha);
+    })();
+  }, [user.store?.id, user.email]);
 
   // Indicador visual de status offline/sincronização (Task 9) — mesma
   // justificativa do efeito acima: StoreLayout sobrevive à troca de aba, é o
@@ -4323,7 +4341,27 @@ NOTIFY pgrst, 'reload schema';`;
                 // aviso claro em vez de ficar esperando uma janela que não vem.
                 if (emissaoFiscalConfigurada && emitirNotaFiscal && vendaTemCobranca({ total: summary.total })) {
                     const tableIdParaNota = selectedTable.id;
-                    abrirCupomFiscalQuandoSair(store.id, store.name, { tableId: tableIdParaNota });
+                    if (result.queued) {
+                        // Sem internet: NFC-e em contingência feita aqui no computador (app do Windows), 2 vias impressas;
+                        // sobe para a SEFAZ sozinha quando a internet voltar (08/10/2026).
+                        const itensDaNota = summary.allItems as unknown as Parameters<typeof emitirNotaSemInternet>[0]['itens'];
+                        void (async () => {
+                            if (!(await notaSemInternetPronta(store.id))) {
+                                toast.warning('Sem internet: a nota fiscal sai quando a conexão voltar (nota sem internet não ativada neste computador).');
+                                return;
+                            }
+                            const r = await emitirNotaSemInternet({ storeId: store.id, itens: itensDaNota, pagamentos: paymentData.methods, destinatario });
+                            if (!r.ok || !r.nota) {
+                                toast.error(`Nota sem internet não saiu: ${r.reason || 'erro'}. Ela será emitida quando a conexão voltar.`);
+                                return;
+                            }
+                            await enfileirarNotaSemInternet({ storeId: store.id, tableId: tableIdParaNota, paymentId: paymentData.payment_id, deviceId: r.deviceId, nota: r.nota });
+                            if (r.impresso) toast.success(`Nota em contingência nº ${r.nota.numero} impressa (2 vias). Vai para a SEFAZ quando a internet voltar.`);
+                            else toast.warning(`Nota em contingência nº ${r.nota.numero} feita, mas não imprimiu. Confira a impressora do caixa.`);
+                        })();
+                    } else {
+                        abrirCupomFiscalQuandoSair(store.id, store.name, { tableId: tableIdParaNota });
+                    }
                 }
 
                 setRemovedServiceFees(prev => {

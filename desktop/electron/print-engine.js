@@ -807,18 +807,21 @@ function start(storeId, options) {
 
 // Impressão USB/compartilhada direto (sem fila do servidor): usa o nome local se
 // esta máquina tem a impressora; senão o compartilhamento do Windows do dono.
+// Nome da impressora USB para o Windows: a local, se esta máquina tem; senão o compartilhamento do dono.
+async function resolverAlvoUsb(printer, donos) {
+  if (!nomesLocais.length) { const n = await detectLocalPrinters(); if (n) nomesLocais = n; }
+  const local = resolverNomeLocal(printer);
+  if (local) return local;
+  const eu = os.hostname().toLowerCase();
+  const dono = (donos || []).find((m) => m && m.toLowerCase() !== eu);
+  if (!dono) throw new Error('Esta máquina não tem essa impressora');
+  return `\\\\${dono}\\${printer.usb_system_name}`;
+}
+
 async function printDirectUsb(printer, content, donos) {
   content = comMargem(printer, content);
-  if (!nomesLocais.length) { const n = await detectLocalPrinters(); if (n) nomesLocais = n; }
   const raw = printer.print_mode === 'raw';
-  const local = resolverNomeLocal(printer);
-  let alvo = local;
-  if (!alvo) {
-    const eu = os.hostname().toLowerCase();
-    const dono = (donos || []).find((m) => m && m.toLowerCase() !== eu);
-    if (!dono) throw new Error('Esta máquina não tem essa impressora');
-    alvo = `\\\\${dono}\\${printer.usb_system_name}`;
-  }
+  const alvo = await resolverAlvoUsb(printer, donos);
   return raw ? printViaUsbRaw(alvo, content, printer.paper_width_mm) : printViaUsb(alvo, content, colunasDoPapel(printer.paper_width_mm));
 }
 
@@ -828,4 +831,4 @@ async function listarImpressorasLocais() {
   return { hostname: os.hostname(), impressoras: nomesLocais };
 }
 
-module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork, printDirectUsb, listarImpressorasLocais, resolverNomeLocal };
+module.exports = { start, stop, detectNetworkPrinters, toEscPos, printDirectNetwork: printViaNetwork, printDirectUsb, resolverAlvoUsb, listarImpressorasLocais, resolverNomeLocal };

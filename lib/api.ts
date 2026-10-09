@@ -43,6 +43,12 @@ declare global {
       decryptSecret?: (b64: string) => Promise<string | null>;
       localPrinters?: () => Promise<{ hostname: string; impressoras: string[] }>;
       printDirectNetwork?: (params: { ip: string; port: number; content: string; raw: boolean }) => Promise<{ ok: boolean; reason?: string }>;
+      fiscal?: {
+        salvarKit: (kit: unknown) => Promise<{ ok: boolean; reason?: string }>;
+        status: (storeId: string) => Promise<{ pronto: boolean; serie?: number; ambiente?: string; geradoEm?: string }>;
+        emitir: (params: { storeId: string; venda: unknown }) => Promise<ResultadoNotaSemInternet>;
+        imprimir: (params: { resultado: ResultadoNotaSemInternet; printer: PrinterConfig; owners: string[]; vias?: number }) => Promise<{ ok: boolean; reason?: string }>;
+      };
     };
   }
 }
@@ -1879,7 +1885,7 @@ export const closeTableSession = async (
   // Task 2 (frente-de-caixa): idem `cash_shift_id`, ver closeCounterOrder.
   paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
-): Promise<{ success: boolean; message?: string }> => {
+): Promise<{ success: boolean; message?: string; queued?: boolean }> => {
   const paymentMethod = paymentData
     ? (paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE')
     : null;
@@ -1908,8 +1914,13 @@ export const closeTableSession = async (
     // (Ordem de Produção, emissão fiscal) ficam pra rodar juntos quando
     // a ação sincronizar de verdade (ver Task 8) — nunca no clique offline.
     await enqueue('close_table_session', { tableId, paymentMethod, paymentData: paymentData || null, destinatario });
-    return { success: true };
+    return { success: true, queued: true };
   }
+};
+
+/** Guarda na fila a NFC-e feita sem internet; sobe para o servidor logo depois do fechamento da mesa. */
+export const enfileirarNotaSemInternet = async (p: { storeId: string; tableId: string; paymentId: string; deviceId?: string; nota: NotaSemInternet }) => {
+  await enqueue('registrar_nota_offline', { ...p });
 };
 
 // Frente de Caixa (Task 2, plano 2026-08-23-frente-de-caixa; RPC criada na
@@ -3955,3 +3966,74 @@ export function temCopiaDeLogin(email: string): boolean {
   const e = email.trim().toLowerCase();
   return lerLoginsGuardados().some((x) => x.email === e) || lerLoginsUniversaisGuardados().some((x) => x.email === e);
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// NFC-e em contingência SEM INTERNET, feita no computador da loja (08/10/2026). Ver lib/fiscal/emitirOffline.ts
+// e desktop/electron/fiscal-kit.js. Só no app do Windows.
+export type NotaSemInternet = {
+  modelo: '65'; ambiente: 'homologacao' | 'producao'; serie: number; numero: number; chave: string; xml: string; qrCode: string;
+  valorTotal: number; dhEmi: string; itens: { descricao: string; quantidade: number; valorUnitario: number; valorTotal: number }[];
+};
+export type ResultadoNotaSemInternet = { ok: boolean; reason?: string; nota?: NotaSemInternet; deviceId?: string; nomeLoja?: string; cnpj?: string; endereco?: string };
+
+/** Depois de um login com internet: baixa o kit da nota sem internet (certificado/CSC/série do PC) e guarda criptografado. */
+export const ativarNotaSemInternet = async (storeId: string, email: string, password: string): Promise<void> => {
+  if (typeof window === 'undefined' || !window.electronApp?.fiscal || !email || !password) return;
+  try {
+    const { meuIdNaRede } = await import('@/lib/offline/rede');
+    const res = await fetch(resolverUrlApi('/api/fiscal/kit-contingencia'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, email, password, deviceId: meuIdNaRede() }),
+    });
+    const corpo = await res.json().catch(() => null) as { ok?: boolean; kit?: unknown; semNota?: boolean } | null;
+    if (corpo?.ok && corpo.kit) await window.electronApp.fiscal.salvarKit(corpo.kit);
+  } catch (e) {
+    console.warn('Nota sem internet: kit não baixado (tenta no próximo login):', e);
+  }
+};
+
+export const notaSemInternetPronta = async (storeId: string): Promise<boolean> => {
+  if (typeof window === 'undefined' || !window.electronApp?.fiscal) return false;
+  try { return (await window.electronApp.fiscal.status(storeId)).pronto; } catch { return false; }
+};
+
+type ItemParaNota = { quantity: number; price_at_time: number; product_id?: string | null; status?: string; selected_options?: unknown; product?: { id?: string; name?: string; ncm?: string | null; omie_codigo?: string | null } | null };
+
+/** Emite a NFC-e em contingência no computador e imprime 2 vias na impressora do cupom/comprovante. */
+export const emitirNotaSemInternet = async (params: {
+  storeId: string;
+  itens: ItemParaNota[];
+  pagamentos?: { method: string; amount: number; brand?: string }[];
+  destinatario?: { cpfCnpj: string; nome: string };
+}): Promise<{ ok: boolean; reason?: string; nota?: NotaSemInternet; deviceId?: string; impresso?: boolean }> => {
+  if (typeof window === 'undefined' || !window.electronApp?.fiscal) return { ok: false, reason: 'Só no app do Windows.' };
+  // NCM/código vêm do produto do pedido; se faltar (pedido montado pela fila), usa o cardápio guardado no aparelho.
+  const menu = await getCachedMenu(params.storeId).catch(() => null);
+  const porId = new Map(((menu?.products as { id: string }[]) || []).map((p) => [p.id, p as ItemParaNota['product']]));
+  const itens = params.itens
+    .filter((i) => i.status !== 'canceled')
+    .map((i) => {
+      const doMenu = porId.get(String(i.product?.id ?? i.product_id ?? ''));
+      const product = { ...(doMenu || {}), ...(i.product || {}) } as NonNullable<ItemParaNota['product']>;
+      if (!product.ncm && doMenu?.ncm) product.ncm = doMenu.ncm;
+      return { quantity: i.quantity, price_at_time: Number(i.price_at_time), selected_options: i.selected_options, product };
+    });
+  const r = await window.electronApp.fiscal.emitir({ storeId: params.storeId, venda: { itens, pagamentos: params.pagamentos, destinatario: params.destinatario } });
+  if (!r.ok || !r.nota) return { ok: false, reason: r.reason || 'Falha ao emitir a nota sem internet.' };
+  const impressoras = impressorasDoAparelho(params.storeId);
+  const printer = impressoras.find((p) => impressoraRecebe(p as never, 'cupom_fiscal' as DocPrint, { soConfigurado: true }))
+    ?? impressoras.find((p) => impressoraRecebe(p as never, 'comprovante' as DocPrint));
+  let impresso = false;
+  if (printer) {
+    let donos: string[] = [];
+    try {
+      const cache: { name: string; machine: string; kind: string }[] = JSON.parse(localStorage.getItem(`ntb-discovered-cache:${params.storeId}`) || '[]');
+      donos = cache.filter((d) => d.kind !== 'network' && d.name === printer.usb_system_name && d.machine).map((d) => d.machine);
+    } catch { /* sem cache */ }
+    const p = await window.electronApp.fiscal.imprimir({ resultado: r, printer, owners: donos, vias: 2 });
+    impresso = p.ok;
+    if (!p.ok) console.error('Nota sem internet: impressão falhou:', p.reason);
+  }
+  return { ok: true, nota: r.nota, deviceId: r.deviceId, impresso };
+};

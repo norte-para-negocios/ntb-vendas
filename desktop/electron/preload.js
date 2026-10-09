@@ -80,4 +80,11 @@ contextBridge.exposeInMainWorld('electronApp', {
     publicar: (params) => ipcRenderer.invoke('ntb-lan-publicar', params),
     ler: () => ipcRenderer.invoke('ntb-lan-ler'),
   },
+  // NFC-e em contingência sem internet (08/10/2026): ver electron/fiscal-kit.js e lib/fiscalOffline.ts.
+  fiscal: {
+    salvarKit: (kit) => ipcRenderer.invoke('ntb-fiscal-salvar-kit', kit),
+    status: (storeId) => ipcRenderer.invoke('ntb-fiscal-status', storeId),
+    emitir: (params) => ipcRenderer.invoke('ntb-fiscal-emitir', params),
+    imprimir: (params) => ipcRenderer.invoke('ntb-fiscal-imprimir', params),
+  },
 });

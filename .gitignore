@@ -93,3 +93,4 @@ scripts/.pooler-host
 /scripts/e2e/.out/
 /.next-portao/
 /scripts/e2e/.portao.lock/
+/desktop/electron/fiscal-offline.js

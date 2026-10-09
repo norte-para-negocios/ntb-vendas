@@ -6,6 +6,7 @@ export type QueuedActionType =
   | 'create_order'
   | 'update_order_item_status'
   | 'close_table_session'
+  | 'registrar_nota_offline'
   | 'close_counter_order'
   // "Balcão paga primeiro" (pedido do André, 2026-09-11): registra o
   // pagamento sem fechar o pedido — ver registrarPagamentoBalcao em

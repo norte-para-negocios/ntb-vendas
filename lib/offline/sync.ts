@@ -72,7 +72,24 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       if (finalizeErr) throw finalizeErr;
       if (vendaTemCobranca(paymentData)) {
         triggerOrdemProducao({ tableId: payload.tableId });
-        triggerEmissaoFiscal({ tableId: payload.tableId, destinatario: payload.destinatario });
+        // Nota já feita sem internet neste computador (contingência): sobe pela ação 'registrar_nota_offline' logo
+        // depois desta; emitir aqui geraria uma SEGUNDA nota para a mesma venda.
+        const pid = paymentData?.payment_id;
+        const notaJaFeita = pid && (await getPendingActions()).some((a) => a.type === 'registrar_nota_offline' && (a.payload as any).paymentId === pid);
+        if (!notaJaFeita) triggerEmissaoFiscal({ tableId: payload.tableId, destinatario: payload.destinatario });
+      }
+      break;
+    }
+    case 'registrar_nota_offline': {
+      const payload = action.payload as any;
+      const res = await fetch(resolverUrlApi('/api/fiscal/registrar-contingencia'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.reason || `Falha ao registrar a nota feita sem internet (HTTP ${res.status}).`);
       }
       break;
     }
@@ -393,6 +410,8 @@ export function descreverAcaoFila(action: QueuedAction): string {
         refCurta(p.tableId) && `mesa ${refCurta(p.tableId)}`,
         emReais(p.paymentData?.total),
       ]);
+    case 'registrar_nota_offline':
+      return comDetalhe('Nota fiscal feita sem internet', [p.nota?.numero ? `NFC-e ${p.nota.numero} série ${p.nota.serie}` : '', emReais(p.nota?.valorTotal)]);
     case 'close_counter_order':
       return comDetalhe('Entrega/fechamento do pedido de balcão', [
         refCurta(p.orderId) && `pedido ${refCurta(p.orderId)}`,
@@ -446,6 +465,8 @@ export function explicarDescarteAcao(action: QueuedAction): string {
       return 'O item vai continuar com o status antigo no servidor (quem olha o KDS não vai ver essa mudança). Refaça pela tela depois de descartar, se ainda valer.';
     case 'close_table_session':
       return 'A conta desta mesa NÃO vai ser fechada nem o pagamento registrado: a mesa continua ocupada e o dinheiro não entra no turno. Só descarte se já fechou essa mesa por outro caminho.';
+    case 'registrar_nota_offline':
+      return 'A nota feita sem internet (já entregue ao cliente) NÃO vai para a SEFAZ: fica sem autorização. Só descarte se a nota foi resolvida por outro caminho.';
     case 'close_counter_order':
       return 'O pedido de balcão NÃO vai ser fechado (e, se esta ação carregava o pagamento, ele também não é registrado). O pedido continua aberto na tela do Balcão.';
     case 'registrar_pagamento_balcao':

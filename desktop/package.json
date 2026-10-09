@@ -1,20 +1,25 @@
 {
   "name": "ntb-vendas-desktop",
-  "version": "1.2.101",
+  "version": "1.2.102",
   "private": true,
   "description": "Norte Vendas — app desktop (Windows)",
   "main": "electron/main.js",
   "scripts": {
     "build:web": "cd .. && npx next build desktop/webapp",
-    "dev": "npm run build:web && electron .",
-    "dist": "npm run build:web && node ../scripts/conferir-bundle.mjs webapp/out && electron-builder --win --x64"
+    "dev": "npm run build:web && npm run build:fiscal && electron .",
+    "dist": "npm run build:web && npm run build:fiscal && node ../scripts/conferir-bundle.mjs webapp/out && electron-builder --win --x64",
+    "build:fiscal": "esbuild fiscal/entry.ts --bundle --platform=node --target=node20 --format=cjs --packages=external --outfile=electron/fiscal-offline.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.28.2"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "pdfkit": "^0.17.2",
+    "qrcode": "^1.5.4",
+    "xml-crypto": "^6.3.3"
   },
   "build": {
     "appId": "com.norteparanegocios.ntbvendas",

@@ -2759,3 +2759,21 @@ entre computadores: ação espera ação anterior da MESMA mesa ainda na fila de
 subidas por quem está vivo; quem sobe anuncia o id). Troca a cada 1 s e na hora que a fila muda. A tela de mesas usa a fila de todos
 (`filaDeTodos`). Antes de receber sem internet: se chegou item da mesa que não está na tela, recusa; mesa zerada pede confirmação
 ("o pedido de outro computador leva alguns segundos"). Navegador comum: só fila local, como antes. Teste: `scripts/testes/redeLocal.test.ts`.
+
+## Nota fiscal sem internet: NFC-e em contingência no computador (08/10/2026, migration 176)
+Sem internet, o app do Windows emite a NFC-e em contingência (tpEmis=9) na hora do pagamento da mesa, imprime 2 vias com
+QR Code e guarda o XML na fila; com a internet de volta, a ação `registrar_nota_offline` manda para
+`/api/fiscal/registrar-contingencia`, que grava `fiscal_notas` como 'contingencia' e a retransmissão de sempre envia à SEFAZ.
+- Mesmo código fiscal do servidor: `lib/fiscal/paramsDaVenda.ts` (usado também por `/api/fiscal/emitir`) e
+  `lib/fiscal/emitirOffline.ts`, empacotados por esbuild em `desktop/electron/fiscal-offline.js` (`npm run build:fiscal`,
+  roda no `dist`; arquivo gerado, fora do git). `desktop/electron/fiscal-kit.js`: kit criptografado (safeStorage/DPAPI),
+  contador por série, impressão (rede = ESC/POS com QR nativo; USB = PDF pelo SumatraPDF).
+- Kit (`/api/fiscal/kit-contingencia`): certificado (PEM), CSC, emitente e série do PC; só com e-mail+senha de dono,
+  gerente, caixa ou universal. Baixado a cada login digitado e, para quem já estava logado, com a senha lembrada no PC.
+- Série própria por computador (`fiscal_contingencia_series`, 70..89 por loja/ambiente); o número nunca volta (maior entre
+  o contador do PC, o da tabela e as notas já gravadas na série). Venda achada pelo `payment_id`; idempotente pela chave.
+- Ao sincronizar o fechamento, se há `registrar_nota_offline` do mesmo `payment_id`, NÃO dispara a emissão normal.
+- Só mesa e só NFC-e (modelo 65). Balcão sem internet continua emitindo quando a internet volta.
+- Testado em homologação (ODARA): nota feita "sem internet", registrada e AUTORIZADA pela SEFAZ (cStat 100).
+  Teste: `scripts/testes/notaSemInternet.test.ts`. Apagar linha de `fiscal_contingencia_series` faz a numeração voltar
+  (a SEFAZ recusa com 539): nunca apagar em loja real.

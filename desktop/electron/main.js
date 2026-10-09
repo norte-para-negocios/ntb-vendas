@@ -8,6 +8,7 @@ const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const lanPeer = require('./lan-peer');
+const fiscalKit = require('./fiscal-kit');
 const printEngine = require('./print-engine');
 const engineSession = require('./engine-session');
 const updateGuard = require('./update-guard');
@@ -635,6 +636,13 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('ntb-lan-publicar', (_event, params) => lanPeer.publicar(params || {}));
   ipcMain.handle('ntb-lan-ler', () => lanPeer.ler());
+
+  // NFC-e em contingência sem internet (fiscal-kit.js + lib/fiscal/emitirOffline.ts).
+  const fiscal = fiscalKit.criar({ app, safeStorage, printEngine, sumatraPath, log: (m) => logPrint(`[fiscal] ${m}`) });
+  ipcMain.handle('ntb-fiscal-salvar-kit', (_event, kit) => { try { return fiscal.salvarKit(kit); } catch (e) { return { ok: false, reason: String(e?.message || e) }; } });
+  ipcMain.handle('ntb-fiscal-status', (_event, storeId) => { try { return fiscal.status(storeId); } catch { return { pronto: false }; } });
+  ipcMain.handle('ntb-fiscal-emitir', (_event, params) => { try { return fiscal.emitir(params?.storeId, params?.venda); } catch (e) { return { ok: false, reason: String(e?.message || e) }; } });
+  ipcMain.handle('ntb-fiscal-imprimir', (_event, params) => fiscal.imprimir(params || {}));
 
   ipcMain.handle('ntb-print-direct-network', async (_event, params) => {
     const { ip, port, content, raw } = params || {};

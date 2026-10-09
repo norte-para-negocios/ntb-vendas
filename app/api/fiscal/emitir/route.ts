@@ -18,6 +18,7 @@ import {
 import { transmitirNota, resolverEndpointsNfceConsulta, ehSefazIndisponivel } from '@/lib/fiscal/soap';
 import { montarNfeProc } from '@/lib/fiscal/pdf';
 import { gerarPdfContingencia } from '@/lib/fiscal/pdfContingencia';
+import { itensDaVenda, montarParamsDaVenda, type ItemVenda, type ProdutoTaxaVenda } from '@/lib/fiscal/paramsDaVenda';
 import { montarPayloadIncluirNfce } from '@/lib/omie/nota-fiscal';
 import { interpretarErroEnvioNfce } from '@/lib/omieEnvio';
 import { enviarNfceAutorizadaAoOmie, registrarEnvioOmie } from '@/lib/omieEnvioServidor';
@@ -754,34 +755,8 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     numero = numeroGerado as number;
 
     // 6. Monta itens do XML.
-    itensXml = itensValidos.map((i) => {
-      const produto = (i as any).product;
-      // Descrição do item precisa incluir a variação/adicional escolhido
-      // (ex.: "Pizza Calabresa (Grande)") — sem isso, duas linhas de pedido
-      // do mesmo produto-base com tamanhos/sabores diferentes aparecem
-      // idênticas na nota/cupom (achado real, reunião 2026-08-19). Mesmo
-      // princípio de `getOrderItemDisplayName` (lib/labels.ts), sem o R$ dos
-      // adicionais (não cabe no xProd fiscal).
-      const adicionais = ((i as any).selected_options as { name: string }[] | null | undefined) || [];
-      const nomeComVariacao = adicionais.length
-        ? `${produto?.name ?? 'Produto'} (${adicionais.map((o) => o.name).join(', ')})`
-        : (produto?.name ?? 'Produto');
-      return {
-        // omie_codigo é o SKU real (ex.: "90935"), legível no cupom impresso.
-        // Produto com variação (pizza, caipirinha, moqueca...) não tem código
-        // próprio — o SKU do Omie fica na opção escolhida; usa a 1ª opção com
-        // código (2026-09-28: o ImportarNFCe do Omie recusa a nota inteira se
-        // algum cProd não existir lá). UUID truncado só em último caso.
-        cProd:
-          produto?.omie_codigo ||
-          ((i as any).selected_options as { omie_codigo?: string | null }[] | null | undefined)?.find((o) => o.omie_codigo)?.omie_codigo ||
-          String(produto?.id ?? '').slice(0, 8),
-        xProd: nomeComVariacao,
-        ncm: normalizarNcm(produto?.ncm) ?? produto?.ncm,
-        qCom: i.quantity,
-        vUnCom: Number(i.price_at_time),
-      };
-    });
+    // Mesma montagem da nota em contingência do computador da loja (lib/fiscal/paramsDaVenda.ts).
+    itensXml = itensDaVenda(itensValidos as unknown as ItemVenda[]);
 
     // 7. Certificado — já baixado/extraído/validado contra stores.cnpj
     // ANTES da numeração (ver bloco `certificadoValidado` acima), reaproveitado
@@ -800,62 +775,20 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       .maybeSingle();
 
     // 8. Monta e assina o XML.
-    const paramsXml: MontarXmlParams = {
-      taxaServico: produtoTaxa?.omie_codigo
-        ? { cProd: String(produtoTaxa.omie_codigo), xProd: produtoTaxa.name, ncm: normalizarNcm(produtoTaxa.ncm) ?? produtoTaxa.ncm }
-        : undefined,
+    const paramsXml: MontarXmlParams = montarParamsDaVenda({
+      config,
+      cnpjLoja,
       modelo,
-      ambiente: config.ambiente,
       serie,
       numero,
-      emitente: {
-        // CNPJ real do emitente — stores.cnpj, já validado contra o
-        // certificado acima (nunca config.cnpj_autorizado, ver comentário
-        // do bloco de pré-validação).
-        cnpj: cnpjLoja,
-        ie: config.inscricao_estadual || '',
-        razaoSocial: config.razao_social || '',
-        logradouro: config.endereco_logradouro || '',
-        numero: config.endereco_numero || 'S/N',
-        bairro: config.endereco_bairro || '',
-        municipio: config.endereco_cidade || '',
-        // TODO: mapear UF/município -> código IBGE quando expandir além da
-        // BA/Mata de São João (fora de escopo desta task, ver AGENTS.md).
-        cMun: '2921005',
-        uf: config.endereco_uf || 'BA',
-        cep: (config.endereco_cep || '').replace(/\D/g, ''),
-        cUF: 29,
-        cstCsosnPadrao: config.cst_csosn_padrao || '102',
-        cstPisPadrao: config.cst_pis_padrao || '07',
-        cstCofinsPadrao: config.cst_cofins_padrao || '07',
-        // Grupo <autXML>, exigência específica da Bahia desde 01/01/2016
-        // (identificação do escritório de contabilidade autorizado a baixar
-        // o XML). Preferência pro CNPJ real que a loja configurou em
-        // `cnpj_autorizado` (esse SIM é o uso pretendido desse campo —
-        // achado da revisão final de branch, 2026-08-06: antes ele era
-        // usado por engano como CNPJ do EMITENTE, ver acima); sem valor
-        // configurado, cai no CNPJ de fallback da própria SEFAZ Bahia (sem
-        // NENHUM valor aqui, a SEFAZ rejeita com cStat=486 — já reproduzido
-        // e resolvido com este mesmo CNPJ em teste real, AGENTS.md,
-        // 2026-08-03/04, autorização cStat=100 tanto em NF-e quanto em
-        // NFC-e).
-        autXmlCnpj: (config.cnpj_autorizado || '').replace(/\D/g, '') || '13937073000156',
-        telefone: config.telefone || undefined,
-      },
-      itens: itensXml,
-      // Repassado pros dois modelos agora (2026-09-21) — `montarXmlNota`
-      // (lib/fiscal/xml.ts) decide o formato do <dest> por modelo, e ignora
-      // sozinho um documento vazio/ausente na NFC-e.
+      itensXml,
+      produtoTaxa: produtoTaxa as ProdutoTaxaVenda | null,
       destinatario: body.destinatario,
-      // Achado real (WhatsApp do Ramon, 2026-08-24): `<pag>` nunca lia a
-      // forma de pagamento real da venda. `payment_details.methods` já
-      // existe desde a Task 2 do plano Frente de Caixa — `paymentDetailsAncora`
-      // já foi buscado logo no início desta rota (checagem de emitir_nota),
-      // só reaproveitado aqui.
+      // Forma de pagamento real da venda (payment_details.methods da âncora).
       pagamentos: Array.isArray((paymentDetailsAncora as any)?.methods)
         ? ((paymentDetailsAncora as any).methods as PagamentoNota[])
         : undefined,
-    };
+    });
     paramsXmlUsados = paramsXml;
     const montado = montarXmlNota(paramsXml);
     chave = montado.chave;
