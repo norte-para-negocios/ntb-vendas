@@ -2434,14 +2434,31 @@ export const updateStoreFiscalConfig = async (storeId: string, config: UpdateSto
 // acima) — lido direto da tabela, não precisa passar pela API route.
 // `null` = loja ainda não tem nenhuma configuração salva (estado normal,
 // não é erro).
+// Cópia no aparelho: sem internet a leitura falha e a tela achava que a loja não emite nota (a venda saía sem
+// `emitir_nota`, a nota sem internet não era feita e a baixa ia ao Omie como manual; Sertão, 08/10/2026).
+const chaveFiscalCfg = (storeId: string) => `ntb-fiscal-cfg-${storeId}`;
 export const fetchStoreFiscalConfig = async (storeId: string): Promise<StoreFiscalConfig | null> => {
-  const { data, error } = await supabase
-    .from('store_fiscal_config')
-    .select('*')
-    .eq('store_id', storeId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data;
+  let data: StoreFiscalConfig | null = null;
+  let error: unknown = null;
+  try {
+    const r = await supabase.from('store_fiscal_config').select('*').eq('store_id', storeId).maybeSingle();
+    data = r.data as StoreFiscalConfig | null;
+    error = r.error;
+  } catch (e) { error = e; }
+  if (error) {
+    if (typeof window === 'undefined') return null;
+    try {
+      const guardada = window.localStorage.getItem(chaveFiscalCfg(storeId));
+      return guardada ? (JSON.parse(guardada) as StoreFiscalConfig) : null;
+    } catch { return null; }
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      if (data) window.localStorage.setItem(chaveFiscalCfg(storeId), JSON.stringify(data));
+      else window.localStorage.removeItem(chaveFiscalCfg(storeId));
+    } catch { /* sem espaço/bloqueado: segue sem cópia */ }
+  }
+  return data ?? null;
 };
 
 // Integração ntb-vendas -> ntb-estoque (Ordem de Produção automática, ver

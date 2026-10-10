@@ -40,9 +40,20 @@ export async function montarPayloadsPorPedido(
   // Regra do dono (30/09): PDV só quando a venda gera nota; sem nota é baixa comum.
   const { data: notas } = await admin.from('fiscal_notas').select('order_id, status').in('order_id', ids);
   const temNota = new Set((notas ?? []).filter((n: { status: string }) => n.status !== 'erro' && n.status !== 'cancelada').map((n: { order_id: string }) => n.order_id));
+  // Sem a marca (venda fechada sem internet: o app não sabia a config fiscal) a emissão automática emite do
+  // mesmo jeito, só que segundos DEPOIS desta baixa. Por isso, sem marca, vale a regra da própria emissão
+  // (app/api/fiscal/emitir): loja com emissão automática emite, menos venda 100% cortesia. Senão a baixa saía
+  // como manual (AJU) numa venda com nota (Sertão, 08/10/2026: 4 vendas, notas 151-154).
+  const { data: cfgEmissao } = await admin.from('store_fiscal_config').select('modelo_emissao_automatica').eq('store_id', storeId).maybeSingle();
+  const emissaoAutomatica = ['nfce', 'nfe'].includes(String(cfgEmissao?.modelo_emissao_automatica ?? ''));
   const comNotaDoPedido = (orderId: string) => {
-    const marca = detalhes.get(orderId)?.emitir_nota;
-    return typeof marca === 'boolean' ? marca : temNota.has(orderId);
+    const pd = detalhes.get(orderId);
+    const marca = pd?.emitir_nota;
+    if (typeof marca === 'boolean') return marca;
+    if (temNota.has(orderId)) return true;
+    const metodos = Array.isArray(pd?.methods) ? (pd.methods as { method?: string }[]) : [];
+    const soCortesia = metodos.length > 0 && metodos.every((m) => m.method === 'COURTESY');
+    return emissaoAutomatica && !soCortesia;
   };
 
   const [{ data: setores }, { data: categorias }, { data: locaisEstoque }] = await Promise.all([
