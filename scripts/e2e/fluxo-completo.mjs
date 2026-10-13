@@ -314,7 +314,15 @@ async function confirmarPergunta(dev, textoRe, rotulo = 'Confirmar') {
   await sleep(600);
 }
 async function fecharJanelas(dev) {
-  for (let i = 0; i < 4; i++) { if (await dev.page.locator('[role=dialog]').count() === 0) break; await dev.page.keyboard.press('Escape'); await sleep(500); }
+  for (let i = 0; i < 6; i++) {
+    const n = await dev.page.locator('[role=dialog]').count();
+    if (n === 0) break;
+    // Esc só fecha com o foco dentro da janela (depois de fechar uma janela por cima, o foco vai para o corpo da página):
+    // a partir da 2ª tentativa, clica no X da janela de cima.
+    if (i === 0) await dev.page.keyboard.press('Escape');
+    else await dev.page.locator('[role=dialog]').last().getByRole('button', { name: /^Fechar$/i }).first().click({ timeout: 2000 }).catch(() => dev.page.keyboard.press('Escape'));
+    await sleep(500);
+  }
 }
 async function adicionarItens(dev, nomes) {
   const p = dev.page;
