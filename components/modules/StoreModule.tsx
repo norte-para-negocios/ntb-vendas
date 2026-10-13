@@ -1680,6 +1680,18 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
   const storeName = store.name;
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+  // Cancelar item pela cozinha/bar pede o motivo por escrito (13/10/2026, pedido do dono: "a pessoa explicar o B.O").
+  const [kdsCancelar, setKdsCancelar] = useState<{ itemId: string; nome: string; motivo: string } | null>(null);
+  const confirmarCancelarNoKds = async () => {
+      const dlg = kdsCancelar;
+      if (!dlg || !podeCancelarNoKds || cancellingIds.has(dlg.itemId)) return;
+      const motivo = dlg.motivo.trim();
+      if (motivo.length < 3) { toast.error('Escreva o motivo do cancelamento.'); return; }
+      setKdsCancelar(null);
+      setCancellingIds(prev => new Set(prev).add(dlg.itemId));
+      await cancelSpecificOrderItem(dlg.itemId, loggedUser!.id, loggedUser!.name, motivo);
+      setOrders(prev => prev.filter(o => o.id !== dlg.itemId));
+  };
 
   // Locais de preparo (ex.: Pizzaria) deste fluxo: cada tela pode ficar fixa
   // num local — escolha lembrada neste aparelho.
@@ -1974,14 +1986,10 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                 </button>
                                 {podeCancelarNoKds && <button
                                     disabled={cancellingIds.has(item.id)}
-                                    onClick={async () => {
+                                    onClick={() => {
                                         if (cancellingIds.has(item.id)) return;
                                         if (!podeCancelarNoKds) return;
-                                        if (await confirm({ message: 'Tem certeza que deseja CANCELAR este item?', variant: 'danger' })) {
-                                            setCancellingIds(prev => new Set(prev).add(item.id));
-                                            await cancelSpecificOrderItem(item.id, loggedUser!.id, loggedUser!.name, 'Cancelado no KDS');
-                                            setOrders(prev => prev.filter(o => o.id !== item.id));
-                                        }
+                                        setKdsCancelar({ itemId: item.id, nome: `${item.quantity}x ${getOrderItemDisplayName(item)}`, motivo: '' });
                                     }}
                                     className="w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--err)] hover:bg-[var(--err)]/12 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
                                     title="Cancelar item"
@@ -2006,6 +2014,18 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                 </div>
             )}
         </div>
+        <Modal isOpen={!!kdsCancelar} onClose={() => setKdsCancelar(null)} title="Cancelar item" size="sm">
+            {kdsCancelar && (
+                <div className="space-y-4">
+                    <p className="text-sm text-[var(--text)]">Cancelar <b>{kdsCancelar.nome}</b>?</p>
+                    <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu, acabou o produto" autoFocus value={kdsCancelar.motivo} onChange={(e) => setKdsCancelar({ ...kdsCancelar, motivo: e.target.value })} maxLength={120} />
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button variant="secondary" onClick={() => setKdsCancelar(null)}>Voltar</Button>
+                        <Button variant="danger" onClick={confirmarCancelarNoKds} disabled={kdsCancelar.motivo.trim().length < 3}>Cancelar item</Button>
+                    </div>
+                </div>
+            )}
+        </Modal>
     </div>
   );
 };
@@ -3186,7 +3206,9 @@ const TablesView: React.FC<{
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
     const [showMoveTableModal, setShowMoveTableModal] = useState(false);
-    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; enviando: boolean } | null>(null);
+    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; enviando: boolean } | null>(null);
+    // Trocar de mesa e mover item pedem o motivo por escrito (13/10/2026): fica na auditoria (Equipe/Relatórios).
+    const [trocaMesaMotivo, setTrocaMesaMotivo] = useState('');
     const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; enviando: boolean } | null>(null);
     // Planta de mesas (floor plan): alterna Lista/Mapa; a escolha fica no aparelho.
     const [tablesViewMode, setTablesViewMode] = useState<'lista' | 'mapa'>(() => {
@@ -3951,10 +3973,17 @@ NOTIFY pgrst, 'reload schema';`;
         if (isAberto) { avisarSoComLogin(); return; }
         if (!roleCan(loggedUser, store, 'trocar_mesa')) { toast.error('Você não tem permissão para trocar de mesa.'); return; }
         if (!selectedTable || !targetTableId) return;
+        const motivo = trocaMesaMotivo.trim();
+        if (motivo.length < 3) { toast.error('Escreva o motivo da troca de mesa.'); return; }
         
         if (await confirm(`Tem certeza que deseja mover a Mesa ${selectedTable.number} para a nova mesa?`)) {
             const result = await moveTable(selectedTable.id, targetTableId, loggedUser.id);
             if (result.success) {
+                const destino = tables.find((t) => t.id === targetTableId);
+                registrarAcao(storeId, 'mesa.trocada', { entity: 'tables', entityId: selectedTable.id,
+                    summary: `Mesa ${selectedTable.number} → Mesa ${destino?.number ?? '?'} · Motivo: ${motivo}`,
+                    details: { motivo, de: selectedTable.number, para: destino?.number ?? null } });
+                setTrocaMesaMotivo('');
                 toast.success("Mesa trocada com sucesso!");
                 setShowMoveTableModal(false);
                 setSelectedTable(null);
@@ -4750,19 +4779,24 @@ NOTIFY pgrst, 'reload schema';`;
         if (isAberto) { avisarSoComLogin(); return; }
         if (!roleCan(loggedUser, store, 'mover_item')) { toast.error('Você não tem permissão para mover item.'); return; }
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
-        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', enviando: false });
+        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', motivo: '', enviando: false });
     };
 
     const confirmarMoverItem = async () => {
         const dlg = moveItemDlg;
         if (!dlg || dlg.enviando) return;
         if (!dlg.targetId) { toast.error('Escolha a mesa de destino.'); return; }
+        if (dlg.motivo.trim().length < 3) { toast.error('Escreva o motivo da transferência.'); return; }
         setMoveItemDlg({ ...dlg, enviando: true });
         const origemId = selectedTable?.id ?? null;
         const operadorId = loggedUser.id;
         const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, operadorId, loggedUser.name);
         setMoveItemDlg(null);
         if (r.success) {
+            const destino = tables.find((t) => t.id === dlg.targetId);
+            registrarAcao(storeId, 'item.transferido', { entity: 'order_items', entityId: dlg.itemId,
+                summary: `${dlg.nome}: Mesa ${selectedTable?.number ?? '?'} → Mesa ${destino?.number ?? '?'} · Motivo: ${dlg.motivo.trim()}`,
+                details: { motivo: dlg.motivo.trim(), de: selectedTable?.number ?? null, para: destino?.number ?? null, item: dlg.nome } });
             loadData();
             toast.undo('Item movido para a outra mesa.', 'Desfazer', async () => {
                 // O servidor só devolve se o item ainda está na mesa de destino (p_from_table_id).
@@ -4816,6 +4850,7 @@ NOTIFY pgrst, 'reload schema';`;
         if (!podeCancelarPedido) { toast.error('Você não tem permissão para cancelar o pedido.'); return; }
         if (!selectedTable || cancelandoPedido) return;
         if (!isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
+        if (cancelarMotivo.trim().length < 3) { toast.error('Escreva o motivo do cancelamento.'); return; }
         const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
         if (itens.length === 0) { setShowCancelarPedido(false); return; }
         if (itens.some((i) => (i as any).fiscal_nota_id)) {
@@ -4828,9 +4863,9 @@ NOTIFY pgrst, 'reload schema';`;
             const cancelados: OrderItem[] = [];
             for (const it of itens) {
                 // eslint-disable-next-line no-await-in-loop -- um por vez: ordem e falha parcial ficam claras
-                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name, cancelarMotivo.trim() || 'Pedido cancelado pelo gerente', 'cancelar_pedido')) cancelados.push(it);
+                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name, cancelarMotivo.trim(), 'cancelar_pedido')) cancelados.push(it);
             }
-            if (cancelados.length > 0) await imprimirCancelamento(cancelados, selectedTable.number, cancelarMotivo.trim() || undefined);
+            if (cancelados.length > 0) await imprimirCancelamento(cancelados, selectedTable.number, cancelarMotivo.trim());
             if (cancelados.length === itens.length) toast.success('Pedido cancelado.');
             else toast.warning(`Cancelei ${cancelados.length} de ${itens.length} itens. Tente de novo para os restantes.`);
             setShowCancelarPedido(false);
@@ -5300,10 +5335,11 @@ NOTIFY pgrst, 'reload schema';`;
                                 <option key={t.id} value={t.id}>Mesa {t.number}{t.status === 'available' ? ' (livre)' : ''}</option>
                             ))}
                         </select>
-                        <p className="text-[12px] text-[var(--text-muted)]">O item não é impresso de novo na cozinha. Fica registrado quem moveu.</p>
+                        <Input label="Motivo (obrigatório)" placeholder="Ex.: lançado na mesa errada" value={moveItemDlg.motivo} onChange={(e) => setMoveItemDlg({ ...moveItemDlg, motivo: e.target.value })} maxLength={120} />
+                        <p className="text-[12px] text-[var(--text-muted)]">O item não é impresso de novo na cozinha. Fica registrado quem moveu e o motivo.</p>
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="secondary" onClick={() => setMoveItemDlg(null)} disabled={moveItemDlg.enviando}>Voltar</Button>
-                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando}>Mover item</Button>
+                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando} disabled={!moveItemDlg.targetId || moveItemDlg.motivo.trim().length < 3}>Mover item</Button>
                         </div>
                     </div>
                 )}
@@ -5979,10 +6015,10 @@ NOTIFY pgrst, 'reload schema';`;
                     <p className="text-sm text-[var(--text-muted)]">
                         Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe um pedido de cancelamento. Não dá para desfazer.
                     </p>
-                    <Input label="Motivo (opcional)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={80} />
+                    <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={120} />
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowCancelarPedido(false)} disabled={cancelandoPedido}>Voltar</Button>
-                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido}>Cancelar pedido</Button>
+                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido} disabled={cancelarMotivo.trim().length < 3}>Cancelar pedido</Button>
                     </div>
                 </div>
             </Modal>
@@ -6016,11 +6052,13 @@ NOTIFY pgrst, 'reload schema';`;
                         )}
                     </div>
 
+                    <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente pediu para mudar de lugar" value={trocaMesaMotivo} onChange={(e) => setTrocaMesaMotivo(e.target.value)} maxLength={120} />
+
                     <div className="flex justify-end gap-2 pt-4 border-t border-[var(--border)]">
                         <Button variant="secondary" onClick={() => setShowMoveTableModal(false)}>Cancelar</Button>
                         <Button
                             onClick={handleMoveTable}
-                            disabled={!targetTableId}
+                            disabled={!targetTableId || trocaMesaMotivo.trim().length < 3}
                             className="bg-[var(--info-fill)] hover:bg-[var(--info)]/90 text-white"
                         >
                             Confirmar Troca
