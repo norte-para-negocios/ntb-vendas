@@ -12,8 +12,9 @@ import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModul
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { stockModeFields, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
-import { turnoNaRede } from './offline/rede';
-import { enqueue } from './offline/queue';
+import { turnoNaRede, juntarFilas, acoesDosOutros, idsJaSubidos } from './offline/rede';
+import { resumoSemServidor } from './offline/resumoTurno';
+import { enqueue, getPendingActions } from './offline/queue';
 import { isNetworkError, checkRealConnectivity } from './offline/network';
 import { chamarCriarPedido } from './offline/criarPedido';
 
@@ -2199,7 +2200,10 @@ export interface CashShiftConta {
 // (não existe cache pra um turno aberto direto offline — esse caso é
 // coberto pela UI em StoreModule.tsx, que nunca mais bloqueia o fechamento
 // por falta de resumo).
-export const fetchCashShiftSummary = async (shiftId: string): Promise<CashShiftSummary | null> => {
+// `turnoAtual` (o turno aberto na tela): sem servidor, o resumo é montado com a cópia guardada + os pagamentos e
+// sangrias que ainda estão na fila sem internet (deste aparelho e dos outros da rede) — lib/offline/resumoTurno.ts.
+// Fechar o caixa e imprimir a posição não dependem de internet (13/10/2026).
+export const fetchCashShiftSummary = async (shiftId: string, turnoAtual?: CashShift | null): Promise<CashShiftSummary | null> => {
   try {
     const { data, error } = await supabase.rpc('fetch_cash_shift_summary_secure', { p_shift_id: shiftId });
     if (error) throw error;
@@ -2208,8 +2212,11 @@ export const fetchCashShiftSummary = async (shiftId: string): Promise<CashShiftS
     return data as CashShiftSummary;
   } catch (error) {
     if (!isNetworkError(error)) return null;
-    const cached = await getCachedCashShiftSummary(shiftId);
-    return (cached?.summary as CashShiftSummary) ?? null;
+    const cached = (await getCachedCashShiftSummary(shiftId).catch(() => undefined))?.summary as CashShiftSummary | undefined;
+    const shift = turnoAtual ?? cached?.shift;
+    if (!shift) return cached ?? null;
+    const fila = juntarFilas(await getPendingActions().catch(() => []), acoesDosOutros(), idsJaSubidos());
+    return resumoSemServidor(shift, cached, fila);
   }
 };
 
@@ -3599,7 +3606,8 @@ export const enfileirarCancelamento = async (params: {
 // `print_jobs(store_id, dedupe_key)` (migration 073) barra a segunda
 // tentativa. Combinado com o id da impressora pra nunca colidir entre
 // impressoras diferentes da mesma loja.
-export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string, doc: DocPrint = 'comprovante', soConfigurado = false): Promise<void> => {
+/** Devolve quantas impressoras receberam (na fila do servidor ou, sem internet, direto pela rede no app do Windows). */
+export const enqueueReceiptPrintJobs = async (storeId: string, title: string, content: string | ((paperWidthMm: number | null) => string), dedupeKeyBase?: string, doc: DocPrint = 'comprovante', soConfigurado = false): Promise<number> => {
   const { data: printers, error } = await supabase
     .from('printer_configs')
     .select('*')
@@ -3608,10 +3616,10 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
     .in('connection_type', ['network', 'usb']);
   let impressoras = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc, { soConfigurado }));
   if (error) {
-    if (!isNetworkError(error)) { console.error('Error fetching receipt printers:', error); return; }
+    if (!isNetworkError(error)) { console.error('Error fetching receipt printers:', error); return 0; }
     impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && impressoraRecebe(p, doc, { soConfigurado }));
   }
-  await Promise.all(
+  const resultados = await Promise.all(
     (impressoras || []).map((printer) =>
       enqueuePrintJob({
         storeId,
@@ -3621,9 +3629,10 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
         // Layout em colunas depende do papel DESTA impressora (80 mm = 48, 58 mm = 32).
         content: typeof content === 'function' ? content((printer as { paper_width_mm?: number | null }).paper_width_mm ?? null) : content,
         dedupeKey: dedupeKeyBase ? `${dedupeKeyBase}:${printer.id}` : undefined,
-      })
+      }).catch(() => ({ success: false }))
     )
   );
+  return resultados.filter((r) => r.success).length;
 };
 
 // Cupom fiscal completo (PDF com QR) pela fila: quem finaliza pode estar em

@@ -2805,3 +2805,11 @@ dele). Pedido do dono: "tá todo mundo no mesmo Wi-Fi, não faz sentido cair". A
   SDK em /opt/homebrew/share/android-commandlinetools) com o servidor bloqueado por iptables e um lan-peer no Mac (10.0.2.2): o celular
   mostrou o caixa aberto no "notebook".
 - Limite: o celular só fala com computador que tenha o app do Windows ABERTO na mesma loja; navegador comum continua só com a fila local.
+
+## Fechamento de caixa sem internet (13/10/2026)
+Teste do dono na ODARA: sem internet o fechamento não imprimiu. Causa: o resumo vinha só do servidor (sem cópia = sem papel) e o papel ia
+para a fila `print_jobs`. Agora: com internet a tela do Caixa guarda o resumo do turno a cada minuto; sem servidor,
+`fetchCashShiftSummary(id, turno)` monta o resumo com a cópia + pagamentos/sangrias/suprimentos do turno ainda na fila (minha e dos outros
+aparelhos da rede) — `lib/offline/resumoTurno.ts` (teste `resumoTurnoSemServidor.test.ts`). `imprimirFechamentoDoCaixa`: impressora de
+"Fechamento de caixa" (fila; sem internet, direto pela rede no Windows) → celular manda ao computador (`/imprimir` com `doc`) → impressora
+do aparelho. Fechar sem internet também zera a cópia do turno no aparelho. `enqueueReceiptPrintJobs` agora devolve quantas impressoras receberam.

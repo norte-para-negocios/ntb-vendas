@@ -10,7 +10,8 @@
 
 export type HttpNativo = (o: { url: string; method: 'GET' | 'POST'; headers: Record<string, string>; data?: unknown; connectTimeout?: number; readTimeout?: number }) => Promise<{ status: number; data: unknown }>;
 
-export type TicketCelular = { destination: 'kitchen' | 'bar'; sectorId?: string | null; title: string; content: string; sig: string };
+// Papel do pedido (cozinha/bar, com `sig` para não sair de novo quando sincronizar) ou documento do caixa (`doc`, ex.: fechamento).
+export type TicketCelular = { destination: 'kitchen' | 'bar'; sectorId?: string | null; title: string; content: string; sig: string; doc?: string };
 export type CaixaNaRede = { key: string; shift: unknown | null; updatedAt: number };
 
 const PORTA = 47610;

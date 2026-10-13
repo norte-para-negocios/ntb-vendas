@@ -91,7 +91,7 @@ import { decomporVenda, configTaxaDaLoja, cortesiaDaVenda } from '@/lib/faturame
 import { mesasComFila } from '@/lib/offline/pendingOrders';
 import { iniciarRedeLocal, imprimirPeloComputador } from '@/lib/offline/rede';
 import type { TicketCelular } from '@/lib/offline/lanCelular';
-import { listCachedCashShifts } from '@/lib/offline/cache';
+import { listCachedCashShifts, setCachedCashShift } from '@/lib/offline/cache';
 import { getPendingActions } from '@/lib/offline/queue';
 import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
@@ -1133,7 +1133,12 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
       caixas: () => listCachedCashShifts(sid),
       imprimirTickets: async (tickets) => {
         let n = 0;
-        for (const t of tickets) n += await printOfflineOrderTicket({ storeId: sid, destination: t.destination, sectorId: t.sectorId ?? null, title: t.title, content: t.content, sig: t.sig }).catch(() => 0);
+        for (const t of tickets) {
+          n += t.doc
+            // Documento do caixa (ex.: fechamento feito no celular): impressora marcada para esse documento.
+            ? await enqueueReceiptPrintJobs(sid, t.title, t.content, `lan:${t.sig}`, t.doc as Parameters<typeof enqueueReceiptPrintJobs>[4]).catch(() => 0)
+            : await printOfflineOrderTicket({ storeId: sid, destination: t.destination, sectorId: t.sectorId ?? null, title: t.title, content: t.content, sig: t.sig }).catch(() => 0);
+        }
         return n;
       },
     });
@@ -8044,6 +8049,43 @@ const CaixaViewMeu: React.FC<{
         }
     };
 
+    // Posição do caixa no papel, com ou sem internet (13/10/2026: "encerrar caixa é independente de internet"):
+    // 1) impressora marcada para "Fechamento de caixa" (fila do servidor; sem internet, direto pela rede no app do Windows);
+    // 2) celular sem internet: manda o papel para um computador da loja imprimir (rede local);
+    // 3) senão, a impressora deste aparelho.
+    const imprimirFechamentoDoCaixa = async (titulo: string, dados: ReturnType<typeof dadosDoFechamento>, chave: string): Promise<boolean> => {
+        try {
+            const mmLoja = store.config?.printer_paper_width_mm;
+            const n = await enqueueReceiptPrintJobs(store.id, titulo, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? mmLoja }), chave, 'fechamento_caixa').catch(() => 0);
+            if (n > 0) return true;
+            const texto = buildCashClosingText({ ...dados, paperWidthMm: mmLoja });
+            if (!window.electronApp?.printDirectNetwork && await imprimirPeloComputador(`${chave}:${Date.now()}`, [{ destination: 'kitchen', title: titulo, content: texto, sig: chave, doc: 'fechamento_caixa' }])) {
+                toast.info('Fechamento enviado ao computador do caixa para imprimir.');
+                return true;
+            }
+            const ok = await printPlainTextThermal('Fechamento de caixa', texto, mmLoja === 58 || mmLoja === 48 ? mmLoja : 80);
+            if (!ok) toast.error('O caixa foi fechado, mas o papel do fechamento não saiu. Use "Reimprimir fechamento" no histórico.');
+            return ok;
+        } catch (e) {
+            console.error('imprimir fechamento falhou (o caixa já foi fechado):', e);
+            return false;
+        }
+    };
+
+    // Guarda o resumo do turno aberto a cada minuto (com internet): é a base do fechamento se o servidor cair.
+    const ultimoResumoGuardado = useRef(0);
+    useEffect(() => {
+        if (!shift || String(shift.id).startsWith('local_')) return;
+        const guardar = () => {
+            if (Date.now() - ultimoResumoGuardado.current < 55_000 || (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt) return;
+            ultimoResumoGuardado.current = Date.now();
+            void fetchCashShiftSummary(shift.id).catch(() => null);
+        };
+        guardar();
+        const t = setInterval(guardar, 60_000);
+        return () => clearInterval(t);
+    }, [shift?.id]);
+
     // Abre a tela de fechamento já carregando o resumo real do turno
     // (fetch_cash_shift_summary_secure) — a diferença em si é recalculada
     // ao vivo no client (useMemo abaixo) conforme o operador digita o valor
@@ -8054,9 +8096,10 @@ const CaixaViewMeu: React.FC<{
         setClosingCashBreakdown({});
         setIsLoadingSummary(true);
         try {
-            const summary = await fetchCashShiftSummary(shift.id);
+            const summary = await fetchCashShiftSummary(shift.id, shift);
             setCloseSummary(summary);
             if (!summary) toast.error('Não foi possível carregar o resumo do turno.');
+            else if ((summary as { semServidor?: boolean }).semServidor) toast.info('Sem conexão com o servidor: o resumo foi montado com o que está neste aparelho e nos computadores da loja. O fechamento sincroniza quando a conexão voltar.');
         } finally {
             setIsLoadingSummary(false);
         }
@@ -8084,15 +8127,8 @@ const CaixaViewMeu: React.FC<{
         try {
             const dados = dadosDoFechamento(historySummary, { storeName: store.name, operador: historyOperador || 'Operador', reimpressoEm: new Date() });
             registrarAcao(store.id, 'reimpressao.fechamento_caixa', { entity: 'cash_shift', entityId: historySummary.shift.id, summary: `Reimprimiu o fechamento de caixa de ${historyOperador || 'operador'}` });
-            const temImpressora = await hasActivePrinterForDoc(store.id, 'fechamento_caixa');
-            if (temImpressora) {
-                await enqueueReceiptPrintJobs(store.id, `Fechamento de caixa (reimpressão) - ${historyOperador}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${historySummary.shift.id}:reimp:${Date.now()}`, 'fechamento_caixa');
-                toast.success('Fechamento enviado para a impressora.');
-            } else {
-                const mm = store.config?.printer_paper_width_mm;
-                const ok = await printPlainTextThermal('Fechamento de caixa', buildCashClosingText({ ...dados, paperWidthMm: mm }), mm === 58 || mm === 48 ? mm : 80);
-                if (!ok) toast.error('Não consegui imprimir. Confira a impressora.');
-            }
+            const ok = await imprimirFechamentoDoCaixa(`Fechamento de caixa (reimpressão) - ${historyOperador}`, dados, `fechamento:${historySummary.shift.id}:reimp:${Date.now()}`);
+            if (ok) toast.success('Fechamento enviado para a impressora.');
         } catch (e) {
             console.error('reimprimir fechamento falhou:', e);
             toast.error('Não consegui imprimir. Confira a impressora.');
@@ -8373,8 +8409,7 @@ const CaixaViewMeu: React.FC<{
                         contado: closingCountedValue,
                         diferenca: result.difference ?? (closingCountedValue - (Number(closeSummary.expected_cash) || 0)),
                     });
-                    enqueueReceiptPrintJobs(store.id, `Fechamento de caixa - ${loggedUser.name}`, (mm) => buildCashClosingText({ ...dados, paperWidthMm: mm ?? store.config?.printer_paper_width_mm }), `fechamento:${shift.id}`, 'fechamento_caixa')
-                        .catch((e) => console.error('enqueueReceiptPrintJobs (fechamento de caixa) falhou:', e));
+                    void imprimirFechamentoDoCaixa(`Fechamento de caixa - ${loggedUser.name}`, dados, `fechamento:${shift.id}`);
                 } catch (e) {
                     console.error('montar posição do caixa falhou (o caixa já foi fechado):', e);
                 }
@@ -8387,8 +8422,10 @@ const CaixaViewMeu: React.FC<{
                 setPendingApproval(null);
                 setShowCloseModal(false);
                 setCloseSummary(null);
-                // Volta ao estado "sem turno aberto" (mesma tela da Task 3).
+                // Volta ao estado "sem turno aberto" (mesma tela da Task 3). A cópia do aparelho também (fechado sem internet,
+                // reabrir o app não pode mostrar o caixa aberto de novo; os computadores contam isso ao celular).
                 setShift(null);
+                void setCachedCashShift(store.id, loggedUser.role === 'universal' ? null : loggedUser.id, null).catch(() => null);
             } else if (result.requires_approval) {
                 // Achado da varredura (2026-08-30): a RPC já recusava fechar com
                 // diferença acima da tolerância, mas nada aqui nunca tratava
