@@ -371,14 +371,11 @@ async function secLancamento(C) {
   await g.page.getByRole('button', { name: /Confirmar pedido ·/ }).click();
   await rel.passo('senha ERRADA não lança o pedido', async () => {
     const erro = await confirmarComSenha(g, 'senha-que-ninguem-tem-9', U.garcom.nome);
-    ok(erro && /Nome ou senha incorretos/i.test(erro), `mensagem inesperada: ${erro}`);
+    ok(erro && /Senha não encontrada|Nome ou senha incorretos/i.test(erro), `mensagem inesperada: ${erro}`);
     igual((await amb.pedidosDasMesas()).length, 0, 'pedidos criados com senha errada');
   });
-  await rel.passo('nome de um garçom com a senha de OUTRO (garçom 2) é recusado: "Nome ou senha incorretos"', async () => {
-    const erro = await confirmarComSenha(g, U.garcom2.senha, U.garcom.nome);
-    ok(erro && /Nome ou senha incorretos/i.test(erro), `mensagem inesperada: ${erro}`);
-    igual((await amb.pedidosDasMesas()).length, 0, 'pedidos criados com a senha de outro usuário');
-  });
+  // Desde 08/10/2026 (pedido do dono) a senha sozinha identifica quem lança: a senha de outro garçom lança no nome DELE.
+  // O passo antigo "senha de OUTRO é recusada" saiu (a regra R3 caiu); a autoria é conferida no passo do banco abaixo.
   await orcamento(C, 'lançar 3 itens de locais diferentes (cozinha, bar, pizzaria) = 3 pedidos, um por local', async () => {
     const erro = await confirmarComSenha(g, U.garcom.senha, U.garcom.nome);
     ok(!erro, `senha própria recusada: ${erro}`);
