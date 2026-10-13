@@ -22,7 +22,7 @@ git merge-base --is-ancestor HEAD origin/main || falha "commit atual não está 
 echo "== 2. Configuração do servidor embutido"
 for d in desktop/webapp mobile/webapp; do
   if [ ! -f "$d/.env.local" ]; then
-    PRINC="$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+    PRINC="$(git worktree list --porcelain | sed -n 's/^worktree //p' | head -1)"
     if [ -f "$PRINC/$d/.env.local" ]; then cp "$PRINC/$d/.env.local" "$d/.env.local"; echo "  (copiei $d/.env.local da pasta principal)"; fi
   fi
   [ -f "$d/.env.local" ] || falha "$d/.env.local ausente"
