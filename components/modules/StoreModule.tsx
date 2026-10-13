@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -210,13 +210,24 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     const [storeFilter, setStoreFilter] = useState('');
     const [isLoadingStores, setIsLoadingStores] = useState(false);
 
-    const handleLogin = async (emailArg?: string, senhaArg?: string, lembrarArg?: boolean) => {
+    // Mesmo e-mail com login em mais de uma loja (migration 177): a senha conferiu em várias, a pessoa escolhe a loja.
+    // A senha fica só em memória, até escolher ou voltar.
+    const [escolhaLoja, setEscolhaLoja] = useState<{ lojas: LojaDoLogin[]; email: string; senha: string; lembrar: boolean } | null>(null);
+
+    const handleLogin = async (emailArg?: string, senhaArg?: string, lembrarArg?: boolean, lojaIdArg?: string) => {
         const emailUsado = (emailArg ?? email).trim();
         const senhaUsada = senhaArg ?? password;
         const lembrar = lembrarArg ?? lembrarSenha;
         setError('');
         setIsLoading(true);
-        const result = await authenticateStoreUser(emailUsado, senhaUsada);
+        const result = await authenticateStoreUser(emailUsado, senhaUsada, lojaIdArg);
+
+        if (result.reason === 'escolher_loja' && result.lojas?.length) {
+            setEscolhaLoja({ lojas: result.lojas, email: emailUsado, senha: senhaUsada, lembrar });
+            setIsLoading(false);
+            return 'ok' as const;
+        }
+        setEscolhaLoja(null);
 
         if (result.success && result.user) {
             if (result.user.must_change_password) {
@@ -364,6 +375,44 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                             </Button>
                         </form>
                     </Card>
+                </div>
+            </AuthBackdrop>
+        );
+    }
+
+    if (escolhaLoja) {
+        return (
+            <AuthBackdrop>
+                <div className="max-w-md w-full max-sm:pb-28">
+                    <div className="text-center mb-7 max-sm:mb-5">
+                        <div className="w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full flex items-center justify-center mx-auto mb-5 max-sm:mb-3 text-white ring-1 ring-white/30 bg-white/10 backdrop-blur-md shadow-[0_12px_40px_-12px_rgba(15,12,60,0.7)]">
+                            <StoreIcon size={26} strokeWidth={1.75} />
+                        </div>
+                        <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">Qual loja você quer acessar?</h1>
+                        <p className="text-white/65 text-sm mt-1">{escolhaLoja.email} tem acesso a {escolhaLoja.lojas.length} lojas</p>
+                    </div>
+                    <Card className="u-grow-in p-3 !rounded-[22px]" style={{ boxShadow: '0 30px 60px -20px rgba(15,12,60,0.55), 0 2px 8px rgba(15,12,60,0.12)' }}>
+                        {escolhaLoja.lojas.map((loja, i) => (
+                            <button
+                                key={loja.id}
+                                disabled={isLoading}
+                                onClick={() => handleLogin(escolhaLoja.email, escolhaLoja.senha, escolhaLoja.lembrar, loja.id)}
+                                className="u-grow-in group/store w-full text-left min-h-12 px-3 rounded-[12px] hover:bg-[var(--brand-soft)] u-motion flex items-center gap-3 disabled:opacity-60"
+                                style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
+                            >
+                                <span className="w-8 h-8 rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] group-hover/store:bg-[var(--surface)] group-hover/store:text-[var(--brand)] flex items-center justify-center text-[13px] font-semibold shrink-0 u-motion">
+                                    {loja.name.trim().charAt(0).toUpperCase()}
+                                </span>
+                                <span className="flex-1 min-w-0 py-3 border-b border-[var(--border)] group-last/store:border-0 flex items-center justify-between gap-2">
+                                    <span className="text-[15px] font-medium text-[var(--text)] truncate group-hover/store:text-[var(--brand)]">{loja.name}</span>
+                                    <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]/70 u-motion group-hover/store:translate-x-0.5 group-hover/store:text-[var(--brand)]" />
+                                </span>
+                            </button>
+                        ))}
+                    </Card>
+                    <button onClick={() => { setEscolhaLoja(null); setIsLoading(false); }} className="relative z-10 block mx-auto mt-5 px-5 min-h-11 rounded-full text-sm font-medium text-white bg-white/15 backdrop-blur-md hover:bg-white/25 u-motion">
+                        Voltar
+                    </button>
                 </div>
             </AuthBackdrop>
         );

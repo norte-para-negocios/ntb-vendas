@@ -174,26 +174,33 @@ export const updateStoreCoverUrl = async (storeId: string, coverUrl: string | nu
 // fazia antes via join. Por não distinguir "não encontrado" de "senha errada"
 // (a function devolve success:false pros dois, de propósito, pra não vazar se o
 // e-mail existe), as duas mensagens antigas viram uma só, genérica.
-export type MotivoFalhaLogin = 'network' | 'locked' | 'wrong' | 'store_inactive';
-export const authenticateStoreUser = async (email: string, password: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string; reason?: MotivoFalhaLogin }> => {
+// Mesmo e-mail em várias lojas (migration 177, 13/10/2026): sem `storeId` e a senha conferindo em mais de uma loja, a
+// function devolve a lista e a tela pergunta "Qual loja?"; com `storeId`, entra só naquela loja.
+export type MotivoFalhaLogin = 'network' | 'locked' | 'wrong' | 'store_inactive' | 'escolher_loja';
+export type LojaDoLogin = { id: string; name: string };
+export const authenticateStoreUser = async (email: string, password: string, storeId?: string): Promise<{ success: boolean; user?: StoreUser & { store: Store }; message?: string; reason?: MotivoFalhaLogin; lojas?: LojaDoLogin[] }> => {
   try {
     // Promise.resolve: dispara o login UMA vez (o construtor do supabase executa de novo a cada `then`, e contaria 2 tentativas).
     const chamada = Promise.resolve(supabase.rpc('authenticate_store_user_secure', {
       p_email: email,
       p_password: password,
+      ...(storeId ? { p_store_id: storeId } : {}),
     }));
     // Servidor sem responder em 3 s e a senha confere com a guardada neste aparelho: entra na hora, sem internet
     // (08/10/2026). Sem senha guardada, continua esperando o servidor como sempre.
     const corrida = await Promise.race([chamada, new Promise<'lento'>((ok) => setTimeout(() => ok('lento'), 3000))]);
     if (corrida === 'lento') {
-      const local = await entrarSemInternet(email, password);
+      const local = await entrarSemInternet(email, password, storeId);
       if (local) return local;
       // É a conta universal guardada neste aparelho: devolve "sem conexão" já, e a tela entra pela universal sem esperar.
       if (await entrarUniversalSemInternet(email, password)) return { success: false, reason: 'network', message: 'Sem conexão com o servidor.' };
     }
     const { data, error } = corrida === 'lento' ? await chamada : corrida;
 
-    if (error || data == null) return (await entrarSemInternet(email, password)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    if (error || data == null) return (await entrarSemInternet(email, password, storeId)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    if (!data.success && data.escolher_loja && Array.isArray(data.lojas)) {
+      return { success: false, reason: 'escolher_loja', lojas: data.lojas as LojaDoLogin[], message: 'Escolha a loja.' };
+    }
     if (!data.success) {
       return {
         success: false,
@@ -217,7 +224,7 @@ export const authenticateStoreUser = async (email: string, password: string): Pr
     return { success: true, user };
   } catch (error: any) {
     console.error('Auth Store User Error:', error);
-    return (await entrarSemInternet(email, password)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
+    return (await entrarSemInternet(email, password, storeId)) ?? { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
   }
 };
 
@@ -239,14 +246,20 @@ async function guardarLoginSemInternet(email: string, senha: string, user: Store
     const hash = await derivarSenha(senha, salt);
     if (!hash) return;
     const e = email.trim().toLowerCase();
-    const outros = lerLoginsGuardados().filter((x) => x.email !== e);
+    // Uma cópia por e-mail E loja (o mesmo e-mail pode ter login em mais de uma loja, migration 177).
+    const outros = lerLoginsGuardados().filter((x) => !(x.email === e && x.user?.store_id === user.store_id));
     localStorage.setItem(CHAVE_LOGIN_OFFLINE, JSON.stringify([...outros, { email: e, salt, hash, user, em: Date.now() }].slice(-30)));
   } catch { /* sem armazenamento: segue sem login offline */ }
 }
-async function entrarSemInternet(email: string, senha: string): Promise<{ success: true; user: StoreUser & { store: Store }; offline: true } | null> {
-  const g = lerLoginsGuardados().find((x) => x.email === email.trim().toLowerCase());
-  if (!g || (await derivarSenha(senha, g.salt)) !== g.hash) return null;
-  return { success: true, user: g.user, offline: true };
+async function entrarSemInternet(email: string, senha: string, storeId?: string): Promise<{ success: true; user: StoreUser & { store: Store }; offline: true } | null> {
+  // Sem loja escolhida e o e-mail guardado em mais de uma loja: vale a última em que entrou neste aparelho.
+  const candidatos = lerLoginsGuardados()
+    .filter((x) => x.email === email.trim().toLowerCase() && (!storeId || x.user?.store_id === storeId))
+    .sort((a, b) => b.em - a.em);
+  for (const g of candidatos) {
+    if ((await derivarSenha(senha, g.salt)) === g.hash) return { success: true, user: g.user, offline: true };
+  }
+  return null;
 }
 
 export const updateStoreUserPassword = async (userId: string, newPassword: string) => {

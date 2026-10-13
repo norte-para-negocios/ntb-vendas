@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   // 1. Quem pede: funcionário desta loja que pode receber, ou conta universal.
   let autorizado = false;
-  const { data: loja } = await admin.rpc('authenticate_store_user_secure', { p_email: body.email, p_password: body.password });
+  const { data: loja } = await admin.rpc('authenticate_store_user_secure', { p_email: body.email, p_password: body.password, p_store_id: storeId });
   const u = (loja as { success?: boolean; user?: { store_id?: string; role?: string; permissions?: Record<string, unknown> } } | null);
   if (u?.success && u.user?.store_id === storeId) {
     const r = u.user.role;

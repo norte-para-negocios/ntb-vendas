@@ -9,7 +9,7 @@ import { Store as StoreIcon, Users, Plus, Save, Calendar, CheckCircle, XCircle, 
 import { Button, Card, Input, Modal, Badge, Collapsible } from '@/components/ui';
 import { LojaModalShell, SecaoLoja, type SecaoNav } from '@/components/modules/admin/LojaModalShell';
 import { PreparoImpressaoSection, type LocalPendente } from '@/components/modules/admin/PreparoImpressaoSection';
-import { Building2, FileSignature, Plug, Printer as PrinterIcon, Boxes, ScrollText } from 'lucide-react';
+import { Building2, FileSignature, Plug, Printer as PrinterIcon, Boxes, ScrollText, LogOut, ArrowLeft } from 'lucide-react';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { ROTULO_MODO, MODOS_ESTOQUE, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
 import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchVendasPorConta } from '@/lib/api';
@@ -156,6 +156,10 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                         </Button>
                     </div>
                 </Card>
+                {/* No app (Windows/Android) não há barra de endereço: sem este botão não dava pra voltar à tela inicial. */}
+                <button onClick={() => window.location.assign('/')} className="relative z-10 flex items-center gap-2 mx-auto mt-5 px-5 min-h-11 rounded-full text-sm font-medium text-white bg-white/15 backdrop-blur-md hover:bg-white/25 u-motion">
+                    <ArrowLeft size={16} /> Voltar
+                </button>
             </div>
         </AuthBackdrop>
     );
@@ -415,6 +419,9 @@ export const AdminModule: React.FC = () => {
       { id: 'fiscal', label: 'Fiscal', icon: FileSignature, resumo: emiteNotaFiscal ? 'Emite NFC-e' : 'Não emite nota' },
       { id: 'integracoes', label: 'Integrações', icon: Plug, resumo: editingId ? (ntbEstoqueStatus.configurado ? 'Estoque ligado' : 'Sem integração') : 'Depois de salvar' },
   ];
+
+  // Sair volta à tela inicial (no app do Windows é a que tem "Área do Lojista"; no Android/site, a do lojista).
+  const sairDoMaster = () => { setIsAuthenticated(false); window.location.assign('/'); };
 
   if (!isAuthenticated) {
       return (
@@ -1047,7 +1054,10 @@ export const AdminModule: React.FC = () => {
       <header className="md:hidden bg-[var(--surface)]/80 backdrop-blur-xl border-b border-[var(--border)] text-[var(--text)] px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-3 sticky top-0 z-30">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-[17px] font-semibold tracking-[-0.01em]">Master Admin</h1>
-          <ThemeToggle className="!w-11 !h-11" />
+          <div className="flex items-center gap-1">
+            <ThemeToggle className="!w-11 !h-11" />
+            <button onClick={sairDoMaster} aria-label="Sair" className="w-11 h-11 rounded-full flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-2)] u-motion"><LogOut size={18} /></button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-1 p-0.5 rounded-[10px] bg-[var(--surface-2)]">
           <button onClick={() => setView('stores')} className={`flex items-center justify-center gap-2 min-h-11 rounded-[8px] text-[13px] font-semibold u-motion ${view === 'stores' ? 'bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_rgba(0,0,0,0.12)]' : 'text-[var(--text-muted)]'}`}><StoreIcon size={16} /> Lojas</button>
@@ -1068,6 +1078,9 @@ export const AdminModule: React.FC = () => {
             <Users size={18} /> Usuários (Lojistas)
           </button>
         </nav>
+        <button onClick={sairDoMaster} className="mt-auto flex items-center gap-3 w-full px-3 h-10 rounded-[10px] text-[14px] font-medium text-white/80 hover:bg-white/10 hover:text-white u-motion u-press-sm">
+          <LogOut size={18} /> Sair
+        </button>
       </aside>
 
       {/* Content */}
@@ -1411,8 +1424,10 @@ export const AdminModule: React.FC = () => {
                         <input
                             type="number"
                             min="1"
-                            value={tableCount}
-                            onChange={e => setTableCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            value={tableCount || ''}
+                            // Campo pode ficar vazio enquanto digita (antes voltava sozinho pra 1 e não dava
+                            // pra apagar o primeiro dígito). O mínimo de 1 é cobrado ao salvar.
+                            onChange={e => setTableCount(Math.max(0, parseInt(e.target.value) || 0))}
                             className="w-full rounded-lg border border-[var(--info)]/30 bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]/40 max-sm:text-base"
                         />
                         {/* Achado real (2026-08-27): o texto antigo aqui dizia o
