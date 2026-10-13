@@ -12,6 +12,7 @@ import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModul
 import { checkAccentColorContrast } from '@/lib/colorContrast';
 import { stockModeFields, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
 import { getCachedMenu, setCachedMenu, getCachedTables, setCachedTables, getCachedCashShift, setCachedCashShift, getCachedSession, setCachedSession, getCachedCashShiftSummary, setCachedCashShiftSummary, getCachedKitchenOrders, setCachedKitchenOrders, getCachedCounterOrders, setCachedCounterOrders } from './offline/cache';
+import { turnoNaRede } from './offline/rede';
 import { enqueue } from './offline/queue';
 import { isNetworkError, checkRealConnectivity } from './offline/network';
 import { chamarCriarPedido } from './offline/criarPedido';
@@ -1963,20 +1964,34 @@ export interface CashShift {
 // não "o turno da loja" (agora pode haver mais de um aberto ao mesmo
 // tempo, um por operador). `null` pra conta universal (mesmo
 // tratamento de sempre, ver openCashShift abaixo).
+// Sem servidor, o caixa vem da cópia deste aparelho OU do que os computadores da loja contam pela rede local (celular,
+// 13/10/2026: o notebook abriu o caixa, o servidor caiu e o celular mostrava "fechado" pela cópia velha dele). Vale o
+// mais recente. `turnoIncerto` = esta resposta não veio do servidor: a tela avisa antes de oferecer "Abrir caixa".
+const turnosIncertos = new Set<string>();
+export const turnoIncerto = (storeId: string, operatorUserId: string | null) => turnosIncertos.has(`${storeId}::${operatorUserId ?? 'universal'}`);
+async function turnoSemServidor(storeId: string, operatorUserId: string | null): Promise<{ shift: CashShift | null; conhecido: boolean }> {
+  const guardado = await getCachedCashShift(storeId, operatorUserId).catch(() => undefined);
+  const daRede = turnoNaRede(storeId, operatorUserId);
+  const melhor = [guardado, daRede].filter(Boolean).sort((a, b) => ((b as { updatedAt?: number }).updatedAt || 0) - ((a as { updatedAt?: number }).updatedAt || 0))[0] as { shift?: unknown } | undefined;
+  return { shift: (melhor?.shift as CashShift | null) ?? null, conhecido: !!melhor };
+}
+
 export const fetchOpenCashShift = async (storeId: string, operatorUserId: string | null): Promise<CashShift | null> => {
+  const chave = `${storeId}::${operatorUserId ?? 'universal'}`;
   try {
-    // Servidor sem responder em 1,5 s e com turno guardado no aparelho: usa o guardado (08/10/2026: receber a conta logo
-    // depois de a internet cair esperava 6 s só por isto). Sem cópia guardada, espera o servidor.
+    // Servidor sem responder em 1,5 s e com turno guardado no aparelho (ou contado por um computador da loja): usa esse
+    // (08/10/2026: receber a conta logo depois de a internet cair esperava 6 s só por isto). Sem nada, espera o servidor.
     // Promise.resolve: dispara a chamada UMA vez (o construtor do supabase executa de novo a cada `then`).
     const chamada = Promise.resolve(supabase.rpc('fetch_open_cash_shift_secure', { p_store_id: storeId, p_operator_user_id: operatorUserId }));
     const corrida = await Promise.race([chamada, new Promise<'lento'>((ok) => setTimeout(() => ok('lento'), 1500))]);
     if (corrida === 'lento') {
-      const guardado = await getCachedCashShift(storeId, operatorUserId).catch(() => null);
-      if (guardado?.shift) return guardado.shift as CashShift;
+      const local = await turnoSemServidor(storeId, operatorUserId);
+      if (local.shift) { turnosIncertos.add(chave); return local.shift; }
     }
     const { data, error } = corrida === 'lento' ? await chamada : corrida;
     if (error) throw error;
     const shift = (data as CashShift) || null;
+    turnosIncertos.delete(chave);
     // Fire-and-forget: cacheia o resultado real (inclusive `null`, que
     // vira "confirmamos que não há turno") pra usar de fallback na
     // próxima falha de rede. Nunca bloqueia o retorno desta função.
@@ -1988,12 +2003,9 @@ export const fetchOpenCashShift = async (storeId: string, operatorUserId: string
       // sobe, só devolve null (esta function nunca lançou pro caller).
       return null;
     }
-    // Falha de rede de verdade: usa o último turno conhecido em vez de
-    // "sem turno" — é isso que corrige o bug achado na Task 10 (fechar
-    // mesa/balcão/abrir aba Caixa offline não pode mais se comportar
-    // como se o turno genuinamente aberto não existisse).
-    const cached = await getCachedCashShift(storeId, operatorUserId);
-    return (cached?.shift as CashShift | null) ?? null;
+    // Falha de rede de verdade: usa o último turno conhecido (aparelho ou computadores da loja) em vez de "sem turno".
+    turnosIncertos.add(chave);
+    return (await turnoSemServidor(storeId, operatorUserId)).shift;
   }
 };
 

@@ -60,6 +60,13 @@ export async function setCachedCashShift(storeId: string, operatorUserId: string
   await db.put('cash_shift_cache', { key: cashShiftCacheKey(storeId, operatorUserId), shift, updatedAt: Date.now() });
 }
 
+/** Todos os caixas guardados neste aparelho para a loja (o app do Windows conta ao celular pela rede local). */
+export async function listCachedCashShifts(storeId: string): Promise<{ key: string; shift: unknown | null; updatedAt: number }[]> {
+  const db = await getOfflineDb();
+  const todos = (await db.getAll('cash_shift_cache')) as { key: string; shift: unknown | null; updatedAt: number }[];
+  return todos.filter((c) => typeof c.key === 'string' && c.key.startsWith(`${storeId}::`));
+}
+
 // `undefined` = nunca cacheado nada pra essa loja/operador (estado
 // desconhecido — quem chama decide o que fazer). `null` dentro do valor
 // (`.shift`) = já confirmamos (online, alguma vez) que não há turno

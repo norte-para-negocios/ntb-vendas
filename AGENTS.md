@@ -2777,3 +2777,31 @@ QR Code e guarda o XML na fila; com a internet de volta, a ação `registrar_not
 - Testado em homologação (ODARA): nota feita "sem internet", registrada e AUTORIZADA pela SEFAZ (cStat 100).
   Teste: `scripts/testes/notaSemInternet.test.ts`. Apagar linha de `fiscal_contingencia_series` faz a numeração voltar
   (a SEFAZ recusa com 539): nunca apagar em loja real.
+
+## Login com mais de uma loja (13/10/2026, migration 177)
+- `store_users.email` deixou de ser único na plataforma: agora é único POR LOJA (`store_users_loja_email_key`, sem diferenciar maiúscula/espaço).
+- `authenticate_store_user_secure(p_email, p_password, p_store_id default null)`: com loja, entra só nela; sem loja e a senha confere em
+  UMA loja ativa, entra direto; em VÁRIAS, devolve `escolher_loja: true` + `lojas [{id,name}]` e o `StoreLogin` mostra "Qual loja você
+  quer acessar?" (chama de novo com `p_store_id`). App antigo lê isso como senha errada (quem tem senha diferente por loja entra direto).
+- A rota do kit da nota sem internet autentica com `p_store_id`. Login sem internet guarda uma cópia por e-mail + loja.
+- Backup antes: `/root/backups/store_users-pre-177.dump`. Também no mesmo dia: Master Admin ganhou Sair/Voltar (o app não tem barra
+  de endereço) e o motivo passou a ser obrigatório em cancelar pedido, cancelar item no KDS, trocar de mesa e mover item
+  (troca/transferência gravam `mesa.trocada`/`item.transferido` na auditoria com o motivo).
+
+## Celular na rede local (13/10/2026)
+Incidente: o notebook abriu o caixa, o servidor ficou 5 min fora (rede da Contabo) e o celular mostrou "caixa fechado" (cópia velha
+dele). Pedido do dono: "tá todo mundo no mesmo Wi-Fi, não faz sentido cair". Agora o app do Android entra na rede local dos computadores:
+- `desktop/electron/lan-peer.js` (servidor HTTP 47610 que já existia) ganhou: `GET /acoes` devolve também `caixas` (cópia de
+  `cash_shift_cache` deste computador) e `computadores` (os outros que ele vê por UDP); `POST /celular` (o celular entrega a fila dele, vira
+  "mais um computador" para a tela e a ordem de sincronização, origem `cel:<id>`); `POST /imprimir` (pedido feito no celular sem internet:
+  este computador imprime com `printOfflineOrderTicket`, uma vez só, marca em `ntb-lan-impressos-celular`; pedido com mais de 30 min não sai).
+- `lib/offline/lanCelular.ts`: a mesma interface `lan` do Electron, por HTTP nativo (`CapacitorHttp`, montado em
+  `mobile/webapp/app/NtbBridgeInit.tsx`). Acha os computadores pelos endereços guardados (`ntb-lan-pcs:<loja>`) e, se ninguém responde,
+  varre a faixa /24 das impressoras de rede da loja (1x ao abrir; depois só sem servidor, no máximo 1x/min). Android com
+  `usesCleartextTraffic=true` (http na rede local).
+- `fetchOpenCashShift`: sem servidor, usa o mais recente entre a cópia do aparelho e a dos computadores (`turnoNaRede`); resposta que não
+  veio do servidor marca `turnoIncerto` e a tela "Abrir caixa" mostra o aviso de que não dá para confirmar.
+- Nada no servidor. Testes: `scripts/testes/redeCelular.test.ts` (sobe o lan-peer de verdade) e, à mão, emulador Android (`ntb_test`,
+  SDK em /opt/homebrew/share/android-commandlinetools) com o servidor bloqueado por iptables e um lan-peer no Mac (10.0.2.2): o celular
+  mostrou o caixa aberto no "notebook".
+- Limite: o celular só fala com computador que tenha o app do Windows ABERTO na mesma loja; navegador comum continua só com a fila local.

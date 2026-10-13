@@ -7,6 +7,12 @@
 //  - busca, a cada 1 s, as ações dos outros, e o app monta a tela com tudo (lib/offline/rede.ts).
 // Sem dependência nenhuma (dgram/http do Node). Com internet isto continua ligado, mas não há fila para trocar.
 // Só para a mesma loja: o pedido HTTP precisa trazer o id da loja (x-ntb-loja) igual ao deste computador.
+//
+// Celular na mesma rede (13/10/2026, pedido do dono: "tá todo mundo no mesmo Wi-Fi, não faz sentido cair"): o app do
+// Android não escuta UDP, então ele chama este servidor HTTP (lib/offline/lanCelular.ts):
+//  - GET  /acoes    -> fila deste computador + caixas abertos conhecidos + endereço dos outros computadores;
+//  - POST /celular  -> o celular entrega a fila sem internet dele (vira "mais um computador" para a tela e a ordem);
+//  - POST /imprimir -> pedido feito no celular sem internet: este computador imprime na impressora de rede do local.
 const dgram = require('dgram');
 const http = require('http');
 const os = require('os');
@@ -43,14 +49,34 @@ function parar() {
 function iniciar({ storeId, peerId, portaHttp = PORTA_HTTP, portaUdp = PORTA_UDP }) {
   if (estado && estado.storeId === storeId && estado.peerId === peerId) return { ok: true, porta: estado.porta };
   parar();
-  const st = { storeId, peerId, porta: portaHttp, timers: [], minhas: [], sincronizadas: [], peers: new Map(), remotos: new Map(), portaUdp };
+  const st = { storeId, peerId, porta: portaHttp, timers: [], minhas: [], sincronizadas: [], caixas: [], peers: new Map(), remotos: new Map(), paraImprimir: [], impressosIds: new Set(), portaUdp };
   estado = st;
 
+  const lerCorpo = (req, cb) => {
+    let corpo = ''; let grande = false;
+    req.on('data', (c) => { corpo += c; if (corpo.length > 2 * 1024 * 1024) { grande = true; req.destroy(); } });
+    req.on('end', () => { if (grande) return; try { cb(JSON.parse(corpo || '{}')); } catch { cb(null); } });
+  };
+  const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
   st.server = http.createServer((req, res) => {
     if (req.headers['x-ntb-loja'] !== st.storeId) { res.writeHead(403); return res.end(); }
     if (req.method === 'GET' && req.url === '/acoes') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      return res.end(JSON.stringify({ peerId: st.peerId, acoes: st.minhas, sincronizadas: st.sincronizadas, em: Date.now() }));
+      const outros = [...st.peers.values()].filter((p) => Date.now() - p.visto < 20000).map((p) => ({ ip: p.ip, porta: p.porta }));
+      return json(res, 200, { peerId: st.peerId, acoes: st.minhas, sincronizadas: st.sincronizadas, caixas: st.caixas, computadores: outros, em: Date.now() });
+    }
+    if (req.method === 'POST' && req.url === '/celular') {
+      return lerCorpo(req, (d) => {
+        if (!d || typeof d.peerId !== 'string' || !Array.isArray(d.acoes)) return json(res, 400, { ok: false });
+        st.remotos.set(`cel:${d.peerId}`, { acoes: d.acoes, sincronizadas: Array.isArray(d.sincronizadas) ? d.sincronizadas.slice(-2000) : [], em: Date.now(), celular: true });
+        json(res, 200, { ok: true, peerId: st.peerId });
+      });
+    }
+    if (req.method === 'POST' && req.url === '/imprimir') {
+      return lerCorpo(req, (d) => {
+        if (!d || typeof d.id !== 'string' || !Array.isArray(d.tickets)) return json(res, 400, { ok: false });
+        if (!st.impressosIds.has(d.id) && !st.paraImprimir.some((x) => x.id === d.id)) st.paraImprimir.push({ id: d.id, tickets: d.tickets.slice(0, 100), em: Date.now() });
+        json(res, 200, { ok: true, peerId: st.peerId });
+      });
     }
     res.writeHead(404); res.end();
   });
@@ -98,11 +124,18 @@ function iniciar({ storeId, peerId, portaHttp = PORTA_HTTP, portaUdp = PORTA_UDP
   return { ok: true, porta: st.porta };
 }
 
-/** O app publica a própria fila sem internet e os ids que ele já sincronizou (de qualquer computador). */
-function publicar({ acoes, sincronizadas }) {
+/** O app publica a própria fila sem internet, os ids que ele já sincronizou (de qualquer computador), os caixas abertos
+ *  que ele conhece (para o celular) e os pedidos do celular que ele já imprimiu. */
+function publicar({ acoes, sincronizadas, caixas, impressos }) {
   if (!estado) return { ok: false };
   if (Array.isArray(acoes)) estado.minhas = acoes;
   if (Array.isArray(sincronizadas)) estado.sincronizadas = sincronizadas.slice(-2000);
+  if (Array.isArray(caixas)) estado.caixas = caixas.slice(0, 200);
+  if (Array.isArray(impressos)) {
+    for (const id of impressos) estado.impressosIds.add(id);
+    estado.paraImprimir = estado.paraImprimir.filter((x) => !estado.impressosIds.has(x.id));
+    if (estado.impressosIds.size > 2000) estado.impressosIds = new Set([...estado.impressosIds].slice(-1000));
+  }
   return { ok: true };
 }
 
@@ -114,7 +147,9 @@ function ler() {
     for (const a of r.acoes) acoes.push({ ...a, origem: id, origemVistaEm: r.em });
     for (const s of r.sincronizadas) sinc.add(s);
   }
-  return { ok: true, acoes, sincronizadas: [...sinc], computadores: estado.peers.size };
+  // Pedido de impressão do celular com mais de 30 min não sai mais (a cozinha não pode receber pedido velho).
+  estado.paraImprimir = estado.paraImprimir.filter((x) => Date.now() - x.em < 30 * 60 * 1000);
+  return { ok: true, acoes, sincronizadas: [...sinc], computadores: estado.peers.size, imprimir: estado.paraImprimir };
 }
 
 module.exports = { iniciar, parar, publicar, ler, PORTA_HTTP, PORTA_UDP };

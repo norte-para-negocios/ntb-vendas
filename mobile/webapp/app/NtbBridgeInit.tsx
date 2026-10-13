@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, CapacitorHttp } from '@capacitor/core';
+import { criarLanCelular } from '@/lib/offline/lanCelular';
 
 // Assinatura do plugin nativo Kotlin (Task 4,
 // mobile/android/.../printer/NtbPrinterPlugin.kt). `getStatus` diz qual
@@ -39,6 +40,12 @@ export function NtbBridgeInit() {
       // build (ver Task 9, Step 3). Sem o <meta>, cai num valor visível
       // de "não configurado" em vez de undefined silencioso.
       version: document.querySelector('meta[name="ntb-app-version"]')?.getAttribute('content') || '0.0.0-dev',
+      // Rede local com os computadores da loja (13/10/2026): sem servidor, o celular troca a fila e o caixa com eles pelo
+      // Wi-Fi e manda o pedido para o computador imprimir. HTTP nativo (CapacitorHttp): sem CORS e sem bloqueio de http.
+      lan: criarLanCelular((o) => CapacitorHttp.request({
+        url: o.url, method: o.method, headers: o.headers, data: o.data,
+        connectTimeout: o.connectTimeout, readTimeout: o.readTimeout,
+      }).then((r) => ({ status: r.status, data: r.data }))),
     };
 
     // Ponte de impressão nativa de verdade (Task 4) — substitui o

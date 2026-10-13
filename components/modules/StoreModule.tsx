@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -89,7 +89,9 @@ import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
 import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
 import { decomporVenda, configTaxaDaLoja, cortesiaDaVenda } from '@/lib/faturamento';
 import { mesasComFila } from '@/lib/offline/pendingOrders';
-import { iniciarRedeLocal } from '@/lib/offline/rede';
+import { iniciarRedeLocal, imprimirPeloComputador } from '@/lib/offline/rede';
+import type { TicketCelular } from '@/lib/offline/lanCelular';
+import { listCachedCashShifts } from '@/lib/offline/cache';
 import { getPendingActions } from '@/lib/offline/queue';
 import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
@@ -1122,7 +1124,19 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   }, []);
   // Rede local entre os computadores da loja (08/10/2026): sem internet, todos trocam as filas pelo Wi-Fi/cabo.
   useEffect(() => {
-    if (user.store?.id) void iniciarRedeLocal(user.store.id, getPendingActions);
+    const sid = user.store?.id;
+    if (!sid) return;
+    // Celular (13/10/2026): acha os computadores pela faixa de IP das impressoras de rede — garante a lista guardada.
+    void fetchPrinterConfigs(sid).catch(() => null);
+    void iniciarRedeLocal(sid, getPendingActions, {
+      // O computador conta ao celular os caixas que conhece e imprime o pedido que o celular fez sem internet.
+      caixas: () => listCachedCashShifts(sid),
+      imprimirTickets: async (tickets) => {
+        let n = 0;
+        for (const t of tickets) n += await printOfflineOrderTicket({ storeId: sid, destination: t.destination, sectorId: t.sectorId ?? null, title: t.title, content: t.content, sig: t.sig }).catch(() => 0);
+        return n;
+      },
+    });
   }, [user.store?.id]);
   // Nota fiscal sem internet (08/10/2026): quem já estava logado e só atualizou o app recebe o kit sozinho, usando a
   // senha lembrada neste computador ("Entrar sem senha"). Sem senha lembrada, o kit chega no próximo login digitado.
@@ -4633,6 +4647,7 @@ NOTIFY pgrst, 'reload schema';`;
                 const setores = printSectorsDoAparelho(storeId);
                 dbg('setores');
                 let impressas = 0;
+                const ticketsCelular: TicketCelular[] = [];
                 for (const l of linhas) {
                     const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === l.product.category_id);
                     const setorId: string | null = l.product.sector_id || (l.product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
@@ -4652,10 +4667,15 @@ NOTIFY pgrst, 'reload schema';`;
                         orderIdShort: String(result.orderId).slice(6, 14),
                     });
                     const sig = `${mesa.number}|${l.product.id}|${l.qty}|${notasNoBanco}`;
-                    impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Mesa ${mesa.number}`, content: conteudo, sig }).catch(() => 0);
+                    const ticket = { destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Mesa ${mesa.number}`, content: conteudo, sig };
+                    ticketsCelular.push(ticket);
+                    impressas += await printOfflineOrderTicket({ storeId, ...ticket }).catch(() => 0);
                 }
                 dbg('impressao');
+                // Celular não imprime na impressora de rede: manda para um computador da loja imprimir (rede local).
+                const peloComputador = impressas === 0 && !window.electronApp?.printDirectNetwork && await imprimirPeloComputador(String(result.orderId), ticketsCelular);
                 if (impressas > 0) toast.info('Sem internet: pedido impresso direto na impressora.');
+                else if (peloComputador) toast.info('Sem internet: pedido enviado ao computador do caixa para imprimir.');
                 else toast.warning('Sem internet: o pedido foi salvo, mas o papel do pedido não saiu na impressora. Ele sai quando a internet voltar.');
             }
 
@@ -6721,6 +6741,7 @@ const CounterView: React.FC<{
                 const menuCache: any = await getCachedMenu(storeId).catch(() => null);
                 const setores = printSectorsDoAparelho(storeId); // sem internet: cópia do aparelho, na hora
                 let impressas = 0;
+                const ticketsCelular: TicketCelular[] = [];
                 for (const l of itens) {
                     const catDoProduto = (menuCache?.categories || []).find((c: any) => c.id === l.product.category_id);
                     const setorId: string | null = l.product.sector_id || (l.product.ignore_category_sector ? null : catDoProduto?.sector_id) || null;
@@ -6742,9 +6763,14 @@ const CounterView: React.FC<{
                     // Mesma assinatura que a Estação usa (mesa|produto|qtd|obs,
                     // mesa vazia no balcão) — não sai em dobro depois.
                     const sig = `|${l.product.id}|${l.qty}|${notasNoBanco}`;
-                    impressas += await printOfflineOrderTicket({ storeId, destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Balcão`, content: conteudo, sig }).catch(() => 0);
+                    const ticket = { destination: destino, sectorId: setor ? setorId : null, title: `${l.qty}x ${l.product.name} — Balcão`, content: conteudo, sig };
+                    ticketsCelular.push(ticket);
+                    impressas += await printOfflineOrderTicket({ storeId, ...ticket }).catch(() => 0);
                 }
-                if (impressas === 0) toast.warning('Sem internet: o pedido não saiu na impressora. Avise a cozinha.');
+                // Celular: manda para um computador da loja imprimir (rede local).
+                const peloComputador = impressas === 0 && !window.electronApp?.printDirectNetwork && await imprimirPeloComputador(String(result.orderId), ticketsCelular);
+                if (impressas === 0 && peloComputador) toast.info('Sem internet: pedido enviado ao computador do caixa para imprimir.');
+                else if (impressas === 0) toast.warning('Sem internet: o pedido não saiu na impressora. Avise a cozinha.');
             } else if (!paymentFirst) {
                 // Pedido de balcão nasce 'pending', e a Estação de Impressão /
                 // KDS ignoram item de balcão pendente de propósito (é o pedido
@@ -8671,6 +8697,14 @@ const CaixaViewMeu: React.FC<{
                     <div className="mx-auto mb-3 w-16 h-16">
                         <ProductThumb src={loggedUser.photo_url} name={loggedUser.name} size="store" />
                     </div>
+                    {turnoIncerto(storeId, loggedUser.role === 'universal' ? null : loggedUser.id) && (
+                        // Sem servidor e nenhum computador da loja respondeu pela rede: não dá para garantir que o caixa está fechado
+                        // (13/10/2026: o celular mostrava "fechado" com o caixa aberto no notebook durante uma queda do servidor).
+                        <div role="alert" className="mb-4 text-left rounded-xl border border-[var(--warn)]/40 bg-[var(--warn)]/10 px-3 py-2.5 text-[13px] text-[var(--text)]">
+                            <b>Sem conexão com o servidor.</b> Não dá para confirmar se o seu caixa já está aberto em outro aparelho.
+                            Se abriu no computador do caixa, espere a conexão voltar em vez de abrir outro aqui.
+                        </div>
+                    )}
                     <h3 className="text-lg font-bold text-[var(--text)] mb-1 tracking-[-0.01em]">Abrir caixa, {primeiroNome}</h3>
                     <p className="text-sm text-[var(--text-muted)] mb-6">
                         Informe o fundo de troco (dinheiro físico já na gaveta) pra começar a receber pagamentos —
