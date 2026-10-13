@@ -511,6 +511,7 @@ async function secPermissoesAcoes(C) {
     await linha.locator('button[aria-label="Mover item para outra mesa"]').first().click();
     const dlgM = m.page.getByRole('dialog').filter({ hasText: 'Mover' }).last();
     await dlgM.getByLabel('Mesa de destino').selectOption({ label: `Mesa ${mesaC.number} (livre)` });
+    await dlgM.getByPlaceholder(/mesa errada/i).fill('qa portao');   // motivo obrigatório (13/10/2026)
     const antes = new Set((await amb.ledgerFila()).map((j) => j.id));
     await dlgM.getByRole('button', { name: 'Mover item' }).click();
     await esperar(async () => (await pedidoDoItem(amb, iExtra2.id)).table_id === mesaC.id, { timeout: 10000, motivo: 'item na outra mesa' });
@@ -544,6 +545,7 @@ async function secPermissoesAcoes(C) {
     await cx.page.getByRole('dialog').last().getByRole('button', { name: 'Trocar', exact: true }).click();
     const dlgT = cx.page.getByRole('dialog').filter({ hasText: 'Trocar de Mesa' });
     await dlgT.getByRole('button', { name: new RegExp(`Mesa ${mesaB.number}\\b`) }).click();
+    await dlgT.getByPlaceholder(/mudar de lugar/i).fill('qa portao');   // motivo obrigatório (13/10/2026)
     await dlgT.getByRole('button', { name: 'Confirmar Troca' }).click();
     await confirmarPergunta(cx, /Tem certeza/);
     await esperar(async () => (await pedidoDoItem(amb, iExtra.id)).table_id === mesaB.id, { timeout: 12000, motivo: 'pedido na mesa B' });
