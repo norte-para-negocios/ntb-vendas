@@ -1,6 +1,6 @@
 {
   "name": "ntb-vendas-mobile",
-  "version": "1.0.40",
+  "version": "1.0.41",
   "private": true,
   "scripts": {
     "build:web": "cd .. && npx next build mobile/webapp && node scripts/conferir-bundle.mjs mobile/webapp/out",
