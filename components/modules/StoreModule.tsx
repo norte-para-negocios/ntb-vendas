@@ -97,6 +97,7 @@ import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
+import { buscarProdutosEOpcoes, type ResultadoBusca } from '@/lib/buscaPorOpcao';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { formatDuration } from '@/lib/formatDuration';
@@ -2060,7 +2061,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
 // price_delta.
 // `addLabel`: texto do botão final. Mesa lança na hora ("Lançar pedido"); a
 // venda de balcão pela equipe só junta no carrinho ("Adicionar à venda").
-const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void, addLabel?: string }> = ({ product, onClose, onAdd, addLabel = 'Lançar pedido' }) => {
+const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void, onAdd: (qty: number, notes: string, selectedOptions: SelectedOption[]) => void, addLabel?: string, preSelecao?: Record<string, string[]> }> = ({ product, onClose, onAdd, addLabel = 'Lançar pedido', preSelecao }) => {
     const [qty, setQty] = useState(1);
     const [notes, setNotes] = useState('');
     const [selections, setSelections] = useState<Record<string, string[]>>({}); // group_id -> option_id[]
@@ -2072,8 +2073,10 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
             // Garçom escolhe tamanho/sabor explicitamente (2026-09-24): com a 1ª opção
             // pré-marcada, um pedido errado ficava a um toque de distância e o selo
             // "Obrigatório" perdia o sentido. O cardápio do CLIENTE mantém a pré-seleção.
-            setSelections({});
+            // Exceção (15/10/2026): veio da busca por sabor ("calabresa") -> esse sabor já vem marcado.
+            setSelections(preSelecao ?? {});
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a pré-seleção acompanha o produto aberto
     }, [product]);
 
     if (!product) return null;
@@ -2106,6 +2109,10 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                     )}
                     <div>
                         <h4 className="font-semibold text-[20px] tracking-[-0.01em] text-[var(--text)]">{product.name}</h4>
+                        {/* Veio da busca por sabor: mostra o que já está marcado (a opção pode estar lá embaixo na lista). */}
+                        {(product.option_groups || []).flatMap((g) => (g.options || []).filter((o) => (selections[g.id] || []).includes(o.id) && (preSelecao?.[g.id] || []).includes(o.id)).map((o) => (
+                            <p key={o.id} className="text-[14px] font-semibold text-[var(--ok)] mt-0.5">{g.name}: {o.name} ✓</p>
+                        )))}
                         <p className="text-[var(--text-muted)] text-[13px] line-clamp-2">{product.description}</p>
                         {/* Preço promocional (migration 019): garçom precisa ver/calcular
                             o mesmo preço efetivo que create_order_secure cobra no servidor,
@@ -2227,6 +2234,8 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     const [direction, setDirection] = useState<1 | -1>(1);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    // Busca por sabor (15/10/2026): o produto abre com esse sabor já marcado.
+    const [preSelecao, setPreSelecao] = useState<Record<string, string[]> | undefined>(undefined);
 
     const listRef = useRef<HTMLDivElement>(null);
     const [loaded, setLoaded] = useState(false);
@@ -2356,31 +2365,38 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 
     // Busca: sem acento, nome ou descrição, no cardápio inteiro; cada
     // resultado mostra a categoria (três "Carne do Sol" ficam distinguíveis).
+    // Também acha pelo SABOR/opção (15/10/2026, pedido do dono: "calabresa" não achava nada no Sertão porque o sabor
+    // mora dentro da pizza): o resultado diz o sabor e, ao tocar, abre com ele já marcado (lib/buscaPorOpcao.ts).
     const term = searchTerm.trim();
-    const searchResults = useMemo(() => {
+    const searchResults = useMemo<ResultadoBusca[]>(() => {
         if (!term) return [];
-        const nt = normalizeForSearch(term);
-        const matches = (p: Product) => normalizeForSearch(p.name).includes(nt) || (!!p.description && normalizeForSearch(p.description).includes(nt));
-        const ordered = orderedCategories.flatMap(c => (productsByCategory.get(c.id) || []).filter(matches));
-        const orphans = products.filter(p => !p.category_id && matches(p));
-        return [...ordered, ...orphans];
+        const todos = [...orderedCategories.flatMap(c => productsByCategory.get(c.id) || []), ...products.filter(p => !p.category_id)];
+        return buscarProdutosEOpcoes(todos, term);
     }, [term, orderedCategories, productsByCategory, products]);
 
-    const renderProductRow = (product: Product, catLabel?: string) => {
+    const renderProductRow = (product: Product, catLabel?: string, opcao?: ResultadoBusca['opcao']) => {
+        const abrir = () => {
+            if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; }
+            setPreSelecao(opcao ? { [opcao.groupId]: [opcao.optionId] } : undefined);
+            setSelectedProduct(product);
+        };
         const effectivePrice = getEffectivePrice(product);
         const hasActivePromo = effectivePrice < product.price;
         const variablePricing = !!product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0));
         return (
             <div
-                key={product.id}
+                key={opcao ? `${product.id}:${opcao.optionId}` : product.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => { if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; } setSelectedProduct(product); }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; } setSelectedProduct(product); } }}
+                onClick={abrir}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } }}
                 className={`flex items-center gap-3 px-2 -mx-2 py-3 border-b border-[var(--border)] last:border-0 cursor-pointer u-motion hover:bg-[var(--surface-2)] rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${product.sold_out ? 'opacity-60' : ''}`}
             >
                 <div className="flex-1 min-w-0">
                     <h4 className="text-[15px] font-semibold text-[var(--text)] leading-snug line-clamp-2">{product.name}</h4>
+                    {opcao && (
+                        <p className="text-[13px] font-semibold text-[var(--text)] mt-0.5">{opcao.groupName}: {opcao.optionName}</p>
+                    )}
                     {catLabel && (
                         <p className="text-[12px] font-medium text-[var(--brand)] mt-0.5 truncate">{catLabel}</p>
                     )}
@@ -2598,7 +2614,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
             <div ref={listRef} className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-1">
                 {term ? (
                     searchResults.length
-                        ? searchResults.map(p => renderProductRow(p, p.category_id ? categoryLabelOf.get(p.category_id) : undefined))
+                        ? searchResults.map(({ product: p, opcao }) => renderProductRow(p, p.category_id ? categoryLabelOf.get(p.category_id) : undefined, opcao))
                         : <p className="text-sm text-[var(--text-muted)] text-center py-8">Nada encontrado para “{term}”.</p>
                 ) : (
                     <AnimatePresence mode="popLayout" initial={false} custom={direction}>
@@ -2624,7 +2640,8 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
             <StoreProductModal
                 product={selectedProduct}
                 addLabel={addLabel}
-                onClose={() => setSelectedProduct(null)}
+                preSelecao={preSelecao}
+                onClose={() => { setSelectedProduct(null); setPreSelecao(undefined); }}
                 onAdd={(qty, notes, selectedOptions) => {
                     if (selectedProduct) {
                         onAddItem(selectedProduct, qty, notes, selectedOptions);
