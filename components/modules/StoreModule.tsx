@@ -97,7 +97,7 @@ import { dadosDoFechamento, formasSemCortesia } from '@/lib/caixaResumo';
 import { FaturamentoDoTurno } from '@/components/modules/caixa/FaturamentoDoTurno';
 import { contaTemTaxaPercentual, ehTaxa, ehTaxaPercentual, semTaxas, valorTaxaPercentual, baseDaTaxaPercentual, resolverTaxaEditada, resolverValorTaxaFixa, taxaPercentualDesatualizada, podeLancarTaxa } from '@/lib/taxas';
 import { normalizeForSearch } from '@/lib/search';
-import { buscarProdutosEOpcoes, type ResultadoBusca } from '@/lib/buscaPorOpcao';
+import { buscarProdutosEOpcoes, escolhasRapidas, ehMeioAMeio, type ResultadoBusca } from '@/lib/buscaPorOpcao';
 import { visibleOptionGroups } from '@/lib/optionRules';
 import { formatScheduleLabel } from '@/lib/schedule';
 import { formatDuration } from '@/lib/formatDuration';
@@ -2075,6 +2075,11 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
             // "Obrigatório" perdia o sentido. O cardápio do CLIENTE mantém a pré-seleção.
             // Exceção (15/10/2026): veio da busca por sabor ("calabresa") -> esse sabor já vem marcado.
             setSelections(preSelecao ?? {});
+            // Meio a meio pelo botão de tamanho da busca: tamanho e 1º sabor já marcados -> abre já no 2º sabor.
+            if (preSelecao && Object.keys(preSelecao).length >= 2) {
+                const vazio = visibleOptionGroups(product.option_groups || [], preSelecao).find(g => !(preSelecao[g.id] || []).length);
+                if (vazio) setTimeout(() => document.getElementById(`grupo-opcao-${vazio.id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 250);
+            }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a pré-seleção acompanha o produto aberto
     }, [product]);
@@ -2144,7 +2149,7 @@ const StoreProductModal: React.FC<{ product: Product | null, onClose: () => void
                 </div>
 
                 {groups.map(group => (
-                    <div key={group.id} className="rounded-[14px] px-4 py-3 bg-[var(--surface-2)]">
+                    <div key={group.id} id={`grupo-opcao-${group.id}`} className="rounded-[14px] px-4 py-3 bg-[var(--surface-2)] scroll-mt-2">
                         <div className="flex items-center justify-between mb-1">
                             <h4 className="font-semibold text-[15px] text-[var(--text)]">{group.name}</h4>
                             {group.required && <Badge color="bg-[var(--warn)]/10 text-[var(--warn)]">Obrigatório</Badge>}
@@ -2383,6 +2388,17 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
         const effectivePrice = getEffectivePrice(product);
         const hasActivePromo = effectivePrice < product.price;
         const variablePricing = !!product.option_groups?.some(g => g.options?.some(o => o.price_delta > 0));
+        // Busca por sabor, 2ª rodada (15/10/2026, Ramon: "pesquisa, escolhe e confirma"): tamanho em botões no resultado.
+        // Pizza inteira: um toque já põe no pedido. Meio a meio: abre a janela no 2º sabor.
+        const rapidas = opcao ? escolhasRapidas(product, opcao) : [];
+        const meio = ehMeioAMeio(product);
+        const escolherTamanho = (b: (typeof rapidas)[number]) => {
+            if (meio) { setPreSelecao(b.selecoes); setSelectedProduct(product); return; }
+            const visiveis = visibleOptionGroups(product.option_groups || [], b.selecoes);
+            const escolhidas: SelectedOption[] = resolveSelectedOptions(visiveis, b.selecoes)
+                .map(({ group_id, option_id, name, price_delta }) => ({ group_id, option_id, name, price_delta }));
+            onAddItem(product, 1, '', escolhidas);
+        };
         return (
             <div
                 key={opcao ? `${product.id}:${opcao.optionId}` : product.id}
@@ -2414,6 +2430,24 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                             <span className="text-[var(--text-muted)] line-through text-[13px]">R$ {formatBRL(product.price)}</span>
                         )}
                     </div>
+                    {rapidas.length > 0 && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {meio && <span className="text-[12px] text-[var(--text-muted)] w-full">Escolha o tamanho e depois o 2º sabor</span>}
+                            {rapidas.map(b => (
+                                <button
+                                    key={b.optionId}
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); escolherTamanho(b); }}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    aria-label={meio ? `${product.name}, ${b.nome}: escolher o 2º sabor` : `Adicionar ${product.name} ${opcao?.optionName} ${b.nome}`}
+                                    className="min-h-9 max-sm:min-h-11 px-3.5 max-sm:px-3 rounded-full bg-[var(--brand-soft)] text-[14px] max-sm:text-[13px] font-semibold u-motion u-press-sm hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                                    style={{ color: GARCOM_ACTION }}
+                                >
+                                    {meio ? '' : '+ '}{b.nome} <span className="font-normal num">· <span className="max-sm:hidden">R$ </span>{formatBRL(b.preco)}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 {product.sold_out && (
                     <span className="shrink-0 text-[12px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-[var(--err-fill)] text-white">Esgotado</span>
