@@ -126,8 +126,10 @@ async function preparar(C) {
     caixa: { role: 'cashier', perms: { tables: true, counter: true, kitchen: false, bar: false, menu: false, admin: false, caixa: true, trocas: true } },
     gerente: { role: 'manager', perms: { tables: true, counter: true, kitchen: true, bar: true, menu: true, admin: true, caixa: true, trocas: true, supervisiona_caixa: true } },
   });
-  // Estado conhecido da loja: pedido pede a senha, fluxo de impressão direta, sem pausa de impressão, pré-conta automática no padrão (ligada).
-  await amb.ajustarConfig({ order_flow: 'direct_print', pedido_pede_senha: true, printing_paused: undefined, auto_pre_conta: undefined, charge_service_fee: true, service_fee_rate: 0.1 });
+  // Estado conhecido da loja: pedido pede a senha, fluxo de impressão direta (sem modo por local, que venceria o fluxo), sem pausa de
+  // impressão, pré-conta automática no padrão (ligada), fechamento sem contagem cega. A ZZ virou a loja de demonstração "Casa Norte" (18/10): fica em KDS e sem estoque.
+  await amb.ajustarConfig({ order_flow: 'direct_print', locais_preparo_modo: undefined, pedido_pede_senha: true, printing_paused: undefined, auto_pre_conta: undefined, charge_service_fee: true, service_fee_rate: 0.1, cash_shift_blind_count: undefined, cash_shift_max_tolerance: undefined });
+  await amb.ligarModoEstoque();
   await amb.criarLocaisEImpressoras();
   await amb.enviarPizzaParaOLocal();
   if (C.local && !amb.estoqueRealNaLoja) { await amb.iniciarMock(); await amb.vincularCodigosOmie(); }
@@ -395,7 +397,7 @@ async function secLancamento(C) {
     const itens = ped[0].order_items;
     igual(itens.length, 3, 'itens');
     ok(itens.every((i) => i.added_by_name === U.garcom.nome && i.added_by_role === 'garcom'), `autor dos itens: ${JSON.stringify(itens.map((i) => i.added_by_name))}`);
-    igual(Number(ped[0].total), P.cozinha.price + P.bar.price + P.pizza.price, 'total do pedido (sem taxa)');
+    igual(Number(ped[0].total), Math.round((Number(P.cozinha.price) + Number(P.bar.price) + Number(P.pizza.price)) * 100) / 100, 'total do pedido (sem taxa)');
     C.pedidoIds = [ped[0].id];
   });
   await fecharJanelas(g);
@@ -668,7 +670,7 @@ async function secPagamento(C) {
   await rel.passo(`conta da mesa mostra R$ ${brl(total)} (3 itens + 10% de serviço) no modal de pagamento`, async () => {
     await cx.irArea('Caixa');
     await sleep(1500);
-    await cx.page.locator('button').filter({ hasText: new RegExp(`^Mesa ${mesa.number}\\s*R\\$`) }).first().click();
+    await cx.page.locator('button').filter({ hasText: new RegExp(`^Mesa ${mesa.number}\\b[\\s\\S]*R\\$`) }).first().click();
     await sleep(1200);
     const modal = cx.page.getByRole('dialog').filter({ hasText: 'Receber pagamento' }).last();
     await modal.waitFor({ timeout: 8000 });

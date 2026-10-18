@@ -41,7 +41,7 @@ export class Ambiente {
   // ---------- guardas (nunca o Sertão; só ZZ/Donana)
   async guardas() {
     if (!LOJAS_PERMITIDAS.has(this.lojaId) || this.lojaId === SERTAO_ID) throw new Error(`loja ${this.lojaId} não é permitida neste teste (só ZZ Laboratório e Donana Brotas)`);
-    const { data: loja, error } = await this.admin.from('stores').select('id,name,slug,config,is_active').eq('id', this.lojaId).single();
+    const { data: loja, error } = await this.admin.from('stores').select('id,name,slug,config,is_active,stock_mode').eq('id', this.lojaId).single();
     if (error || !loja) throw new Error(`não achei a loja ${this.lojaId}: ${error?.message}`);
     if (ehSertao(loja.name, loja.slug)) throw new Error(`ABORTADO: a loja ${loja.name} parece ser o Sertão`);
     if (/sert[aã]o/i.test(this.baseUrl)) throw new Error(`ABORTADO: BASE_URL ${this.baseUrl} parece apontar para o Sertão`);
@@ -165,6 +165,14 @@ export class Ambiente {
     this.salvar();
     const { error } = await this.admin.from('stores').update({ config: cfg }).eq('id', this.lojaId);
     if (error) throw new Error(`config: ${error.message}`);
+  }
+
+  // ---------- a baixa de estoque só é testada com a loja em modo Omie; loja 'nenhum' (demonstração) volta ao modo original no fim
+  async ligarModoEstoque() {
+    if ((this.loja?.stock_mode ?? 'omie') === 'omie') return;
+    this.estado.stockModeOriginal = this.loja.stock_mode; this.salvar();
+    const { error } = await this.admin.from('stores').update({ stock_mode: 'omie' }).eq('id', this.lojaId);
+    if (error) throw new Error(`modo de estoque: ${error.message}`);
   }
 
   // ---------- locais e impressoras temporários (fila print_jobs nunca é consumida: não existe agente/PC ligado à ZZ)
@@ -348,6 +356,8 @@ export class Ambiente {
       for (const [k, v] of Object.entries(chaves)) { if (v.existia) cfg[k] = v.valor; else delete cfg[k]; }
       await tentar('config da loja', () => this.admin.from('stores').update({ config: cfg }).eq('id', loja));
     }
+    // 8b) modo de estoque da loja (só se o teste trocou)
+    if (e.stockModeOriginal) await tentar('modo de estoque', () => this.admin.from('stores').update({ stock_mode: e.stockModeOriginal }).eq('id', loja));
     // 9) cópias no histórico frio (só existem se o servidor do app tinha NTB_FRIO_API_URL)
     if (ordemIds.length) {
       try {
