@@ -27,7 +27,8 @@
 // Sem o agente rodando, o job fica 'pending' pra sempre — esta tela nunca
 // finge que "enfileirou" é o mesmo que "imprimiu".
 
-import { DOCS_IMPRESSAO, impressoraRecebe, impressorasDoDoc } from '@/lib/printDocs';
+import { DOCS_IMPRESSAO, impressoraRecebe, impressorasDoDoc, rotuloDoc } from '@/lib/printDocs';
+import { DOCS_DO_APARELHO, lerImpressaoDoAparelho, salvarImpressaoDoAparelho, type ImpressaoDoAparelho } from '@/lib/impressaoAparelho';
 import React, { useEffect, useState, useCallback } from 'react';
 import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
@@ -164,6 +165,9 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
   const [novoSetorLocal, setNovoSetorLocal] = useState('');
   const comOmie = !!estoque?.configurado && estoque.locais.length > 0;
   const [maquina, setMaquina] = useState<{ hostname: string; impressoras: string[] } | null>(null);
+  // Onde cada papel sai a partir DESTE computador (guardado no aparelho). Ver lib/impressaoAparelho.ts.
+  const [escolhaAparelho, setEscolhaAparelho] = useState<ImpressaoDoAparelho>({});
+  useEffect(() => { setEscolhaAparelho(lerImpressaoDoAparelho(store.id)); }, [store.id]);
   useEffect(() => {
     window.electronApp?.localPrinters?.().then(setMaquina).catch(() => {});
   }, []);
@@ -403,6 +407,50 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
             : comandaManual.length > 0
               ? <>Nenhuma impressora marcada para a automática. O botão Imprimir sai em: <span className="font-medium text-[var(--text)]">{comandaManual.map((p) => p.name).join(', ')}</span>.</>
               : <>Nenhuma impressora marcada: a comanda sai na janela de impressão do aparelho (só manual).</>}
+        </p>
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div>
+          <p className="text-[15px] font-semibold text-[var(--text)]">Este computador{maquina?.hostname ? ` (${maquina.hostname})` : ''}</p>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+            Escolha onde sai cada papel impresso por este computador. Vale só aqui: cada computador e celular tem a sua escolha. Os pedidos continuam saindo no local de preparo.
+          </p>
+        </div>
+        {(() => {
+          const opcoes = printers.filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb'));
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {DOCS_DO_APARELHO.map((doc) => {
+                const ids = escolhaAparelho[doc];
+                const valor = ids === undefined ? 'loja' : ids.length === 0 ? 'nenhuma' : ids[0];
+                const daLoja = impressorasDoDoc(printers, doc).filter((p) => p.connection_type === 'network' || p.connection_type === 'usb').map((p) => p.name);
+                return (
+                  <div key={doc} className="flex flex-col gap-1">
+                    <label htmlFor={`aparelho-${doc}`} className="text-[13px] font-medium text-[var(--text-muted)]">{rotuloDoc(doc)}</label>
+                    <select
+                      id={`aparelho-${doc}`}
+                      value={valor}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEscolhaAparelho(salvarImpressaoDoAparelho(store.id, doc, v === 'loja' ? null : v === 'nenhuma' ? [] : [v]));
+                        toast.success(v === 'loja' ? `${rotuloDoc(doc)}: igual à loja neste computador.` : v === 'nenhuma' ? `${rotuloDoc(doc)}: não imprime neste computador.` : `${rotuloDoc(doc)}: sai em ${opcoes.find((p) => p.id === v)?.name ?? 'impressora'} quando impresso daqui.`);
+                      }}
+                      className="w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
+                    >
+                      <option value="loja">Igual à loja{daLoja.length ? ` (${daLoja.join(', ')})` : ''}</option>
+                      {opcoes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      <option value="nenhuma">Não imprimir neste computador</option>
+                      {valor !== 'loja' && valor !== 'nenhuma' && !opcoes.some((p) => p.id === valor) && <option value={valor}>Impressora apagada ou desativada (segue a loja)</option>}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+        <p className="text-[12px] text-[var(--text-muted)]">
+          A comanda automática (quando a mesa pede a conta) sai uma vez só, na impressora escolhida pelo primeiro aparelho que mandar imprimir.
         </p>
       </Card>
 

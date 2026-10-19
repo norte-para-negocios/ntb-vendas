@@ -2828,3 +2828,21 @@ no Sertão) foi MOVIDA para a ODARA pelo "Vincular à Loja" do Master Admin quan
 - **Master Admin > Editar Acesso** com outra loja escolhida pergunta: "Dar acesso às duas lojas" (padrão, `copy_store_user_to_store_secure`:
   mesmo nome, e-mail, senha, função e permissões; ao entrar a pessoa escolhe a loja, 177) ou "Mover".
 - Tai (taise@donanarestaurante.com.br): login do Sertão recriado em 19/10 com as permissões que tinha lá (admin + supervisiona_caixa).
+
+## Impressão por computador (19/10/2026)
+Pedido do dono: "cada computador vai ter sua própria configuração, não vai ser geral... se eu imprimir no notebook e botei para
+a comanda sair no bar, vai sair no bar; no computador do caixa, se botei pra comanda sair no caixa, sai no caixa".
+- Configurações > Impressão > cartão **"Este computador"**: para Comanda (conta do cliente), Comprovante, Cupom fiscal e
+  Fechamento de caixa, escolhe "Igual à loja" (padrão: marcação de cada impressora, como antes), uma impressora, ou "Não
+  imprimir neste computador". Guardado no aparelho (`localStorage` `ntb-impressao-aparelho:<loja>`), nada no servidor:
+  `lib/impressaoAparelho.ts`. Os PEDIDOS continuam por local de preparo (igual para a loja toda); o nome da impressora no
+  Windows de cada PC continua no "Neste computador" do cartão da impressora (`machine_names`).
+- Aplicado em `enqueueReceiptPrintJobs`, `enqueueFiscalCupomPrintJobs`, `hasActivePrinterForDoc` (com escolha no aparelho, nunca
+  abre a janela do navegador) e na nota sem internet (`emitirNotaSemInternet`). Escolha apontando para impressora apagada ou
+  desativada segue a loja.
+- Comanda AUTOMÁTICA (pedir conta) é um evento só: todos os PCs vigiam e o celular de quem pediu também manda. A chave
+  anti-duplicata da posição i é o id da i-ésima impressora da loja (`chaveDoPapel`), a mesma de um aparelho sem escolha
+  ou app antigo: sai uma vez, na escolha de quem chegou primeiro. Manual/comprovante/cupom continuam `base:id da impressora`.
+- Testes: `scripts/testes/impressaoAparelho.test.ts`; portão seção 5 ("POR COMPUTADOR"): gerente escolhe Bar e o Imprimir dele
+  sai só no Bar, o garçom (sem escolha) sai no Caixa, "Igual à loja" volta para o Caixa.
+- Chega nos PCs/celulares só com release dos apps (webapp embutido).

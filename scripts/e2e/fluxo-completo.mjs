@@ -666,6 +666,42 @@ async function secComandaEConta(C) {
     }
     ok(erros.length === 0, erros.join('; '));
   });
+  // Por computador (19/10/2026): cada aparelho escolhe onde sai a comanda; a escolha de um não vale no outro.
+  const comandaManualEm = async (dev) => {
+    const antes = new Set((await amb.ledgerFila()).map((j) => j.id));
+    await abrirMesa(dev, mesa.number);
+    await dev.page.getByRole('button', { name: /Ver Comanda/ }).click();
+    await sleep(800);
+    await dev.page.getByRole('dialog').last().getByRole('button', { name: 'Imprimir' }).click();
+    await esperar(async () => (await amb.ledgerFila()).some((j) => !antes.has(j.id)), { timeout: 15000, motivo: 'comanda na fila' }).catch(() => {});
+    await sleep(4000);
+    await fecharJanelas(dev);
+    const novos = (await amb.ledgerFila()).filter((j) => !antes.has(j.id));
+    (C.vistos = C.vistos ?? new Set()); novos.forEach((j) => C.vistos.add(j.id));
+    return novos.map((j) => `${j.tipo}/${j.local}`).sort().join(' ; ');
+  };
+  await rel.passo('POR COMPUTADOR: o gerente escolhe em "Este computador" a comanda no Bar e o Imprimir dele sai SÓ no Bar', async () => {
+    const m = C.devs.gerente;
+    await abrirAdmin(m, 'Configurações', 'Impressão');
+    const sel = m.page.locator('#aparelho-pre_conta');
+    await sel.waitFor({ timeout: 8000 });
+    const bar = amb.impressoras.find((p) => p.name === 'QA Portao Bar');
+    await sel.selectOption(bar.id);
+    await sleep(800);
+    igual(await comandaManualEm(m), 'comanda/Bar', 'comanda impressa pelo gerente');
+  });
+  await rel.passo('POR COMPUTADOR: no aparelho do garçom (sem escolha) a comanda continua saindo no Caixa, como a loja marcou', async () => {
+    igual(await comandaManualEm(g), 'comanda/Caixa', 'comanda impressa pelo garçom');
+  });
+  await rel.passo('POR COMPUTADOR: "Igual à loja" no gerente volta a mandar a comanda para o Caixa', async () => {
+    const m = C.devs.gerente;
+    await abrirAdmin(m, 'Configurações', 'Impressão');
+    await m.page.locator('#aparelho-pre_conta').selectOption('loja');
+    await sleep(800);
+    // fora da janela de 45 s da chave anti-duplicata do Imprimir manual da mesma conta na mesma impressora
+    await sleep(46000);
+    igual(await comandaManualEm(m), 'comanda/Caixa', 'comanda impressa pelo gerente depois de voltar para a loja');
+  });
 }
 
 async function secPagamento(C) {

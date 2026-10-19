@@ -7,6 +7,7 @@ import { vendaTemCobranca } from '@/lib/calc';
 import { dividirEmLotes } from '@/lib/planta';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
 import { impressoraRecebe, type DocPrint } from '@/lib/printDocs';
+import { lerImpressaoDoAparelho, escolherImpressorasDoAparelho, chaveDoPapel } from '@/lib/impressaoAparelho';
 import { Store, Table, Product, Category, PrintSector, CategoryGroup, OrderItem, OrderStatus, TableStatus, CartItem, StoreUser, Order, TableSession, StoreFiscalCertificateStatus, StoreFiscalConfig, OrderRating, UniversalUser, ProductOptionGroup, OptionVariant, FiscalNota, OperatorCheckin, TableReservation, PrinterConfig, PrintJob } from '@/types';
 import { StoreModules, OrderFlow, isDefaultStoreModules } from '@/lib/storeModules';
 import { checkAccentColorContrast } from '@/lib/colorContrast';
@@ -3271,6 +3272,8 @@ export const hasActivePrinterForDoc = async (storeId: string, doc: DocPrint): Pr
   // Sem internet (08/10/2026): antes respondia "não tem impressora" e o comprovante ia para a janela do navegador em vez
   // da impressora do caixa. Agora decide pelas impressoras guardadas no aparelho.
   const lista = (error ? impressorasDoAparelho(storeId) : (data || [])) as { destination: string; documentos?: string[] | null }[];
+  // Este computador escolheu onde o papel sai (ou "não imprimir aqui"): nunca abre a janela de impressão.
+  if (lerImpressaoDoAparelho(storeId)[doc]) return true;
   // Se alguma impressora já teve "documentos" configurado, o operador assumiu o controle de onde sai cada coisa:
   // um documento sem impressora marcada NÃO deve abrir a janela de impressão do navegador a cada venda.
   return lista.some((p) => impressoraRecebe(p, doc)) || lista.some((p) => p.documentos && p.documentos.length > 0);
@@ -3648,22 +3651,26 @@ export const enqueueReceiptPrintJobs = async (storeId: string, title: string, co
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .in('connection_type', ['network', 'usb']);
-  let impressoras = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, doc, { soConfigurado }));
+    .in('connection_type', ['network', 'usb'])
+    .order('created_at', { ascending: true });
+  let ativas = (printers || []) as PrinterConfig[];
   if (error) {
     if (!isNetworkError(error)) { console.error('Error fetching receipt printers:', error); return 0; }
-    impressoras = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type) && impressoraRecebe(p, doc, { soConfigurado }));
+    ativas = readCachedPrinters(storeId).filter((p) => p.is_active && ['network', 'usb'].includes(p.connection_type));
   }
+  const daLoja = ativas.filter((p) => impressoraRecebe(p, doc, { soConfigurado }));
+  // Escolha deste computador (Configurações > Impressão > "Este computador") vence a marcação da impressora.
+  const { impressoras, doAparelho } = escolherImpressorasDoAparelho(lerImpressaoDoAparelho(storeId), doc, ativas, daLoja);
   const resultados = await Promise.all(
-    (impressoras || []).map((printer) =>
+    impressoras.map((printer, i) =>
       enqueuePrintJob({
         storeId,
         printerConfigId: printer.id,
         destination: printer.destination,
         title,
         // Layout em colunas depende do papel DESTA impressora (80 mm = 48, 58 mm = 32).
-        content: typeof content === 'function' ? content((printer as { paper_width_mm?: number | null }).paper_width_mm ?? null) : content,
-        dedupeKey: dedupeKeyBase ? `${dedupeKeyBase}:${printer.id}` : undefined,
+        content: typeof content === 'function' ? content(printer.paper_width_mm ?? null) : content,
+        dedupeKey: dedupeKeyBase ? chaveDoPapel(dedupeKeyBase, printer, i, daLoja, doAparelho, soConfigurado) : undefined,
       }).catch(() => ({ success: false }))
     )
   );
@@ -3686,9 +3693,12 @@ export const enqueueFiscalCupomPrintJobs = async (
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .in('connection_type', ['network', 'usb']);
+    .in('connection_type', ['network', 'usb'])
+    .order('created_at', { ascending: true });
   if (error) { console.error('Error fetching receipt printers:', error); return 0; }
-  const impressorasCupom = (printers || []).filter((p) => impressoraRecebe(p as { destination: string; documentos?: string[] | null }, 'cupom_fiscal'));
+  const ativas = (printers || []) as PrinterConfig[];
+  const impressorasCupom = escolherImpressorasDoAparelho(lerImpressaoDoAparelho(storeId), 'cupom_fiscal', ativas,
+    ativas.filter((p) => impressoraRecebe(p, 'cupom_fiscal'))).impressoras;
   const origem = typeof window !== 'undefined' ? window.location.origin : '';
   await Promise.all(
     impressorasCupom.map((printer) => {
@@ -4108,8 +4118,11 @@ export const emitirNotaSemInternet = async (params: {
   const r = await window.electronApp.fiscal.emitir({ storeId: params.storeId, venda: { itens, pagamentos: params.pagamentos, destinatario: params.destinatario } });
   if (!r.ok || !r.nota) return { ok: false, reason: r.reason || 'Falha ao emitir a nota sem internet.' };
   const impressoras = impressorasDoAparelho(params.storeId);
-  const printer = impressoras.find((p) => impressoraRecebe(p as never, 'cupom_fiscal' as DocPrint, { soConfigurado: true }))
-    ?? impressoras.find((p) => impressoraRecebe(p as never, 'comprovante' as DocPrint));
+  // Escolha deste computador para o cupom fiscal vence; "não imprimir aqui" não imprime.
+  const escolha = escolherImpressorasDoAparelho(lerImpressaoDoAparelho(params.storeId), 'cupom_fiscal', impressoras, []);
+  const printer = escolha.doAparelho ? escolha.impressoras[0]
+    : impressoras.find((p) => impressoraRecebe(p as never, 'cupom_fiscal' as DocPrint, { soConfigurado: true }))
+      ?? impressoras.find((p) => impressoraRecebe(p as never, 'comprovante' as DocPrint));
   let impresso = false;
   if (printer) {
     let donos: string[] = [];
