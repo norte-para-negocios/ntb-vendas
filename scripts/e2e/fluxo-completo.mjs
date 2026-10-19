@@ -444,7 +444,7 @@ async function pedidoDoItem(amb, id) { const { data: i } = await amb.admin.from(
 const linhaDaComanda = (dlg, nome) => dlg.locator('div').filter({ hasText: nome }).filter({ has: dlg.page().locator('button[title="Cancelar Item"]') }).last();
 
 async function secPermissoesAcoes(C) {
-  rel.entrar('4. Trocar mesa / mover item / cancelar item / cancelar pedido: só gerente e quem tem "trocas"');
+  rel.entrar('4. Trocar mesa / mover item: só gerente e quem tem "trocas"; cancelar item / pedido: com a senha de gerente, caixa ou quem tem a permissão');
   const { amb } = C; const U = amb.usuarios; const g = C.devs.garcom; const m = C.devs.gerente; const cx = C.devs.caixa; const P = amb.produtos;
   const [mesaA, mesaB, mesaC] = amb.mesas;
   await fecharJanelas(g); await fecharJanelas(m);
@@ -460,17 +460,40 @@ async function secPermissoesAcoes(C) {
   const iExtra = (await itemDoProduto(amb, P.extra.id))[0]; const iExtra2 = (await itemDoProduto(amb, P.extra2.id))[0];
   ok(iExtra && iExtra2, 'itens descartáveis não foram gravados');
 
-  await rel.passo('garçom: a comanda NÃO tem Trocar, Mover item, Cancelar item nem Cancelar pedido (só Imprimir e Pedir conta)', async () => {
+  await rel.passo('garçom: a comanda NÃO tem Trocar nem Mover item; Cancelar item e Cancelar pedido aparecem (pedem a senha de quem autoriza)', async () => {
     await abrirMesa(g, mesaA.number);
     await g.page.getByRole('button', { name: /Ver Comanda/ }).click();
     await sleep(1000);
     const dlg = g.page.getByRole('dialog').last();
-    igual(await dlg.locator('button[title="Cancelar Item"]').count(), 0, 'botões "Cancelar item" visíveis para o garçom');
+    ok(await dlg.locator('button[title="Cancelar Item"]').count() >= 2, 'botões "Cancelar item" deveriam aparecer para o garçom (pedem senha)');
     igual(await dlg.locator('button[aria-label="Mover item para outra mesa"]').count(), 0, 'botões "Mover item" visíveis para o garçom');
     igual(await dlg.getByRole('button', { name: 'Trocar', exact: true }).count(), 0, 'botão Trocar visível para o garçom');
-    igual(await dlg.getByRole('button', { name: /Cancelar pedido/ }).count(), 0, 'botão Cancelar pedido visível para o garçom');
+    igual(await dlg.getByRole('button', { name: /Cancelar pedido/ }).count(), 1, 'botão Cancelar pedido deveria aparecer para o garçom (pede senha)');
     ok(await dlg.getByRole('button', { name: 'Imprimir' }).count() === 1 && await dlg.getByRole('button', { name: /Pedir conta/ }).count() === 1, 'garçom deveria ter Imprimir e Pedir conta');
     await fecharJanelas(g);
+  });
+  await rel.passo('garçom tenta cancelar item com a PRÓPRIA senha: recusado ("não pode cancelar") e o item continua', async () => {
+    await abrirMesa(g, mesaA.number);
+    await g.page.getByRole('button', { name: /Ver Comanda/ }).click();
+    await sleep(1000);
+    const dlg = g.page.getByRole('dialog').last();
+    await linhaDaComanda(dlg, P.extra.name).locator('button[title="Cancelar Item"]').first().click();
+    const dlgC = g.page.getByRole('dialog').filter({ hasText: 'Escolha o motivo' });
+    await dlgC.waitFor({ timeout: 5000 });
+    await dlgC.getByText('Erro de lançamento').click();
+    await dlgC.getByLabel('Senha de quem autoriza').fill(U.garcom.senha);
+    await dlgC.getByRole('button', { name: 'Cancelar item' }).click();
+    await g.page.getByText(/não pode cancelar/).first().waitFor({ timeout: 8000 });
+    igual((await statusItem(amb, iExtra.id)).status, 'pending', 'o item foi cancelado com a senha do garçom');
+    await fecharJanelas(g);
+  });
+  await rel.passo('cancelar com senha pelo servidor: senha errada e senha de garçom são recusadas, nada muda', async () => {
+    const r1 = (await amb.anon.rpc('cancel_order_items_autorizado_secure', { p_item_ids: [iExtra.id], p_password: 'senha-que-nao-existe-qa', p_reason: 'teste', p_action: 'cancelar_item' })).data;
+    const r2 = (await amb.anon.rpc('cancel_order_items_autorizado_secure', { p_item_ids: [iExtra.id], p_password: U.garcom.senha, p_reason: 'teste', p_action: 'cancelar_pedido' })).data;
+    ok(r1 && r1.success === false && r1.error === 'invalid', `senha errada deveria ser recusada: ${JSON.stringify(r1)}`);
+    ok(r2 && r2.success === false && r2.error === 'sem_permissao', `senha do garçom deveria ser recusada: ${JSON.stringify(r2)}`);
+    igual((await statusItem(amb, iExtra.id)).status, 'pending', 'o item foi cancelado apesar da recusa');
+    await amb.admin.from('store_open_mode_attempts').delete().eq('store_id', LOJA);   // a senha errada não pode travar o resto do teste
   });
   await rel.passo('garçom chamando direto o servidor (RPCs v2 com o id dele): trocar mesa, mover item, cancelar item e cancelar pedido são RECUSADOS e nada muda', async () => {
     const nome = U.garcom.nome; const id = U.garcom.id;
@@ -491,7 +514,7 @@ async function secPermissoesAcoes(C) {
     ok(abertas.length === 0, `ainda executáveis pela chave anônima (o garçom contorna a regra chamando direto): ${abertas.join(', ')}`);
   }, { pendente: 'permissões/senha única (outra frente): migration 159 deixa as v1 abertas até o deploy do app; falta a migration que revoga o execute delas' });
 
-  await rel.passo('gerente consegue CANCELAR ITEM (motivo obrigatório) e a cozinha recebe o aviso de cancelamento', async () => {
+  await rel.passo('gerente consegue CANCELAR ITEM (motivo e senha obrigatórios) e a cozinha recebe o aviso de cancelamento', async () => {
     await abrirMesa(m, mesaA.number);
     await m.page.getByRole('button', { name: /Ver Comanda/ }).click();
     await sleep(1000);
@@ -500,6 +523,7 @@ async function secPermissoesAcoes(C) {
     const dlgC = m.page.getByRole('dialog').filter({ hasText: 'Escolha o motivo' });
     await dlgC.waitFor({ timeout: 5000 });
     await dlgC.getByText('Erro de lançamento').click();
+    await dlgC.getByLabel('Senha de quem autoriza').fill(U.gerente.senha);
     const antes = new Set((await amb.ledgerFila()).map((j) => j.id));
     await dlgC.getByRole('button', { name: 'Cancelar item' }).click();
     await esperar(async () => (await statusItem(amb, iExtra.id)).status === 'canceled', { timeout: 10000, motivo: 'item cancelado no banco' });
@@ -528,7 +552,7 @@ async function secPermissoesAcoes(C) {
     igual(novos.length, 0, `mover item mandou ${novos.length} documento(s) para a impressora: ${novos.map((j) => j.titulo).join(' ; ')}`);
     await fecharJanelas(m);
   });
-  await rel.passo('caixa com "trocas" consegue CANCELAR O PEDIDO da mesa (cancelamento na cozinha)', async () => {
+  await rel.passo('caixa consegue CANCELAR O PEDIDO da mesa com a senha dele (cancelamento na cozinha)', async () => {
     await abrirMesa(cx, mesaC.number);
     await cx.page.getByRole('button', { name: /Ver Comanda/ }).click();
     await sleep(1000);
@@ -537,6 +561,7 @@ async function secPermissoesAcoes(C) {
     const dlgC = cx.page.getByRole('dialog').filter({ hasText: 'Cancelar pedido da Mesa' });
     await dlgC.waitFor({ timeout: 5000 });
     await dlgC.getByPlaceholder(/cliente desistiu/i).fill('qa portao');
+    await dlgC.getByLabel('Senha de quem autoriza').fill(U.caixa.senha);
     await dlgC.getByRole('button', { name: 'Cancelar pedido' }).click();
     await esperar(async () => (await statusItem(amb, iExtra2.id)).status === 'canceled', { timeout: 10000, motivo: 'pedido cancelado no banco' });
     await esperar(async () => (await amb.ledgerFila()).filter((j) => !antes.has(j.id)).length >= 1, { timeout: 15000, motivo: 'aviso de cancelamento na fila' }).catch(() => {});

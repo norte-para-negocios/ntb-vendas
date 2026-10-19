@@ -6,8 +6,18 @@ import { getSupabaseAdmin } from '../../lib/supabaseAdmin';
 import { estornarVendaDaNota } from '../../lib/fiscal/estornoDaVenda';
 
 const ZZ = 'f33b4310-ff0a-487c-a3b1-62acd0a58850';
-const TURNO_ABERTO = '9a4b8a40-6efe-4ba1-ae5d-ce3b401c7fa8';
-const TURNO_FECHADO = '782b69b5-49a6-404a-b85f-ae354a4f2d90';
+// Turnos próprios do teste (a ZZ virou a loja demo Casa Norte em 18/10 e não guarda turnos fixos).
+let TURNO_ABERTO = '';
+let TURNO_FECHADO = '';
+const turnosCriados: string[] = [];
+async function criarTurno(fechado: boolean) {
+  const { data, error } = await admin.from('cash_shifts').insert(fechado
+    ? { store_id: ZZ, opening_float: 0, status: 'closed', closed_at: new Date().toISOString(), closing_counted_cash: 0, notes: 'teste automatizado estornoDaVenda' }
+    : { store_id: ZZ, opening_float: 0, status: 'open', notes: 'teste automatizado estornoDaVenda' }).select('id').single();
+  assert.ok(!error, error?.message);
+  turnosCriados.push(data!.id);
+  return data!.id as string;
+}
 const NOTA_FALSA = '00000000-0000-4000-8000-000000000001';
 const admin = getSupabaseAdmin();
 const criados: string[] = [];
@@ -22,6 +32,8 @@ const esperado = async (turno: string) => Number(((await admin.rpc('fetch_cash_s
 
 (async () => {
   try {
+    TURNO_ABERTO = await criarTurno(false);
+    TURNO_FECHADO = await criarTurno(true);
     const { data: prod } = await admin.from('products').select('id, category_id').eq('store_id', ZZ).limit(1).single();
     const pagamento = (turno: string) => ({ total: 30, methods: [{ method: 'CASH', amount: 30 }], cash_shift_id: turno });
 
@@ -70,6 +82,11 @@ const esperado = async (turno: string) => Number(((await admin.rpc('fetch_cash_s
       await admin.from('cash_shift_audit_events').delete().eq('store_id', ZZ).eq('details->>order_id', id);
       await admin.from('order_items').delete().eq('order_id', id);
       await admin.from('orders').delete().eq('id', id);
+    }
+    for (const id of turnosCriados) {
+      await admin.from('cash_shift_audit_events').delete().eq('shift_id', id);
+      await admin.from('cash_movements').delete().eq('shift_id', id);
+      await admin.from('cash_shifts').delete().eq('id', id);
     }
   }
 })().catch((e) => { console.error(e); process.exit(1); });

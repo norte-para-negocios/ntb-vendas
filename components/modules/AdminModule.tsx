@@ -12,7 +12,7 @@ import { PreparoImpressaoSection, type LocalPendente } from '@/components/module
 import { Building2, FileSignature, Plug, Printer as PrinterIcon, Boxes, ScrollText, LogOut, ArrowLeft } from 'lucide-react';
 import { AuthBackdrop } from '@/components/AuthBackdrop';
 import { ROTULO_MODO, MODOS_ESTOQUE, normalizarModo, type ModoEstoque } from '@/lib/modoEstoque';
-import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchVendasPorConta } from '@/lib/api';
+import { createPrintSector, createStore, updateStore, deleteStore, duplicateStore, authenticateAdmin, updateAdminPassword, fetchAllStores, fetchTables, createStoreUser, updateStoreUser, copyStoreUserToStore, deleteStoreUser, fetchStoreUsers, fetchStoreTeamMembers, uploadStoreLogo, uploadStoreCover, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, authenticateUniversalUser, updateUniversalUserPassword, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, criarLojaNoEstoque, fetchVendasPorConta } from '@/lib/api';
 import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { Store, StoreUser, StoreFiscalCertificateStatus } from '@/types';
 import { cobrancaTaxaDoCadastro, formatBRL, getOrderDisplayTotal } from '@/lib/calc';
@@ -343,6 +343,10 @@ export const AdminModule: React.FC = () => {
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userStoreId, setUserStoreId] = useState('');
+  // Editar com outra loja escolhida: dar acesso às duas (padrão) ou mover. Em 19/10 a Tai foi MOVIDA do Sertão
+  // para a ODARA por aqui quando devia ficar nas duas.
+  const [userStoreIdOriginal, setUserStoreIdOriginal] = useState('');
+  const [trocaLoja, setTrocaLoja] = useState<'duas' | 'mover'>('duas');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -950,6 +954,8 @@ export const AdminModule: React.FC = () => {
       setUserName(user.name);
       setUserEmail(user.email);
       setUserStoreId(user.store_id);
+      setUserStoreIdOriginal(user.store_id);
+      setTrocaLoja('duas');
       setUserPassword(''); // Password not edited here
       setErrorMsg(null);
       loadStores(); // Ensure we have stores list
@@ -1010,11 +1016,13 @@ export const AdminModule: React.FC = () => {
       try {
           let result;
           if (editingUserId) {
+              const outraLoja = userStoreId !== userStoreIdOriginal;
               result = await updateStoreUser(editingUserId, {
                   name: trimmedUserName,
                   email: trimmedUserEmail,
-                  store_id: userStoreId
+                  store_id: outraLoja && trocaLoja === 'duas' ? userStoreIdOriginal : userStoreId
               });
+              if (result.success && outraLoja && trocaLoja === 'duas') result = await copyStoreUserToStore(editingUserId, userStoreId);
           } else {
               result = await createStoreUser(userStoreId, trimmedUserName, trimmedUserEmail, userPassword);
           }
@@ -2085,6 +2093,21 @@ export const AdminModule: React.FC = () => {
                           ))}
                       </select>
                   </div>
+
+                  {editingUserId && userStoreIdOriginal && userStoreId !== userStoreIdOriginal && (
+                      <div className="space-y-2" role="radiogroup" aria-label="O que fazer com a loja atual">
+                          {([
+                              ['duas', `Dar acesso às duas lojas (continua em ${stores.find((x) => x.id === userStoreIdOriginal)?.name ?? 'a atual'})`],
+                              ['mover', `Mover: sai de ${stores.find((x) => x.id === userStoreIdOriginal)?.name ?? 'a atual'}`],
+                          ] as const).map(([v, rotulo]) => (
+                              <label key={v} className={`flex items-center gap-2 min-h-11 px-3 rounded-xl border cursor-pointer text-[15px] ${trocaLoja === v ? 'border-[var(--brand)] bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}>
+                                  <input type="radio" name="troca-loja" checked={trocaLoja === v} onChange={() => setTrocaLoja(v)} />
+                                  {rotulo}
+                              </label>
+                          ))}
+                          {trocaLoja === 'duas' && <p className="text-xs text-[var(--text-muted)]">Mesmo e-mail e mesma senha nas duas. Ao entrar, a pessoa escolhe a loja.</p>}
+                      </div>
+                  )}
               </div>
 
               {errorMsg && <div className="bg-[var(--err)]/10 text-[var(--err)] p-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle size={18} /><span>{errorMsg}</span></div>}

@@ -2813,3 +2813,18 @@ para a fila `print_jobs`. Agora: com internet a tela do Caixa guarda o resumo do
 aparelhos da rede) — `lib/offline/resumoTurno.ts` (teste `resumoTurnoSemServidor.test.ts`). `imprimirFechamentoDoCaixa`: impressora de
 "Fechamento de caixa" (fila; sem internet, direto pela rede no Windows) → celular manda ao computador (`/imprimir` com `doc`) → impressora
 do aparelho. Fechar sem internet também zera a cópia do turno no aparelho. `enqueueReceiptPrintJobs` agora devolve quantas impressoras receberam.
+
+## Cancelar com senha e login em duas lojas pelo Master (19/10/2026, migration 178)
+Reclamação do dono: o caixa não conseguia cancelar item (botão escondido: só gerente ou quem tinha `trocas`), e a Tai (login
+no Sertão) foi MOVIDA para a ODARA pelo "Vincular à Loja" do Master Admin quando devia ficar nas duas.
+- **Cancelar item / cancelar pedido / cancelar no KDS pedem a senha de quem autoriza.** O botão aparece para todos (inclusive
+  garçom e modo Aberto); `cancel_order_items_autorizado_secure(ids[], senha, motivo, acao, solicitado_por)` acha o dono da senha
+  na loja (mesma regra do pedido: senha única, sem `open`, sem senha provisória; senão conta universal), confere
+  `operator_can_secure` e cancela no nome de quem AUTORIZOU (auditoria grava `autorizado_por` e `solicitado_por`). Erros:
+  invalid, locked (10 erros = 1 min, `store_open_mode_attempts`), ambiguous, sem_permissao (`mensagemCancelarComSenha` em `lib/api.ts`).
+  Precisa de internet. A v2 (`cancel_order_item_v2`) continua para quem chama com operador.
+- **Caixa cancela item e pedido por padrão** (`DEFAULT_ROLE_PERMS.cashier` e `operator_can_secure`); valor salvo na matriz vence.
+- Parte comum do cancelamento virou `_cancelar_item_registrado` (sem execute para anon); `cancel_order_item_secure` chama ela.
+- **Master Admin > Editar Acesso** com outra loja escolhida pergunta: "Dar acesso às duas lojas" (padrão, `copy_store_user_to_store_secure`:
+  mesmo nome, e-mail, senha, função e permissões; ao entrar a pessoa escolhe a loja, 177) ou "Mover".
+- Tai (taise@donanarestaurante.com.br): login do Sertão recriado em 19/10 com as permissões que tinha lá (admin + supervisiona_caixa).

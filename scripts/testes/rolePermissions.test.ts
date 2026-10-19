@@ -53,14 +53,16 @@ assert.deepEqual([...SEGUE_ABA].sort(), ['editar_cardapio', 'editar_precos_horar
 const ef = matrizEfetiva(undefined);
 assert.equal(ef.cashier.editar_cardapio, true, 'sem config: quem tem a aba edita, então a matriz mostra ligado');
 assert.equal(ef.waiter.esgotar, true);
-assert.equal(ef.cashier.cancelar_item, false);
+assert.equal(ef.cashier.cancelar_item, true, 'caixa cancela item por padrão (178)');
+assert.equal(roleCan(caixa, loja(), 'cancelar_pedido'), true, 'caixa cancela pedido por padrão (178)');
+assert.equal(roleCan(caixa, loja({ cashier: { cancelar_item: false } }), 'cancelar_item'), false, 'matriz salva ainda tira do caixa');
 assert.equal(ef.manager.cancelar_item, true);
 assert.equal(matrizEfetiva({ waiter: { esgotar: false } }).waiter.esgotar, false, 'valor salvo vence');
 
 // Gravação esparsa: só o que difere do efetivo
-let cfg = alterarPermissaoEsparso(undefined, 'cashier', 'cancelar_item', true);
-assert.deepEqual(cfg, { cashier: { cancelar_item: true } }, 'ligar uma chave grava só ela');
-cfg = alterarPermissaoEsparso(cfg, 'cashier', 'cancelar_item', false);
+let cfg = alterarPermissaoEsparso(undefined, 'cashier', 'trocar_mesa', true);
+assert.deepEqual(cfg, { cashier: { trocar_mesa: true } }, 'ligar uma chave grava só ela');
+cfg = alterarPermissaoEsparso(cfg, 'cashier', 'trocar_mesa', false);
 assert.equal(cfg, undefined, 'voltar ao efetivo apaga a chave e, vazio, remove role_permissions');
 cfg = alterarPermissaoEsparso(undefined, 'waiter', 'editar_cardapio', false);
 assert.deepEqual(cfg, { waiter: { editar_cardapio: false } }, 'desligar uma das 3 dependentes da aba grava false explícito');

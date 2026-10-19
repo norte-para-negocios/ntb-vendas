@@ -185,6 +185,8 @@ export const updateStoreUser = async (userId: string, updates: any) => {
   return { success: true };
 };
 
+export const copyStoreUserToStore = async (_userId: string, _storeId: string) => { await delay(); return { success: true }; };
+
 export const deleteStoreUser = async (userId: string) => {
   await delay();
   storeUsers = storeUsers.filter(u => u.id !== userId);
@@ -432,6 +434,13 @@ export const cancelSpecificOrderItem = async (itemId: string) => {
   const i = orderItems.find(i => i.id === itemId);
   if (i) i.status = OrderStatus.CANCELED;
 };
+
+export const cancelarItensComSenha = async (itemIds: string[]) => {
+  await delay();
+  orderItems.filter(i => itemIds.includes(i.id)).forEach(i => { i.status = OrderStatus.CANCELED; });
+  return { success: true as const, name: 'Gerente', role: 'manager', cancelados: itemIds.length };
+};
+export const mensagemCancelarComSenha = () => 'Senha não confere.';
 
 export const updateTableStatus = async (tableId: string, status: TableStatus, hostName?: string) => {
   await delay();

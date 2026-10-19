@@ -9,7 +9,7 @@ import { motion, AnimatePresence, MotionConfig, useDragControls, useAnimate, use
 import { SPRING_TAP, SPRING_SHEET, SPRING_UI, LIST_ITEM_MOTION } from '@/lib/motion';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { flashSuccessCheck } from '@/components/SuccessCheck';
-import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, TAB_MODULE_KEY, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid, podeTrocarOuExcluir } from '@/lib/storeModules';
+import { resolveStoreModules, resolveOrderFlow, computeAccessibleTabIds, TAB_IDS, TAB_MODULE_KEY, hasTabPermission, canFinalizeBill, isTableInJurisdiction, isCounterPaymentFirst, isCounterOrderPaid } from '@/lib/storeModules';
 import { useCaixaPrintStation, CaixaPrintStationIndicator, CaixaPrintStationOfflineBanner, wasKitchenTicketPrinted, printPendingKitchenTicket, isCaixaRole } from '@/components/modules/CaixaPrintStation';
 import PrinterSettingsView from '@/components/modules/PrinterSettingsView';
 import StoreSettingsView from '@/components/modules/StoreSettingsView';
@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelSpecificOrderItem, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -1694,22 +1694,25 @@ const MyProfileModal: React.FC<{
 
 // --- SUB-MODULE: KDS (Kitchen / Bar) ---
 const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLocal?: string; loggedUser?: StoreUser }> = ({ destination, store, fixedLocal, loggedUser }) => {
-    // Cancelar item no KDS segue a mesma regra da comanda: só gerente/dono ou quem tem a permissão de trocas (R1).
-    const podeCancelarNoKds = !!loggedUser && roleCan(loggedUser, store, 'cancelar_item');
+    // Cancelar item no KDS segue a mesma regra da comanda: pede a senha de quem autoriza (migration 178).
   const storeId = store.id;
   const storeName = store.name;
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   // Cancelar item pela cozinha/bar pede o motivo por escrito (13/10/2026, pedido do dono: "a pessoa explicar o B.O").
-  const [kdsCancelar, setKdsCancelar] = useState<{ itemId: string; nome: string; motivo: string } | null>(null);
+  const [kdsCancelar, setKdsCancelar] = useState<{ itemId: string; nome: string; motivo: string; senha: string } | null>(null);
   const confirmarCancelarNoKds = async () => {
       const dlg = kdsCancelar;
-      if (!dlg || !podeCancelarNoKds || cancellingIds.has(dlg.itemId)) return;
+      if (!dlg || cancellingIds.has(dlg.itemId)) return;
       const motivo = dlg.motivo.trim();
       if (motivo.length < 3) { toast.error('Escreva o motivo do cancelamento.'); return; }
-      setKdsCancelar(null);
+      if (!dlg.senha) { toast.error('Digite a senha de quem autoriza.'); return; }
       setCancellingIds(prev => new Set(prev).add(dlg.itemId));
-      await cancelSpecificOrderItem(dlg.itemId, loggedUser!.id, loggedUser!.name, motivo);
+      const r = await cancelarItensComSenha([dlg.itemId], dlg.senha, motivo, 'cancelar_item', loggedUser && loggedUser.role !== 'open' ? loggedUser.name : null);
+      setCancellingIds(prev => { const n = new Set(prev); n.delete(dlg.itemId); return n; });
+      if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setKdsCancelar({ ...dlg, senha: '' }); return; }
+      setKdsCancelar(null);
+      toast.success(`Item cancelado (autorizado por ${r.name}).`);
       setOrders(prev => prev.filter(o => o.id !== dlg.itemId));
   };
 
@@ -2004,19 +2007,18 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                 >
                                     <AlertTriangle size={15} />
                                 </button>
-                                {podeCancelarNoKds && <button
+                                <button
                                     disabled={cancellingIds.has(item.id)}
                                     onClick={() => {
                                         if (cancellingIds.has(item.id)) return;
-                                        if (!podeCancelarNoKds) return;
-                                        setKdsCancelar({ itemId: item.id, nome: `${item.quantity}x ${getOrderItemDisplayName(item)}`, motivo: '' });
+                                        setKdsCancelar({ itemId: item.id, nome: `${item.quantity}x ${getOrderItemDisplayName(item)}`, motivo: '', senha: '' });
                                     }}
                                     className="w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--err)] hover:bg-[var(--err)]/12 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
                                     title="Cancelar item"
                                     aria-label="Cancelar item"
                                 >
                                     <X size={16} />
-                                </button>}
+                                </button>
                             </div>
                         </div>
                     </Card>
@@ -2039,9 +2041,12 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                 <div className="space-y-4">
                     <p className="text-sm text-[var(--text)]">Cancelar <b>{kdsCancelar.nome}</b>?</p>
                     <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu, acabou o produto" autoFocus value={kdsCancelar.motivo} onChange={(e) => setKdsCancelar({ ...kdsCancelar, motivo: e.target.value })} maxLength={120} />
+                    <form onSubmit={(e) => { e.preventDefault(); confirmarCancelarNoKds(); }}>
+                        <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={kdsCancelar.senha} onChange={(e) => setKdsCancelar({ ...kdsCancelar, senha: e.target.value })} />
+                    </form>
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" onClick={() => setKdsCancelar(null)}>Voltar</Button>
-                        <Button variant="danger" onClick={confirmarCancelarNoKds} disabled={kdsCancelar.motivo.trim().length < 3}>Cancelar item</Button>
+                        <Button variant="danger" onClick={confirmarCancelarNoKds} disabled={kdsCancelar.motivo.trim().length < 3 || !kdsCancelar.senha || cancellingIds.has(kdsCancelar.itemId)}>Cancelar item</Button>
                     </div>
                 </div>
             )}
@@ -3279,7 +3284,7 @@ const TablesView: React.FC<{
     const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; enviando: boolean } | null>(null);
     // Trocar de mesa e mover item pedem o motivo por escrito (13/10/2026): fica na auditoria (Equipe/Relatórios).
     const [trocaMesaMotivo, setTrocaMesaMotivo] = useState('');
-    const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; enviando: boolean } | null>(null);
+    const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; senha: string; enviando: boolean } | null>(null);
     // Planta de mesas (floor plan): alterna Lista/Mapa; a escolha fica no aparelho.
     const [tablesViewMode, setTablesViewMode] = useState<'lista' | 'mapa'>(() => {
         try { return localStorage.getItem('tables_view_mode') === 'mapa' ? 'mapa' : 'lista'; } catch { return 'lista'; }
@@ -4884,15 +4889,15 @@ NOTIFY pgrst, 'reload schema';`;
         else toast.error(r.message || 'Não consegui mover o item.');
     };
 
+    // Cancelar pede a senha de quem autoriza (gerente, caixa ou quem tem a permissão; migration 178): qualquer pessoa
+    // da comanda abre o pedido, e o cancelamento sai no nome de quem autorizou.
     const handleDeleteItem = async (itemId: string) => {
-        if (isAberto) { avisarSoComLogin(); return; }
-        if (!podeTrocarOuExcluir(loggedUser, store)) { toast.error('Você não tem permissão para excluir item.'); return; }
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
         const nomeItem = itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item';
         // Motivo obrigatório (migration 150): abre o diálogo de motivo; o cancelamento sai em confirmarCancelamentoItem.
-        setCancelItemDlg({ itemId, nome: nomeItem, motivo: '', outro: '', enviando: false });
+        setCancelItemDlg({ itemId, nome: nomeItem, motivo: '', outro: '', senha: '', enviando: false });
     };
 
     const confirmarCancelamentoItem = async () => {
@@ -4900,33 +4905,34 @@ NOTIFY pgrst, 'reload schema';`;
         if (!dlg || dlg.enviando) return;
         const motivoFinal = (dlg.motivo === 'Outro' ? dlg.outro.trim() : dlg.motivo).trim();
         if (!motivoFinal) { toast.error('Escolha o motivo do cancelamento.'); return; }
+        if (!dlg.senha) { toast.error('Digite a senha de quem autoriza.'); return; }
         setCancelItemDlg({ ...dlg, enviando: true });
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === dlg.itemId) : undefined;
         try {
-            const ok = await cancelSpecificOrderItem(dlg.itemId, loggedUser.id, loggedUser.name, motivoFinal);
-            if (!ok) { toast.error("Erro ao cancelar item."); setCancelItemDlg(null); return; }
+            const r = await cancelarItensComSenha([dlg.itemId], dlg.senha, motivoFinal, 'cancelar_item', isAberto ? null : loggedUser.name);
+            if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setCancelItemDlg({ ...dlg, senha: '', enviando: false }); return; }
             if (itemAlvo && selectedTable) await imprimirCancelamento([itemAlvo], selectedTable.number, motivoFinal);
+            toast.success(`Item cancelado (autorizado por ${r.name}).`);
             setCancelItemDlg(null);
+            loadData();
         } catch (e) {
             toast.error("Erro ao cancelar item.");
             setCancelItemDlg(null);
         }
     };
 
-    // Cancelar o PEDIDO inteiro da mesa (todos os itens ainda não pagos) — só gerente/dono/
-    // universal/supervisor (decisão do dono do Sertão, 2026-09-29: "só gerente cancela").
-    // Fica no nome de quem cancelou (auditoria) e sai a comanda de cancelamento. Item já
-    // faturado em nota por pessoa não entra: precisa cancelar a nota antes.
-    const podeCancelarPedido = roleCan(loggedUser, store, 'cancelar_pedido');
+    // Cancelar o PEDIDO inteiro da mesa (todos os itens ainda não pagos) com a senha de quem autoriza
+    // (gerente, caixa ou quem tem a permissão; migration 178). Fica no nome de quem autorizou (auditoria)
+    // e sai a comanda de cancelamento. Item já faturado em nota por pessoa não entra: precisa cancelar a nota antes.
     const [showCancelarPedido, setShowCancelarPedido] = useState(false);
     const [cancelarMotivo, setCancelarMotivo] = useState('');
+    const [cancelarSenha, setCancelarSenha] = useState('');
     const [cancelandoPedido, setCancelandoPedido] = useState(false);
     const handleCancelarPedidoMesa = async () => {
-        if (isAberto) { avisarSoComLogin(); return; }
-        if (!podeCancelarPedido) { toast.error('Você não tem permissão para cancelar o pedido.'); return; }
         if (!selectedTable || cancelandoPedido) return;
         if (!isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         if (cancelarMotivo.trim().length < 3) { toast.error('Escreva o motivo do cancelamento.'); return; }
+        if (!cancelarSenha) { toast.error('Digite a senha de quem autoriza.'); return; }
         const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
         if (itens.length === 0) { setShowCancelarPedido(false); return; }
         if (itens.some((i) => (i as any).fiscal_nota_id)) {
@@ -4935,17 +4941,13 @@ NOTIFY pgrst, 'reload schema';`;
         }
         setCancelandoPedido(true);
         try {
-            const operador = loggedUser.id;
-            const cancelados: OrderItem[] = [];
-            for (const it of itens) {
-                // eslint-disable-next-line no-await-in-loop -- um por vez: ordem e falha parcial ficam claras
-                if (await cancelSpecificOrderItem(it.id, operador, loggedUser.name, cancelarMotivo.trim(), 'cancelar_pedido')) cancelados.push(it);
-            }
-            if (cancelados.length > 0) await imprimirCancelamento(cancelados, selectedTable.number, cancelarMotivo.trim());
-            if (cancelados.length === itens.length) toast.success('Pedido cancelado.');
-            else toast.warning(`Cancelei ${cancelados.length} de ${itens.length} itens. Tente de novo para os restantes.`);
+            const r = await cancelarItensComSenha(itens.map((i) => i.id), cancelarSenha, cancelarMotivo.trim(), 'cancelar_pedido', isAberto ? null : loggedUser.name);
+            if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setCancelarSenha(''); return; }
+            await imprimirCancelamento(itens, selectedTable.number, cancelarMotivo.trim());
+            toast.success(`Pedido cancelado (autorizado por ${r.name}).`);
             setShowCancelarPedido(false);
             setCancelarMotivo('');
+            setCancelarSenha('');
             loadData();
         } finally {
             setCancelandoPedido(false);
@@ -5436,6 +5438,9 @@ NOTIFY pgrst, 'reload schema';`;
                         {cancelItemDlg.motivo === 'Outro' && (
                             <Input placeholder="Descreva o motivo" value={cancelItemDlg.outro} onChange={(e) => setCancelItemDlg({ ...cancelItemDlg, outro: e.target.value })} maxLength={120} />
                         )}
+                        <form onSubmit={(e) => { e.preventDefault(); confirmarCancelamentoItem(); }}>
+                            <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelItemDlg.senha} onChange={(e) => setCancelItemDlg({ ...cancelItemDlg, senha: e.target.value })} />
+                        </form>
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="secondary" onClick={() => setCancelItemDlg(null)} disabled={cancelItemDlg.enviando}>Voltar</Button>
                             <Button variant="danger" onClick={confirmarCancelamentoItem} isLoading={cancelItemDlg.enviando}>Cancelar item</Button>
@@ -5767,7 +5772,6 @@ NOTIFY pgrst, 'reload schema';`;
                                                                 <ArrowRightLeft size={16} />
                                                             </button>
                                                             )}
-                                                            {podeTrocarOuExcluir(loggedUser, store) && (
                                                             <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--err)] p-1 u-motion u-press"
@@ -5775,7 +5779,6 @@ NOTIFY pgrst, 'reload schema';`;
                                                             >
                                                                 <Trash2 size={16} />
                                                             </button>
-                                                            )}
                                                         </div>
                                                     </div>
                                                     );
@@ -5836,8 +5839,8 @@ NOTIFY pgrst, 'reload schema';`;
                                     <Printer size={16}/> Imprimir comanda
                                 </Button>
                             </div>
-                            {podeCancelarPedido && (currentTableSummary?.allItems || []).some((i) => i.status !== OrderStatus.CANCELED) && (
-                                <Button variant="danger" className="w-full max-sm:h-11 mb-3" onClick={() => { setCancelarMotivo(''); setShowCancelarPedido(true); }}>
+                            {(currentTableSummary?.allItems || []).some((i) => i.status !== OrderStatus.CANCELED) && (
+                                <Button variant="danger" className="w-full max-sm:h-11 mb-3" onClick={() => { setCancelarMotivo(''); setCancelarSenha(''); setShowCancelarPedido(true); }}>
                                     <Trash2 size={16}/> Cancelar pedido
                                 </Button>
                             )}
@@ -5984,7 +5987,6 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <ArrowRightLeft size={15} />
                                             </button>
                                             )}
-                                            {podeTrocarOuExcluir(loggedUser, store) && (
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteItem(item.id)}
@@ -5994,7 +5996,6 @@ NOTIFY pgrst, 'reload schema';`;
                                             >
                                                 <Trash2 size={16} />
                                             </button>
-                                            )}
                                         </div>
                                     ))}
                                     </div>
@@ -6092,9 +6093,12 @@ NOTIFY pgrst, 'reload schema';`;
                         Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe um pedido de cancelamento. Não dá para desfazer.
                     </p>
                     <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={120} />
+                    <form onSubmit={(e) => { e.preventDefault(); handleCancelarPedidoMesa(); }}>
+                        <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelarSenha} onChange={(e) => setCancelarSenha(e.target.value)} />
+                    </form>
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowCancelarPedido(false)} disabled={cancelandoPedido}>Voltar</Button>
-                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido} disabled={cancelarMotivo.trim().length < 3}>Cancelar pedido</Button>
+                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido} disabled={cancelarMotivo.trim().length < 3 || !cancelarSenha}>Cancelar pedido</Button>
                     </div>
                 </div>
             </Modal>

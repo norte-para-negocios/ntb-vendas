@@ -23,7 +23,8 @@ export const ACTIONS: { key: ActionKey; label: string; desc: string }[] = [
 
 const GERENTE: Record<ActionKey, boolean> = { cancelar_item: true, trocar_mesa: true, mover_item: true, cancelar_pedido: true, esgotar: true, editar_planta: true, ver_excecoes: true, editar_cardapio: true, editar_precos_horario: true };
 const NADA: Record<ActionKey, boolean> = { cancelar_item: false, trocar_mesa: false, mover_item: false, cancelar_pedido: false, esgotar: false, editar_planta: false, ver_excecoes: false, editar_cardapio: false, editar_precos_horario: false };
-export const DEFAULT_ROLE_PERMS: Record<RoleKey, Record<ActionKey, boolean>> = { manager: { ...GERENTE }, cashier: { ...NADA }, waiter: { ...NADA } };
+// Caixa cancela item e pedido por padrão (19/10/2026, pedido do dono; mesmo padrão em operator_can_secure, migration 178).
+export const DEFAULT_ROLE_PERMS: Record<RoleKey, Record<ActionKey, boolean>> = { manager: { ...GERENTE }, cashier: { ...NADA, cancelar_item: true, cancelar_pedido: true }, waiter: { ...NADA } };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 

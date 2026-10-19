@@ -22,7 +22,7 @@ for (const a of ['cancelar_item', 'trocar_mesa', 'mover_item', 'cancelar_pedido'
   assert.equal(roleCan(gerente, loja, a), true, `gerente: ${a}`);
   assert.equal(roleCan(caixaTrocas, loja, a), true, `caixa com trocas: ${a}`);
   assert.equal(roleCan(caixaSoTrocas, loja, a), true, `caixa com trocas (sem supervisão): ${a}`);
-  assert.equal(roleCan(caixaSem, loja, a), a === 'cancelar_pedido' ? false : false, `caixa sem trocas: ${a}`);
+  assert.equal(roleCan(caixaSem, loja, a), a === 'cancelar_item' || a === 'cancelar_pedido', `caixa sem trocas: ${a} (cancelar é padrão do caixa desde a 178)`);
 }
 // o garçom não ganha nada nem com a chave `trocas` ausente/false, e a matriz da loja só vale se o gerente ligar
 assert.equal(roleCan({ role: 'waiter', permissions: { trocas: false } }, loja, 'trocar_mesa'), false);

@@ -431,6 +431,13 @@ export const updateStoreUser = async (userId: string, updates: Partial<StoreUser
   }
 };
 
+// Migration 178: dá à pessoa um login igual em outra loja, sem tirar da atual (mesma senha = escolhe a loja ao entrar).
+export const copyStoreUserToStore = async (userId: string, storeId: string): Promise<{ success: boolean; message?: string }> => {
+  const { data, error } = await supabase.rpc('copy_store_user_to_store_secure', { p_user_id: userId, p_store_id: storeId });
+  if (error) return { success: false, message: error.message };
+  return { success: !!data?.success, message: data?.message };
+};
+
 export const deleteStoreUser = async (userId: string): Promise<{ success: boolean; message?: string }> => {
   try {
     const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId });
@@ -1799,6 +1806,34 @@ export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: s
   });
   if (error) { console.error('cancelSpecificOrderItem falhou:', error); return false; }
   return (data as { success?: boolean } | null)?.success === true;
+};
+
+// Migration 178: cancelar com a senha de quem autoriza (gerente, caixa ou quem tem a permissão). Precisa de internet.
+export type ResultadoCancelarComSenha =
+  | { success: true; name: string; role: string; cancelados: number }
+  | { success: false; error: 'invalid' | 'locked' | 'ambiguous' | 'sem_permissao' | 'motivo' | 'itens' | 'rede'; name?: string; seconds?: number };
+export const cancelarItensComSenha = async (itemIds: string[], senha: string, motivo: string, acao: 'cancelar_item' | 'cancelar_pedido' = 'cancelar_item', solicitadoPor?: string | null): Promise<ResultadoCancelarComSenha> => {
+  const { data, error } = await supabase.rpc('cancel_order_items_autorizado_secure', {
+    p_item_ids: itemIds,
+    p_password: senha,
+    p_reason: motivo,
+    p_action: acao,
+    p_solicitado_por: solicitadoPor ?? null,
+  });
+  if (error || !data) { console.error('cancelarItensComSenha falhou:', error); return { success: false, error: 'rede' }; }
+  return data as ResultadoCancelarComSenha;
+};
+
+export const mensagemCancelarComSenha = (r: ResultadoCancelarComSenha & { success: false }): string => {
+  switch (r.error) {
+    case 'invalid': return 'Senha não confere.';
+    case 'locked': return `Muitas senhas erradas. Espere ${r.seconds ?? 60} s.`;
+    case 'ambiguous': return 'Essa senha está repetida na loja. Use outra pessoa para autorizar.';
+    case 'sem_permissao': return `${r.name ?? 'Essa pessoa'} não pode cancelar. Use a senha de um gerente ou caixa.`;
+    case 'motivo': return 'Escreva o motivo do cancelamento.';
+    case 'itens': return 'Não achei esse item. Atualize a tela.';
+    default: return 'Sem conexão com o servidor. Cancelar precisa de internet.';
+  }
 };
 
 // Relatório de exceções do período (migration 150). Vazio se a RPC ainda não existe (app novo, banco antigo).
