@@ -337,12 +337,14 @@ export const createStoreUserInvite = async (storeId: string, dados: { name: stri
   return data.token as string;
 };
 
-export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any; assignedTableIds?: string[] | null }) => {
+export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password: string; role: string; permissions: any; assignedTableIds?: string[] | null }) => {
+  // Sem senha padrão: o 123456 repetido em várias contas travava o login e a confirmação de pedido (ODARA, 20/10/2026).
+  if (!userData.password || userData.password.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
   const { data, error } = await supabase.rpc('create_store_team_member_secure', {
     p_store_id: storeId,
     p_name: userData.name,
     p_email: userData.email,
-    p_password: userData.password || '123456',
+    p_password: userData.password,
     p_role: userData.role,
     p_permissions: userData.permissions,
     p_assigned_table_ids: userData.assignedTableIds ?? null,

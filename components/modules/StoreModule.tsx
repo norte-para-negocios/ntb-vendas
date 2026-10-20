@@ -11349,6 +11349,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
         if (!name || (role !== 'waiter' && !email) || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
         // 20/10/2026 (ODARA): o e-mail foi digitado no campo Nome e a pessoa não conseguia entrar. Nome é o nome da pessoa.
         if (name.includes('@')) return toast.error('No campo Nome, coloque o nome da pessoa. O e-mail vai no campo E-mail.');
+        if (password && password.length < 6) return toast.error('A senha precisa ter pelo menos 6 caracteres.');
         setIsLoading(true);
         try {
             // Jurisdicao de mesas (Task 3): restrictTables=false ou lista
@@ -11364,7 +11365,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             if (editingUser) {
                 await updateStoreTeamMember(editingUser.id, userData);
             } else {
-                await createStoreTeamMember(storeId, { ...userData, assignedTableIds });
+                await createStoreTeamMember(storeId, { ...userData, password, assignedTableIds });
             }
             setIsModalOpen(false);
             loadUsers();
