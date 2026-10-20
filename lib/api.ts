@@ -318,6 +318,25 @@ export const fetchStoreTeamMembers = async (storeId: string): Promise<StoreUser[
 
 // assignedTableIds (Task 3, migration 049): null/undefined = sem restrição
 // (todas as mesas) — mesmo default de todo store_user existente.
+// Convite por link (migration 181): a pessoa cria o próprio login e a própria senha, sem senha provisória.
+const SITE_PUBLICO = 'https://nortevendas.norteparanegocios.com.br';
+export const linkDoConvite = (token: string): string => {
+  const base = typeof window !== 'undefined' && window.location.protocol === 'https:' && !/localhost|127\.0\.0\.1/.test(window.location.hostname) ? window.location.origin : SITE_PUBLICO;
+  return `${base}/convite/${token}`;
+};
+export const createStoreUserInvite = async (storeId: string, dados: { name: string; role: string; permissions: unknown; assignedTableIds?: string[] | null }): Promise<string> => {
+  const { data, error } = await supabase.rpc('create_store_user_invite_secure', {
+    p_store_id: storeId,
+    p_name: dados.name,
+    p_role: dados.role,
+    p_permissions: dados.permissions,
+    p_assigned_table_ids: dados.assignedTableIds ?? null,
+  });
+  if (error) throw error;
+  if (!data?.success) throw new Error(data?.message || 'Não foi possível gerar o convite.');
+  return data.token as string;
+};
+
 export const createStoreTeamMember = async (storeId: string, userData: { name: string; email: string; password?: string; role: string; permissions: any; assignedTableIds?: string[] | null }) => {
   const { data, error } = await supabase.rpc('create_store_team_member_secure', {
     p_store_id: storeId,
@@ -3853,7 +3872,7 @@ export const criarLocalEstoque = async (storeId: string, descricao: string): Pro
 // criar sessão. Bateu com uma conta = o pedido sai no nome dela.
 export type ResultadoSenhaEquipe =
   | { success: true; user_id: string; name: string; role: string; /** Sem internet e senha nunca conferida neste aparelho. */ semConferencia?: boolean }
-  | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline'; seconds?: number };
+  | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline' | 'conta_aberta'; seconds?: number };
 
 // Cache local das senhas JÁ conferidas neste aparelho (nunca a senha: PBKDF2 com salt aleatório por entrada): sem
 // internet o pedido não pode travar na conferência. Vale 12 h e só para quem já passou pela conferência online aqui;

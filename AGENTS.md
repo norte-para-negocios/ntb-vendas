@@ -2869,3 +2869,15 @@ na tela de mesas"; comanda da ODARA com "Cliente: Talislane Silva" embaixo de ca
 - Portão seção 1: primeiro acesso agora testado com o caixa; garçom novo confirma pedido com a senha dada; garçom entra pelo nome.
 - Fechamento de caixa (Claudia/Ramon, 19/10): "Contas do turno" e "Produtos vendidos" saíram do papel (gastavam muito papel; seguem no
   sistema) e o papel é diagramado em 32 colunas também no 80 mm, para o driver do Windows imprimir com letra maior.
+- **Senha do pedido sem pegadinha (migration 180, 20/10 à tarde)**: a confirmação do pedido (`verify_store_staff_password_secure`, nomes em
+  `list_store_staff_for_orders_secure`, "toque no seu nome" em `verify_store_staff_login_secure`) e o cancelar com senha (178) passam a aceitar
+  quem ainda tem `must_change_password`: senha dada pelo gerente vale na hora. Senha repetida entre duas contas provisórias = 'ambiguous'
+  (a tela pede o nome). Senha que só existe numa conta "Aberto" devolve `conta_aberta` e a tela explica (antes: "senha incorreta").
+  A opção do cadastro agora se chama "Mesas — conta do computador do salão (NÃO use para uma pessoa)". Portão: passo na seção 1.
+- **Convite por link (migration 181, 20/10 à noite)**: Administração > Usuários > Novo usuário: por padrão "Mandar link (a pessoa cria a senha)".
+  Gerente escolhe nome, função e permissões, gera o link (`/convite/<token>`, vale 7 dias e 1 uso; copiar ou WhatsApp) e a pessoa
+  abre, escolhe e-mail (opcional para garçom) e senha própria (mín. 6, única na loja) e já entra, sem troca obrigatória. "Eu defino a
+  senha" continua existindo. Tabela `store_user_invites` (sem acesso direto; só as RPCs `create_/get_/accept_store_user_invite_secure`).
+  O padrão antigo `123456` do `createStoreTeamMember` era a origem das senhas repetidas. A opção "Mesas" (perfil Aberto) só aparece
+  ao EDITAR uma conta que já é Aberto: pessoa nova nunca mais cai nele por engano (ODARA 20/10: Elyda/Milky foram recriadas como Aberto).
+  Olhinho de mostrar/esconder em todo campo de senha (`Input` de `components/ui.tsx` e o cartão de conta do login).

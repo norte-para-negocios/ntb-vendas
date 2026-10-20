@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Loader2, X, ChevronDown } from 'lucide-react';
+import { Loader2, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET, SPRING_UI } from '@/lib/motion';
 
@@ -67,6 +67,9 @@ export const Input: React.FC<
 > = ({ label, error, className = '', id, ...props }) => {
   const generatedId = React.useId();
   const inputId = id ?? generatedId;
+  // Olhinho em todo campo de senha (20/10/2026, pedido do Ramon: "digitar a senha e não ver o que digitou"): mostra/esconde o que foi digitado.
+  const ehSenha = props.type === 'password';
+  const [vendo, setVendo] = React.useState(false);
 
   return (
     <div className="flex flex-col gap-1 w-full">
@@ -75,13 +78,30 @@ export const Input: React.FC<
           {label}
         </label>
       )}
-      <input
-        id={inputId}
-        className={`w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] h-[38px] px-3 text-[15px] max-sm:text-base max-sm:h-11 text-[var(--text)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 transition-all ${
-          error ? 'ring-2 ring-[var(--err)]/50' : ''
-        } ${className}`}
-        {...props}
-      />
+      <div className="relative w-full">
+        <input
+          id={inputId}
+          className={`w-full rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] h-[38px] px-3 text-[15px] max-sm:text-base max-sm:h-11 text-[var(--text)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 transition-all ${
+            error ? 'ring-2 ring-[var(--err)]/50' : ''
+          } ${className} ${ehSenha ? '!pr-11' : ''}`}
+          {...props}
+          type={ehSenha && vendo ? 'text' : props.type}
+          {...(ehSenha && vendo ? { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } : {})}
+        />
+        {ehSenha && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={vendo ? 'Esconder senha' : 'Mostrar senha'}
+            aria-pressed={vendo}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setVendo((v) => !v)}
+            className="absolute right-0 top-0 h-full w-11 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)]"
+          >
+            {vendo ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        )}
+      </div>
       {error && <span className="text-[12px] text-[var(--err)]">{error}</span>}
     </div>
   );

@@ -43,7 +43,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
-import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, createStoreUserInvite, linkDoConvite, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
@@ -164,6 +164,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
     const [editandoContas, setEditandoContas] = useState(false);
     const [entrandoEmail, setEntrandoEmail] = useState<string | null>(null);
     const [tremerSenha, setTremerSenha] = useState(0);
+    const [verSenhaConta, setVerSenhaConta] = useState(false); // olhinho na senha do cartão da conta (20/10)
     const [agora, setAgora] = useState(() => new Date());
     useEffect(() => {
         const t = setInterval(() => setAgora(new Date()), 15000);
@@ -656,13 +657,23 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                         className="w-72 relative"
                     >
                         <input
-                            type="password"
+                            type={verSenhaConta ? 'text' : 'password'}
                             autoFocus
                             placeholder="Senha"
                             value={password}
                             onChange={e => { setPassword(e.target.value); if (error) setError(''); }}
-                            className="w-full h-11 pl-4 pr-12 rounded-full bg-white/15 backdrop-blur-xl text-white placeholder:text-white/55 ring-1 ring-white/30 focus:ring-2 focus:ring-white/70 outline-none text-base u-motion"
+                            className="w-full h-11 pl-4 pr-24 rounded-full bg-white/15 backdrop-blur-xl text-white placeholder:text-white/55 ring-1 ring-white/30 focus:ring-2 focus:ring-white/70 outline-none text-base u-motion"
                         />
+                        <button
+                            type="button"
+                            tabIndex={-1}
+                            aria-label={verSenhaConta ? 'Esconder senha' : 'Mostrar senha'}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setVerSenhaConta((v) => !v)}
+                            className="absolute right-12 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-white/80 hover:text-white max-sm:min-h-11 max-sm:min-w-11"
+                        >
+                            {verSenhaConta ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
                         <button
                             type="submit"
                             aria-label="Entrar"
@@ -6049,7 +6060,8 @@ NOTIFY pgrst, 'reload schema';`;
                             return;
                         }
                         const erro =
-                            r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Troque a sua senha.' :
+                            r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Toque no seu nome e peça ao gerente para trocar a sua senha.' :
+                            r.error === 'conta_aberta' ? 'Essa senha é da conta Mesas (do computador), não de uma pessoa. O gerente precisa cadastrar você como Garçom.' :
                             r.error === 'locked' ? `Muitas tentativas erradas. Espere ${r.seconds ?? 60} segundos.` :
                             (senhaPedido.userId ? 'Nome ou senha incorretos.' : 'Senha não encontrada.');
                         setSenhaPedido((x) => ({ ...x, verificando: false, erro, senha: '' }));
@@ -11224,6 +11236,9 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<StoreUser | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    // Cadastro novo: por padrão manda um LINK e a pessoa cria o próprio login e senha (20/10/2026, migration 181).
+    const [modoCadastro, setModoCadastro] = useState<'link' | 'senha'>('link');
+    const [linkConvite, setLinkConvite] = useState('');
 
     // Form State
     const [name, setName] = useState('');
@@ -11307,6 +11322,8 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             setRestrictTables(false);
             setSelectedTableIds([]);
         }
+        setLinkConvite('');
+        setModoCadastro('link');
         setIsModalOpen(true);
     };
 
@@ -11315,6 +11332,20 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
     };
 
     const handleSave = async () => {
+        if (!editingUser && modoCadastro === 'link') {
+            if (!name.trim()) return toast.error('Coloque o nome da pessoa.');
+            if (name.includes('@')) return toast.error('No campo Nome, coloque o nome da pessoa. O e-mail ela coloca ao criar o login.');
+            setIsLoading(true);
+            try {
+                const token = await createStoreUserInvite(storeId, { name: name.trim(), role, permissions: role === 'waiter' ? {} : permissions, assignedTableIds: restrictTables && selectedTableIds.length > 0 ? selectedTableIds : null });
+                setLinkConvite(linkDoConvite(token));
+            } catch (e: any) {
+                toast.error('Erro ao gerar o convite: ' + e.message);
+            } finally {
+                setIsLoading(false);
+            }
+            return;
+        }
         if (!name || (role !== 'waiter' && !email) || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
         // 20/10/2026 (ODARA): o e-mail foi digitado no campo Nome e a pessoa não conseguia entrar. Nome é o nome da pessoa.
         if (name.includes('@')) return toast.error('No campo Nome, coloque o nome da pessoa. O e-mail vai no campo E-mail.');
@@ -11397,11 +11428,34 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? 'Editar usuário' : 'Novo usuário'}>
                 <div className="space-y-4">
+                    {!editingUser && !linkConvite && (
+                        <div className="flex gap-1.5 p-1 rounded-[var(--r-md)] bg-[var(--surface-2)]" role="radiogroup" aria-label="Como cadastrar">
+                            {([['link', 'Mandar link (a pessoa cria a senha)'], ['senha', 'Eu defino a senha']] as const).map(([k, rotulo]) => (
+                                <button key={k} type="button" role="radio" aria-checked={modoCadastro === k} onClick={() => setModoCadastro(k)}
+                                    className={`flex-1 min-h-11 px-2 rounded-[var(--r-sm)] text-[13px] font-medium ${modoCadastro === k ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)]'}`}>{rotulo}</button>
+                            ))}
+                        </div>
+                    )}
+                    {linkConvite && (
+                        <div className="space-y-3 rounded-[14px] bg-[var(--surface-2)] p-4" data-testid="link-convite">
+                            <p className="text-[15px] font-semibold text-[var(--text)]">Convite de {name} pronto</p>
+                            <p className="text-[13px] text-[var(--text-muted)]">Mande este link. A pessoa abre, escolhe o e-mail e a senha dela, e já entra. Vale 7 dias e só funciona uma vez.</p>
+                            <input readOnly value={linkConvite} onFocus={(e) => e.currentTarget.select()} className="w-full h-11 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 text-[13px] text-[var(--text)]" />
+                            <div className="flex gap-2">
+                                <Button className="flex-1 max-sm:min-h-11" onClick={async () => { try { await navigator.clipboard.writeText(linkConvite); toast.success('Link copiado.'); } catch { toast.error('Não consegui copiar. Segure o link e copie.'); } }}>Copiar link</Button>
+                                <a className="flex-1 inline-flex min-h-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--surface)] border border-[var(--border)] text-[14px] font-semibold text-[var(--text)]" target="_blank" rel="noreferrer"
+                                   href={`https://wa.me/?text=${encodeURIComponent(`Oi ${name.split(' ')[0]}! Crie o seu login do Norte Vendas por aqui: ${linkConvite}`)}`}>WhatsApp</a>
+                            </div>
+                            <Button variant="ghost" className="w-full" onClick={() => { setIsModalOpen(false); loadUsers(); }}>Fechar</Button>
+                        </div>
+                    )}
                     <Input label="Nome Completo" value={name} onChange={e => setName(e.target.value)} />
+                    {(editingUser || modoCadastro === 'senha') && !linkConvite && (<>
                     <Input label={role === 'waiter' ? 'E-mail (opcional)' : 'Email de Acesso'} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={role === 'waiter' ? 'Para entrar no celular. Sem e-mail, entra pelo nome.' : undefined} />
                     <Input label={editingUser ? "Nova Senha (opcional)" : "Senha"} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={editingUser ? "Deixe em branco para manter" : "******"} />
+                    </>)}
                     
-                    <div>
+                    <div className={linkConvite ? 'hidden' : ''}>
                         <label className="text-[13px] font-medium text-[var(--text-muted)] mb-1 block">Função</label>
                         <select className="w-full h-[38px] max-sm:h-11 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[var(--text)] px-3 text-[15px] max-sm:text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40" value={role} onChange={e => { const r = e.target.value; setRole(r); if (!editingUser) setPermissions(r === 'manager' ? { tables: true, counter: true, kitchen: true, bar: true, menu: true, admin: true, caixa: true, supervisiona_caixa: true, trocas: true } : { ...DEFAULT_TEAM_PERMISSIONS }); }}>
                             <option value="waiter">Garçom</option>
@@ -11409,7 +11463,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <option value="cook">Cozinheiro</option>
                             <option value="attendant">Atendente</option>
                             <option value="manager">Gerente</option>
-                            <option value="open">Aberto (conta do computador do salão, não é uma pessoa)</option>
+                            {editingUser?.role === 'open' && <option value="open">Mesas — conta do computador do salão (NÃO use para uma pessoa)</option>}
                         </select>
                         {role === 'waiter' && (
                             <p className="mt-1.5 text-xs text-[var(--text-muted)]">Garçom não tem perfil: entrando ou não no celular (com o e-mail ou o nome e esta senha), ele cai na tela de Mesas. Para lançar um pedido, toca no próprio nome e digita esta senha, que já vale na hora.</p>
@@ -11419,7 +11473,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         )}
                     </div>
 
-                    <div className={`bg-[var(--surface-2)] p-4 rounded-[14px] ${role === 'waiter' ? 'hidden' : ''}`}>
+                    <div className={`bg-[var(--surface-2)] p-4 rounded-[14px] ${role === 'waiter' || linkConvite ? 'hidden' : ''}`}>
                         <label className="text-[15px] font-semibold text-[var(--text)] mb-2 block">Permissões de acesso</label>
                         {!editingUser && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -11534,7 +11588,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         </div>
                     )}
 
-                    <Button className="w-full mt-2" onClick={handleSave} isLoading={isLoading}>Salvar Usuário</Button>
+                    {!linkConvite && <Button className="w-full mt-2" onClick={handleSave} isLoading={isLoading}>{!editingUser && modoCadastro === 'link' ? 'Gerar link do convite' : 'Salvar Usuário'}</Button>}
                 </div>
             </Modal>
         </div>

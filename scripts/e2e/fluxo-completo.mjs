@@ -200,6 +200,46 @@ async function secLogin(C) {
     const { data, error } = await amb.admin.rpc('verify_store_staff_password_secure', { p_store_id: amb.lojaId, p_password: U.garcom2.senha });
     ok(!error && data?.success && data.user_id === U.garcom2.id, `senha do garçom novo não confirmou: ${JSON.stringify(error || data)}`);
   });
+  // --- 20/10 (migration 180): senha de pessoa vale na hora (mesmo com troca pendente); senha da conta "Mesas" explica o motivo
+  await rel.passo('senha de quem ainda tem a troca pendente confirma pedido; senha da conta Mesas diz o motivo (não "incorreta")', async () => {
+    const rpc = async (nome, email, senha, role) => {
+      const { data } = await amb.admin.rpc('create_store_team_member_secure', { p_store_id: amb.lojaId, p_name: nome, p_email: email, p_password: senha, p_role: role, p_permissions: {}, p_assigned_table_ids: null });
+      if (data?.id) { amb.estado.usuarios.push(data.id); amb.salvar(); }
+      return data;
+    };
+    const senhaP = senhaAleatoria(), senhaA = senhaAleatoria();
+    const p = await rpc('QA Portao pendente', `qa-portao-pendente@${'interno.norteparanegocios.com.br'}`, senhaP, 'cashier');
+    const a = await rpc('QA Portao mesas', `qa-portao-mesas@${'interno.norteparanegocios.com.br'}`, senhaA, 'open');
+    ok(p?.success && a?.success, `cadastro dos usuários de teste: ${JSON.stringify([p, a])}`);
+    const v1 = (await amb.admin.rpc('verify_store_staff_password_secure', { p_store_id: amb.lojaId, p_password: senhaP })).data;
+    ok(v1?.success && v1.user_id === p.id, `conta com troca pendente não confirmou o pedido: ${JSON.stringify(v1)}`);
+    const v2 = (await amb.admin.rpc('verify_store_staff_password_secure', { p_store_id: amb.lojaId, p_password: senhaA })).data;
+    igual(v2?.error, 'conta_aberta', 'senha da conta Mesas');
+  });
+  // --- 20/10 (migration 181): convite por link. A pessoa cria o próprio login e senha; senha repetida na loja é recusada com aviso claro.
+  await rel.passo('convite por link: a pessoa cria o login e a senha, entra, confirma pedido; senha repetida é recusada; link só vale uma vez', async () => {
+    const senha1 = senhaAleatoria();
+    const { data: conv } = await amb.admin.rpc('create_store_user_invite_secure', { p_store_id: amb.lojaId, p_name: 'QA Portao convidado', p_role: 'waiter', p_permissions: {}, p_assigned_table_ids: null });
+    ok(conv?.success && conv.token, `convite não foi criado: ${JSON.stringify(conv)}`);
+    const { data: ver } = await amb.admin.rpc('get_store_user_invite_secure', { p_token: conv.token });
+    ok(ver?.success && ver.role === 'waiter', `convite não abre: ${JSON.stringify(ver)}`);
+    const { data: ruim } = await amb.admin.rpc('accept_store_user_invite_secure', { p_token: conv.token, p_email: '', p_password: U.caixa.senha, p_name: 'QA Portao convidado' });
+    ok(!ruim?.success && ruim?.error === 'senha', `senha repetida na loja deveria ser recusada: ${JSON.stringify(ruim)}`);
+    const { data: curta } = await amb.admin.rpc('accept_store_user_invite_secure', { p_token: conv.token, p_email: '', p_password: '123', p_name: 'QA Portao convidado' });
+    ok(!curta?.success && curta?.error === 'senha', `senha curta deveria ser recusada: ${JSON.stringify(curta)}`);
+    const { data: ok1 } = await amb.admin.rpc('accept_store_user_invite_secure', { p_token: conv.token, p_email: '', p_password: senha1, p_name: 'QA Portao convidado' });
+    ok(ok1?.success, `convite não foi aceito: ${JSON.stringify(ok1)}`);
+    const { data: novo } = await amb.admin.from('store_users').select('id,must_change_password,role').eq('store_id', amb.lojaId).eq('name', 'QA Portao convidado').single();
+    if (novo?.id) { amb.estado.usuarios.push(novo.id); amb.salvar(); }
+    ok(novo && novo.must_change_password === false && novo.role === 'waiter', `usuário criado pelo convite errado: ${JSON.stringify(novo)}`);
+    const v = (await amb.admin.rpc('verify_store_staff_password_secure', { p_store_id: amb.lojaId, p_password: senha1 })).data;
+    ok(v?.success && v.user_id === novo.id, `senha do convidado não confirma pedido: ${JSON.stringify(v)}`);
+    const l = (await amb.admin.rpc('authenticate_store_user_secure', { p_email: 'qa portao convidado', p_password: senha1, p_store_id: amb.lojaId })).data;
+    ok(l?.success, `convidado não entra pelo nome: ${JSON.stringify(l)}`);
+    const { data: dnv } = await amb.admin.rpc('accept_store_user_invite_secure', { p_token: conv.token, p_email: '', p_password: senhaAleatoria(), p_name: 'Outro' });
+    ok(!dnv?.success && dnv?.error === 'usado', `link deveria valer uma vez só: ${JSON.stringify(dnv)}`);
+    await amb.admin.from('store_user_invites').delete().eq('token', conv.token); // limpeza
+  });
   // --- cada perfil entra e cai na tela certa (garçom entra direto; gerente troca a senha no primeiro acesso)
   C.devs.garcom = await novoDispositivo(C, 'garcom', 'garcom', { viewport: { width: 1280, height: 900 } });
   await C.devs.garcom.login(U.garcom.email, U.garcom.senha);
