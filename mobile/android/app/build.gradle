@@ -28,8 +28,8 @@ android {
         // app desktop, que tem fluxo de build separado) — versionCode
         // precisa ser incrementado manualmente a cada nova versão, e
         // versionName atualizado junto com mobile/package.json.
-        versionCode 43
-        versionName "1.0.42"
+        versionCode 44
+        versionName "1.0.43"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
