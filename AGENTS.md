@@ -2881,3 +2881,9 @@ na tela de mesas"; comanda da ODARA com "Cliente: Talislane Silva" embaixo de ca
   O padrão antigo `123456` do `createStoreTeamMember` era a origem das senhas repetidas. A opção "Mesas" (perfil Aberto) só aparece
   ao EDITAR uma conta que já é Aberto: pessoa nova nunca mais cai nele por engano (ODARA 20/10: Elyda/Milky foram recriadas como Aberto).
   Olhinho de mostrar/esconder em todo campo de senha (`Input` de `components/ui.tsx` e o cartão de conta do login).
+
+## Sessão no servidor para contas e senhas (migration 182, 20/10/2026)
+- Login (loja, universal, admin) devolve `token` (tabela `sessoes_app`, 30 dias). `lib/api.ts`: `tokenLoja()` / `tokenAdmin()` (localStorage) vão como `p_token` em criar/editar/apagar login, convite, copiar login, trocar senha e `fetch_all_store_users_secure`.
+- Servidor confere em `_sessao_ok`: gestor/dono (ou `permissions.admin`) da MESMA loja, Master/universal em qualquer, ou a própria pessoa (só foto/própria senha).
+- Entra DESLIGADO: `seg_flags.exigir_sessao = false`, para apps antigos e sessões abertas antes não quebrarem. Ligar só depois que os apps novos (≥ 1.2.110 / 1.0.45) estiverem nos aparelhos: `update seg_flags set valor = true where chave = 'exigir_sessao';`. Desligar de novo é o mesmo comando com false.
+- Cadastro não tem mais senha padrão 123456 (`createStoreTeamMember` exige 6+).

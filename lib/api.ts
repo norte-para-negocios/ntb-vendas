@@ -105,6 +105,17 @@ export function resolverUrlApi(caminho: string): string {
 // cobre rate-limit (5 tentativas / 5min de bloqueio); o client não precisa
 // distinguir "bloqueado" de "senha errada" pra manter a mesma assinatura de
 // retorno de antes.
+
+// Migration 182: o login devolve um token de sessão; as funções de conta/senha mandam esse token e o servidor confere quem chama.
+// Dois tokens porque o Master (admin) e o lojista podem estar abertos no mesmo navegador.
+const CHAVE_TOKEN_LOJA = 'ntb-sessao-token-loja';
+const CHAVE_TOKEN_ADMIN = 'ntb-sessao-token-admin';
+const lerToken = (k: string): string | null => { try { return typeof window === 'undefined' ? null : window.localStorage.getItem(k); } catch { return null; } };
+const guardarToken = (k: string, t: unknown) => { try { if (typeof t === 'string' && t) window.localStorage.setItem(k, t); } catch { /* sem armazenamento: segue sem token */ } };
+export const tokenLoja = () => lerToken(CHAVE_TOKEN_LOJA);
+export const tokenAdmin = () => lerToken(CHAVE_TOKEN_ADMIN);
+export const limparTokenLoja = () => { try { window.localStorage.removeItem(CHAVE_TOKEN_LOJA); } catch { /* nada a limpar */ } };
+export const limparTokenAdmin = () => { try { window.localStorage.removeItem(CHAVE_TOKEN_ADMIN); } catch { /* nada a limpar */ } };
 export const authenticateAdmin = async (username: string, password: string): Promise<{ success: boolean; mustChangePass?: boolean; userId?: string }> => {
   const { data, error } = await supabase.rpc('authenticate_admin_secure', {
     p_username: username,
@@ -113,11 +124,12 @@ export const authenticateAdmin = async (username: string, password: string): Pro
 
   if (error || !data?.success) return { success: false };
 
+  guardarToken(CHAVE_TOKEN_ADMIN, data.token);
   return { success: true, mustChangePass: data.mustChangePass, userId: data.userId };
 };
 
 export const updateAdminPassword = async (userId: string, newPassword: string) => {
-  const { error } = await supabase.rpc('update_admin_password_secure', { p_user_id: userId, p_new_password: newPassword });
+  const { error } = await supabase.rpc('update_admin_password_secure', { p_user_id: userId, p_new_password: newPassword, p_token: tokenAdmin() });
   if (error) throw error;
 };
 
@@ -212,6 +224,7 @@ export const authenticateStoreUser = async (email: string, password: string, sto
       };
     }
 
+    guardarToken(CHAVE_TOKEN_LOJA, data.token);
     const store = await fetchStoreById(data.user.store_id);
     // fetchStoreById devolve null também quando a rede falha e não há cache: não é loja inativa, é falta de conexão.
     if (!store) return { success: false, reason: 'network', message: 'Sem conexão com o servidor. Tente de novo.' };
@@ -266,7 +279,7 @@ async function entrarSemInternet(email: string, senha: string, storeId?: string)
 }
 
 export const updateStoreUserPassword = async (userId: string, newPassword: string) => {
-  const { error } = await supabase.rpc('update_store_user_password_secure', { p_user_id: userId, p_new_password: newPassword });
+  const { error } = await supabase.rpc('update_store_user_password_secure', { p_user_id: userId, p_new_password: newPassword, p_token: tokenLoja() });
   if (error) throw error;
 };
 
@@ -331,6 +344,7 @@ export const createStoreUserInvite = async (storeId: string, dados: { name: stri
     p_role: dados.role,
     p_permissions: dados.permissions,
     p_assigned_table_ids: dados.assignedTableIds ?? null,
+    p_token: tokenLoja(),
   });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Não foi possível gerar o convite.');
@@ -348,6 +362,7 @@ export const createStoreTeamMember = async (storeId: string, userData: { name: s
     p_role: userData.role,
     p_permissions: userData.permissions,
     p_assigned_table_ids: userData.assignedTableIds ?? null,
+    p_token: tokenLoja(),
   });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Erro ao criar usuário.');
@@ -355,14 +370,14 @@ export const createStoreTeamMember = async (storeId: string, userData: { name: s
 };
 
 export const updateStoreTeamMember = async (userId: string, userData: { name?: string; email?: string; role?: string; permissions?: any; password?: string; assigned_table_ids?: string[] | null }) => {
-  const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: userData });
+  const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: userData, p_token: tokenLoja() });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || 'Erro ao atualizar usuário.');
   return data;
 };
 
 export const deleteStoreTeamMember = async (userId: string) => {
-  const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId });
+  const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId, p_token: tokenLoja() });
   if (error) throw error;
 };
 
@@ -432,6 +447,7 @@ export const createStoreUser = async (storeId: string, name: string, email: stri
       p_password: password,
       p_role: 'owner',
       p_permissions: { tables: true, counter: true, kitchen: true, menu: true, admin: true },
+      p_token: tokenAdmin(),
     });
     if (error) throw error;
     if (!data?.success) return { success: false, message: data?.message };
@@ -444,7 +460,7 @@ export const createStoreUser = async (storeId: string, name: string, email: stri
 
 export const updateStoreUser = async (userId: string, updates: Partial<StoreUser> & { password?: string }): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: updates });
+    const { data, error } = await supabase.rpc('update_store_user_secure', { p_user_id: userId, p_updates: updates, p_token: tokenAdmin() });
     if (error) throw error;
     if (!data?.success) return { success: false, message: data?.message };
     return { success: true };
@@ -455,14 +471,14 @@ export const updateStoreUser = async (userId: string, updates: Partial<StoreUser
 
 // Migration 178: dá à pessoa um login igual em outra loja, sem tirar da atual (mesma senha = escolhe a loja ao entrar).
 export const copyStoreUserToStore = async (userId: string, storeId: string): Promise<{ success: boolean; message?: string }> => {
-  const { data, error } = await supabase.rpc('copy_store_user_to_store_secure', { p_user_id: userId, p_store_id: storeId });
+  const { data, error } = await supabase.rpc('copy_store_user_to_store_secure', { p_user_id: userId, p_store_id: storeId, p_token: tokenAdmin() });
   if (error) return { success: false, message: error.message };
   return { success: !!data?.success, message: data?.message };
 };
 
 export const deleteStoreUser = async (userId: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId });
+    const { error } = await supabase.rpc('delete_store_user_secure', { p_user_id: userId, p_token: tokenAdmin() });
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -471,7 +487,7 @@ export const deleteStoreUser = async (userId: string): Promise<{ success: boolea
 };
 
 export const fetchStoreUsers = async (): Promise<(StoreUser & { store: Store })[]> => {
-  const { data, error } = await supabase.rpc('fetch_all_store_users_secure');
+  const { data, error } = await supabase.rpc('fetch_all_store_users_secure', { p_token: tokenAdmin() });
   if (error) { console.error('Fetch Users Error:', error); return []; }
   return (data as any) || [];
 };
@@ -3775,6 +3791,7 @@ export const authenticateUniversalUser = async (email: string, password: string)
         message: data?.locked ? 'Muitas tentativas incorretas. Tente novamente em alguns minutos.' : 'Usuário ou senha incorretos.',
       };
     }
+    guardarToken(CHAVE_TOKEN_LOJA, data.token);
     if (!data.mustChangePass) await guardarLoginUniversalSemInternet(email, password, data.user);
     return { success: true, user: data.user, mustChangePass: data.mustChangePass };
   } catch (error: any) {
@@ -3808,7 +3825,7 @@ export async function entrarUniversalSemInternet(email: string, senha: string): 
 }
 
 export const updateUniversalUserPassword = async (userId: string, newPassword: string) => {
-  const { error } = await supabase.rpc('update_universal_user_password_secure', { p_user_id: userId, p_new_password: newPassword });
+  const { error } = await supabase.rpc('update_universal_user_password_secure', { p_user_id: userId, p_new_password: newPassword, p_token: tokenLoja() });
   if (error) throw error;
 };
 
