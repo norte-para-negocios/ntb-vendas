@@ -160,19 +160,19 @@ async function secLogin(C) {
   // --- login com senha errada
   const anon = await novoDispositivo(C, 'anon', 'login-errado');
   await anon.ir('/loja');
-  await anon.page.waitForSelector('input[type=email]', { timeout: 45000 });
+  await anon.page.waitForSelector('input[autocomplete=username]', { timeout: 45000 });
   await rel.passo('senha errada não entra e mostra erro', async () => {
     await anon.tentarLogin(U.garcom.email, 'senha-errada-xyz');
     await sleep(2500);
-    ok(await anon.page.locator('input[type=email]').isVisible(), 'saiu da tela de login com senha errada');
+    ok(await anon.page.locator('input[autocomplete=username]').isVisible(), 'saiu da tela de login com senha errada');
     ok(/senha|incorret|inválid|erro/i.test(await anon.texto()), 'sem mensagem de erro');
   });
-  // --- primeiro acesso: pede nova senha (mínimo 6, confirmação igual); a senha inicial deixa de valer
-  const senhaInicial = U.garcom.senha;
+  // --- primeiro acesso (caixa; garçom não troca desde 20/10, migration 179): pede nova senha (mínimo 6, confirmação igual); a senha inicial deixa de valer
+  const senhaInicial = U.caixa.senha;
   await rel.passo('primeiro acesso pede para criar a senha (valida mínimo de 6 e confirmação)', async () => {
     await anon.ir('/loja');
-    await anon.page.waitForSelector('input[type=email]');
-    await anon.tentarLogin(U.garcom.email, senhaInicial);
+    await anon.page.waitForSelector('input[autocomplete=username]');
+    await anon.tentarLogin(U.caixa.email, senhaInicial);
     await anon.page.waitForSelector('text=Crie sua senha', { timeout: 20000 });
     const campos = anon.page.locator('input[type=password]');
     await campos.nth(0).fill('123'); await campos.nth(1).fill('123');
@@ -184,25 +184,37 @@ async function secLogin(C) {
     const nova = NOVA();
     await campos.nth(0).fill(nova); await campos.nth(1).fill(nova);
     await anon.page.click('button[type=submit]');
-    await anon.page.waitForSelector('input[type=email]', { timeout: 20000 });
-    U.garcom.senha = nova;
+    await anon.page.waitForSelector('input[autocomplete=username]', { timeout: 20000 });
+    U.caixa.senha = nova;
   });
   await rel.passo('a senha inicial não vale mais depois de trocada', async () => {
     await anon.ir('/loja');
-    await anon.page.waitForSelector('input[type=email]');
-    await anon.tentarLogin(U.garcom.email, senhaInicial);
+    await anon.page.waitForSelector('input[autocomplete=username]');
+    await anon.tentarLogin(U.caixa.email, senhaInicial);
     await sleep(2500);
-    ok(await anon.page.locator('input[type=email]').isVisible(), 'a senha inicial ainda entra');
+    ok(await anon.page.locator('input[autocomplete=username]').isVisible(), 'a senha inicial ainda entra');
   });
   await anon.fechar(); delete C.devs['login-errado'];
-  // --- cada perfil entra (os outros trocam a senha no primeiro acesso) e cai na tela certa
+  // --- garçom recém-cadastrado (20/10, migration 179): a senha que o gerente deu já confirma pedido, sem precisar entrar e trocar
+  await rel.passo('garçom recém-cadastrado: a senha dada pelo gerente já confirma pedido (sem troca obrigatória)', async () => {
+    const { data, error } = await amb.admin.rpc('verify_store_staff_password_secure', { p_store_id: amb.lojaId, p_password: U.garcom2.senha });
+    ok(!error && data?.success && data.user_id === U.garcom2.id, `senha do garçom novo não confirmou: ${JSON.stringify(error || data)}`);
+  });
+  // --- cada perfil entra e cai na tela certa (garçom entra direto; gerente troca a senha no primeiro acesso)
   C.devs.garcom = await novoDispositivo(C, 'garcom', 'garcom', { viewport: { width: 1280, height: 900 } });
   await C.devs.garcom.login(U.garcom.email, U.garcom.senha);
-  for (const perfil of ['garcom2', 'caixa', 'gerente']) {
-    const d = await novoDispositivo(C, perfil, perfil);
+  C.devs.garcom2 = await novoDispositivo(C, 'garcom2', 'garcom2');
+  await rel.passo('garçom entra pelo NOME (sem e-mail) e cai na tela de Mesas', async () => {
+    await C.devs.garcom2.login(U.garcom2.nome.toUpperCase(), U.garcom2.senha);
+    igual(await C.devs.garcom2.titulo(), 'Mesas & Comandas', 'tela do garçom que entrou pelo nome');
+  });
+  C.devs.caixa = await novoDispositivo(C, 'caixa', 'caixa');
+  await C.devs.caixa.login(U.caixa.email, U.caixa.senha);
+  {
+    const d = await novoDispositivo(C, 'gerente', 'gerente');
     const nova = NOVA();
-    await d.login(U[perfil].email, U[perfil].senha, { trocarPara: nova });
-    U[perfil].senha = nova;
+    await d.login(U.gerente.email, U.gerente.senha, { trocarPara: nova });
+    U.gerente.senha = nova;
   }
   await rel.passo('garçom {tables:true} entra direto em Mesas & Comandas', async () => {
     igual(await C.devs.garcom.titulo(), 'Mesas & Comandas', 'tela inicial do garçom');

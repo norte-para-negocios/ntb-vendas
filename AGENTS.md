@@ -2846,3 +2846,26 @@ a comanda sair no bar, vai sair no bar; no computador do caixa, se botei pra com
 - Testes: `scripts/testes/impressaoAparelho.test.ts`; portão seção 5 ("POR COMPUTADOR"): gerente escolhe Bar e o Imprimir dele
   sai só no Bar, o garçom (sem escolha) sai no Caixa, "Igual à loja" volta para o Caixa.
 - Chega nos PCs/celulares só com release dos apps (webapp embutido).
+
+## Login por e-mail ou nome, garçom sem troca obrigatória, atendente na comanda, "Peça também" (20/10/2026, migration 179)
+Reclamações de Ramon/Andrey/dono: "muita gente sem conseguir fazer login"; garçom no celular "se quiser fazer login faz, mas cai
+na tela de mesas"; comanda da ODARA com "Cliente: Talislane Silva" embaixo de cada item; "Peça também" zerando o item principal.
+- **Achados na ODARA**: o cadastro de Garçom escondia o campo E-mail, e o e-mail da pessoa foi digitado no campo Nome (o login virou
+  `garcom-xxxx@interno` → "Usuário ou senha incorretos"); pessoas cadastradas como "Aberto" (perfil do PC do salão, a senha não vale
+  no pedido); todo cadastro/troca de senha marcava `must_change_password`, e conta assim fica fora da senha do pedido até entrar e
+  trocar; senha provisória repetida (123456) entre duas pessoas só é aceita enquanto as duas ainda têm a troca obrigatória (158).
+- **179**: `authenticate_store_user_secure` aceita e-mail OU nome (sem diferenciar maiúscula/espaços); garçom criado ou com senha
+  trocada pelo gerente fica SEM troca obrigatória (os outros perfis continuam). Dados: ODARA Elyda/Milky com nome e e-mail certos,
+  Elyda/Talislane de "Aberto" para garçom; garçons com troca obrigatória liberados, menos os 3 com senha repetida (Elyda,
+  Talislane, Milky: entram uma vez e criam a senha). Backup `/root/backups/store_users-pre-179.dump`.
+- Tela de login: campo "E-mail ou nome" (`type=text`, `autocomplete=username`; o portão usa esse seletor). Cadastro: garçom tem
+  "E-mail (opcional)"; Nome com "@" é recusado; e-mail interno não aparece (cartão mostra "Sem e-mail (entra pelo nome)");
+  "Aberto" explica que não é uma pessoa.
+- Comanda/comprovante (`lib/print.ts`): item com `porEquipe` (added_by_role 'garcom') não imprime "Cliente:"; os nomes da equipe saem
+  uma vez no fim dos itens ("Atendente: X" / "Atendentes: X, Y"). Nome do cliente pelo QR continua por item. Teste
+  `scripts/testes/atendenteNaComanda.test.ts`.
+- "Peça também" (cardápio do cliente): tocar na sugestão manda o item atual pro carrinho antes de abrir a sugestão; com opção
+  obrigatória faltando, avisa e não troca.
+- Portão seção 1: primeiro acesso agora testado com o caixa; garçom novo confirma pedido com a senha dada; garçom entra pelo nome.
+- Fechamento de caixa (Claudia/Ramon, 19/10): "Contas do turno" e "Produtos vendidos" saíram do papel (gastavam muito papel; seguem no
+  sistema) e o papel é diagramado em 32 colunas também no 80 mm, para o driver do Windows imprimir com letra maior.

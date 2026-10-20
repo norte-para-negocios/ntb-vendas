@@ -5,7 +5,7 @@ import { calculateOrderTotal, calculateServiceFee, resolveServiceFeeRate } from 
 import { getOrderItemDisplayName, parseItemNote } from './labels';
 import { contaTemTaxaPercentual } from './taxas';
 
-type ItemLike = { id: string; quantity: number; price_at_time: number; status?: string; created_at?: string; notes?: string | null; product?: any; selected_options?: any };
+type ItemLike = { id: string; quantity: number; price_at_time: number; status?: string; created_at?: string; notes?: string | null; product?: any; selected_options?: any; added_by_role?: string | null };
 type OrderLike = { id: string; table_id?: string | null; order_items?: ItemLike[] | null };
 
 function itensAtivos(tableId: string, orders: OrderLike[]): { order: OrderLike; item: ItemLike }[] {
@@ -48,6 +48,7 @@ export function montarPreConta(
       quantity: i.quantity,
       name: getOrderItemDisplayName(i as any),
       client: parseItemNote(i.notes || '').client,
+      porEquipe: i.added_by_role === 'garcom',
       total: i.price_at_time * i.quantity,
     })),
     subtotal,

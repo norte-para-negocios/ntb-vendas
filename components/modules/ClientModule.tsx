@@ -1595,7 +1595,8 @@ const ProductModal: React.FC<{
                 {/* "Peça também" (migration 020, Vende Mais II): cross-sell manual
                     do lojista, movido pra cima do rodapé fixo (Task 6). Clicar
                     troca o produto do próprio modal (onSelectRecommended ->
-                    setSelectedProduct no ClientModule, mesmo mecanismo de sempre). */}
+                    setSelectedProduct no ClientModule, mesmo mecanismo de sempre),
+                    depois de mandar o produto atual pro carrinho (20/10/2026). */}
                 {!!availableRecommended.length && (
                     <div className="px-4 mt-4 pb-4">
                         <h4 className="text-[13px] font-semibold text-[var(--text)] mb-2 flex items-center gap-1.5">
@@ -1606,7 +1607,15 @@ const ProductModal: React.FC<{
                                 <button
                                     key={rec.id}
                                     type="button"
-                                    onClick={() => onSelectRecommended(rec)}
+                                    onClick={() => {
+                                        // 20/10/2026 (Andrey, ODARA): tocar no "Peça também" trocava o produto do modal e o item
+                                        // principal sumia sem ir pro carrinho. Agora o principal entra primeiro, depois abre o sugerido.
+                                        if (!viewOnly && !product.sold_out) {
+                                            if (missingRequired) { toast.error(`Escolha as opções de ${product.name} antes.`); return; }
+                                            onAdd(qty, notes, selectedOptions);
+                                        }
+                                        onSelectRecommended(rec);
+                                    }}
                                     className="flex-shrink-0 w-24 text-left rounded-[12px] overflow-hidden bg-[var(--surface-2)] u-motion u-press-sm"
                                 >
                                     <div className="w-full h-16 bg-[var(--surface-2)] overflow-hidden">

@@ -72,21 +72,21 @@ export class Dispositivo {
 
   async tentarLogin(email, senha) {
     const p = this.page;
-    await p.fill('input[type=email]', email);
+    await p.fill('input[autocomplete=username]', email);
     await p.fill('input[type=password]', senha);
     await p.click('button[type=submit]');
   }
   // Login completo. `trocarPara`: nova senha quando for o primeiro acesso (a tela "Crie sua senha" é obrigatória).
   async login(email, senha, { trocarPara } = {}) {
     await this.ir('/loja');
-    await this.page.waitForSelector('input[type=email]', { timeout: 30000 });
+    await this.page.waitForSelector('input[autocomplete=username]', { timeout: 30000 });
     await this.tentarLogin(email, senha);
     if (trocarPara) {
       await this.page.waitForSelector('text=Crie sua senha', { timeout: 20000 });
       const campos = this.page.locator('input[type=password]');
       await campos.nth(0).fill(trocarPara); await campos.nth(1).fill(trocarPara);
       await this.page.click('button[type=submit]');
-      await this.page.waitForSelector('input[type=email]', { timeout: 20000 });
+      await this.page.waitForSelector('input[autocomplete=username]', { timeout: 20000 });
       await sleep(600);
       await this.tentarLogin(email, trocarPara);
     }

@@ -500,6 +500,14 @@ export function buildKitchenTicketText(opts: {
   return lines.join('\n');
 }
 
+// 20/10/2026 (Tai/Ramon/Andrey, ODARA): o nome de quem LANÇOU saía como "Cliente: Talislane Silva" embaixo de cada item.
+// Agora o nome da equipe sai uma vez só, no fim dos itens ("Atendente: ..."); o nome que o cliente digitou no QR continua por item.
+function atendentesDaConta(items: BillReceiptItem[]): string[] {
+  return [...new Set(items.filter((i) => i.porEquipe && i.client).map((i) => String(i.client).trim()).filter(Boolean))];
+}
+const clienteDoItem = (i: BillReceiptItem): string | null => (i.porEquipe ? null : i.client || null);
+const linhaAtendentes = (nomes: string[]) => `${nomes.length > 1 ? 'Atendentes' : 'Atendente'}: ${nomes.join(', ')}`;
+
 export interface BillReceiptItem {
   quantity: number;
   name: string;
@@ -509,6 +517,8 @@ export interface BillReceiptItem {
   // quem pediu cada item (parseItemNote), mas o comprovante IMPRESSO nunca
   // teve esse campo — cliente via certo na tela e sumia no papel.
   client?: string | null;
+  // 20/10/2026: `client` veio da EQUIPE (garçom/caixa lançou, o nome é de quem lançou) e não do cliente pelo QR.
+  porEquipe?: boolean;
 }
 
 // Task 3 (2026-08-22): estado explícito da taxa de serviço nesta conta —
@@ -625,13 +635,14 @@ export function printBillReceipt(opts: {
             (i) => `
           <tr>
             <td>${i.quantity}x</td>
-            <td style="padding-right:4px;">${escapeHtml(i.name)}${i.client ? `<div style="font-size:10px;color:#000;">Cliente: ${escapeHtml(i.client)}</div>` : ''}</td>
+            <td style="padding-right:4px;">${escapeHtml(i.name)}${clienteDoItem(i) ? `<div style="font-size:10px;color:#000;">Cliente: ${escapeHtml(clienteDoItem(i) as string)}</div>` : ''}</td>
             <td class="right">${formatBRL(i.total)}</td>
           </tr>`
           )
           .join('')}
       </tbody>
     </table>
+    ${atendentesDaConta(opts.items).length ? `<div style="font-size:10px;margin-top:2px;">${escapeHtml(linhaAtendentes(atendentesDaConta(opts.items)))}</div>` : ''}
     ${
       opts.serviceFee
         ? `<table class="summary-table">
@@ -687,8 +698,11 @@ export function buildBillReceiptText(opts: {
     partes.forEach((parte, n) => {
       lines.push(n === 0 ? `${`${i.quantity}x`.padEnd(4)}${esqDir(parte, valor, W - 4)}` : `    ${parte}`);
     });
-    if (i.client) lines.push(`    Cliente: ${i.client}`);
+    const cliente = clienteDoItem(i);
+    if (cliente) lines.push(`    Cliente: ${cliente}`);
   });
+  const atendentes = atendentesDaConta(opts.items);
+  if (atendentes.length) lines.push(...wrapLine(linhaAtendentes(atendentes), W));
   lines.push(simples);
   if (opts.serviceFee) {
     lines.push(esqDir('Subtotal', `R$ ${formatBRL(opts.subtotal)}`, W));
@@ -880,7 +894,9 @@ export function buildCashClosingText(opts: {
   reimpressoEm?: Date | null;
   paperWidthMm?: number | null;
 }): string {
-  const W = colunasDoPapel(opts.paperWidthMm);
+  // 20/10/2026 ("a fonte do fechamento do caixa está bem pequenininha"): diagramado em no máximo 32 colunas, a impressora pelo
+  // driver do Windows aumenta a letra para caber a linha mais longa (print-engine.js, printViaUsb).
+  const W = Math.min(colunasDoPapel(opts.paperWidthMm), 32);
   const dupla = '='.repeat(W);
   const simples = '-'.repeat(W);
   const dh = (d: Date) => `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -979,39 +995,8 @@ export function buildCashClosingText(opts: {
   lines.push('*** Conferencia ***', linha('Dinheiro no caixa', opts.dinheiroEsperado));
   if (opts.dinheiroContado !== null) lines.push(linha('Dinheiro contado', opts.dinheiroContado));
   if (opts.diferenca !== null) lines.push(linha('Diferença', opts.diferenca));
-  if (dt && dt.contas.length > 0) {
-    // Uma linha por conta (hora, mesa, forma, valor) e embaixo a decomposição quando tem taxa/cortesia/desconto.
-    lines.push(dupla, centralizar('CONTAS DO TURNO', W), simples);
-    dt.contas.forEach((c) => {
-      const h = new Date(c.quando).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      const onde = `${c.tipo === 'balcao' ? 'Balcao' : `Mesa ${c.mesa ?? '?'}`}${c.funcionario ? ' FUNC' : ''}`;
-      const formas = c.formas.map((f) => rotuloFormaCurta(f.method)).join('+') || '-';
-      lines.push(esqDir(`${h} ${onde} ${formas}`.slice(0, W - 11), c.estornada ? 'ESTORNADA' : formatBRL(c.recebido), W));
-      const partes = [`itens ${formatBRL(c.itens)}`];
-      if (c.desconto > 0.005) partes.push(`desc -${formatBRL(c.desconto)}`);
-      if (c.taxa > 0.005) partes.push(`taxa ${formatBRL(c.taxa)}`);
-      if (c.outras > 0.005) partes.push(`outras ${formatBRL(c.outras)}`);
-      if (c.excesso > 0.005) partes.push(`a mais ${formatBRL(c.excesso)}`);
-      if (c.cortesia > 0.005) partes.push(`cortesia -${formatBRL(c.cortesia)}`);
-      if (c.cancelado > 0.005) partes.push(`canc. ${formatBRL(c.cancelado)}`);
-      wrapLine(`  ${partes.join(' | ')}`, W).forEach((t) => lines.push(t));
-    });
-    lines.push(simples);
-  }
-
-  if (dt && dt.produtos.length > 0) {
-    lines.push(centralizar('PRODUTOS VENDIDOS', W), simples);
-    let cat = '';
-    dt.produtos.forEach((p) => {
-      if (p.categoria !== cat) { cat = p.categoria; lines.push(`[${cat}]`); }
-      const qtd = Number.isInteger(p.quantidade) ? String(p.quantidade) : formatBRL(p.quantidade);
-      const nome = `${qtd}x ${p.nome}`;
-      const wrapped = wrapLine(nome, W - 11);
-      wrapped.forEach((t, i) => lines.push(i === wrapped.length - 1 ? esqDir(t, formatBRL(p.total), W) : t));
-    });
-    lines.push(simples);
-  }
-
+  // 20/10/2026 (Claudia/Ramon, Sertão): "Contas do turno" e "Produtos vendidos" (08/10) gastavam papel demais no fechamento e
+  // saíram do papel; continuam no sistema (Caixa > turnos e relatórios).
   lines.push(dupla, centralizar('SEM VALOR FISCAL', W), '\n\n\n');
   return lines.join('\n');
 }

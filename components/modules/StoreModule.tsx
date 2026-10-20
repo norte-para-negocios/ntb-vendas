@@ -702,7 +702,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 <Card className="u-grow-in p-6 !rounded-[22px]" style={{ boxShadow: '0 30px 60px -20px rgba(15,12,60,0.55), 0 2px 8px rgba(15,12,60,0.12)' }}>
                     <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleLogin(); }}>
                         {!contaEscolhida && (
-                            <Input label="Email de acesso" placeholder="seu@email.com" type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} className="h-11" />
+                            <Input label="E-mail ou nome" placeholder="seu@email.com ou seu nome" type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} className="h-11" />
                         )}
                         <Input label="Senha" placeholder="Sua senha" type="password" autoComplete="current-password" autoFocus={Boolean(contaEscolhida)} value={password} onChange={e => setPassword(e.target.value)} className="h-11" />
                         {isDesktop && (
@@ -3997,7 +3997,7 @@ NOTIFY pgrst, 'reload schema';`;
                 items: summary.allItems.map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
-                    client: parseItemNote(item.notes || '').client,
+                    client: parseItemNote(item.notes || '').client, porEquipe: item.added_by_role === 'garcom',
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: summary.subtotal,
@@ -4444,7 +4444,7 @@ NOTIFY pgrst, 'reload schema';`;
                         items: summary.allItems.map(item => ({
                             quantity: item.quantity,
                             name: getOrderItemDisplayName(item),
-                            client: parseItemNote(item.notes || '').client,
+                            client: parseItemNote(item.notes || '').client, porEquipe: item.added_by_role === 'garcom',
                             total: item.price_at_time * item.quantity,
                         })),
                         subtotal: summary.subtotal,
@@ -7236,7 +7236,7 @@ const CounterView: React.FC<{
                     items: items.map(item => ({
                         quantity: item.quantity,
                         name: getOrderItemDisplayName(item),
-                        client: parseItemNote(item.notes || '').client,
+                        client: parseItemNote(item.notes || '').client, porEquipe: item.added_by_role === 'garcom',
                         total: item.price_at_time * item.quantity,
                     })),
                     subtotal: total,
@@ -7345,7 +7345,7 @@ const CounterView: React.FC<{
                 items: items.map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
-                    client: parseItemNote(item.notes || '').client,
+                    client: parseItemNote(item.notes || '').client, porEquipe: item.added_by_role === 'garcom',
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: total,
@@ -11253,7 +11253,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
         if (user) {
             setEditingUser(user);
             setName(user.name);
-            setEmail(user.email);
+            setEmail(user.email?.endsWith('@interno.norteparanegocios.com.br') ? '' : user.email); // e-mail interno do garçom não aparece
             setRole(user.role);
             // Fix round 3 (Group C2): antes disto, chaves ausentes em
             // user.permissions herdavam DEFAULT_TEAM_PERMISSIONS — pensado
@@ -11316,6 +11316,8 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
     const handleSave = async () => {
         if (!name || (role !== 'waiter' && !email) || (!editingUser && !password)) return toast.error('Preencha os campos obrigatórios');
+        // 20/10/2026 (ODARA): o e-mail foi digitado no campo Nome e a pessoa não conseguia entrar. Nome é o nome da pessoa.
+        if (name.includes('@')) return toast.error('No campo Nome, coloque o nome da pessoa. O e-mail vai no campo E-mail.');
         setIsLoading(true);
         try {
             // Jurisdicao de mesas (Task 3): restrictTables=false ou lista
@@ -11325,7 +11327,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             // disso silenciosamente.
             const assignedTableIds = restrictTables && selectedTableIds.length > 0 ? selectedTableIds : null;
             // Garçom não tem perfil: só nome e senha (e-mail interno gerado, permissões vazias). A conta dele entra direto na tela de Mesas.
-            const emailFinal = email || (role === 'waiter' ? `garcom-${crypto.randomUUID().slice(0, 8)}@interno.norteparanegocios.com.br` : '');
+            const emailFinal = email || (editingUser?.email?.endsWith('@interno.norteparanegocios.com.br') ? editingUser.email : '') || (role === 'waiter' ? `garcom-${crypto.randomUUID().slice(0, 8)}@interno.norteparanegocios.com.br` : '');
             const userData = { name, email: emailFinal, role, permissions: role === 'waiter' && !editingUser ? {} : permissions, assigned_table_ids: assignedTableIds, ...(password ? { password } : {}) };
 
             if (editingUser) {
@@ -11366,7 +11368,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                         <div className="flex justify-between items-start gap-2 mb-2">
                             <div className="min-w-0">
                                 <h4 className="font-semibold text-[17px] text-[var(--text)] truncate">{user.name}</h4>
-                                <p className="text-[13px] text-[var(--text-muted)] truncate">{user.email}</p>
+                                <p className="text-[13px] text-[var(--text-muted)] truncate">{user.email?.endsWith('@interno.norteparanegocios.com.br') ? 'Sem e-mail (entra pelo nome)' : user.email}</p>
                             </div>
                             <span className="shrink-0"><Badge color="bg-[var(--surface-2)] text-[var(--text-muted)]">{getRoleLabel(user.role)}</Badge></span>
                         </div>
@@ -11396,7 +11398,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? 'Editar usuário' : 'Novo usuário'}>
                 <div className="space-y-4">
                     <Input label="Nome Completo" value={name} onChange={e => setName(e.target.value)} />
-                    <div className={role === 'waiter' ? 'hidden' : ''}><Input label="Email de Acesso" type="email" value={email} onChange={e => setEmail(e.target.value)} /></div>
+                    <Input label={role === 'waiter' ? 'E-mail (opcional)' : 'Email de Acesso'} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={role === 'waiter' ? 'Para entrar no celular. Sem e-mail, entra pelo nome.' : undefined} />
                     <Input label={editingUser ? "Nova Senha (opcional)" : "Senha"} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={editingUser ? "Deixe em branco para manter" : "******"} />
                     
                     <div>
@@ -11407,10 +11409,10 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
                             <option value="cook">Cozinheiro</option>
                             <option value="attendant">Atendente</option>
                             <option value="manager">Gerente</option>
-                            <option value="open">Aberto (computador só de mesas)</option>
+                            <option value="open">Aberto (conta do computador do salão, não é uma pessoa)</option>
                         </select>
                         {role === 'waiter' && (
-                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Garçom não tem perfil: só usa a tela de Mesas. Para lançar um pedido, ele toca no próprio nome e digita esta senha.</p>
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Garçom não tem perfil: entrando ou não no celular (com o e-mail ou o nome e esta senha), ele cai na tela de Mesas. Para lançar um pedido, toca no próprio nome e digita esta senha, que já vale na hora.</p>
                         )}
                         {role === 'open' && (
                             <p className="mt-1.5 text-xs text-[var(--text-muted)]">Conta pra deixar logada no computador do salão: só abre mesa e lança pedido. Cada pedido pede a senha de quem está lançando e sai no nome dessa pessoa. Conta, pagamento e o resto do sistema ficam bloqueados.</p>
@@ -12164,7 +12166,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
                 items: itensDoComprovante.map(item => ({
                     quantity: item.quantity,
                     name: getOrderItemDisplayName(item),
-                    client: parseItemNote(item.notes || '').client,
+                    client: parseItemNote(item.notes || '').client, porEquipe: item.added_by_role === 'garcom',
                     total: item.price_at_time * item.quantity,
                 })),
                 subtotal: itemsTotal,

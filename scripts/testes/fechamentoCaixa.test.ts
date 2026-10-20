@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { buildCashClosingText } from '../../lib/print';
 
-for (const [mm, W] of [[80, 48], [58, 32]] as const) {
+// 80 mm também em 32 colunas desde 20/10/2026 (letra maior no fechamento).
+for (const [mm, W] of [[80, 32], [58, 32]] as const) {
   const txt = buildCashClosingText({
     storeName: 'O Sertão Vai Virar Mar',
     operador: 'Gicelio Buery',
