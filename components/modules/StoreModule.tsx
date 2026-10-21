@@ -66,6 +66,7 @@ import { ProducaoView } from '@/components/modules/ProducaoView';
 import { ResumoKds, ChipsLocal } from '@/components/modules/ProducaoCabecalho';
 import { resumirKds, modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
+import { podePedirConta, textoConfirmarConta } from '@/lib/pedirConta';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
@@ -3288,6 +3289,14 @@ const TablesView: React.FC<{
     // Menu Mode State
     const [showMenuMode, setShowMenuMode] = useState(false);
     useEffect(() => { if (!showMenuMode) setMesaCarrinho([]); }, [showMenuMode]);
+    // Quando o cardápio da mesa fecha (pedido confirmado), a janela da mesa volta com "Pedir conta" embaixo do dedo:
+    // o toque que chega logo depois não conta (lib/pedirConta.ts).
+    const cardapioFechouEm = useRef<number | null>(null);
+    const cardapioAberto = useRef(false);
+    useEffect(() => {
+        if (cardapioAberto.current && !showMenuMode) cardapioFechouEm.current = Date.now();
+        cardapioAberto.current = showMenuMode;
+    }, [showMenuMode]);
 
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
@@ -4585,9 +4594,13 @@ NOTIFY pgrst, 'reload schema';`;
     // também").
     const handleRequestBill = async (tableId: string) => {
         // Pedir conta é do garçom (a conta e o pagamento é que são do caixa): vale também na tela livre de Mesas.
+        if (!podePedirConta(Date.now(), cardapioFechouEm.current)) return;
+        const mesa = tables.find((t) => t.id === tableId);
+        const jaPediuConta = mesa?.status === TableStatus.WAITING_BILL;
+        if (!(await confirm(textoConfirmarConta(mesa?.number ?? '', !jaPediuConta && preContaAutomaticaLigada(store.config))))) return;
         try {
-            const jaPediuConta = tables.find((t) => t.id === tableId)?.status === TableStatus.WAITING_BILL;
             const { queued } = await requestTableBill(tableId);
+            registrarAcao(store.id, 'mesa.pediu_conta', { entity: 'table', entityId: tableId, summary: `Pediu a conta da mesa ${mesa?.number ?? ''}`, details: { aparelho: loggedUser.role === 'open' ? 'Mesas (sem login)' : loggedUser.name } });
             setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: TableStatus.WAITING_BILL } : t));
             if (selectedTable && selectedTable.id === tableId) {
                 setSelectedTable(prev => prev ? { ...prev, status: TableStatus.WAITING_BILL } : null);

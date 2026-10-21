@@ -645,13 +645,31 @@ async function secPermissoesAcoes(C) {
   });
 }
 
+// "Pedir conta" pede confirmação (21/10/2026): o toque no botão sozinho não pede a conta.
+async function pedirContaConfirmando(dev) {
+  await dev.page.getByRole('button', { name: /Pedir conta/ }).first().click();
+  const dlg = dev.page.getByRole('alertdialog').filter({ hasText: /Pedir a conta da mesa/ }).last();
+  await dlg.waitFor({ timeout: 5000 });
+  await dlg.getByRole('button', { name: 'Pedir conta', exact: true }).click();
+}
+
 async function secComandaEConta(C) {
   rel.entrar('5. Pedir conta e COMANDA (a conta com preços antes da nota fiscal)');
   const { amb } = C; const g = C.devs.garcom; const mesa = C.mesaAtual;
   await fecharJanelas(g);
-  await orcamento(C, 'garçom pede a conta = 1 COMANDA (e nenhum pedido novo)', async () => {
+  await orcamento(C, 'garçom toca em Pedir conta e desiste no aviso = mesa continua ocupada e nada imprime', async () => {
     await abrirMesa(g, mesa.number);
     await g.page.getByRole('button', { name: /Pedir conta/ }).first().click();
+    const dlg = g.page.getByRole('alertdialog').filter({ hasText: /Pedir a conta da mesa/ }).last();
+    await dlg.waitFor({ timeout: 5000 });
+    await dlg.getByRole('button', { name: 'Cancelar' }).click();
+    await sleep(2500);
+    ok((await amb.admin.from('tables').select('status').eq('id', mesa.id).single()).data.status === 'occupied', 'desistir no aviso não pode pedir a conta');
+    await fecharJanelas(g);
+  }, {});
+  await orcamento(C, 'garçom pede a conta = 1 COMANDA (e nenhum pedido novo)', async () => {
+    await abrirMesa(g, mesa.number);
+    await pedirContaConfirmando(g);
     await esperar(async () => (await amb.admin.from('tables').select('status').eq('id', mesa.id).single()).data.status === 'waiting_bill', { timeout: 10000, motivo: 'mesa aguardando conta' });
     await fecharJanelas(g);
   }, { comanda: 1 });
@@ -686,7 +704,7 @@ async function secComandaEConta(C) {
   await cancelarContaPeloCaixa();
   await orcamento(C, 'com a comanda automática DESLIGADA, pedir conta não imprime nada', async () => {
     await abrirMesa(g, mesa.number);
-    await g.page.getByRole('button', { name: /Pedir conta/ }).first().click();
+    await pedirContaConfirmando(g);
     await esperar(async () => (await amb.admin.from('tables').select('status').eq('id', mesa.id).single()).data.status === 'waiting_bill', { timeout: 10000, motivo: 'mesa aguardando conta' });
     await sleep(2500);
     await fecharJanelas(g);
@@ -695,7 +713,7 @@ async function secComandaEConta(C) {
   await cancelarContaPeloCaixa();
   await orcamento(C, 'religada a comanda automática, pedir conta de novo com a MESMA conta não repete o papel (garçom + cliente pedindo junto)', async () => {
     await abrirMesa(g, mesa.number);
-    await g.page.getByRole('button', { name: /Pedir conta/ }).first().click();
+    await pedirContaConfirmando(g);
     await esperar(async () => (await amb.admin.from('tables').select('status').eq('id', mesa.id).single()).data.status === 'waiting_bill', { timeout: 10000, motivo: 'mesa aguardando conta' });
     await sleep(2500);
     await fecharJanelas(g);

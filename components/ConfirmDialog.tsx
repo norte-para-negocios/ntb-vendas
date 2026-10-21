@@ -46,6 +46,9 @@ export function ConfirmDialogRoot() {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => finish(false)}>
       <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={options.title || options.message}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm bg-[var(--surface)] rounded-[var(--r-lg)] p-6 animate-[slideUp_0.25s_cubic-bezier(0.22,1,0.36,1)]"
         style={{ boxShadow: 'var(--shadow-md), 0 0 0 1px var(--border)' }}
