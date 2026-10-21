@@ -2,7 +2,8 @@
 import { abertoDesde } from '@/lib/turnoRotulo';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Input } from '@/components/ui';
-import { Order, TableSession, OrderRating, OperatorCheckin, Table, TableStatus, OrderStatus } from '@/types';
+import { Order, TableSession, OrderRating, OperatorCheckin, Table, TableStatus, OrderStatus, Category, CategoryGroup } from '@/types';
+import { rankingDeProdutos, opcoesDoFiltro, filtroDoValor } from '@/lib/rankingProdutos';
 import { BarChart3, Receipt, CheckCircle, Clock, Users, Coffee, TrendingUp, TrendingDown, Star, Wallet, ArrowRight, AlertTriangle } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -14,7 +15,7 @@ import { getPaymentMethodLabel, getOrderItemDisplayName } from '@/lib/labels';
 import { formatBRL, getOrderDisplayTotal, calculateMargin, filterLowStockProducts, compareProductQuantities, averageStats } from '@/lib/calc';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { formatDuration } from '@/lib/formatDuration';
-import { fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, fetchLowStockAlerts, LowStockAlert, CashShift } from '@/lib/api';
+import { fetchMenu, fetchCheckinsHistory, fetchOpenCashShifts, fetchTables, fetchActiveOrdersForTables, fetchLowStockAlerts, LowStockAlert, CashShift } from '@/lib/api';
 
 // 4 cores por token semântico (--ok/--warn/--info/--brand) + 2 literais extras,
 // pois "Formas de Pagamento" pode ter até 6 fatias distintas (CREDIT/DEBIT/PIX/
@@ -356,28 +357,25 @@ export const StoreDashboardView: React.FC<{
     // ordenado em vez de `option_id`.
     const optionsSignature = (opts?: { name: string }[]) => (opts || []).map(o => o.name).slice().sort().join('|');
 
-    const productStats = useMemo(() => {
-        // Chave agora inclui a assinatura dos adicionais: "Pizza Marguerita (Catupiry)"
-        // e "Pizza Marguerita (Mussarela)" viram linhas separadas no ranking, não uma
-        // linha só agrupada por product_id.
-        const map = new Map<string, { key: string, name: string, qty: number }>();
-        periodSales.forEach(o => {
-            o.order_items?.forEach(i => {
-                // Item cancelado e taxa (serviço, rolha...) não são produto vendido.
-                if (!i.product || i.status === 'canceled' || i.product.fee_type) return;
-                const key = `${i.product_id}::${optionsSignature(i.selected_options)}`;
-                const existing = map.get(key) || { key, name: getOrderItemDisplayName(i), qty: 0 };
-                existing.qty += i.quantity;
-                map.set(key, existing);
-            });
-        });
-        const arr = Array.from(map.values()).sort((a, b) => b.qty - a.qty);
-        const top = arr.slice(0, 5);
-        const topKeys = new Set(top.map(p => p.key));
-        // Exclui do "menos vendidos" quem ja aparece no "mais vendidos" (acontecia quando havia <=10 produtos distintos no periodo).
-        const bottom = arr.slice().reverse().filter(p => !topKeys.has(p.key)).slice(0, 5);
-        return { top, bottom };
-    }, [periodSales]);
+    // Mais e menos vendidos com filtro de categoria (Andrey, 20/10/2026): lib/rankingProdutos.ts.
+    const [categoriasMenu, setCategoriasMenu] = useState<Category[]>([]);
+    const [gruposMenu, setGruposMenu] = useState<CategoryGroup[]>([]);
+    const [filtroRanking, setFiltroRanking] = useState('todas');
+    useEffect(() => {
+        if (!storeId) return;
+        let vivo = true;
+        fetchMenu(storeId, true).then(({ categories, categoryGroups }) => {
+            if (!vivo) return;
+            setCategoriasMenu(categories || []);
+            setGruposMenu(categoryGroups || []);
+        }).catch(() => { /* sem cardápio: o filtro fica só com "Todas" */ });
+        return () => { vivo = false; };
+    }, [storeId]);
+    const opcoesRanking = useMemo(() => opcoesDoFiltro(categoriasMenu, gruposMenu), [categoriasMenu, gruposMenu]);
+    const productStats = useMemo(
+        () => rankingDeProdutos(periodSales, categoriasMenu, filtroDoValor(filtroRanking)),
+        [periodSales, categoriasMenu, filtroRanking],
+    );
 
     // Comparativo de produtos vs. período anterior (relatórios comparativos).
     const productMovers = useMemo(() => {
@@ -765,6 +763,19 @@ export const StoreDashboardView: React.FC<{
                                 accentColor="var(--info)"
                             />
                         </div>
+                        {opcoesRanking.length > 1 && (
+                            <div className="flex items-center gap-2 mb-3">
+                                <label htmlFor="ranking-categoria" className="text-[13px] font-medium text-[var(--text-muted)] shrink-0">Categoria</label>
+                                <select
+                                    id="ranking-categoria"
+                                    value={filtroRanking}
+                                    onChange={(e) => setFiltroRanking(e.target.value)}
+                                    className="w-full sm:w-auto sm:min-w-[260px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
+                                >
+                                    {opcoesRanking.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                            </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Card className={cardCls}>
                                 <h4 className={h4Cls}>Top 5 mais vendidos</h4>
@@ -791,7 +802,7 @@ export const StoreDashboardView: React.FC<{
                                 </div>
                             </Card>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <Card className={cardCls}>
                                 <h4 className={h4Cls}>Mais cresceram vs. período anterior</h4>
                                 <div className="space-y-3">
