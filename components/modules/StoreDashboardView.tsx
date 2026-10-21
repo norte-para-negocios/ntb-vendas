@@ -364,7 +364,8 @@ export const StoreDashboardView: React.FC<{
     useEffect(() => {
         if (!storeId) return;
         let vivo = true;
-        fetchMenu(storeId, true).then(({ categories, categoryGroups }) => {
+        // false = sempre da rede: a cópia rápida (corrida de 1,5 s) volta sem grupos e o filtro perderia "Grupo (todas)".
+        fetchMenu(storeId, false).then(({ categories, categoryGroups }) => {
             if (!vivo) return;
             setCategoriasMenu(categories || []);
             setGruposMenu(categoryGroups || []);

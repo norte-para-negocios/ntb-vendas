@@ -11,9 +11,9 @@ const mem = new Map<string, string>();
   removeItem: (k: string) => { mem.delete(k); },
 };
 
-import { lerComputadorMesas, salvarComputadorMesas, migrarChaveAntiga, rotuloBotaoMesas } from '../../lib/computadorMesas';
+import { lerComputadorMesas, salvarComputadorMesas, migrarChaveAntiga, rotuloBotaoMesas, chaveAntiga } from '../../lib/computadorMesas';
 
-async function main() {
+function main() {
 
 // ler / salvar
 assert.equal(lerComputadorMesas(), null);
@@ -28,64 +28,42 @@ mem.set('ntb-computador-mesas', JSON.stringify({ storeName: 'x' }));
 assert.equal(lerComputadorMesas(), null, 'sem storeId = sem configuração');
 mem.clear();
 
-const nome = (n: string | null | undefined) => async () => n;
-
-// 1. PC do salão (está na tela de Mesas) atualiza: fica preso à loja dele, sem ninguém configurar.
+// 1. PC do salão (sessão de Mesas restaurada) atualiza: fica preso à loja dele, sem ninguém configurar.
 mem.set('ntb_mesas_loja', 's1');
-mem.set('ntb_store_session', JSON.stringify({ aberto: true, storeId: 's1' }));
-let r = await migrarChaveAntiga(nome('O Sertão Vai Virar Mar'));
+let r = migrarChaveAntiga({ storeId: 's1', storeName: 'O Sertão Vai Virar Mar' });
 assert.equal(r?.storeId, 's1');
 assert.equal(r?.storeName, 'O Sertão Vai Virar Mar');
 assert.equal(r?.definidoPor, 'atualização');
-assert.equal(mem.has('ntb_mesas_loja'), false, 'chave antiga some');
+assert.equal(chaveAntiga(), null, 'chave antiga some');
 assert.deepEqual(lerComputadorMesas(), r);
 mem.clear();
 
-// 2. A loja da sessão de Mesas vence a chave antiga (último login pode ter sido de outra loja).
-mem.set('ntb_mesas_loja', 'o1');
-mem.set('ntb_store_session', JSON.stringify({ aberto: true, storeId: 's1' }));
-r = await migrarChaveAntiga(async (id) => (id === 's1' ? 'Sertão' : 'ODARA'));
-assert.equal(r?.storeId, 's1');
-mem.clear();
-
-// 3. PC do caixa (sessão de uma pessoa): o botão some.
+// 2. PC do caixa (entrou uma pessoa): o botão some.
 mem.set('ntb_mesas_loja', 's1');
-mem.set('ntb_store_session', JSON.stringify({ userId: 'u1', storeId: 's1' }));
-r = await migrarChaveAntiga(nome('Sertão'));
+r = migrarChaveAntiga(null);
 assert.equal(r, null);
-assert.equal(mem.has('ntb_mesas_loja'), false);
+assert.equal(chaveAntiga(), null);
 assert.equal(lerComputadorMesas(), null);
 mem.clear();
 
-// 4. Já configurado: login antigo não sobrescreve.
+// 3. Já configurado: a chave antiga não sobrescreve.
 salvarComputadorMesas({ storeId: 'o1', storeName: 'ODARA', definidoPor: 'Ramon', em: 'x' });
 mem.set('ntb_mesas_loja', 's1');
-mem.set('ntb_store_session', JSON.stringify({ aberto: true, storeId: 's1' }));
-r = await migrarChaveAntiga(nome('Sertão'));
+r = migrarChaveAntiga({ storeId: 's1', storeName: 'Sertão' });
 assert.equal(r?.storeId, 'o1');
-assert.equal(mem.has('ntb_mesas_loja'), false);
+assert.equal(chaveAntiga(), null);
 mem.clear();
 
-// 5. Loja desativada: não prende.
-mem.set('ntb_store_session', JSON.stringify({ aberto: true, storeId: 's1' }));
-r = await migrarChaveAntiga(nome(null));
-assert.equal(r, null);
+// 4. Já migrado (sem chave antiga): garçom logar num PC sem marcação NÃO marca; e não desmarca o marcado.
+assert.equal(migrarChaveAntiga({ storeId: 's1', storeName: 'Sertão' }), null);
 assert.equal(lerComputadorMesas(), null);
+salvarComputadorMesas({ storeId: 'o1', storeName: 'ODARA', definidoPor: 'Ramon', em: 'x' });
+assert.equal(migrarChaveAntiga(null)?.storeId, 'o1');
 mem.clear();
-
-// 6. Sem internet na atualização: prende assim mesmo (salão não pode parar), nome vem depois.
-mem.set('ntb_store_session', JSON.stringify({ aberto: true, storeId: 's1' }));
-r = await migrarChaveAntiga(nome(undefined));
-assert.equal(r?.storeId, 's1');
-assert.equal(r?.storeName, '');
-mem.clear();
-
-// 7. Nada antigo: nada muda.
-assert.equal(await migrarChaveAntiga(nome('x')), null);
 
 // rótulo
 assert.equal(rotuloBotaoMesas({ storeId: 'o1', storeName: 'ODARA BEACH', definidoPor: '', em: '' }), 'Mesas · ODARA BEACH');
 assert.equal(rotuloBotaoMesas({ storeId: 'o1', storeName: '', definidoPor: '', em: '' }), 'Mesas');
 console.log('computadorMesas: ok');
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main();

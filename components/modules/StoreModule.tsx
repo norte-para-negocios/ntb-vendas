@@ -67,7 +67,7 @@ import { ResumoKds, ChipsLocal } from '@/components/modules/ProducaoCabecalho';
 import { resumirKds, modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
 import { podePedirConta, textoConfirmarConta } from '@/lib/pedirConta';
-import { lerComputadorMesas, salvarComputadorMesas, migrarChaveAntiga, type ComputadorMesas } from '@/lib/computadorMesas';
+import { lerComputadorMesas, salvarComputadorMesas, migrarChaveAntiga, chaveAntiga, type ComputadorMesas } from '@/lib/computadorMesas';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
@@ -14154,6 +14154,8 @@ export const StoreModule: React.FC = () => {
 
                 if (restoredUser) {
                     setUser(restoredUser);
+                    // 1ª abertura depois de atualizar: aparelho na tela de Mesas fica preso à loja dela; com pessoa, perde o botão.
+                    migrarChaveAntiga(restoredUser.role === 'open' ? { storeId: restoredUser.store.id, storeName: restoredUser.store.name } : null);
                     const savedTab = localStorage.getItem(STORE_LAST_TAB_STORAGE_KEY);
                     const modules = resolveStoreModules(restoredUser.store);
                     const hasPermission = (t: string) => hasTabPermission(restoredUser, t, restoredUser.store);
@@ -14223,6 +14225,7 @@ export const StoreModule: React.FC = () => {
             setUser(aberto);
             setTab('tables');
             localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ aberto: true, storeId: u.store.id }));
+            migrarChaveAntiga({ storeId: u.store.id, storeName: u.store.name });
             toast.info('Tela de Mesas. Para lançar um pedido, toque no seu nome e digite a senha.');
             return;
         }
@@ -14231,27 +14234,36 @@ export const StoreModule: React.FC = () => {
         setUser(u);
         setTab(pickInitialStoreTab(u));
         localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id, isUniversal: u.role === 'universal' }));
+        migrarChaveAntiga(null);
     };
 
-    // Loja das mesas = escolha do aparelho (lib/computadorMesas.ts), não o último login. Na 1ª abertura depois de
-    // atualizar, o aparelho que já estava na tela de Mesas fica preso à loja dela; nos outros o botão some.
+    // Loja das mesas = escolha do aparelho (lib/computadorMesas.ts), não o último login. Aparelho que ainda não passou
+    // pela migração (tela de entrada antes de alguém entrar) continua com o botão de antes até a sessão ou o login dizer
+    // o que ele é (migrarChaveAntiga na restauração da sessão, no login e ao entrar nas Mesas).
     const [lojaMesas, setLojaMesas] = useState<ComputadorMesas | null>(null);
     useEffect(() => {
         let vivo = true;
-        migrarChaveAntiga(async (id) => {
-            const s = await fetchStoreById(id).catch(() => undefined);
-            if (s === undefined) return undefined;
-            return s && s.is_active !== false ? s.name : null;
-        }).then((c) => { if (vivo) setLojaMesas(c ?? lerComputadorMesas()); });
-        const aoMudar = () => setLojaMesas(lerComputadorMesas());
+        const ler = async () => {
+            const c = lerComputadorMesas();
+            if (c) { setLojaMesas(c); return; }
+            const antiga = chaveAntiga();
+            if (!antiga) { setLojaMesas(null); return; }
+            setLojaMesas({ storeId: antiga, storeName: '', definidoPor: '', em: '' });
+            const loja = await fetchStoreById(antiga).catch(() => null);
+            if (vivo && loja?.name && chaveAntiga() === antiga && !lerComputadorMesas()) setLojaMesas({ storeId: antiga, storeName: loja.name, definidoPor: '', em: '' });
+        };
+        void ler();
+        const aoMudar = () => { void ler(); };
         window.addEventListener('ntb-computador-mesas', aoMudar);
         return () => { vivo = false; window.removeEventListener('ntb-computador-mesas', aoMudar); };
-    }, [user]);
+    }, []);
     const entrarMesas = async () => {
         if (!lojaMesas) return;
         const store = await fetchStoreById(lojaMesas.storeId).catch(() => null);
         if (!store || !store.is_active) { toast.error('Não consegui abrir as mesas desta loja. Entre com o seu login.'); return; }
-        if (store.name !== lojaMesas.storeName) { const c = { ...lojaMesas, storeName: store.name }; salvarComputadorMesas(c); setLojaMesas(c); }
+        const marcado = lerComputadorMesas();
+        if (!marcado) migrarChaveAntiga({ storeId: store.id, storeName: store.name });
+        else if (marcado.storeId === store.id && marcado.storeName !== store.name) salvarComputadorMesas({ ...marcado, storeName: store.name });
         const u = usuarioAberto(store);
         definirAtor({ id: null, name: u.name, role: u.role });
         registrarAcao(store.id, 'login.modo_aberto', { entity: 'login', summary: 'PC do salão entrou no modo Aberto (só Mesas)' });

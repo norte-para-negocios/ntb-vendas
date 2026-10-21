@@ -29,6 +29,7 @@ export function ConfirmDialogRoot() {
   useEffect(() => {
     openImpl = (options) =>
       new Promise<boolean>((resolve) => {
+        resolveRef.current?.(false); // um aviso novo por cima de outro: o de baixo vale como Cancelar (nunca fica pendurado)
         resolveRef.current = resolve;
         setTyped('');
         setState({ options });
@@ -36,16 +37,34 @@ export function ConfirmDialogRoot() {
     return () => { openImpl = null; };
   }, []);
 
+  // Aberto por cima de uma janela (ex.: a da mesa): o foco vem para o aviso e o Esc fecha só o aviso, não a janela de baixo.
+  const caixaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!state) return;
+    caixaRef.current?.querySelector<HTMLElement>('input, button')?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      resolveRef.current?.(false);
+      resolveRef.current = undefined;
+      setState(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [state]);
+
   if (!state) return null;
   const { options } = state;
   const danger = options.variant === 'danger';
   const locked = !!options.requireText && typed !== options.requireText;
 
-  const finish = (v: boolean) => { resolveRef.current?.(v); setState(null); };
+  const finish = (v: boolean) => { resolveRef.current?.(v); resolveRef.current = undefined; setState(null); };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => finish(false)}>
       <div
+        ref={caixaRef}
         role="alertdialog"
         aria-modal="true"
         aria-label={options.title || options.message}

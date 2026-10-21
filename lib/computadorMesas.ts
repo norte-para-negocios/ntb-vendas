@@ -9,7 +9,6 @@ export type ComputadorMesas = { storeId: string; storeName: string; definidoPor:
 
 const CHAVE = 'ntb-computador-mesas';
 const CHAVE_ANTIGA = 'ntb_mesas_loja';
-const CHAVE_SESSAO = 'ntb_store_session';
 
 const ls = (): Storage | null => {
   try { return typeof window !== 'undefined' ? window.localStorage : null; } catch { return null; }
@@ -34,27 +33,25 @@ export function salvarComputadorMesas(c: ComputadorMesas | null): void {
   try { if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('ntb-computador-mesas')); } catch { /* */ }
 }
 
+/** Loja da chave antiga (`ntb_mesas_loja`) enquanto o aparelho ainda não passou pela migração. */
+export function chaveAntiga(): string | null {
+  try { return ls()?.getItem(CHAVE_ANTIGA) || null; } catch { return null; }
+}
+
 /**
- * Uma vez, na atualização: o aparelho que JÁ está na tela de Mesas (sessão `aberto`) fica preso à loja dela, para o
- * salão não parar; nos outros (PC do caixa, escritório) a chave antiga some e o botão também.
- * `nomeDaLoja`: string = loja ativa; null = loja desativada (não prende); undefined = não deu para conferir (sem
- * internet: prende assim mesmo, o nome entra depois).
+ * Uma vez por aparelho, na primeira vez que se sabe o que ele é depois de atualizar (sessão restaurada ou login):
+ * o aparelho que está na tela de Mesas (`lojaEmMesas`) fica preso a essa loja, para o salão não parar; o que entrou
+ * com uma pessoa (caixa, escritório) perde o botão. Sem a chave antiga não faz nada: depois de migrado, só a escolha em
+ * Configurações muda o aparelho (garçom logar num PC não marca mais).
  */
-export async function migrarChaveAntiga(nomeDaLoja: (storeId: string) => Promise<string | null | undefined>): Promise<ComputadorMesas | null> {
+export function migrarChaveAntiga(lojaEmMesas: { storeId: string; storeName: string } | null): ComputadorMesas | null {
   const s = ls();
-  if (!s) return null;
   const atual = lerComputadorMesas();
-  let sessaoMesas: string | null = null;
-  try {
-    const sessao = JSON.parse(s.getItem(CHAVE_SESSAO) || 'null');
-    if (sessao?.aberto && typeof sessao.storeId === 'string') sessaoMesas = sessao.storeId;
-  } catch { /* sessão ilegível */ }
+  if (!s || chaveAntiga() == null) return atual;
   try { s.removeItem(CHAVE_ANTIGA); } catch { /* */ }
   if (atual) return atual;
-  if (!sessaoMesas) return null;
-  const nome = await nomeDaLoja(sessaoMesas).catch(() => undefined);
-  if (nome === null) return null;
-  const c: ComputadorMesas = { storeId: sessaoMesas, storeName: nome ?? '', definidoPor: 'atualização', em: new Date().toISOString() };
+  if (!lojaEmMesas) { salvarComputadorMesas(null); return null; }
+  const c: ComputadorMesas = { storeId: lojaEmMesas.storeId, storeName: lojaEmMesas.storeName, definidoPor: 'atualização', em: new Date().toISOString() };
   salvarComputadorMesas(c);
   return c;
 }
