@@ -3077,9 +3077,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
     };
 
-    // Gate de acesso movido pra hora da ação (2026-08-14): navegar pelo
-    // cardápio é livre; só a primeira tentativa de adicionar item ao
-    // carrinho pede nome+mesa+PIN. Com sessão já aberta, executa na hora;
+    // Gate de acesso (2026-08-14, revisto em 21/10): navegar e montar o
+    // carrinho é livre; nome+mesa+PIN só ao confirmar a comanda
+    // (confirmarComanda). Com sessão já aberta, executa na hora;
     // sem sessão, guarda a ação e abre o modal — handleLogin completa ela
     // sozinho ao validar o PIN.
     const requestAccessThen = (action: () => void) => {
@@ -3106,6 +3106,21 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             clearCart();
         }
     };
+
+    // Identificação na hora de CONFIRMAR a comanda (21/10/2026, pedido do dono: "quando clico no Peça também ele já pede
+    // o PIN da mesa; só quando eu clicar em confirmar"). Antes (14/08) pedia no primeiro item colocado no carrinho.
+    // Sem sessão: abre nome+mesa+PIN e, validado, envia sozinho (o efeito roda com a mesa já no estado novo).
+    const [enviarAposEntrar, setEnviarAposEntrar] = useState(false);
+    const confirmarComanda = () => {
+        if (hasAccess) handleSendOrder();
+        else requestAccessThen(() => setEnviarAposEntrar(true));
+    };
+    useEffect(() => {
+        if (!enviarAposEntrar || !hasAccess) return;
+        setEnviarAposEntrar(false);
+        handleSendOrder();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- dispara uma vez, quando a identificação termina
+    }, [enviarAposEntrar, hasAccess]);
 
     const handleSendOrder = () => {
         // If Counter, show alert first
@@ -4429,10 +4444,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                                         // opcionais (ex.: borda de pizza) também são upsell/
                                                         // vinculados ao omie_codigo, não podem ser pulados no "+".
                                                         if ((p.option_groups || []).length > 0) { setSelectedProduct(p); return; }
-                                                        requestAccessThen(() => {
-                                                            addToCart(p, 1, '', []);
-                                                            toast.success(`${p.name} adicionado`);
-                                                        });
+                                                        // Identificação (nome, mesa, PIN) só ao confirmar a comanda (21/10/2026).
+                                                        addToCart(p, 1, '', []);
+                                                        toast.success(`${p.name} adicionado`);
                                                     }}
                                                     disabled={isWaitingBill}
                                                     style={stagger(Math.min(i, 10) * 30)}
@@ -4554,10 +4568,9 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 onAdd={(qty, notes, selectedOptions) => {
                     const product = selectedProduct;
                     if (product && clientOrdering) {
-                        requestAccessThen(() => {
-                            addToCart(product, qty, notes, selectedOptions);
-                            toast.success('Adicionado ao carrinho!');
-                        });
+                        // Sem pedir nome/mesa/PIN aqui (nem no "Peça também"): só ao confirmar a comanda (21/10/2026).
+                        addToCart(product, qty, notes, selectedOptions);
+                        toast.success('Adicionado ao carrinho!');
                     }
                 }}
                 noteSuggestions={currentStore?.config?.note_suggestions || []}
@@ -4581,7 +4594,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 onClose={() => setIsCartOpen(false)}
                 cart={cart}
                 total={cartTotal}
-                onConfirm={handleSendOrder}
+                onConfirm={confirmarComanda}
                 isLoading={isLoading}
                 onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
                 onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
