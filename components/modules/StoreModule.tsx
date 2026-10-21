@@ -67,6 +67,7 @@ import { ResumoKds, ChipsLocal } from '@/components/modules/ProducaoCabecalho';
 import { resumirKds, modoProducao, abaCorretaDeProducao, producaoAcessivel, locaisAcessiveis, abasProducao, somaContagens } from '@/lib/producaoNav';
 import { confirm } from '@/components/ConfirmDialog';
 import { podePedirConta, textoConfirmarConta } from '@/lib/pedirConta';
+import { lerComputadorMesas, salvarComputadorMesas, migrarChaveAntiga, type ComputadorMesas } from '@/lib/computadorMesas';
 import { ContaSalva, lerContasSalvas, salvarConta, removerContaSalva, rotuloDoPapel } from '@/lib/contasSalvas';
 import { Skeleton, stagger } from '@/components/Skeleton';
 import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
@@ -149,7 +150,7 @@ const universalPermissionsFor = (store: Store): StoreUserPermissions => {
     };
 };
 
-const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => void; onEntrarMesas?: () => void }> = ({ onLogin, onEntrarMesas }) => {
+const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => void; onEntrarMesas?: () => void; nomeLojaMesas?: string }> = ({ onLogin, onEntrarMesas, nomeLojaMesas }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -557,7 +558,8 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                                 </div>
                                 <div className="text-center">
                                     <p className="text-[15px] font-semibold leading-tight">Mesas</p>
-                                    <p className="text-xs text-white/60 mt-0.5">Sem login</p>
+                                    <p className="text-xs text-white/80 mt-0.5 line-clamp-2">{nomeLojaMesas ?? 'Sem login'}</p>
+                                    {nomeLojaMesas && <p className="text-[11px] text-white/55">Sem login</p>}
                                 </div>
                             </motion.button>
                         )}
@@ -738,7 +740,7 @@ const StoreLogin: React.FC<{ onLogin: (user: StoreUser & { store: Store }) => vo
                 </Card>
                 {onEntrarMesas && (
                     <button onClick={onEntrarMesas} className="flex items-center justify-center gap-2 mx-auto mt-6 px-5 min-h-11 rounded-full text-sm font-semibold text-white bg-white/12 hover:bg-white/20 u-motion">
-                        <LayoutDashboard size={16} /> Entrar só nas mesas (sem login)
+                        <LayoutDashboard size={16} /> Entrar só nas mesas{nomeLojaMesas ? ` · ${nomeLojaMesas}` : ''} (sem login)
                     </button>
                 )}
                 {isDesktop && contas.length > 0 && (
@@ -12693,7 +12695,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             {activeTab === 'permissoes' && navCtx.can?.('ver_permissoes') && <RolePermissionsView store={store} loggedUser={loggedUser} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'saude' && roleCan(loggedUser, store, 'editar_cardapio') && <CardapioSaudeView storeId={storeId} modoEstoque={store.stock_mode} />}
             {activeTab === 'regras_caixa' && <RegrasCaixaView store={store} onStoreUpdate={onStoreUpdate} />}
-            {activeTab === 'impressao' && <PrinterSettingsView store={store} />}
+            {activeTab === 'impressao' && <PrinterSettingsView store={store} quemConfigura={loggedUser.name} />}
             {activeTab === 'locais' && <LocaisPreparoView store={store} />}
             {activeTab === 'locais_estoque' && <LocaisEstoqueView store={store} podeEditar={roleCan(loggedUser, store, 'editar_cardapio')} />}
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
@@ -14037,9 +14039,8 @@ const FiscalNotasView: React.FC<{ storeId: string; storeName?: string; modoCaixa
 // só o suficiente pra rebuscar o store_user via fetchStoreUserById depois de
 // um F5 (achado de bug #6). Nunca guarda senha nem dado sensível.
 const STORE_SESSION_STORAGE_KEY = 'ntb_store_session';
-// Modo Aberto (30/09): loja deste computador, gravada a cada login real, pra tela de
-// entrada oferecer "Mesas · Sem login". Usuário sintético role='open' (id nulo fixo).
-const MESAS_LOJA_STORAGE_KEY = 'ntb_mesas_loja';
+// Modo Aberto (30/09): "Mesas · Sem login" na tela de entrada. A loja vem da escolha do aparelho
+// (lib/computadorMesas.ts, 21/10). Usuário sintético role='open' (id nulo fixo).
 const ABERTO_USER_ID = '00000000-0000-0000-0000-000000000000';
 const usuarioAberto = (store: Store): StoreUser & { store: Store } => ({
     id: ABERTO_USER_ID,
@@ -14222,7 +14223,6 @@ export const StoreModule: React.FC = () => {
             setUser(aberto);
             setTab('tables');
             localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ aberto: true, storeId: u.store.id }));
-            try { localStorage.setItem(MESAS_LOJA_STORAGE_KEY, u.store.id); } catch { /* sem armazenamento */ }
             toast.info('Tela de Mesas. Para lançar um pedido, toque no seu nome e digite a senha.');
             return;
         }
@@ -14231,22 +14231,27 @@ export const StoreModule: React.FC = () => {
         setUser(u);
         setTab(pickInitialStoreTab(u));
         localStorage.setItem(STORE_SESSION_STORAGE_KEY, JSON.stringify({ userId: u.id, storeId: u.store.id, isUniversal: u.role === 'universal' }));
-        try { localStorage.setItem(MESAS_LOJA_STORAGE_KEY, u.store.id); } catch { /* sem armazenamento */ }
     };
 
-    const [lojaMesas, setLojaMesas] = useState<string | null>(null);
+    // Loja das mesas = escolha do aparelho (lib/computadorMesas.ts), não o último login. Na 1ª abertura depois de
+    // atualizar, o aparelho que já estava na tela de Mesas fica preso à loja dela; nos outros o botão some.
+    const [lojaMesas, setLojaMesas] = useState<ComputadorMesas | null>(null);
     useEffect(() => {
-        try {
-            // Grava a loja também quando a sessão é restaurada (ex.: app reabriu após atualizar),
-            // senão o botão "Mesas" só apareceria depois de alguém digitar o login de novo.
-            if (user && user.role !== 'open' && user.role !== 'universal') localStorage.setItem(MESAS_LOJA_STORAGE_KEY, user.store.id);
-            setLojaMesas(localStorage.getItem(MESAS_LOJA_STORAGE_KEY));
-        } catch { /* sem armazenamento */ }
+        let vivo = true;
+        migrarChaveAntiga(async (id) => {
+            const s = await fetchStoreById(id).catch(() => undefined);
+            if (s === undefined) return undefined;
+            return s && s.is_active !== false ? s.name : null;
+        }).then((c) => { if (vivo) setLojaMesas(c ?? lerComputadorMesas()); });
+        const aoMudar = () => setLojaMesas(lerComputadorMesas());
+        window.addEventListener('ntb-computador-mesas', aoMudar);
+        return () => { vivo = false; window.removeEventListener('ntb-computador-mesas', aoMudar); };
     }, [user]);
     const entrarMesas = async () => {
         if (!lojaMesas) return;
-        const store = await fetchStoreById(lojaMesas).catch(() => null);
+        const store = await fetchStoreById(lojaMesas.storeId).catch(() => null);
         if (!store || !store.is_active) { toast.error('Não consegui abrir as mesas desta loja. Entre com o seu login.'); return; }
+        if (store.name !== lojaMesas.storeName) { const c = { ...lojaMesas, storeName: store.name }; salvarComputadorMesas(c); setLojaMesas(c); }
         const u = usuarioAberto(store);
         definirAtor({ id: null, name: u.name, role: u.role });
         registrarAcao(store.id, 'login.modo_aberto', { entity: 'login', summary: 'PC do salão entrou no modo Aberto (só Mesas)' });
@@ -14295,7 +14300,7 @@ export const StoreModule: React.FC = () => {
     if (!user) {
         return (
             <MotionConfig reducedMotion="user">
-                <StoreLogin onLogin={handleLogin} onEntrarMesas={lojaMesas ? entrarMesas : undefined} />
+                <StoreLogin onLogin={handleLogin} onEntrarMesas={lojaMesas ? entrarMesas : undefined} nomeLojaMesas={lojaMesas?.storeName || undefined} />
             </MotionConfig>
         );
     }

@@ -33,6 +33,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Printer, Wifi, Usb, Monitor, Plus, Trash2, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { preContaAutomaticaLigada } from '@/lib/preConta';
+import { ComputadorMesasCard } from '@/components/modules/ComputadorMesasCard';
 import { toast } from '@/components/Toast';
 import {
   fetchPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig,
@@ -87,7 +88,7 @@ const resolverNomeLocal = (printer: PrinterConfig, host: string, locais: string[
   return achadas.length === 1 ? achadas[0] : null;
 };
 
-const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
+const PrinterSettingsView: React.FC<{ store: Store; quemConfigura?: string }> = ({ store, quemConfigura }) => {
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
   const [salvandoDocs, setSalvandoDocs] = useState<string | null>(null);
   const [jobs, setJobs] = useState<PrintJob[]>([]);
@@ -409,6 +410,8 @@ const PrinterSettingsView: React.FC<{ store: Store }> = ({ store }) => {
               : <>Nenhuma impressora marcada: a comanda sai na janela de impressão do aparelho (só manual).</>}
         </p>
       </Card>
+
+      <ComputadorMesasCard store={store} quemConfigura={quemConfigura} />
 
       <Card className="p-4 space-y-3">
         <div>
