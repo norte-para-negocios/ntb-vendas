@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, MapPin, Image as ImageIcon } from 'lucide-react';
+import { ShoppingBag, Search, Clock, Plus, Minus, Check, User, LogIn, Coffee, LayoutGrid, Eye, EyeOff, ArrowUpDown, ArrowDownAZ, ArrowUpNarrowWide, ArrowDownWideNarrow, Bell, BellRing, LogOut, Trash2, Receipt, ChefHat, CheckCircle, AlertTriangle, AlertCircle, Users, Calculator, List, CheckSquare, Square, Lock, Info, PartyPopper, UtensilsCrossed, RefreshCw, X, Star, Sparkles, Heart, ChevronRight, CornerDownRight, MapPin, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { removerCategoriasSoEquipe } from '@/lib/menu';
 import { semTaxas, contaTemTaxaPercentual } from '@/lib/taxas';
@@ -26,6 +26,7 @@ import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
 import { THEME_PRESETS, resolveThemePreset } from '@/lib/theme';
+import { lerSessaoSalva, decidirRestauracao, montarSessaoSalva, textoConfirmarSessao } from '@/lib/sessaoCardapio';
 
 // --- COMPONENTS ---
 
@@ -2697,6 +2698,8 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // sessão. `pendingCartAction` guarda o que o cliente tentou fazer pra
     // completar sozinho assim que o PIN é validado.
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    // Sessão que veio do localStorage (não foi identificada nesta página): o 1º Confirmar pergunta a mesa.
+    const [sessaoRestaurada, setSessaoRestaurada] = useState(false);
     const [pendingCartAction, setPendingCartAction] = useState<(() => void) | null>(null);
     // "Só ver o cardápio" só esconde o convite de entrar — nada mais muda:
     // navegar sempre funcionou sem login. Fica por sessão (não em
@@ -2952,18 +2955,21 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 return;
             }
 
-            const savedSession = localStorage.getItem(`session_${slug}`);
-            if (savedSession) {
+            let savedRaw: string | null = null;
+            try { savedRaw = localStorage.getItem(`session_${slug}`); } catch {}
+            const session = lerSessaoSalva(savedRaw);
+            if (savedRaw && !session) { try { localStorage.removeItem(`session_${slug}`); } catch {} }
+            if (session) {
                 try {
-                    const session = JSON.parse(savedSession);
-                    // Session is valid for 4 hours
-                    if (Date.now() - session.timestamp < 4 * 60 * 60 * 1000) {
+                    // Validade (4 h) e "mesma ocupação da mesa" em lib/sessaoCardapio.ts (22/10/2026).
+                    {
                         if (session.tableId) {
                             const tables = await fetchTablesPublic(currentStore.id);
                             const table = tables.find(t => t.id === session.tableId);
 
-                            // Only auto-restore if table is still occupied by the same context
-                            if (table && (table.status === TableStatus.OCCUPIED || table.status === TableStatus.WAITING_BILL)) {
+                            // Só restaura se a mesa segue ocupada pela MESMA ocupação (anfitrião igual ao do
+                            // login): mesa fechada e reaberta por outro grupo nunca mostra os pedidos deles.
+                            if (table && decidirRestauracao(session, table, Date.now()) === 'restaurar') {
                                 // If I was the host, check if I am still the host
                                 const isReturningHost = table.current_host_name?.toLowerCase() === session.name.toLowerCase();
 
@@ -2972,6 +2978,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 setIsHost(isReturningHost);
                                 setHostPin(isReturningHost ? (session.hostPin ?? null) : null);
                                 setHasAccess(true);
+                                setSessaoRestaurada(true);
 
                                 // Restaura mesaOrderIds a partir do banco (mesma RPC que já
                                 // alimenta o BillSplitter, fetchTableOrderSummary/
@@ -3017,11 +3024,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 // Table closed or reset, clear session
                                 localStorage.removeItem(`session_${slug}`);
                             }
-                        } else if (session.mode === 'counter') {
+                        } else if (decidirRestauracao(session, null, Date.now()) === 'restaurar') {
                             setClientName(session.name);
                             setGlobalTable(null);
                             setIsHost(true);
                             setHasAccess(true);
+                            setSessaoRestaurada(true);
+                        } else {
+                            localStorage.removeItem(`session_${slug}`);
                         }
                     }
                 } catch (e) {
@@ -3038,6 +3048,10 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
             setPendingCartAction(null);
             return;
         }
+        // Login novo = sessão nova: nada da mesa/pessoa anterior (pedidos acompanhados, conta aberta,
+        // incerteza de pedidos) segue para esta identificação. O carrinho é de quem está com o aparelho
+        // e acabou de vê-lo ao tocar em Confirmar, então fica.
+        limparEstadoDaSessao();
         setClientName(name);
 
         // A validação de PIN e a decisão de quem é host já aconteceram no
@@ -3059,13 +3073,15 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         setHasAccess(true);
 
         // SAVE SESSION
-        localStorage.setItem(`session_${slug}`, JSON.stringify({
-            name,
-            tableId,
-            mode: tableId ? 'table' : 'counter',
-            timestamp: Date.now(),
-            hostPin: tableId && hostStatus && table ? table.pin : null,
-        }));
+        try {
+            localStorage.setItem(`session_${slug}`, JSON.stringify(montarSessaoSalva({
+                name,
+                tableId,
+                hostPin: tableId && hostStatus && table ? table.pin : null,
+                hostName: table?.current_host_name ?? null,
+                agora: Date.now(),
+            })));
+        } catch {}
 
         // Login disparado a partir de uma tentativa de adicionar item (ver
         // requestAccessThen abaixo): fecha o modal e completa sozinho a ação
@@ -3092,16 +3108,28 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
         }
     };
 
+    // Estado ligado à sessão (mesa/pessoa) atual. Usado ao sair, ao trocar de mesa no Confirmar e em
+    // todo login novo, para nada de uma mesa aparecer na sessão seguinte.
+    const limparEstadoDaSessao = () => {
+        setTrackedOrderId(null);
+        setMesaOrderIds([]);
+        setTableOrdersUnknown(false);
+        setIsOrderStatusOpen(false);
+        setShowBill(false);
+        setBillRequestIntent(false);
+        setIsCounterConfirmOpen(false);
+        setSessaoRestaurada(false);
+    };
+
     const handleLogout = async (force = false) => {
         if(force || await confirm("Deseja realmente sair? Se você for o anfitrião, a mesa continuará aberta.")) {
-            localStorage.removeItem(`session_${slug}`);
-            setTrackedOrderId(null);
-            setMesaOrderIds([]);
-            setTableOrdersUnknown(false);
-            setIsOrderStatusOpen(false);
+            try { localStorage.removeItem(`session_${slug}`); } catch {}
+            limparEstadoDaSessao();
 
             setHasAccess(false);
             setClientName('');
+            setIsHost(false);
+            setHostPin(null);
             setGlobalTable(null);
             clearCart();
         }
@@ -3111,9 +3139,34 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // o PIN da mesa; só quando eu clicar em confirmar"). Antes (14/08) pedia no primeiro item colocado no carrinho.
     // Sem sessão: abre nome+mesa+PIN e, validado, envia sozinho (o efeito roda com a mesa já no estado novo).
     const [enviarAposEntrar, setEnviarAposEntrar] = useState(false);
+    // 22/10/2026 (reunião 21/10): o QR é o mesmo link para todas as mesas e cada leitura abre uma aba que
+    // restaurava a sessão salva (ex.: mesa 1) sem ninguém perceber; o Confirmar mandava direto para ela.
+    // Sessão restaurada agora pergunta UMA vez por página para onde vai, antes do primeiro envio.
+    // "Estou em outra mesa" esquece a sessão salva (a mesa anterior e os pedidos dela somem da tela,
+    // nada é cancelado no restaurante), mantém o carrinho e abre nome+mesa+PIN.
+    // Fechar a pergunta (X/Esc/fora) não faz nada: nem envia nem tira o aparelho da mesa.
+    const [perguntaMesaAberta, setPerguntaMesaAberta] = useState(false);
     const confirmarComanda = () => {
+        if (hasAccess && sessaoRestaurada) { setPerguntaMesaAberta(true); return; }
         if (hasAccess) handleSendOrder();
         else requestAccessThen(() => setEnviarAposEntrar(true));
+    };
+    const enviarParaSessaoSalva = () => {
+        setPerguntaMesaAberta(false);
+        setSessaoRestaurada(false);
+        handleSendOrder();
+    };
+    const estouEmOutraMesa = () => {
+        setPerguntaMesaAberta(false);
+        try { localStorage.removeItem(`session_${slug}`); } catch {}
+        limparEstadoDaSessao();
+        setHasAccess(false);
+        setClientName('');
+        setIsHost(false);
+        setHostPin(null);
+        setGlobalTable(null);
+        setPendingCartAction(() => () => setEnviarAposEntrar(true));
+        setIsLoginModalOpen(true);
     };
     useEffect(() => {
         if (!enviarAposEntrar || !hasAccess) return;
@@ -3351,7 +3404,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // (nada de "pulo"). Por isso a margem do título das seções e a faixa do
     // scroll-spy reservam sempre a altura dela quando a loja tem algum grupo,
     // senão o título ficaria escondido embaixo da fileira.
-    const SUBROW_H = 44;
+    const SUBROW_H = 48;
     const spyOffset = stickyOffset + (hasAnyGroup && !hasActiveFilter ? SUBROW_H : 0);
 
     // Scroll-spy: um único IntersectionObserver observando as seções de
@@ -4297,10 +4350,20 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -6 }}
                                 transition={SPRING_TAP}
-                                className="absolute left-0 right-0 top-full bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)]"
+                                // Reunião 21/10 ("muito colado, parece quebra de layout; o fundo de baixo tem que ter
+                                // destaque"): faixa própria em --surface-2 (a barra de cima é --surface), filete em cima
+                                // e embaixo, ícone de "dentro de" e pílulas menores com respiro. Alvo de toque = altura
+                                // inteira da faixa (48px); a pílula visível é só o miolo do botão.
+                                className="absolute left-0 right-0 top-full bg-[var(--surface-2)] border-t border-b border-[var(--border)]"
                                 style={{ height: SUBROW_H }}
                             >
-                                <div role="group" aria-label={`Subcategorias de ${activeGroupItem.group.name}`} className="relative h-full flex items-center gap-2 overflow-x-auto no-scrollbar px-4">
+                                <div
+                                    role="group"
+                                    aria-label={`Subcategorias de ${activeGroupItem.group.name}`}
+                                    className="relative h-full flex items-center gap-2 overflow-x-auto no-scrollbar pl-4 pr-6"
+                                    style={{ maskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent 100%)' }}
+                                >
+                                    <CornerDownRight size={14} aria-hidden="true" className="flex-shrink-0 text-[var(--text-muted)] -mr-0.5" />
                                     {expandedGroupSubcategories.map(cat => {
                                         const isActiveSub = activeCategory === cat.id;
                                         return (
@@ -4310,10 +4373,14 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                                                 ref={el => { subTabButtonRefs.current[cat.id] = el; }}
                                                 onClick={() => handleTabClick(cat.id)}
                                                 aria-current={isActiveSub ? 'true' : undefined}
-                                                className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[13px] whitespace-nowrap u-motion max-sm:min-h-11 ${isActiveSub ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface-2)] font-medium text-[var(--text)]'}`}
-                                                style={isActiveSub ? { color: ACTION_FG } : undefined}
+                                                className="group/sub flex-shrink-0 h-full flex items-center focus-visible:outline-none"
                                             >
-                                                {cat.name}
+                                                <span
+                                                    className={`h-7 flex items-center px-3 rounded-full border text-[12.5px] whitespace-nowrap u-motion group-focus-visible/sub:ring-2 group-focus-visible/sub:ring-[var(--brand)] ${isActiveSub ? 'bg-[var(--brand-soft)] font-semibold' : 'bg-[var(--surface)] border-[var(--border)] font-medium text-[var(--text-muted)]'}`}
+                                                    style={isActiveSub ? { color: ACTION_FG, borderColor: 'color-mix(in srgb, var(--brand) 35%, transparent)' } : undefined}
+                                                >
+                                                    {cat.name}
+                                                </span>
                                             </button>
                                         );
                                     })}
@@ -4601,6 +4668,20 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 accentColor={currentStore?.config?.accent_color || 'var(--text)'}
                 storeId={currentStore?.id}
             />
+
+            {/* Sessão restaurada: confirma a mesa antes do 1º envio (ver confirmarComanda). */}
+            {(() => {
+                const t = textoConfirmarSessao(clientName, currentTable ? currentTable.number : null);
+                return (
+                    <Modal isOpen={perguntaMesaAberta} onClose={() => setPerguntaMesaAberta(false)} title={t.title}>
+                        <p className="text-[15px] leading-relaxed text-[var(--text)]">{t.message}</p>
+                        <div className="mt-5 flex flex-col gap-2">
+                            <Button onClick={enviarParaSessaoSalva} isLoading={isLoading} className="w-full">{t.confirmLabel}</Button>
+                            <Button variant="secondary" onClick={estouEmOutraMesa} className="w-full">{t.cancelLabel}</Button>
+                        </div>
+                    </Modal>
+                );
+            })()}
 
             <OrderStatusModal
                 isOpen={isOrderStatusOpen}
