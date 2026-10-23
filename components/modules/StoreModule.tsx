@@ -1549,7 +1549,8 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     )}
 
     {/* Main Content Area */}
-    <main className="p-4 md:p-8 pt-4 md:pt-6 pb-24 md:pb-8 max-w-7xl mx-auto">
+    {/* Monitor largo: só o Resumo de Vendas (data-painel-largo, StoreDashboardView) passa de max-w-7xl. */}
+    <main className="p-4 md:p-8 pt-4 md:pt-6 pb-24 md:pb-8 max-w-7xl 2xl:has-[[data-painel-largo]]:max-w-[1680px] mx-auto">
       <header className="relative mb-6 hidden md:flex justify-between items-center gap-4">
         <h2 className="text-[30px] max-sm:text-[26px] font-bold tracking-[-0.02em] leading-tight text-[var(--text)] truncate">{title}</h2>
         <div className="flex items-center gap-3 shrink-0">

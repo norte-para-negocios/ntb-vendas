@@ -56,6 +56,20 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
     );
 }
 
+// Estado vazio único dos gráficos e listas (22/10/2026): antes cada um tinha um "Sem dados" solto no canto,
+// a pizza vazia virava um quadro em branco e o mapa de calor sumia. `compacto` = listas e cartões sem altura fixa.
+function SemDados({ texto = 'Sem dados no período', compacto = false }: { texto?: string; compacto?: boolean }) {
+    return (
+        <div className={`${compacto ? 'py-6' : 'h-full'} flex flex-col items-center justify-center gap-2 text-center`}>
+            <span className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)]">
+                <BarChart3 size={18} className="text-[var(--text-muted)]" />
+            </span>
+            <p className="text-[15px] font-medium text-[var(--text)]">{texto}</p>
+            <p className="text-[13px] text-[var(--text-muted)]">Troque o período no filtro acima.</p>
+        </div>
+    );
+}
+
 export const StoreDashboardView: React.FC<{
     sales: Order[];
     tableSessions: TableSession[];
@@ -491,7 +505,8 @@ export const StoreDashboardView: React.FC<{
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="text-[13px] font-medium text-[var(--text-muted)]">{title}</p>
-                    <h3 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-[var(--text)] mt-1 num">{value}</h3>
+                    {/* nowrap: em 3 colunas o "R$" quebrava sozinho na linha de cima. */}
+                    <h3 className="text-[26px] @6xl:text-[28px] leading-tight font-bold tracking-[-0.02em] text-[var(--text)] mt-1 num whitespace-nowrap">{value}</h3>
                     {subtitle && <p className="text-[13px] text-[var(--text-muted)] mt-1">{subtitle}</p>}
                 </div>
                 <div className="w-9 h-9 grid place-items-center rounded-full bg-[var(--surface-2)] flex-shrink-0">
@@ -503,71 +518,59 @@ export const StoreDashboardView: React.FC<{
 
     const cardCls = 'p-5 bg-[var(--surface)]';
     const h4Cls = 'text-[15px] font-semibold text-[var(--text)] mb-4';
+    const h2Cls = 'text-[22px] font-bold tracking-[-0.015em] text-[var(--text)]';
+    const h3Cls = 'text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2';
+    const tooltipStyle = { background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' };
 
+    // Reunião 21/10/2026 (André e Ramon, visão do gerente): "sempre trazer o que é prioritário pra cima".
+    // Ordem: 1) quanto vendeu (faturamento, ticket, nº de pedidos); 2) gestão (vendas por dia, formas de
+    // pagamento, mais/menos vendidos, balcão, margem); 3) detalhamento (hora a hora, ocupação, tempos,
+    // funil, avaliações). Grades por container query (@container): a largura útil depende da barra
+    // lateral e do menu da Administração, não só da tela. `data-painel-largo` deixa o <main> do
+    // StoreModule mais largo em monitor grande só nesta aba.
     return (
-        <div className="space-y-8">
-            {/* Fase 4, Task 11: "Hoje na loja" — só aparece com storeId (quem
-                monta este componente sem essa prop continua vendo o dashboard
-                normal, sem esse card). */}
-            {storeId && (
-                <section>
-                    <Card className={`${cardCls} u-grow-in u-card`}>
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className={h4Cls + ' mb-0'}>Hoje na loja</h3>
-                            {isLoadingTodayCard && <span className="text-[13px] text-[var(--text-muted)]">Atualizando...</span>}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <p className="text-[13px] font-medium text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
-                                    <Users size={13} /> Trabalhando agora
-                                </p>
-                                {workingNow.length === 0 ? (
-                                    <p className="text-sm text-[var(--text-muted)]">Ninguém bateu ponto ainda.</p>
-                                ) : (
-                                    <ul className="space-y-1">
-                                        {workingNow.map(c => (
-                                            <li key={c.id} className="text-[15px] font-medium text-[var(--text)] flex items-center gap-2">
-                                                <span className="h-2 w-2 rounded-full bg-[var(--ok-fill)] shrink-0" />
-                                                {c.user_name} <span className="text-[var(--text-muted)] font-normal">(trabalhando)</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
+        <div className="@container space-y-8" data-painel-largo>
+            {/* 1. Quanto vendeu — primeira dobra */}
+            <section>
+                <h2 className={`${h2Cls} mb-4`}>Faturamento bruto</h2>
+                <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-4">
+                    {[
+                        { label: 'Hoje', stats: dailyStats, prev: prevDailyStats, prevLabel: 'vs. ontem', accent: 'var(--brand)' },
+                        { label: 'Esta semana', stats: weeklyStats, prev: prevWeeklyStats, prevLabel: 'vs. semana passada', accent: 'var(--info)' },
+                        { label: 'Este mês', stats: monthlyStats, prev: prevMonthlyStats, prevLabel: 'vs. mês passado', accent: 'var(--ok)' },
+                    ].map(({ label, stats, prev, prevLabel, accent }, i) => (
+                        <Card key={label} accentColor={accent} className={`${cardCls} u-grow-in u-card relative overflow-hidden`} style={{ animationDelay: `${i * 60}ms` }}>
+                            {label === 'Hoje' && hasEnoughDataForSparkline && (
+                                <Sparkline values={last7DaysTotals} color="var(--brand)" />
+                            )}
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-[13px] font-medium text-[var(--text-muted)]">{label}</h3>
                             </div>
-                            <div>
-                                <p className="text-[13px] font-medium text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
-                                    <Wallet size={13} /> {openShifts.length > 1 ? `Turnos de caixa (${openShifts.length})` : 'Turno de caixa'}
-                                </p>
-                                {openShifts.length > 0 ? (
-                                    <ul className="space-y-1">
-                                        {openShifts.map((s) => (
-                                            <li key={s.id} className="text-[15px] text-[var(--text)] flex items-baseline gap-2">
-                                                <span className="h-2 w-2 rounded-full bg-[var(--ok-fill)] shrink-0 translate-y-[-1px]" />
-                                                <span><span className="font-medium">Aberto</span>
-                                                {` — ${s.operator_name || 'Equipe'}`} desde{' '}
-                                                {abertoDesde(s.opened_at)}
-                                                <span className="text-[var(--text-muted)]">{' · '}fundo R$ {formatBRL(s.opening_float)}</span></span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p className="text-sm text-[var(--text-muted)]">Nenhum turno de caixa aberto agora.</p>
-                                )}
+                            {/* Total em destaque tipográfico (número grande primeiro,
+                                leitura de relance) + variação vs. o período anterior
+                                equivalente logo abaixo. */}
+                            <p className="text-[30px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)]">R$ <AnimatedNumber value={stats.total} format={formatBRL} /></p>
+                            <div className="min-h-[18px] mb-3">
+                                <ChangeBadge value={percentChange(stats.total, prev.total)} label={prevLabel} />
                             </div>
-                            <div className="flex items-start md:items-center md:justify-end">
-                                {onNavigateToOperatorHistory && (
-                                    <button
-                                        onClick={onNavigateToOperatorHistory}
-                                        className="min-h-11 text-[15px] font-medium text-[var(--brand)] hover:underline flex items-center gap-1 u-motion"
-                                    >
-                                        Ver histórico por operador <ArrowRight size={14} />
-                                    </button>
-                                )}
+                            <div className="space-y-2 border-t border-[var(--border)] pt-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket médio</span>
+                                    <span className="font-medium text-[var(--text)] num">R$ <AnimatedNumber value={stats.ticket} format={formatBRL} /></span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>
+                                    <span className="font-medium text-[var(--text)] num">{stats.count}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Users size={13} /> Pedidos de mesa</span>
+                                    <span className="font-medium text-[var(--text)] num">{stats.tableOrders}</span>
+                                </div>
                             </div>
-                        </div>
-                    </Card>
-                </section>
-            )}
+                        </Card>
+                    ))}
+                </div>
+            </section>
 
             {/* Fase 4, Task 12: alertas que avisam antes — só renderiza a
                 seção quando existe pelo menos um alerta, pra não ocupar
@@ -626,53 +629,73 @@ export const StoreDashboardView: React.FC<{
                 </section>
             )}
 
-            {/* Faturamento Bruto */}
-            <section>
-                <h2 className="text-[22px] font-bold tracking-[-0.015em] text-[var(--text)] mb-4">Faturamento bruto</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                        { label: 'Hoje', stats: dailyStats, prev: prevDailyStats, prevLabel: 'vs. ontem', accent: 'var(--brand)' },
-                        { label: 'Esta semana', stats: weeklyStats, prev: prevWeeklyStats, prevLabel: 'vs. semana passada', accent: 'var(--info)' },
-                        { label: 'Este mês', stats: monthlyStats, prev: prevMonthlyStats, prevLabel: 'vs. mês passado', accent: 'var(--ok)' },
-                    ].map(({ label, stats, prev, prevLabel, accent }, i) => (
-                        <Card key={label} accentColor={accent} className={`${cardCls} u-grow-in u-card relative overflow-hidden`} style={{ animationDelay: `${i * 60}ms` }}>
-                            {label === 'Hoje' && hasEnoughDataForSparkline && (
-                                <Sparkline values={last7DaysTotals} color="var(--brand)" />
-                            )}
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="text-[13px] font-medium text-[var(--text-muted)]">{label}</h3>
+            {/* Fase 4, Task 11: "Hoje na loja" — só aparece com storeId (quem
+                monta este componente sem essa prop continua vendo o dashboard
+                normal, sem esse card). */}
+            {storeId && (
+                <section>
+                    <Card className={`${cardCls} u-grow-in u-card`}>
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className={h4Cls + ' mb-0'}>Hoje na loja</h3>
+                            {isLoadingTodayCard && <span className="text-[13px] text-[var(--text-muted)]">Atualizando...</span>}
+                        </div>
+                        <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-4">
+                            <div>
+                                <p className="text-[13px] font-medium text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
+                                    <Users size={13} /> Trabalhando agora
+                                </p>
+                                {workingNow.length === 0 ? (
+                                    <p className="text-sm text-[var(--text-muted)]">Ninguém bateu ponto ainda.</p>
+                                ) : (
+                                    <ul className="space-y-1">
+                                        {workingNow.map(c => (
+                                            <li key={c.id} className="text-[15px] font-medium text-[var(--text)] flex items-center gap-2">
+                                                <span className="h-2 w-2 rounded-full bg-[var(--ok-fill)] shrink-0" />
+                                                {c.user_name} <span className="text-[var(--text-muted)] font-normal">(trabalhando)</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
-                            {/* Total em destaque tipográfico (número grande primeiro,
-                                leitura de relance) + variação vs. o período anterior
-                                equivalente logo abaixo — antes eram 4 linhas de texto
-                                de mesmo peso, difícil comparar os 3 blocos num olhar. */}
-                            <p className="text-[30px] leading-tight font-bold tracking-[-0.02em] num text-[var(--text)]">R$ <AnimatedNumber value={stats.total} format={formatBRL} /></p>
-                            <div className="min-h-[18px] mb-3">
-                                <ChangeBadge value={percentChange(stats.total, prev.total)} label={prevLabel} />
+                            <div>
+                                <p className="text-[13px] font-medium text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
+                                    <Wallet size={13} /> {openShifts.length > 1 ? `Turnos de caixa (${openShifts.length})` : 'Turno de caixa'}
+                                </p>
+                                {openShifts.length > 0 ? (
+                                    <ul className="space-y-1">
+                                        {openShifts.map((s) => (
+                                            <li key={s.id} className="text-[15px] text-[var(--text)] flex items-baseline gap-2">
+                                                <span className="h-2 w-2 rounded-full bg-[var(--ok-fill)] shrink-0 translate-y-[-1px]" />
+                                                <span><span className="font-medium">Aberto</span>
+                                                {` — ${s.operator_name || 'Equipe'}`} desde{' '}
+                                                {abertoDesde(s.opened_at)}
+                                                <span className="text-[var(--text-muted)]">{' · '}fundo R$ {formatBRL(s.opening_float)}</span></span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-sm text-[var(--text-muted)]">Nenhum turno de caixa aberto agora.</p>
+                                )}
                             </div>
-                            <div className="space-y-2 border-t border-[var(--border)] pt-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><TrendingUp size={13} /> Ticket médio</span>
-                                    <span className="font-medium text-[var(--text)] num">R$ <AnimatedNumber value={stats.ticket} format={formatBRL} /></span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Coffee size={13} /> Pedidos</span>
-                                    <span className="font-medium text-[var(--text)] num">{stats.count}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="flex items-center gap-1.5 text-[15px] text-[var(--text-muted)]"><Users size={13} /> Pedidos de mesa</span>
-                                    <span className="font-medium text-[var(--text)] num">{stats.tableOrders}</span>
-                                </div>
+                            <div className="flex items-start @2xl:items-center @2xl:justify-end">
+                                {onNavigateToOperatorHistory && (
+                                    <button
+                                        onClick={onNavigateToOperatorHistory}
+                                        className="min-h-11 text-[15px] font-medium text-[var(--brand)] hover:underline flex items-center gap-1 u-motion"
+                                    >
+                                        Ver histórico por operador <ArrowRight size={14} />
+                                    </button>
+                                )}
                             </div>
-                        </Card>
-                    ))}
-                </div>
-            </section>
+                        </div>
+                    </Card>
+                </section>
+            )}
 
-            {/* Por Período */}
+            {/* 2. Por período: números do período e gestão */}
             <section className="border-t border-[var(--border)] pt-6">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <h2 className="text-[22px] font-bold tracking-[-0.015em] text-[var(--text)]">Por período</h2>
+                <div className="flex flex-col @3xl:flex-row justify-between items-start @3xl:items-center mb-6 gap-4">
+                    <h2 className={h2Cls}>Por período</h2>
                     <div className="flex flex-wrap items-center gap-2">
                         {periodType === 'today' && (
                             <div className="flex items-center gap-1 p-1 rounded-full bg-[var(--surface-2)]" role="tablist" aria-label="Comparar com">
@@ -708,25 +731,29 @@ export const StoreDashboardView: React.FC<{
                 </div>
 
                 <div className="space-y-8">
-                    {/* Faturamento */}
+                    {/* Números do período (o que mais importa: quanto vendeu) */}
+                    <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-4">
+                        <StatCard title="Total no período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, comparisonStats.total)} label={comparisonLabel} />} icon={Receipt} accentColor="var(--brand)" />
+                        <StatCard title="Ticket médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, comparisonStats.ticket)} label={comparisonLabel} />} icon={TrendingUp} accentColor="var(--info)" />
+                        <StatCard title="Número de pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, comparisonStats.count)} label={comparisonLabel} />} icon={CheckCircle} accentColor="var(--ok)" />
+                    </div>
+
+                    {/* Vendas por dia + formas de pagamento */}
                     <div>
-                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Receipt size={18} className="text-[var(--text-muted)]" /> Faturamento</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Total no período" value={`R$ ${formatBRL(periodStats.total)}`} subtitle={<ChangeBadge value={percentChange(periodStats.total, comparisonStats.total)} label={comparisonLabel} />} icon={Receipt} accentColor="var(--brand)" />
-                            <StatCard title="Ticket médio" value={`R$ ${formatBRL(periodStats.ticket)}`} subtitle={<ChangeBadge value={percentChange(periodStats.ticket, comparisonStats.ticket)} label={comparisonLabel} />} icon={TrendingUp} accentColor="var(--info)" />
-                        </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            <Card className={`${cardCls} lg:col-span-2`}>
+                        <h3 className={h3Cls}><Receipt size={18} className="text-[var(--text-muted)]" /> Faturamento</h3>
+                        <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-4">
+                            <Card className={`${cardCls} @3xl:col-span-2`}>
                                 <h4 className={h4Cls}>Evolução das vendas</h4>
                                 <div className="h-64">
-                                    {salesByDay.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Sem dados</p> : (
+                                    {salesByDay.length === 0 ? <SemDados /> : (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <LineChart data={salesByDay}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                                                 <XAxis dataKey="date" tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
                                                 <YAxis tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${v}`} />
-                                                <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} contentStyle={{ background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' }} />
-                                                <Line type="monotone" dataKey="total" stroke="var(--brand)" strokeWidth={2.5} dot={false} activeDot={{r: 5}} />
+                                                <RechartsTooltip formatter={(value: any) => [`R$ ${formatBRL(Number(value))}`, 'Total']} contentStyle={tooltipStyle} />
+                                                {/* Um dia só: sem ponto a linha não aparece. */}
+                                                <Line type="monotone" dataKey="total" stroke="var(--brand)" strokeWidth={2.5} dot={salesByDay.length === 1 ? { r: 4, fill: 'var(--brand)' } : false} activeDot={{r: 5}} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     )}
@@ -735,75 +762,67 @@ export const StoreDashboardView: React.FC<{
                             <Card className={cardCls}>
                                 <h4 className={h4Cls}>Formas de pagamento</h4>
                                 <div className="h-64">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie data={paymentMethods} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} stroke="none" dataKey="value">
-                                                {paymentMethods.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                ))}
-                                            </Pie>
-                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' }} />
-                                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 13 }} formatter={(v: any) => <span style={{ color: 'var(--text)' }}>{v}</span>} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
+                                    {paymentMethods.length === 0 ? <SemDados /> : (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie data={paymentMethods} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} stroke="none" dataKey="value">
+                                                    {paymentMethods.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <RechartsTooltip contentStyle={tooltipStyle} />
+                                                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 13 }} formatter={(v: any) => <span style={{ color: 'var(--text)' }}>{v}</span>} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    )}
                                 </div>
                             </Card>
                         </div>
                     </div>
 
-                    {/* Pedidos */}
+                    {/* Mais/menos vendidos */}
                     <div>
-                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><CheckCircle size={18} className="text-[var(--text-muted)]" /> Pedidos</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <StatCard title="Número de pedidos" value={periodStats.count} subtitle={<ChangeBadge value={percentChange(periodStats.count, comparisonStats.count)} label={comparisonLabel} />} icon={CheckCircle} accentColor="var(--ok)" />
-                            <StatCard
-                                title="Tempo médio de atendimento"
-                                value={`${avgDeliveryTime.avg} min`}
-                                subtitle={avgDeliveryTime.excluded > 0 ? `Criação até entrega · ${avgDeliveryTime.excluded} atípico(s) excluído(s)` : 'Criação até entrega'}
-                                icon={Clock}
-                                accentColor="var(--info)"
-                            />
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
+                            <h3 className={h3Cls + ' mb-0'}><CheckCircle size={18} className="text-[var(--text-muted)]" /> Produtos</h3>
+                            {opcoesRanking.length > 1 && (
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <label htmlFor="ranking-categoria" className="text-[13px] font-medium text-[var(--text-muted)] shrink-0">Categoria</label>
+                                    <select
+                                        id="ranking-categoria"
+                                        value={filtroRanking}
+                                        onChange={(e) => setFiltroRanking(e.target.value)}
+                                        className="w-full sm:w-auto sm:min-w-[260px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
+                                    >
+                                        {opcoesRanking.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+                            )}
                         </div>
-                        {opcoesRanking.length > 1 && (
-                            <div className="flex items-center gap-2 mb-3">
-                                <label htmlFor="ranking-categoria" className="text-[13px] font-medium text-[var(--text-muted)] shrink-0">Categoria</label>
-                                <select
-                                    id="ranking-categoria"
-                                    value={filtroRanking}
-                                    onChange={(e) => setFiltroRanking(e.target.value)}
-                                    className="w-full sm:w-auto sm:min-w-[260px] rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] max-sm:text-base"
-                                >
-                                    {opcoesRanking.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                            </div>
-                        )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 @2xl:grid-cols-2 @6xl:grid-cols-4 gap-4">
                             <Card className={cardCls}>
                                 <h4 className={h4Cls}>Top 5 mais vendidos</h4>
                                 <div className="space-y-3">
                                     {productStats.top.map((p, i) => (
-                                        <div key={i} className="flex justify-between items-center">
+                                        <div key={i} className="flex justify-between items-center gap-3">
                                             <span className="text-[15px] text-[var(--text)] min-w-0"><span className="text-[var(--text-muted)] num mr-1.5">{i+1}</span>{p.name}</span>
-                                            <span className="text-[15px] font-semibold num text-[var(--text)]">{p.qty} un</span>
+                                            <span className="text-[15px] font-semibold num text-[var(--text)] whitespace-nowrap">{p.qty} un</span>
                                         </div>
                                     ))}
-                                    {productStats.top.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
+                                    {productStats.top.length === 0 && <SemDados compacto />}
                                 </div>
                             </Card>
                             <Card className={cardCls}>
                                 <h4 className={h4Cls}>Top 5 menos vendidos</h4>
                                 <div className="space-y-3">
                                     {productStats.bottom.map((p, i) => (
-                                        <div key={i} className="flex justify-between items-center">
+                                        <div key={i} className="flex justify-between items-center gap-3">
                                             <span className="text-[15px] text-[var(--text)] min-w-0"><span className="text-[var(--text-muted)] num mr-1.5">{i+1}</span>{p.name}</span>
-                                            <span className="text-[15px] font-semibold num text-[var(--text-muted)]">{p.qty} un</span>
+                                            <span className="text-[15px] font-semibold num text-[var(--text-muted)] whitespace-nowrap">{p.qty} un</span>
                                         </div>
                                     ))}
-                                    {productStats.bottom.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
+                                    {productStats.bottom.length === 0 && <SemDados compacto texto={productStats.top.length > 0 ? 'Todos já estão nos mais vendidos' : undefined} />}
                                 </div>
                             </Card>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <Card className={cardCls}>
                                 <h4 className={h4Cls}>Mais cresceram vs. período anterior</h4>
                                 <div className="space-y-3">
@@ -813,7 +832,7 @@ export const StoreDashboardView: React.FC<{
                                             <span className="text-[15px] font-semibold num text-[var(--ok)] whitespace-nowrap">+{m.delta} un <span className="text-[var(--text-muted)] font-normal">({m.previous} → {m.current})</span></span>
                                         </div>
                                     ))}
-                                    {productMovers.up.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
+                                    {productMovers.up.length === 0 && <SemDados compacto />}
                                 </div>
                             </Card>
                             <Card className={cardCls}>
@@ -825,9 +844,18 @@ export const StoreDashboardView: React.FC<{
                                             <span className="text-[15px] font-semibold num text-[var(--err)] whitespace-nowrap">{m.delta} un <span className="text-[var(--text-muted)] font-normal">({m.previous} → {m.current})</span></span>
                                         </div>
                                     ))}
-                                    {productMovers.down.length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem dados</p>}
+                                    {productMovers.down.length === 0 && <SemDados compacto />}
                                 </div>
                             </Card>
+                        </div>
+                    </div>
+
+                    {/* Balcão */}
+                    <div>
+                        <h3 className={h3Cls}><Coffee size={18} className="text-[var(--text-muted)]" /> Balcão</h3>
+                        <div className="grid grid-cols-1 @xl:grid-cols-2 gap-4">
+                            <StatCard title="Faturamento balcão" value={`R$ ${formatBRL(counterStats.total)}`} icon={Receipt} accentColor="var(--warn)" />
+                            <StatCard title="Número de pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
                         </div>
                     </div>
 
@@ -842,7 +870,7 @@ export const StoreDashboardView: React.FC<{
                         const margin = calculateMargin(totalRevenue, totalCost);
                         if (!margin) return null;
                         return (
-                            <Card className={`${cardCls} mt-4`}>
+                            <Card className={cardCls}>
                                 <h4 className={h4Cls}>Margem de Lucro (CMV)</h4>
                                 <p className="text-[13px] text-[var(--text-muted)] mb-3">
                                     Baseado nos {itemsWithCost.length} itens com custo cadastrado neste período.
@@ -866,11 +894,20 @@ export const StoreDashboardView: React.FC<{
                             </Card>
                         );
                     })()}
+                </div>
+            </section>
 
-                    {/* Mesas */}
+            {/* 3. Detalhamento: hora a hora, ocupação, tempos, avaliações (mesmo filtro de período) */}
+            <section className="border-t border-[var(--border)] pt-6">
+                <div className="mb-6">
+                    <h2 className={h2Cls}>Detalhamento</h2>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Mesmo período escolhido acima.</p>
+                </div>
+                <div className="space-y-8">
+                    {/* Mesas e tempos */}
                     <div>
-                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Users size={18} className="text-[var(--text-muted)]" /> Mesas</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <h3 className={h3Cls}><Users size={18} className="text-[var(--text-muted)]" /> Mesas e tempos</h3>
+                        <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-4 mb-4">
                             <StatCard title="Ocupações" value={tableOccupations} icon={Users} accentColor="var(--info)" />
                             <StatCard
                                 title="Tempo médio de ocupação"
@@ -879,33 +916,70 @@ export const StoreDashboardView: React.FC<{
                                 icon={Clock}
                                 accentColor="var(--warn)"
                             />
+                            <StatCard
+                                title="Tempo médio de atendimento"
+                                value={`${avgDeliveryTime.avg} min`}
+                                subtitle={avgDeliveryTime.excluded > 0 ? `Criação até entrega · ${avgDeliveryTime.excluded} atípico(s) excluído(s)` : 'Criação até entrega'}
+                                icon={Clock}
+                                accentColor="var(--info)"
+                            />
                         </div>
-                        <Card className={cardCls}>
-                            <h4 className={h4Cls}>Ocupação por hora do dia</h4>
-                            <div className="h-64">
-                                {tableOccupationsByHour.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Sem dados</p> : (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={tableOccupationsByHour}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                                            <XAxis dataKey="hour" tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
-                                            <YAxis tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
-                                            <RechartsTooltip contentStyle={{ background: 'var(--surface)', border: 'none', borderRadius: 12, boxShadow: 'var(--shadow-md)', color: 'var(--text)' }} />
-                                            <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                        <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-4">
+                            <Card className={`${cardCls} @3xl:col-span-2`}>
+                                <h4 className={h4Cls}>Ocupação por hora do dia</h4>
+                                <div className="h-64">
+                                    {tableOccupationsByHour.length === 0 ? <SemDados /> : (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={tableOccupationsByHour}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                                <XAxis dataKey="hour" tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                                                <YAxis allowDecimals={false} tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                                                <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--surface-2)' }} />
+                                                {/* maxBarSize: com 1 ou 2 horas a barra ocupava o cartão inteiro. */}
+                                                <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </div>
+                            </Card>
+
+                            {/* Fase 4, Task 13: funil simples do período filtrado. */}
+                            <Card className={cardCls}>
+                                <h4 className={h4Cls}>Funil de conversão (mesas)</h4>
+                                {funnelStats.opened === 0 ? <SemDados compacto texto="Nenhuma mesa aberta no período" /> : (
+                                    <div className="grid grid-cols-3 @3xl:grid-cols-1 gap-3 @3xl:gap-4 text-center @3xl:text-left">
+                                        <div>
+                                            <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.opened}</p>
+                                            <p className="text-[13px] text-[var(--text-muted)] mt-1">Mesas abertas</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.withOrder}</p>
+                                            <p className="text-[13px] text-[var(--text-muted)] mt-1">
+                                                Com pedido <span className="block @3xl:inline">({Math.round(funnelStats.withOrder / funnelStats.opened * 100)}%)</span>
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.closed}</p>
+                                            <p className="text-[13px] text-[var(--text-muted)] mt-1">
+                                                Fechadas com pagamento <span className="block @3xl:inline">({Math.round(funnelStats.closed / funnelStats.opened * 100)}%)</span>
+                                            </p>
+                                        </div>
+                                    </div>
                                 )}
-                            </div>
-                        </Card>
+                            </Card>
+                        </div>
 
                         {/* Fase 4, Task 13: mapa de calor cruzando dia da semana ×
-                            hora — mesmo dado do gráfico acima, outro ângulo. Sem
-                            biblioteca de heatmap: grid CSS simples, intensidade da
-                            cor de marca proporcional à contagem (0 = célula vazia). */}
-                        {occupancyHeatmap.hours.length > 0 && (
-                            <Card className={`${cardCls} mt-4 overflow-x-auto`}>
-                                <h4 className={h4Cls}>Ocupação por dia da semana × hora</h4>
-                                <div className="inline-block min-w-full">
-                                    <div className="grid gap-1" style={{ gridTemplateColumns: `48px repeat(${occupancyHeatmap.hours.length}, 1fr)` }}>
+                            hora — mesmo dado do gráfico acima, outro ângulo. Grid CSS
+                            simples, intensidade da cor de marca proporcional à contagem.
+                            Colunas com teto de largura: antes eram `1fr` + aspect-square
+                            e, com poucas horas (loja com pouco movimento), cada célula
+                            virava um quadrado do tamanho do cartão. */}
+                        <Card className={`${cardCls} mt-4`}>
+                            <h4 className={h4Cls}>Ocupação por dia da semana × hora</h4>
+                            {occupancyHeatmap.hours.length === 0 ? <SemDados compacto /> : (
+                                <div className="overflow-x-auto">
+                                    <div className="grid gap-1 w-fit" style={{ gridTemplateColumns: `40px repeat(${occupancyHeatmap.hours.length}, minmax(22px, 44px))` }}>
                                         <div />
                                         {occupancyHeatmap.hours.map(h => (
                                             <div key={h} className="text-[10px] text-center text-[var(--text-muted)] num">{h}h</div>
@@ -919,7 +993,7 @@ export const StoreDashboardView: React.FC<{
                                                         <div
                                                             key={i}
                                                             title={`${label} ${occupancyHeatmap.hours[i]}h: ${v} mesa(s)`}
-                                                            className="aspect-square rounded-sm flex items-center justify-center text-[9px] font-bold"
+                                                            className="aspect-square min-w-[22px] max-w-[44px] rounded-sm flex items-center justify-center text-[9px] font-bold"
                                                             style={{
                                                                 backgroundColor: v === 0 ? 'var(--surface-2)' : `color-mix(in srgb, var(--brand) ${Math.round(20 + intensity * 80)}%, var(--surface-2))`,
                                                                 color: intensity > 0.5 ? '#fff' : 'var(--text-muted)',
@@ -933,66 +1007,32 @@ export const StoreDashboardView: React.FC<{
                                         ))}
                                     </div>
                                 </div>
-                            </Card>
-                        )}
-
-                        {/* Fase 4, Task 13: funil simples do período filtrado. */}
-                        <Card className={`${cardCls} mt-4`}>
-                            <h4 className={h4Cls}>Funil de conversão (mesas)</h4>
-                            <div className="grid grid-cols-3 gap-3 text-center">
-                                <div>
-                                    <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.opened}</p>
-                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">Mesas abertas</p>
-                                </div>
-                                <div>
-                                    <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.withOrder}</p>
-                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">
-                                        Com pedido
-                                        {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.withOrder / funnelStats.opened * 100)}%)</span>}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--text)] num">{funnelStats.closed}</p>
-                                    <p className="text-[13px] text-[var(--text-muted)] mt-1">
-                                        Fechadas com pagamento
-                                        {funnelStats.opened > 0 && <span className="block">({Math.round(funnelStats.closed / funnelStats.opened * 100)}%)</span>}
-                                    </p>
-                                </div>
-                            </div>
+                            )}
                         </Card>
-                    </div>
-
-                    {/* Balcão */}
-                    <div>
-                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Coffee size={18} className="text-[var(--text-muted)]" /> Balcão</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard title="Faturamento balcão" value={`R$ ${formatBRL(counterStats.total)}`} icon={Receipt} accentColor="var(--warn)" />
-                            <StatCard title="Número de pedidos" value={counterStats.count} icon={Coffee} accentColor="var(--warn)" />
-                        </div>
                     </div>
 
                     {/* Avaliações */}
                     <div>
-                        <h3 className="text-[17px] font-semibold text-[var(--text)] mb-3 flex items-center gap-2"><Star size={18} className="text-[var(--text-muted)]" /> Avaliações</h3>
-                        <div className="grid grid-cols-1 gap-4 mb-4">
+                        <h3 className={h3Cls}><Star size={18} className="text-[var(--text-muted)]" /> Avaliações</h3>
+                        <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-4 items-start">
                             <StatCard title="Nota média" value={periodRatings.length > 0 ? avgRating.toFixed(1) : '-'} subtitle={`${periodRatings.length} avaliação(ões) no período`} icon={Star} accentColor="var(--warn)" />
-                        </div>
-                        <Card className={cardCls}>
-                            <h4 className={h4Cls}>Comentários recentes</h4>
-                            <div className="space-y-3 max-h-80 overflow-y-auto">
-                                {periodRatings.filter(r => r.comment).slice(0, 10).map((r) => (
-                                    <div key={r.id} className="border-b border-[var(--border)] pb-2 last:border-0">
-                                        <div className="flex items-center gap-1 mb-1">
-                                            {[1, 2, 3, 4, 5].map((n) => (
-                                                <Star key={n} size={12} className={n <= r.stars ? 'fill-[var(--warn)] text-[var(--warn)]' : 'text-[var(--border)]'} />
-                                            ))}
+                            <Card className={`${cardCls} @3xl:col-span-2`}>
+                                <h4 className={h4Cls}>Comentários recentes</h4>
+                                <div className="space-y-3 max-h-80 overflow-y-auto">
+                                    {periodRatings.filter(r => r.comment).slice(0, 10).map((r) => (
+                                        <div key={r.id} className="border-b border-[var(--border)] pb-2 last:border-0">
+                                            <div className="flex items-center gap-1 mb-1">
+                                                {[1, 2, 3, 4, 5].map((n) => (
+                                                    <Star key={n} size={12} className={n <= r.stars ? 'fill-[var(--warn)] text-[var(--warn)]' : 'text-[var(--border)]'} />
+                                                ))}
+                                            </div>
+                                            <p className="text-sm text-[var(--text)]">{r.comment}</p>
                                         </div>
-                                        <p className="text-sm text-[var(--text)]">{r.comment}</p>
-                                    </div>
-                                ))}
-                                {periodRatings.filter(r => r.comment).length === 0 && <p className="text-sm text-[var(--text-muted)]">Sem comentários no período</p>}
-                            </div>
-                        </Card>
+                                    ))}
+                                    {periodRatings.filter(r => r.comment).length === 0 && <SemDados compacto texto="Sem comentários no período" />}
+                                </div>
+                            </Card>
+                        </div>
                     </div>
                 </div>
             </section>
