@@ -2911,3 +2911,8 @@ AUTORIZADA, a gente emitia contingência com o mesmo número e outra chave, e a 
   chave/protocolo e avisa, se não houver XML). Nunca marca 'rejeitada' nem libera itens nesse caso.
 - `scripts/fiscal/consultar-duplicidades.ts` (só leitura) e `scripts/fiscal/recuperar-xml-online.ts` (reconstrói o XML
   autorizado a partir do de contingência, conferindo DigestValue = digVal do protocolo; `--gravar` grava).
+- `lib/fiscal/payloadOmieDoXml.ts` + `scripts/fiscal/enviar-omie-notas.ts`: envio ao Omie a partir do nfeProc guardado
+  (para promovidas de contingência e recuperadas). Atenção: o Omie lê o cProd do XML — produto vendido sem omie_codigo
+  sai com UUID truncado e o ImportarNFCe recusa (5445) para sempre.
+- `lib/fiscal/inutilizacao.ts` + `scripts/fiscal/inutilizar.ts` (NFeInutilizacao4; consulta antes que a faixa não consta).
+  Sertão série 002, 74–75 inutilizados em 23/10/2026, protocolo 229261383785768.
