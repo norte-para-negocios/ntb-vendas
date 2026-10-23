@@ -2899,3 +2899,15 @@ Reunião 21/10 (André/Ramon, ODARA): "pediu duas águas, quer cancelar uma". `c
 - Os gatilhos `bloquear_item_esgotado` e `trg_bloquear_item_em_conta_aguardando` deixam passar linha que nasce `canceled`.
 - `cancelarItensComSenha` (lib/api.ts) chama a v3 e cai na `cancel_order_items_autorizado_secure` se o banco não tem a 183 (aí só item inteiro, com senha).
 - Testado em transação com ROLLBACK na Casa Norte (parcial, sem senha no tempo, precisa_senha fora do tempo, senha errada, repetição).
+
+## NFC-e: timeout não é falha (184, 23/10/2026)
+Incidente Sertão 11–19/10: a SVRS recebia a nota 35–90 s depois do envio (timeout nosso = 30 s). A tentativa online era
+AUTORIZADA, a gente emitia contingência com o mesmo número e outra chave, e a retransmissão voltava 539 → nota
+'rejeitada', itens liberados, cupom autorizado fora do banco e do Omie (14 casos, R$ 2.013,27). Agora:
+- `consultarSituacaoChave` (lib/fiscal/soap.ts, NFeConsultaProtocolo4) — a rota de emissão consulta a chave online antes de
+  cair em contingência (timeout/erro de rede e cStat de indisponibilidade). Autorizada → segue o caminho normal.
+- A contingência guarda `xml_online_tentativa` (184). A retransmissão consulta a chave online antes de reenviar e, num 539
+  cuja chave citada tem o mesmo número/série e está autorizada, promove com o XML online (ou grava autorizada com
+  chave/protocolo e avisa, se não houver XML). Nunca marca 'rejeitada' nem libera itens nesse caso.
+- `scripts/fiscal/consultar-duplicidades.ts` (só leitura) e `scripts/fiscal/recuperar-xml-online.ts` (reconstrói o XML
+  autorizado a partir do de contingência, conferindo DigestValue = digVal do protocolo; `--gravar` grava).

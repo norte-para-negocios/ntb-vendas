@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { carregarCredenciaisFiscaisDaLoja } from '@/lib/fiscal/carregarCredenciaisFiscaisDaLoja';
-import { transmitirNota, ehSefazIndisponivel } from '@/lib/fiscal/soap';
+import { transmitirNota, ehSefazIndisponivel, consultarSituacaoChave, chaveDaDuplicidade, type SituacaoChave } from '@/lib/fiscal/soap';
 import { salvarNotaAutorizada } from '@/lib/fiscal/salvarNotaAutorizada';
 
 // Linha de fiscal_notas em contingência, com só o que a retransmissão lê.
@@ -15,6 +15,7 @@ interface NotaPendente {
   numero: number | null;
   serie: number | null;
   xml_contingencia: string | null;
+  xml_online_tentativa: string | null; // migration 184
 }
 
 // Trava de ciclo (processo único, systemd no Contabo — ver instrumentation.ts).
@@ -86,7 +87,7 @@ async function executarCiclo(): Promise<void> {
 
   const { data: pendentes, error } = await admin
     .from('fiscal_notas')
-    .select('id, store_id, order_id, table_id, modelo, ambiente, chave_acesso, numero, serie, xml_contingencia')
+    .select('id, store_id, order_id, table_id, modelo, ambiente, chave_acesso, numero, serie, xml_contingencia, xml_online_tentativa')
     .eq('status', 'contingencia');
 
   if (error) {
@@ -108,6 +109,19 @@ async function executarCiclo(): Promise<void> {
 
     try {
       const { certComCadeia, keyPem } = await carregarCredenciaisFiscaisDaLoja(admin, nota.store_id);
+
+      // Antes de reenviar a contingência: a tentativa ONLINE (mesmo número, outra chave) pode ter sido autorizada
+      // apesar do timeout. Se foi, ESSE é o documento da venda; reenviar a contingência só daria 539 (incidente
+      // Sertão out/2026: 14 cupons autorizados ficaram 'rejeitada' e fora do Omie).
+      const chaveOnline = chaveDoXml(nota.xml_online_tentativa);
+      if (chaveOnline && chaveOnline !== nota.chave_acesso) {
+        const sit = await consultarSituacaoChave({ modelo: nota.modelo, ambiente: nota.ambiente, chave: chaveOnline, certPem: certComCadeia, keyPem });
+        if (sit.situacao === 'autorizada') {
+          await promoverPelaTentativaOnline(admin, nota, chaveOnline, sit);
+          continue;
+        }
+        if (sit.situacao === 'sem_resposta') continue; // SEFAZ fora: tenta de novo no próximo ciclo
+      }
 
       // `ambiente` vem da LINHA, não da config atual da loja: o tpAmb está
       // assado dentro do XML assinado e da chave de acesso. Se a loja tivesse
@@ -157,6 +171,10 @@ async function executarCiclo(): Promise<void> {
         );
 
         if (notaId) await marcarLacunaOmie(admin, nota.store_id, notaId);
+      } else if (resposta.cStat === '539' && (await resolverDuplicidade(admin, nota, resposta.xMotivo, certComCadeia, keyPem))) {
+        // Duplicidade com diferença na chave e a chave citada é autorizada com o MESMO número/série: a venda já tem
+        // documento (a tentativa online). Tratado em resolverDuplicidade; nunca marcar 'rejeitada' nem liberar os
+        // itens, senão um "Reemitir" geraria um segundo cupom para a mesma venda.
       } else if (resposta.cStat !== null && !ehSefazIndisponivel(resposta.cStat)) {
         // Rejeição de NEGÓCIO de verdade. `ehSefazIndisponivel` exclui daqui
         // os códigos de serviço fora do ar (105/106/108/109): esses NÃO são
@@ -290,4 +308,69 @@ async function marcarLacunaOmie(
   } catch (e) {
     console.error(`Retransmissão fiscal: falha ao checar integração Omie da loja ${storeId}:`, e);
   }
+}
+
+function chaveDoXml(xml: string | null | undefined): string | null {
+  return xml?.match(/Id="NFe(\d{44})"/)?.[1] ?? null;
+}
+
+async function promoverPelaTentativaOnline(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  nota: NotaPendente,
+  chaveOnline: string,
+  sit: SituacaoChave,
+): Promise<void> {
+  const { data: itens } = await admin.from('order_items').select('id').eq('fiscal_nota_id', nota.id);
+  const { notaId, motivoPosAutorizacao } = await salvarNotaAutorizada({
+    storeId: nota.store_id,
+    modelo: nota.modelo,
+    chave: chaveOnline,
+    numero: nota.numero!,
+    serie: nota.serie!,
+    xmlAssinado: nota.xml_online_tentativa!,
+    protocoloXmlBruto: sit.xmlBruto,
+    protocolo: sit.protocolo,
+    valorTotalComTaxa: 0,
+    notaBase: { store_id: nota.store_id, order_id: nota.order_id, table_id: nota.table_id, modelo: nota.modelo, ambiente: nota.ambiente },
+    itensValidos: itens ?? [],
+    notaIdExistente: nota.id,
+  });
+  console.log(
+    `Retransmissão fiscal: nota ${nota.id} — a tentativa ONLINE (chave=${chaveOnline}) estava AUTORIZADA, protocolo=${sit.protocolo}; contingência descartada` +
+      (motivoPosAutorizacao ? ` — ${motivoPosAutorizacao}` : ''),
+  );
+  if (notaId) await marcarLacunaOmie(admin, nota.store_id, notaId);
+}
+
+// 539 na retransmissão: consulta a chave citada. Autorizada e com o mesmo número/série = é o documento desta venda.
+// Com o XML online guardado (184), promove com ele; sem ele (notas de antes da 184), grava como autorizada com chave
+// e protocolo reais e avisa que o XML precisa ser recuperado. Devolve true quando tratou.
+async function resolverDuplicidade(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  nota: NotaPendente,
+  xMotivo: string | null,
+  certPem: string,
+  keyPem: string,
+): Promise<boolean> {
+  const chave = chaveDaDuplicidade(xMotivo);
+  if (!chave || Number(chave.slice(22, 25)) !== nota.serie || Number(chave.slice(25, 34)) !== nota.numero) return false;
+  const sit = await consultarSituacaoChave({ modelo: nota.modelo, ambiente: nota.ambiente, chave, certPem, keyPem });
+  if (sit.situacao !== 'autorizada') return false;
+  if (chaveDoXml(nota.xml_online_tentativa) === chave) {
+    await promoverPelaTentativaOnline(admin, nota, chave, sit);
+    return true;
+  }
+  const { error } = await admin
+    .from('fiscal_notas')
+    .update({
+      status: 'autorizada',
+      chave_acesso: chave,
+      protocolo: sit.protocolo,
+      motivo_erro: `Autorizada pela tentativa online (chave ${chave}); a contingência voltou 539. XML do documento autorizado não foi guardado: recuperar antes de enviar ao Omie.`,
+    })
+    .eq('id', nota.id)
+    .eq('status', 'contingencia');
+  if (error) console.error(`Retransmissão fiscal: falha ao gravar a nota ${nota.id} autorizada pela tentativa online:`, error);
+  else console.error(`Retransmissão fiscal: nota ${nota.id} AUTORIZADA pela tentativa online (chave=${chave}) sem XML guardado — recuperar o XML.`);
+  return true;
 }

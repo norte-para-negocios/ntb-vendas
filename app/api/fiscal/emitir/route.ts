@@ -15,7 +15,7 @@ import {
   extrairDigestValue,
   inserirSuplNoXmlAssinado,
 } from '@/lib/fiscal/qrcode';
-import { transmitirNota, resolverEndpointsNfceConsulta, ehSefazIndisponivel } from '@/lib/fiscal/soap';
+import { transmitirNota, resolverEndpointsNfceConsulta, ehSefazIndisponivel, consultarSituacaoChave } from '@/lib/fiscal/soap';
 import { montarNfeProc } from '@/lib/fiscal/pdf';
 import { gerarPdfContingencia } from '@/lib/fiscal/pdfContingencia';
 import { itensDaVenda, montarParamsDaVenda, type ItemVenda, type ProdutoTaxaVenda } from '@/lib/fiscal/paramsDaVenda';
@@ -179,6 +179,9 @@ async function emitirEmContingencia(params: {
   // cStat") — gravado em motivo_erro pra o lojista/suporte saber POR QUE
   // esta venda saiu em contingência, sem precisar caçar log.
   motivoOriginal: string;
+  // XML assinado da tentativa online (se chegou a ser transmitida). Guardado para a retransmissão consultar a chave
+  // online antes de reenviar: timeout não quer dizer que a SEFAZ não autorizou (incidente Sertão out/2026, ver 184).
+  xmlOnline?: string | null;
 }): Promise<NextResponse> {
   const { admin, storeId, nomeLoja, serie, paramsXml, itensXml, itensValidos, notaBase, certificado, motivoOriginal } =
     params;
@@ -273,6 +276,7 @@ async function emitirEmContingencia(params: {
         numero,
         serie,
         xml_contingencia: xmlAssinado,
+        xml_online_tentativa: params.xmlOnline ?? null,
         pdf_path: caminhoPdf,
         motivo_erro: motivoOriginal,
       })
@@ -718,10 +722,13 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // como 'erro'/'rejeitada': uma reemissão futura pega numeração nova, sem
   // nenhum documento órfão do lado da SEFAZ.
   // ════════════════════════════════════════════════════════════════════════
-  let chave: string;
-  let numero: number;
-  let xmlAssinado: string;
-  let resposta: Awaited<ReturnType<typeof transmitirNota>>;
+  let chave!: string;
+  let numero!: number;
+  let xmlAssinado!: string;
+  let resposta!: Awaited<ReturnType<typeof transmitirNota>>;
+  // Chave que de fato foi para a SEFAZ (só existe depois do passo 10 começar). Com ela, numa falha de transporte, a
+  // gente PERGUNTA à SEFAZ se a nota foi autorizada antes de emitir em contingência com o mesmo número.
+  let chaveTransmitida: string | null = null;
   // Achado real (2026-08-27, venda ao vivo): valorTotal (calculado acima,
   // antes do XML existir) é só o subtotal dos itens — nunca incluiu a taxa
   // de serviço, divergindo do histórico de vendas e do comprovante impresso
@@ -827,6 +834,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     }
 
     // 10. Transmite.
+    chaveTransmitida = chave;
     resposta = await transmitirNota({
       modelo,
       ambiente: config.ambiente,
@@ -867,7 +875,14 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     // codebase não implementa — mandar uma NF-e por este caminho geraria um
     // documento inválido. Modelo 55 nesta mesma condição mantém o
     // comportamento anterior à feature de contingência: 'erro'.
-    if (ehFalhaDeTransporte && paramsXmlUsados && modelo === '65') {
+    const autorizadaMesmo =
+      ehFalhaDeTransporte && paramsXmlUsados && modelo === '65' && chaveTransmitida
+        ? await consultarSeAutorizou(chaveTransmitida, modelo, config.ambiente, certificadoValidado)
+        : null;
+    if (autorizadaMesmo) {
+      console.error(`Emissão fiscal: ${mensagemErro} — mas a SEFAZ AUTORIZOU a chave ${chaveTransmitida}; segue como autorizada.`);
+      resposta = autorizadaMesmo;
+    } else if (ehFalhaDeTransporte && paramsXmlUsados && modelo === '65') {
       console.error('Emissão fiscal: falha de transporte pra SEFAZ, caindo pra contingência:', e);
       return await emitirEmContingencia({
         admin,
@@ -880,18 +895,19 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
         notaBase,
         certificado: certificadoValidado,
         motivoOriginal: mensagemErro,
+        xmlOnline: chaveTransmitida ? xmlAssinado : null,
       });
+    } else {
+      const { error: insertErr } = await admin.from('fiscal_notas').insert({
+        ...notaBase,
+        valor_total: valorTotalComTaxa,
+        status: 'erro',
+        motivo_erro: mensagemErro,
+      });
+      if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (erro pré-autorização):', insertErr);
+      console.error('Emissão fiscal falhou (fase pré-autorização):', e);
+      return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
     }
-
-    const { error: insertErr } = await admin.from('fiscal_notas').insert({
-      ...notaBase,
-      valor_total: valorTotalComTaxa,
-      status: 'erro',
-      motivo_erro: mensagemErro,
-    });
-    if (insertErr) console.error('Emissão fiscal: falha ao gravar fiscal_notas (erro pré-autorização):', insertErr);
-    console.error('Emissão fiscal falhou (fase pré-autorização):', e);
-    return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
   }
 
   // A resposta CHEGOU (sem exceção), mas a SEFAZ não analisou o documento:
@@ -910,6 +926,11 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // lista — ex.: 204 Duplicidade, 899 pagamento incorreto) continua intocada.
   // `modelo === '65'` pelo mesmo motivo do site de exceção acima: tpEmis=9 é
   // mecanismo de NFC-e, NF-e mantém o comportamento pré-feature.
+  // Mesma pergunta à SEFAZ antes da contingência: lote em processamento (105) ou corpo cortado pode ter autorizado.
+  if (ehSefazIndisponivel(resposta.cStat) && paramsXmlUsados && modelo === '65') {
+    const autorizada = await consultarSeAutorizou(chave, modelo, config.ambiente, certificadoValidado);
+    if (autorizada) resposta = autorizada;
+  }
   if (ehSefazIndisponivel(resposta.cStat) && paramsXmlUsados && modelo === '65') {
     const motivoIndisponivel = resposta.cStat
       ? `SEFAZ indisponível na transmissão (cStat=${resposta.cStat} ${resposta.xMotivo ?? ''}).`.replace(/\s+\)/, ')')
@@ -926,6 +947,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
       notaBase,
       certificado: certificadoValidado,
       motivoOriginal: motivoIndisponivel,
+      xmlOnline: xmlAssinado,
     });
   }
 
@@ -1047,3 +1069,22 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   });
 }
 
+
+// Pergunta à SEFAZ se uma chave que acabou de falhar no transporte foi autorizada mesmo assim. Devolve uma resposta
+// no formato de transmitirNota (cStat 100 + <protNFe>) para seguir pelo caminho normal de nota autorizada, ou null
+// (não consta, outra situação ou a consulta também falhou: aí a contingência continua sendo o certo).
+async function consultarSeAutorizou(
+  chave: string,
+  modelo: '55' | '65',
+  ambiente: 'homologacao' | 'producao',
+  certificado: { certComCadeia: string; keyPem: string },
+): Promise<Awaited<ReturnType<typeof transmitirNota>> | null> {
+  try {
+    const r = await consultarSituacaoChave({ modelo, ambiente, chave, certPem: certificado.certComCadeia, keyPem: certificado.keyPem });
+    if (r.situacao !== 'autorizada') return null;
+    return { httpStatus: 200, cStat: '100', xMotivo: r.xMotivo, cStatLote: null, protocolo: r.protocolo, xmlBruto: r.xmlBruto };
+  } catch (e) {
+    console.error(`Emissão fiscal: consulta da chave ${chave} falhou, segue para contingência:`, e);
+    return null;
+  }
+}

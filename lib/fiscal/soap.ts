@@ -217,3 +217,102 @@ export async function transmitirNota(params: {
 
   return parseRespostaSefaz(xmlBruto, httpStatus);
 }
+
+// Consulta da situação de uma chave na SEFAZ (NFeConsultaProtocolo4). Existe por causa do incidente de outubro/2026
+// no Sertão: o envio online deu timeout, a SEFAZ AUTORIZOU mesmo assim, a gente emitiu em contingência com o mesmo
+// número e outra chave e a retransmissão voltou 539 "Duplicidade com diferença na chave" — 14 cupons autorizados
+// que não estavam nem no nosso banco nem no Omie. Antes de dar uma tentativa como perdida, pergunta pela chave.
+const ENDPOINTS_CONSULTA: Record<'55' | '65', Record<'homologacao' | 'producao', string>> = {
+  '55': {
+    homologacao: 'https://hnfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx',
+    producao: 'https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx',
+  },
+  '65': {
+    homologacao: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    producao: 'https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  },
+};
+
+export interface SituacaoChave {
+  // 'autorizada': cStat 100/150 com protocolo; 'nao_existe': 217 (NF-e não consta na base); 'cancelada': 101/151/135
+  // (evento de cancelamento homologado); 'outra': qualquer outro cStat; 'sem_resposta': SEFAZ não analisou.
+  situacao: 'autorizada' | 'nao_existe' | 'cancelada' | 'outra' | 'sem_resposta';
+  cStat: string | null;
+  xMotivo: string | null;
+  protocolo: string | null;
+  protNFe: string | null; // <protNFe> inteiro, para montar o nfeProc
+  xmlBruto: string;
+}
+
+export function parseConsultaSituacao(xmlBruto: string): SituacaoChave {
+  const protNFe = xmlBruto.match(/<protNFe[\s\S]*?<\/protNFe>/)?.[0] ?? null;
+  const cStatGeral = xmlBruto.match(/<retConsSitNFe[\s\S]*?<cStat>(\d+)<\/cStat>/)?.[1] ?? xmlBruto.match(/<cStat>(\d+)<\/cStat>/)?.[1] ?? null;
+  const xMotivo = xmlBruto.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] ?? null;
+  const cStatNota = protNFe?.match(/<cStat>(\d+)<\/cStat>/)?.[1] ?? null;
+  const protocolo = protNFe?.match(/<nProt>([^<]+)<\/nProt>/)?.[1] ?? null;
+  let situacao: SituacaoChave['situacao'];
+  if (cStatGeral === '101' || cStatGeral === '151' || cStatGeral === '135') situacao = 'cancelada';
+  else if ((cStatGeral === '100' || cStatGeral === '150') && protocolo && (cStatNota === '100' || cStatNota === '150')) situacao = 'autorizada';
+  else if (cStatGeral === '217') situacao = 'nao_existe';
+  else if (ehSefazIndisponivel(cStatGeral)) situacao = 'sem_resposta';
+  else situacao = 'outra';
+  return { situacao, cStat: cStatGeral, xMotivo, protocolo, protNFe, xmlBruto };
+}
+
+export async function consultarSituacaoChave(params: {
+  modelo: '55' | '65';
+  ambiente: 'homologacao' | 'producao';
+  chave: string;
+  certPem: string;
+  keyPem: string;
+  timeoutMs?: number;
+}): Promise<SituacaoChave> {
+  const { modelo, ambiente, chave, certPem, keyPem } = params;
+  const tpAmb = ambiente === 'producao' ? '1' : '2';
+  const cons =
+    `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+    `<tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chave}</chNFe></consSitNFe>`;
+  const soapBody =
+    `<?xml version="1.0" encoding="utf-8"?>` +
+    `<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
+    `<soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">${cons}</nfeDadosMsg></soap12:Body></soap12:Envelope>`;
+
+  const https = await import('node:https');
+  const u = new URL(ENDPOINTS_CONSULTA[modelo][ambiente]);
+  const xmlBruto = await new Promise<string>((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        path: u.pathname,
+        method: 'POST',
+        cert: certPem,
+        key: keyPem,
+        rejectUnauthorized: false,
+        headers: {
+          'Content-Type':
+            'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF"',
+          'Content-Length': Buffer.byteLength(soapBody),
+        },
+        timeout: params.timeoutMs ?? 15000,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => (data += c));
+        res.on('end', () => resolve(data));
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Timeout na consulta da SEFAZ.'));
+    });
+    req.write(soapBody);
+    req.end();
+  });
+  return parseConsultaSituacao(xmlBruto);
+}
+
+// Chave citada na rejeição 539 ("Duplicidade de NF-e, com diferença na Chave de Acesso [chNFe:...]").
+export function chaveDaDuplicidade(xMotivo: string | null | undefined): string | null {
+  return xMotivo?.match(/chNFe:(\d{44})/)?.[1] ?? null;
+}
