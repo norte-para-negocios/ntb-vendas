@@ -2887,3 +2887,15 @@ na tela de mesas"; comanda da ODARA com "Cliente: Talislane Silva" embaixo de ca
 - Servidor confere em `_sessao_ok`: gestor/dono (ou `permissions.admin`) da MESMA loja, Master/universal em qualquer, ou a própria pessoa (só foto/própria senha).
 - Entra DESLIGADO: `seg_flags.exigir_sessao = false`, para apps antigos e sessões abertas antes não quebrarem. Ligar só depois que os apps novos (≥ 1.2.110 / 1.0.45) estiverem nos aparelhos: `update seg_flags set valor = true where chave = 'exigir_sessao';`. Desligar de novo é o mesmo comando com false.
 - Cadastro não tem mais senha padrão 123456 (`createStoreTeamMember` exige 6+).
+
+## Cancelar parte de um item e tempo livre (22/10/2026, migration 183)
+Reunião 21/10 (André/Ramon, ODARA): "pediu duas águas, quer cancelar uma". `cancelar_itens_v3(p_itens jsonb [{id, qtd?}], senha, motivo, ação, solicitado_por)`:
+- Cancelar PARTE divide a linha: a original fica com o resto (mesmo id: não reimprime, mantém status da cozinha) e uma linha NOVA já `canceled`
+  guarda o que saiu (mesmo preço, opções, notas, `created_at`). Ocorrência `item_cancelado` com `parcial: true, de: N` e quantidade/valor só do que saiu.
+  A cozinha recebe "CANCELAR: 1x" (`imprimirCancelamento` com a quantidade escolhida). Item com `fiscal_nota_id` é recusado (`faturado`).
+- Tempo livre: `stores.config.cancel_free_minutes` (Configurações > Atendimento, 0..60, padrão 0 = sempre senha). Item lançado há menos de N min
+  cancela sem senha no nome de quem pediu (`sem_senha: true` na ocorrência); passou o tempo = senha de quem autoriza (regra da 180). A tela decide
+  com `lib/cancelamentoLivre.ts` (margem de 15 s); o servidor decide de verdade (`precisa_senha`). Vale para item (comanda), pedido inteiro e KDS.
+- Os gatilhos `bloquear_item_esgotado` e `trg_bloquear_item_em_conta_aguardando` deixam passar linha que nasce `canceled`.
+- `cancelarItensComSenha` (lib/api.ts) chama a v3 e cai na `cancel_order_items_autorizado_secure` se o banco não tem a 183 (aí só item inteiro, com senha).
+- Testado em transação com ROLLBACK na Casa Norte (parcial, sem senha no tempo, precisa_senha fora do tempo, senha errada, repetição).
