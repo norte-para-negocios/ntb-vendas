@@ -3,6 +3,7 @@ import React from 'react';
 import { useSetting } from './SettingsConfigContext';
 import { SettingRow, Switch, NumberField } from './SettingRow';
 import { resolveServiceFeeRate, formatServiceFeeRate, taxaPercentualParaConfig, TAXA_MAXIMA_PERCENT } from '@/lib/calc';
+import { minutosLivres, MAX_MINUTOS_LIVRES } from '@/lib/cancelamentoLivre';
 import type { Store } from '@/types';
 
 export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
@@ -12,6 +13,8 @@ export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
     const [semPedido, setSemPedido] = useSetting<number>('table_alert_no_order_minutes', 0, 'Aviso de mesa sem pedido');
     // Percentual da taxa (stores.config.service_fee_rate, fração). Antes só o Master Admin mexia; agora o lojista também (0 a 30%).
     const [taxaRate, setTaxaRate] = useSetting<number>('service_fee_rate', resolveServiceFeeRate(undefined), 'Percentual da taxa de serviço', (b) => resolveServiceFeeRate({ service_fee_rate: b }));
+    // Tempo livre de cancelamento (183, reunião 21/10): item lançado há menos de N min cancela sem senha. 0 = sempre senha.
+    const [cancelLivre, setCancelLivre] = useSetting<number>('cancel_free_minutes', 0, 'Tempo para cancelar sem senha', (b) => minutosLivres({ cancel_free_minutes: b }));
     const taxaPercent = Number((taxaRate * 100).toFixed(2));
     const taxaFmt = formatServiceFeeRate(taxaRate);
     return (
@@ -25,6 +28,15 @@ export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
                     : 'Desligado: o pedido sai no nome de quem está logado no aparelho.'}
             >
                 <Switch ligado={pedeSenha} onChange={() => setPedeSenha(!pedeSenha)} rotulo="Pedir a senha de quem lança o pedido" />
+            </SettingRow>
+            <SettingRow
+                id="aj-cancel_free_minutes"
+                titulo="Cancelar item sem senha logo depois de lançar"
+                descricao={cancelLivre > 0
+                    ? `Até ${cancelLivre} min depois de lançado, quem está na comanda cancela sem senha (fica registrado no nome dele). Depois disso, só com a senha de quem autoriza.`
+                    : 'Desligado (0): cancelar sempre pede a senha de quem autoriza (gerente, caixa ou quem tem permissão).'}
+            >
+                <NumberField valor={cancelLivre} onChange={(n) => setCancelLivre(minutosLivres({ cancel_free_minutes: n }))} sufixo="min" max={MAX_MINUTOS_LIVRES} passo={1} largura="w-16" rotulo="Minutos para cancelar sem senha" />
             </SettingRow>
             <SettingRow id="aj-taxa_servico" titulo={`Cobrar taxa de serviço (${taxaFmt})`} descricao={`Aplica ${taxaFmt} de taxa opcional no total das comandas (a conta do cliente).`}>
                 <Switch ligado={taxa} onChange={() => setTaxa(!taxa)} rotulo="Cobrar taxa de serviço" />

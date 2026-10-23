@@ -74,6 +74,7 @@ import { CaixasAoVivo } from '@/components/modules/CaixasAoVivo';
 import { VendasCanceladasView } from '@/components/modules/VendasCanceladasView';
 import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { roleCan, roleCanOr } from '@/lib/rolePermissions';
+import { dentroDoTempoLivre, limitarQuantidade, minutosLivres } from '@/lib/cancelamentoLivre';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
@@ -1714,19 +1715,19 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   // Cancelar item pela cozinha/bar pede o motivo por escrito (13/10/2026, pedido do dono: "a pessoa explicar o B.O").
-  const [kdsCancelar, setKdsCancelar] = useState<{ itemId: string; nome: string; motivo: string; senha: string } | null>(null);
+  const [kdsCancelar, setKdsCancelar] = useState<{ itemId: string; nome: string; motivo: string; senha: string; livre?: boolean } | null>(null);
   const confirmarCancelarNoKds = async () => {
       const dlg = kdsCancelar;
       if (!dlg || cancellingIds.has(dlg.itemId)) return;
       const motivo = dlg.motivo.trim();
       if (motivo.length < 3) { toast.error('Escreva o motivo do cancelamento.'); return; }
-      if (!dlg.senha) { toast.error('Digite a senha de quem autoriza.'); return; }
+      if (!dlg.senha && !dlg.livre) { toast.error('Digite a senha de quem autoriza.'); return; }
       setCancellingIds(prev => new Set(prev).add(dlg.itemId));
       const r = await cancelarItensComSenha([dlg.itemId], dlg.senha, motivo, 'cancelar_item', loggedUser && loggedUser.role !== 'open' ? loggedUser.name : null);
       setCancellingIds(prev => { const n = new Set(prev); n.delete(dlg.itemId); return n; });
-      if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setKdsCancelar({ ...dlg, senha: '' }); return; }
+      if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setKdsCancelar({ ...dlg, senha: '', livre: r.error === 'precisa_senha' ? false : dlg.livre }); return; }
       setKdsCancelar(null);
-      toast.success(`Item cancelado (autorizado por ${r.name}).`);
+      toast.success(r.sem_senha ? 'Item cancelado.' : `Item cancelado (autorizado por ${r.name}).`);
       setOrders(prev => prev.filter(o => o.id !== dlg.itemId));
   };
 
@@ -2025,7 +2026,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                                     disabled={cancellingIds.has(item.id)}
                                     onClick={() => {
                                         if (cancellingIds.has(item.id)) return;
-                                        setKdsCancelar({ itemId: item.id, nome: `${item.quantity}x ${getOrderItemDisplayName(item)}`, motivo: '', senha: '' });
+                                        setKdsCancelar({ itemId: item.id, nome: `${item.quantity}x ${getOrderItemDisplayName(item)}`, motivo: '', senha: '', livre: dentroDoTempoLivre([item as any], store.config as any) });
                                     }}
                                     className="w-8 h-8 max-sm:w-11 max-sm:h-11 inline-flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--err)] hover:bg-[var(--err)]/12 u-motion u-press disabled:opacity-50 disabled:pointer-events-none"
                                     title="Cancelar item"
@@ -2055,12 +2056,16 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
                 <div className="space-y-4">
                     <p className="text-sm text-[var(--text)]">Cancelar <b>{kdsCancelar.nome}</b>?</p>
                     <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu, acabou o produto" autoFocus value={kdsCancelar.motivo} onChange={(e) => setKdsCancelar({ ...kdsCancelar, motivo: e.target.value })} maxLength={120} />
-                    <form onSubmit={(e) => { e.preventDefault(); confirmarCancelarNoKds(); }}>
-                        <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={kdsCancelar.senha} onChange={(e) => setKdsCancelar({ ...kdsCancelar, senha: e.target.value })} />
-                    </form>
+                    {kdsCancelar.livre ? (
+                        <p className="text-[13px] text-[var(--text-muted)]">Lançado agora há pouco: cancela sem senha (tempo livre de {minutosLivres(store.config as any)} min).</p>
+                    ) : (
+                        <form onSubmit={(e) => { e.preventDefault(); confirmarCancelarNoKds(); }}>
+                            <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={kdsCancelar.senha} onChange={(e) => setKdsCancelar({ ...kdsCancelar, senha: e.target.value })} />
+                        </form>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" onClick={() => setKdsCancelar(null)}>Voltar</Button>
-                        <Button variant="danger" onClick={confirmarCancelarNoKds} disabled={kdsCancelar.motivo.trim().length < 3 || !kdsCancelar.senha || cancellingIds.has(kdsCancelar.itemId)}>Cancelar item</Button>
+                        <Button variant="danger" onClick={confirmarCancelarNoKds} disabled={kdsCancelar.motivo.trim().length < 3 || (!kdsCancelar.senha && !kdsCancelar.livre) || cancellingIds.has(kdsCancelar.itemId)}>Cancelar item</Button>
                     </div>
                 </div>
             )}
@@ -3306,7 +3311,7 @@ const TablesView: React.FC<{
     const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; enviando: boolean } | null>(null);
     // Trocar de mesa e mover item pedem o motivo por escrito (13/10/2026): fica na auditoria (Equipe/Relatórios).
     const [trocaMesaMotivo, setTrocaMesaMotivo] = useState('');
-    const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; senha: string; enviando: boolean } | null>(null);
+    const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; senha: string; enviando: boolean; total: number; qtd: number; livre: boolean } | null>(null);
     // Planta de mesas (floor plan): alterna Lista/Mapa; a escolha fica no aparelho.
     const [tablesViewMode, setTablesViewMode] = useState<'lista' | 'mapa'>(() => {
         try { return localStorage.getItem('tables_view_mode') === 'mapa' ? 'mapa' : 'lista'; } catch { return 'lista'; }
@@ -4921,9 +4926,12 @@ NOTIFY pgrst, 'reload schema';`;
         // Defesa em profundidade — mesmo motivo do handleAddItem acima.
         if (selectedTable && !isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
-        const nomeItem = itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item';
+        const nomeItem = itemAlvo ? getOrderItemDisplayName(itemAlvo) : 'este item';
+        const total = Math.max(1, Number(itemAlvo?.quantity) || 1);
         // Motivo obrigatório (migration 150): abre o diálogo de motivo; o cancelamento sai em confirmarCancelamentoItem.
-        setCancelItemDlg({ itemId, nome: nomeItem, motivo: '', outro: '', senha: '', enviando: false });
+        // 183: escolhe quantas unidades cancelar (2 águas -> cancela 1) e, no tempo livre da loja, não pede senha.
+        setCancelItemDlg({ itemId, nome: nomeItem, motivo: '', outro: '', senha: '', enviando: false, total, qtd: total,
+            livre: !!itemAlvo && dentroDoTempoLivre([itemAlvo as any], store.config as any) });
     };
 
     const confirmarCancelamentoItem = async () => {
@@ -4931,14 +4939,22 @@ NOTIFY pgrst, 'reload schema';`;
         if (!dlg || dlg.enviando) return;
         const motivoFinal = (dlg.motivo === 'Outro' ? dlg.outro.trim() : dlg.motivo).trim();
         if (!motivoFinal) { toast.error('Escolha o motivo do cancelamento.'); return; }
-        if (!dlg.senha) { toast.error('Digite a senha de quem autoriza.'); return; }
+        if (!dlg.senha && !dlg.livre) { toast.error('Digite a senha de quem autoriza.'); return; }
         setCancelItemDlg({ ...dlg, enviando: true });
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === dlg.itemId) : undefined;
+        const qtd = limitarQuantidade(dlg.qtd, dlg.total);
         try {
-            const r = await cancelarItensComSenha([dlg.itemId], dlg.senha, motivoFinal, 'cancelar_item', isAberto ? null : loggedUser.name);
-            if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setCancelItemDlg({ ...dlg, senha: '', enviando: false }); return; }
-            if (itemAlvo && selectedTable) await imprimirCancelamento([itemAlvo], selectedTable.number, motivoFinal);
-            toast.success(`Item cancelado (autorizado por ${r.name}).`);
+            const r = await cancelarItensComSenha([qtd < dlg.total ? { id: dlg.itemId, qtd } : dlg.itemId], dlg.senha, motivoFinal, 'cancelar_item', isAberto ? null : loggedUser.name);
+            if (!r.success) {
+                toast.error(mensagemCancelarComSenha(r));
+                // Passou o tempo livre enquanto a janela estava aberta: agora pede a senha.
+                setCancelItemDlg({ ...dlg, senha: '', enviando: false, livre: r.error === 'precisa_senha' ? false : dlg.livre });
+                return;
+            }
+            // A cozinha recebe o cancelamento só do que saiu (cancelou 1 de 2 = "CANCELAR: 1x").
+            if (itemAlvo && selectedTable) await imprimirCancelamento([{ ...itemAlvo, quantity: qtd }], selectedTable.number, motivoFinal);
+            const parte = qtd < dlg.total ? `${qtd} de ${dlg.total} cancelado${qtd === 1 ? '' : 's'}` : 'Item cancelado';
+            toast.success(r.sem_senha ? `${parte}.` : `${parte} (autorizado por ${r.name}).`);
             setCancelItemDlg(null);
             loadData();
         } catch (e) {
@@ -4954,12 +4970,14 @@ NOTIFY pgrst, 'reload schema';`;
     const [cancelarMotivo, setCancelarMotivo] = useState('');
     const [cancelarSenha, setCancelarSenha] = useState('');
     const [cancelandoPedido, setCancelandoPedido] = useState(false);
+    const pedidoNoTempoLivre = !!selectedTable && showCancelarPedido
+        && dentroDoTempoLivre(getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED) as any[], store.config as any);
     const handleCancelarPedidoMesa = async () => {
         if (!selectedTable || cancelandoPedido) return;
         if (!isTableInJurisdiction(loggedUser, idDaMesaFisica(selectedTable))) return;
         if (cancelarMotivo.trim().length < 3) { toast.error('Escreva o motivo do cancelamento.'); return; }
-        if (!cancelarSenha) { toast.error('Digite a senha de quem autoriza.'); return; }
         const itens = getTableSummary(selectedTable.id).allItems.filter((i) => i.status !== OrderStatus.CANCELED);
+        if (!cancelarSenha && !dentroDoTempoLivre(itens as any[], store.config as any)) { toast.error('Digite a senha de quem autoriza.'); return; }
         if (itens.length === 0) { setShowCancelarPedido(false); return; }
         if (itens.some((i) => (i as any).fiscal_nota_id)) {
             toast.error('Este pedido tem item já faturado em nota fiscal. Cancele a nota antes (Administração → Notas fiscais).');
@@ -4970,7 +4988,7 @@ NOTIFY pgrst, 'reload schema';`;
             const r = await cancelarItensComSenha(itens.map((i) => i.id), cancelarSenha, cancelarMotivo.trim(), 'cancelar_pedido', isAberto ? null : loggedUser.name);
             if (!r.success) { toast.error(mensagemCancelarComSenha(r)); setCancelarSenha(''); return; }
             await imprimirCancelamento(itens, selectedTable.number, cancelarMotivo.trim());
-            toast.success(`Pedido cancelado (autorizado por ${r.name}).`);
+            toast.success(r.sem_senha ? 'Pedido cancelado.' : `Pedido cancelado (autorizado por ${r.name}).`);
             setShowCancelarPedido(false);
             setCancelarMotivo('');
             setCancelarSenha('');
@@ -5452,7 +5470,21 @@ NOTIFY pgrst, 'reload schema';`;
             <Modal isOpen={!!cancelItemDlg} onClose={() => !cancelItemDlg?.enviando && setCancelItemDlg(null)} title="Cancelar item" size="sm">
                 {cancelItemDlg && (
                     <div className="space-y-4">
-                        <p className="text-sm text-[var(--text)]">Cancelar <b>{cancelItemDlg.nome}</b> da comanda? Escolha o motivo:</p>
+                        <p className="text-sm text-[var(--text)]">Cancelar <b>{cancelItemDlg.total}x {cancelItemDlg.nome}</b> da comanda?</p>
+                        {cancelItemDlg.total > 1 && (
+                            <div className="flex items-center justify-between gap-3 min-h-11 px-3 rounded-xl border border-[var(--border)]">
+                                <span className="text-[15px] text-[var(--text)]">Quantos cancelar</span>
+                                <div className="flex items-center gap-1 bg-[var(--surface-2)] h-11 px-1 rounded-full">
+                                    <button type="button" aria-label="Cancelar menos" disabled={cancelItemDlg.qtd <= 1} onClick={() => setCancelItemDlg({ ...cancelItemDlg, qtd: limitarQuantidade(cancelItemDlg.qtd - 1, cancelItemDlg.total) })} className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text)] disabled:opacity-40"><Minus size={16} /></button>
+                                    <span className="w-14 text-center font-semibold text-[15px] text-[var(--text)] num" aria-live="polite">{cancelItemDlg.qtd} de {cancelItemDlg.total}</span>
+                                    <button type="button" aria-label="Cancelar mais" disabled={cancelItemDlg.qtd >= cancelItemDlg.total} onClick={() => setCancelItemDlg({ ...cancelItemDlg, qtd: limitarQuantidade(cancelItemDlg.qtd + 1, cancelItemDlg.total) })} className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text)] disabled:opacity-40"><Plus size={16} /></button>
+                                </div>
+                            </div>
+                        )}
+                        {cancelItemDlg.qtd < cancelItemDlg.total && (
+                            <p className="text-[13px] text-[var(--text-muted)] -mt-2">Ficam {cancelItemDlg.total - cancelItemDlg.qtd} na comanda. A cozinha recebe o cancelamento só de {cancelItemDlg.qtd}.</p>
+                        )}
+                        <p className="text-sm text-[var(--text)]">Escolha o motivo:</p>
                         <div className="space-y-2" role="radiogroup" aria-label="Motivo do cancelamento">
                             {resolveCancelReasons(store.config as any).map((r) => (
                                 <label key={r} className={`flex items-center gap-2 min-h-11 px-3 rounded-xl border cursor-pointer text-[15px] ${cancelItemDlg.motivo === r ? 'border-[var(--brand)] bg-[var(--surface-2)]' : 'border-[var(--border)]'}`}>
@@ -5464,12 +5496,16 @@ NOTIFY pgrst, 'reload schema';`;
                         {cancelItemDlg.motivo === 'Outro' && (
                             <Input placeholder="Descreva o motivo" value={cancelItemDlg.outro} onChange={(e) => setCancelItemDlg({ ...cancelItemDlg, outro: e.target.value })} maxLength={120} />
                         )}
-                        <form onSubmit={(e) => { e.preventDefault(); confirmarCancelamentoItem(); }}>
-                            <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelItemDlg.senha} onChange={(e) => setCancelItemDlg({ ...cancelItemDlg, senha: e.target.value })} />
-                        </form>
+                        {cancelItemDlg.livre ? (
+                            <p className="text-[13px] text-[var(--text-muted)]">Lançado agora há pouco: cancela sem senha (tempo livre de {minutosLivres(store.config as any)} min).</p>
+                        ) : (
+                            <form onSubmit={(e) => { e.preventDefault(); confirmarCancelamentoItem(); }}>
+                                <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelItemDlg.senha} onChange={(e) => setCancelItemDlg({ ...cancelItemDlg, senha: e.target.value })} />
+                            </form>
+                        )}
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="secondary" onClick={() => setCancelItemDlg(null)} disabled={cancelItemDlg.enviando}>Voltar</Button>
-                            <Button variant="danger" onClick={confirmarCancelamentoItem} isLoading={cancelItemDlg.enviando}>Cancelar item</Button>
+                            <Button variant="danger" onClick={confirmarCancelamentoItem} isLoading={cancelItemDlg.enviando}>{cancelItemDlg.qtd < cancelItemDlg.total ? `Cancelar ${cancelItemDlg.qtd}` : 'Cancelar item'}</Button>
                         </div>
                     </div>
                 )}
@@ -6120,12 +6156,16 @@ NOTIFY pgrst, 'reload schema';`;
                         Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe um pedido de cancelamento. Não dá para desfazer.
                     </p>
                     <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={120} />
-                    <form onSubmit={(e) => { e.preventDefault(); handleCancelarPedidoMesa(); }}>
-                        <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelarSenha} onChange={(e) => setCancelarSenha(e.target.value)} />
-                    </form>
+                    {pedidoNoTempoLivre ? (
+                        <p className="text-[13px] text-[var(--text-muted)]">Lançado agora há pouco: cancela sem senha (tempo livre de {minutosLivres(store.config as any)} min).</p>
+                    ) : (
+                        <form onSubmit={(e) => { e.preventDefault(); handleCancelarPedidoMesa(); }}>
+                            <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelarSenha} onChange={(e) => setCancelarSenha(e.target.value)} />
+                        </form>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                         <Button variant="secondary" className="max-sm:h-11" onClick={() => setShowCancelarPedido(false)} disabled={cancelandoPedido}>Voltar</Button>
-                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido} disabled={cancelarMotivo.trim().length < 3 || !cancelarSenha}>Cancelar pedido</Button>
+                        <Button variant="danger" className="max-sm:h-11" onClick={handleCancelarPedidoMesa} isLoading={cancelandoPedido} disabled={cancelarMotivo.trim().length < 3 || (!cancelarSenha && !pedidoNoTempoLivre)}>Cancelar pedido</Button>
                     </div>
                 </div>
             </Modal>

@@ -1847,19 +1847,34 @@ export const cancelSpecificOrderItem = async (itemId: string, operatorUserId?: s
 };
 
 // Migration 178: cancelar com a senha de quem autoriza (gerente, caixa ou quem tem a permissão). Precisa de internet.
+// Migration 183 (cancelar_itens_v3): cada item pode levar a quantidade a cancelar (cancelar 1 de 2 águas) e, dentro do
+// tempo livre da loja (config.cancel_free_minutes), cancela sem senha. Banco sem a 183: cai na função antiga (só item inteiro).
+export type ItemACancelar = string | { id: string; qtd?: number };
 export type ResultadoCancelarComSenha =
-  | { success: true; name: string; role: string; cancelados: number }
-  | { success: false; error: 'invalid' | 'locked' | 'ambiguous' | 'sem_permissao' | 'motivo' | 'itens' | 'rede'; name?: string; seconds?: number };
-export const cancelarItensComSenha = async (itemIds: string[], senha: string, motivo: string, acao: 'cancelar_item' | 'cancelar_pedido' = 'cancelar_item', solicitadoPor?: string | null): Promise<ResultadoCancelarComSenha> => {
-  const { data, error } = await supabase.rpc('cancel_order_items_autorizado_secure', {
-    p_item_ids: itemIds,
+  | { success: true; name: string; role: string; cancelados: number; sem_senha?: boolean }
+  | { success: false; error: 'invalid' | 'locked' | 'ambiguous' | 'sem_permissao' | 'motivo' | 'itens' | 'rede' | 'precisa_senha' | 'faturado' | 'versao'; name?: string; seconds?: number; minutos?: number };
+export const cancelarItensComSenha = async (itens: ItemACancelar[], senha: string, motivo: string, acao: 'cancelar_item' | 'cancelar_pedido' = 'cancelar_item', solicitadoPor?: string | null): Promise<ResultadoCancelarComSenha> => {
+  const lista = itens.map((i) => (typeof i === 'string' ? { id: i } : i));
+  const { data, error } = await supabase.rpc('cancelar_itens_v3', {
+    p_itens: lista,
     p_password: senha,
     p_reason: motivo,
     p_action: acao,
     p_solicitado_por: solicitadoPor ?? null,
   });
-  if (error || !data) { console.error('cancelarItensComSenha falhou:', error); return { success: false, error: 'rede' }; }
-  return data as ResultadoCancelarComSenha;
+  if (!error && data) return data as ResultadoCancelarComSenha;
+  if (error?.code !== 'PGRST202') { console.error('cancelarItensComSenha falhou:', error); return { success: false, error: 'rede' }; }
+  // Banco ainda sem a 183.
+  if (lista.some((i) => i.qtd != null) || !senha) return { success: false, error: 'versao' };
+  const antigo = await supabase.rpc('cancel_order_items_autorizado_secure', {
+    p_item_ids: lista.map((i) => i.id),
+    p_password: senha,
+    p_reason: motivo,
+    p_action: acao,
+    p_solicitado_por: solicitadoPor ?? null,
+  });
+  if (antigo.error || !antigo.data) { console.error('cancelarItensComSenha falhou:', antigo.error); return { success: false, error: 'rede' }; }
+  return antigo.data as ResultadoCancelarComSenha;
 };
 
 export const mensagemCancelarComSenha = (r: ResultadoCancelarComSenha & { success: false }): string => {
@@ -1870,6 +1885,9 @@ export const mensagemCancelarComSenha = (r: ResultadoCancelarComSenha & { succes
     case 'sem_permissao': return `${r.name ?? 'Essa pessoa'} não pode cancelar. Use a senha de um gerente ou caixa.`;
     case 'motivo': return 'Escreva o motivo do cancelamento.';
     case 'itens': return 'Não achei esse item. Atualize a tela.';
+    case 'precisa_senha': return 'Passou o tempo para cancelar sem senha. Digite a senha de quem autoriza.';
+    case 'faturado': return 'Este item já está numa nota fiscal. Cancele a nota antes (Administração → Notas fiscais).';
+    case 'versao': return 'O servidor ainda não tem essa opção. Cancele o item inteiro com a senha.';
     default: return 'Sem conexão com o servidor. Cancelar precisa de internet.';
   }
 };
