@@ -2,6 +2,7 @@
 import { normalizarNcm } from '@/lib/fiscal/ncm';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
+import { agruparItensIguais } from '@/lib/agruparItens';
 import { publicarMesas, publicarKds } from '@/lib/dadosAoVivo';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
@@ -21,7 +22,7 @@ import RegrasCaixaView from '@/components/modules/admin/RegrasCaixaView';
 import type { AbaId, NavCtx } from '@/lib/adminNav';
 import CouponManagementView from '@/components/modules/CouponManagementView';
 import { dentroDoPrazoCancelamento, limiteCancelamento, mensagemPrazoEncerrado, PRAZO_CANCELAMENTO_TEXTO } from '@/lib/fiscal/prazoCancelamento';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle, ChevronDown } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from '@/components/ui';
@@ -3309,6 +3310,9 @@ const TablesView: React.FC<{
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showFixDbModal, setShowFixDbModal] = useState(false);
     const [showMoveTableModal, setShowMoveTableModal] = useState(false);
+    // Itens iguais agrupados na comanda (lib/agruparItens.ts): quais grupos estão abertos.
+    const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
+    const alternarGrupo = (chave: string) => setGruposAbertos((g) => { const n = new Set(g); if (n.has(chave)) n.delete(chave); else n.add(chave); return n; });
     const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; enviando: boolean } | null>(null);
     // Trocar de mesa e mover item pedem o motivo por escrito (13/10/2026): fica na auditoria (Equipe/Relatórios).
     const [trocaMesaMotivo, setTrocaMesaMotivo] = useState('');
@@ -5821,7 +5825,8 @@ NOTIFY pgrst, 'reload schema';`;
 
                                         return (
                                             <>
-                                                {items.map(item => {
+                                                {agruparItensIguais(items).map(grupo => {
+                                                const renderLinha = (item: (typeof items)[number], dentroDoGrupo: boolean) => {
                                                     // Achado real (reunião com o Ramon, 2026-08-25): nome do
                                                     // cliente nunca aparecia na comanda em mesa com pedidos de
                                                     // pessoas diferentes — só o item lançado pelo GARÇOM tinha
@@ -5829,7 +5834,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     // `notes` (createOrder, lib/api.ts), nunca extraído aqui.
                                                     const clientNote = parseItemNote(item.notes || '');
                                                     return (
-                                                    <div key={item.id} className="flex justify-between items-center gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 text-[15px]">
+                                                    <div key={item.id} className={`flex justify-between items-center gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 text-[15px] ${dentroDoGrupo ? 'pl-8 bg-[var(--surface)]/50' : ''}`}>
                                                         <div className="flex-1 min-w-0">
                                                             <span className="text-[var(--text)] flex flex-wrap items-center gap-x-2 gap-y-1">
                                                                 <span className="text-[var(--text-muted)] num">{item.quantity}×</span>
@@ -5878,6 +5883,30 @@ NOTIFY pgrst, 'reload schema';`;
                                                         </div>
                                                     </div>
                                                     );
+                                                };
+                                                // Itens iguais numa linha só (lib/agruparItens.ts); a setinha abre os lançamentos para cancelar/mover um.
+                                                if (grupo.itens.length === 1) return renderLinha(grupo.itens[0], false);
+                                                const aberto = gruposAbertos.has(grupo.chave);
+                                                const primeiro = grupo.itens[0];
+                                                return (
+                                                    <React.Fragment key={grupo.chave}>
+                                                        <button type="button" onClick={() => alternarGrupo(grupo.chave)} aria-expanded={aberto}
+                                                            className="w-full flex justify-between items-center gap-3 px-4 py-3 border-b border-[var(--border)] text-[15px] text-left hover:bg-[var(--surface)]/60 u-motion">
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="text-[var(--text)] flex flex-wrap items-center gap-x-2">
+                                                                    <span className="text-[var(--text-muted)] num">{grupo.quantidade}×</span>
+                                                                    <span className="font-medium">{getOrderItemDisplayName(primeiro)}</span>
+                                                                </span>
+                                                                <div className="text-[13px] text-[var(--text-muted)] mt-0.5">{grupo.itens.length} lançamentos · R$ {formatBRL(primeiro.price_at_time)} un. · {aberto ? 'toque para juntar' : 'toque para separar'}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-3 shrink-0">
+                                                                <span className="num text-[var(--text)]">R$ {formatBRL(grupo.total)}</span>
+                                                                <ChevronDown size={18} className={`text-[var(--text-muted)] transition-transform ${aberto ? 'rotate-180' : ''}`} />
+                                                            </div>
+                                                        </button>
+                                                        {aberto && grupo.itens.map(i => renderLinha(i, true))}
+                                                    </React.Fragment>
+                                                );
                                                 })}
                                                 {/* Task 3: linha da taxa de serviço agora SEMPRE aparece na
                                                     comanda, nos 3 estados possíveis — antes só existia
