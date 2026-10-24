@@ -316,7 +316,7 @@ export function printKitchenTicket(opts: {
   orderType: string;
   identifier: string;
   client?: string | null;
-  lancadoPor?: string | null; // função de quem lançou (funcaoNoTicket, lib/labels.ts)
+  lancadoPor?: string | null; // "Garçom: Fulano" (funcaoNoTicket, lib/labels.ts)
   quantity?: number;
   productName?: string;
   addons?: string;
@@ -343,7 +343,7 @@ export function printKitchenTicket(opts: {
     <div class="info">
       <div class="big-text">${escapeHtml(opts.orderType)}: ${escapeHtml(opts.identifier)}</div>
       ${opts.client ? `<div>Cliente: ${escapeHtml(opts.client)}</div>` : ''}
-      ${opts.lancadoPor ? `<div>Lançado por: ${escapeHtml(opts.lancadoPor)}</div>` : ''}
+      ${opts.lancadoPor ? `<div>${escapeHtml(opts.lancadoPor)}</div>` : ''}
     </div>
     ${itensHtml}
     ${opts.cancelamento?.por ? `<div>Por: ${escapeHtml(opts.cancelamento.por)}</div>` : ''}
@@ -466,7 +466,7 @@ export function buildKitchenTicketText(opts: {
   orderType: string;
   identifier: string;
   client?: string | null;
-  lancadoPor?: string | null; // função de quem lançou (funcaoNoTicket, lib/labels.ts)
+  lancadoPor?: string | null; // "Garçom: Fulano" (funcaoNoTicket, lib/labels.ts)
   quantity?: number;
   productName?: string;
   addons?: string;
@@ -493,7 +493,7 @@ export function buildKitchenTicketText(opts: {
   lines.push(dupla);
   lines.push(esqDir(opts.identifier, dataHora, W));
   if (opts.client) lines.push(...wrapLine(`Cliente: ${opts.client}`, W));
-  if (opts.lancadoPor) lines.push(...wrapLine(`Lançado por: ${opts.lancadoPor}`, W));
+  if (opts.lancadoPor) lines.push(...wrapLine(opts.lancadoPor, W));
   lines.push(simples);
   kitchenTicketLines(opts).forEach((l) => {
     const principal = `${opts.cancelamento ? 'CANCELAR: ' : ''}${l.quantity}x ${l.productName}`;

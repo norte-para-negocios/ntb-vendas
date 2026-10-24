@@ -164,18 +164,20 @@ export const clienteNoTicket = (
     return doBalcao ? (nome || customerName || null) : null;
 };
 
-// Função de quem lançou, para o papel da cozinha/bar (24/10/2026, ODARA: "se o garçom pediu sai garçom, a função da
-// pessoa"). Pedido do cliente pelo QR não tem função (sai o nome dele em clienteNoTicket). A função vem do cadastro da
-// equipe pelo nome gravado no item; sem achar a pessoa, item da equipe sai como Garçom.
+// Função e nome de quem lançou, para o papel da cozinha/bar (24/10/2026, ODARA: "é para aparecer garçom ou caixa ou
+// gerente e o nome da pessoa"): "Garçom: Talislane Silva". Pedido do cliente pelo QR não entra aqui (sai "Cliente: nome"
+// em clienteNoTicket). A função vem do cadastro da equipe pelo nome; sem achar a pessoa, item da equipe sai como Garçom.
+// O banco faz o mesmo para aparelho com app antigo (migration 187).
 export const funcaoNoTicket = (
     item: { notes?: string | null; added_by_role?: string | null; added_by_name?: string | null },
     funcaoPorNome?: Map<string, string>,
 ): string | null => {
     if (item.added_by_role === 'cliente') return null;
-    const nome = (item.added_by_name || parseItemNote(item.notes || '').client || '').trim().toLowerCase();
-    if (!nome && item.added_by_role !== 'garcom') return null;
-    const funcao = nome ? funcaoPorNome?.get(nome) : undefined;
-    return funcao ? getRoleLabel(funcao) : 'Garçom';
+    const nome = (item.added_by_name || parseItemNote(item.notes || '').client || '').trim();
+    if (!nome) return item.added_by_role === 'garcom' ? 'Garçom' : null;
+    const funcao = funcaoPorNome?.get(nome.toLowerCase());
+    const rotulo = !funcao ? 'Garçom' : funcao === 'owner' ? 'Gerente' : funcao === 'universal' ? 'Equipe' : getRoleLabel(funcao);
+    return `${rotulo}: ${nome}`;
 };
 
 // Nome de exibição de um item de PEDIDO (histórico/impressão/KDS), com
