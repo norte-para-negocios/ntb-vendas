@@ -54,7 +54,7 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   if (!ehLeitura && !ehLogin) {
     if (off && Date.now() - off < OFFLINE_FLAG_MS) return Promise.reject(new TypeError('Failed to fetch (offline detectado)'));
     // Sem contato com o servidor há mais de 3 s (a internet pode ter acabado de cair): teste rápido ANTES de mandar.
-    // Sem resposta em 1,5 s = não manda (vai para a fila do aparelho); antes a gravação saía e ficava pendurada até o
+    // Sem resposta em 4 s (PING_ANTES_DE_GRAVAR_MS) = não manda (vai para a fila do aparelho); antes a gravação saía e ficava pendurada até o
     // tempo-limite do sistema (achado 08/10/2026 no fechamento de mesa). Com internet o vigia mantém o contato recente.
     const ultimoOk = (globalThis as { __ntbUltimoOk?: number }).__ntbUltimoOk ?? 0;
     if (Date.now() - ultimoOk > 3000) {
@@ -78,9 +78,13 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   return fetch(input, { ...init, signal: controller.signal }).then(limpaAviso, marcaSemInternet).finally(() => clearTimeout(timer));
 };
 
+// 24/10/2026 (ODARA): 1,5 s era pouco. O servidor fica na Europa; a 1ª conexão segura medida no notebook da ODARA,
+// com Wi-Fi bom, levou 1,1 s, e celular na praia passa disso. O teste falhava, o pedido ia para a fila do aparelho e
+// chegava minutos depois ("lancei a água às 12:09, imprimiu 12:13"). Sem internet de verdade, espera no máximo 4 s.
+const PING_ANTES_DE_GRAVAR_MS = 4000;
 async function pingRapido(): Promise<boolean> {
   const c = new AbortController();
-  const t = setTimeout(() => c.abort(), 1500);
+  const t = setTimeout(() => c.abort(), PING_ANTES_DE_GRAVAR_MS);
   try {
     await fetch(`${supabaseUrl}/rest/v1/`, { method: 'HEAD', signal: c.signal, cache: 'no-store', headers: { apikey: supabaseKey } });
     (globalThis as { __ntbUltimoOk?: number }).__ntbUltimoOk = Date.now();

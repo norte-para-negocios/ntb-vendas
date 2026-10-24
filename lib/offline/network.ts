@@ -39,6 +39,8 @@ export function isNetworkError(error: unknown): boolean {
 // arbitrários) — confirmado ao vivo, mesmo fetch que falhava na raiz
 // funciona normal aqui, de dentro do `app://bundle` real.
 let ultimoOkAt = 0;
+// 24/10/2026: 2,5 s → 5 s (servidor na Europa, celular na praia; ver PING_ANTES_DE_GRAVAR_MS em lib/supabaseClient.ts).
+const PING_MS = 5000;
 // Uma tentativa do ping. Qualquer resposta HTTP (até 5xx do gateway) prova que a rede chegou ao servidor.
 async function pingUmaVez(timeoutMs: number): Promise<boolean> {
   const controller = new AbortController();
@@ -65,7 +67,7 @@ export async function checkRealConnectivity(): Promise<boolean> {
   if (off && Date.now() - off < OFFLINE_FLAG_MS) return false;
   if (Date.now() - ultimoOkAt < 3000) return true;
   // Duas tentativas antes de declarar offline: um engasgo isolado do Wi-Fi do salão não pode derrubar o app.
-  const ok = (await pingUmaVez(2500)) || (await pingUmaVez(2500));
+  const ok = (await pingUmaVez(PING_MS)) || (await pingUmaVez(PING_MS));
   if (ok) { delete (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt; ultimoOkAt = Date.now(); }
   else (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
   return ok;
@@ -86,7 +88,7 @@ export function vigiarConexao(aoVoltar: () => void): void {
     // depois da queda ainda esperava o tempo-limite). Sem internet: a cada 3 s, para perceber a volta.
     if (!g.__ntbOfflineAt && ticks % 2 !== 0) return;
     if (!g.__ntbOfflineAt && Date.now() - ultimoOkAt < 8000) return;
-    if (await pingUmaVez(2500)) {
+    if (await pingUmaVez(PING_MS)) {
       const voltou = !!g.__ntbOfflineAt;
       delete g.__ntbOfflineAt; ultimoOkAt = Date.now();
       if (voltou) aoVoltar();
