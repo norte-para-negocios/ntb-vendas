@@ -11,3 +11,12 @@ assert.equal(clienteNoTicket({ notes: '', added_by_role: 'cliente' }, 'table'), 
 assert.equal(clienteNoTicket({ notes: '[Joao]', added_by_role: 'garcom' }, 'counter', 'Joao'), 'Joao');
 assert.equal(clienteNoTicket({ notes: '', added_by_role: null }, 'counter', 'Ana'), 'Ana');
 console.log('clienteNoTicket: ok');
+
+// Função de quem lançou (24/10/2026)
+import { funcaoNoTicket } from '../../lib/labels';
+const funcoes = new Map([['herica santos uchoa lacerda', 'cashier'], ['talislane silva', 'waiter']]);
+assert.equal(funcaoNoTicket({ added_by_role: 'garcom', added_by_name: 'Herica Santos Uchoa Lacerda' }, funcoes), 'Caixa');
+assert.equal(funcaoNoTicket({ added_by_role: 'garcom', added_by_name: 'Talislane Silva' }, funcoes), 'Garçom');
+assert.equal(funcaoNoTicket({ added_by_role: 'garcom', added_by_name: 'JR' }, funcoes), 'Garçom');
+assert.equal(funcaoNoTicket({ added_by_role: 'cliente', notes: '[Maria]' }, funcoes), null);
+console.log('funcaoNoTicket: ok');

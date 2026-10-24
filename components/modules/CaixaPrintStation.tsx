@@ -103,13 +103,13 @@ import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { impressoraRecebe } from '@/lib/printDocs';
 import { montarPreConta, chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
-import { fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, fetchItensJaImpressos, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
+import { fetchEquipePedido, fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, fetchItensJaImpressos, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from '@/lib/print';
 import { particionarPorIdade, MAX_IDADE_AUTOIMPRESSAO_MIN } from '@/lib/impressaoIdade';
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
-import { parseItemNote, getAllergenLabels, clienteNoTicket } from '@/lib/labels';
+import { parseItemNote, getAllergenLabels, clienteNoTicket, funcaoNoTicket } from '@/lib/labels';
 import { Store, OrderItem, StoreUser, TableStatus } from '@/types';
 
 type Destination = 'kitchen' | 'bar';
@@ -433,6 +433,16 @@ function saveFalhaPersistente(storeId: string, alarmada: boolean) {
   }
 }
 
+// Função de cada pessoa da equipe (nome -> função) para o "Lançado por" do papel; renova a cada 10 min.
+let cacheFuncoes: { storeId: string; em: number; mapa: Map<string, string> } | null = null;
+async function funcoesDaEquipe(storeId: string): Promise<Map<string, string>> {
+  if (cacheFuncoes && cacheFuncoes.storeId === storeId && Date.now() - cacheFuncoes.em < 10 * 60 * 1000) return cacheFuncoes.mapa;
+  const lista = await fetchEquipePedido(storeId).catch(() => []);
+  const mapa = new Map(lista.map((p) => [String(p.name || '').trim().toLowerCase(), p.role] as [string, string]));
+  if (mapa.size > 0 || !cacheFuncoes) cacheFuncoes = { storeId, em: Date.now(), mapa };
+  return cacheFuncoes.mapa;
+}
+
 function printedIdsKey(storeId: string, destination: Destination) {
   return `${STORAGE_PREFIX}_impressos_${storeId}_${destination}`;
 }
@@ -744,12 +754,14 @@ async function reconcileDestination(
       alergenicos: getAllergenLabels((it.product as any)?.tags),
     }));
     const client = clienteNoTicket(primeiro as any, orderType, primeiro.order?.customer_name);
+    const lancadoPor = orderType === 'counter' ? null : funcaoNoTicket(primeiro as any, await funcoesDaEquipe(storeId));
     const dadosTicket = {
       kind: kind as 'COZINHA' | 'BAR',
       storeName,
       orderType: orderType === 'counter' ? 'BALCÃO' : 'MESA',
       identifier: orderType === 'counter' ? 'BALCÃO' : `MESA ${tableNumber ?? '?'}`,
       client,
+      lancadoPor,
       items: linhas,
       orderIdShort: primeiro.order_id.slice(0, 8),
     };

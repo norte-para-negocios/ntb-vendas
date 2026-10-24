@@ -164,6 +164,20 @@ export const clienteNoTicket = (
     return doBalcao ? (nome || customerName || null) : null;
 };
 
+// Função de quem lançou, para o papel da cozinha/bar (24/10/2026, ODARA: "se o garçom pediu sai garçom, a função da
+// pessoa"). Pedido do cliente pelo QR não tem função (sai o nome dele em clienteNoTicket). A função vem do cadastro da
+// equipe pelo nome gravado no item; sem achar a pessoa, item da equipe sai como Garçom.
+export const funcaoNoTicket = (
+    item: { notes?: string | null; added_by_role?: string | null; added_by_name?: string | null },
+    funcaoPorNome?: Map<string, string>,
+): string | null => {
+    if (item.added_by_role === 'cliente') return null;
+    const nome = (item.added_by_name || parseItemNote(item.notes || '').client || '').trim().toLowerCase();
+    if (!nome && item.added_by_role !== 'garcom') return null;
+    const funcao = nome ? funcaoPorNome?.get(nome) : undefined;
+    return funcao ? getRoleLabel(funcao) : 'Garçom';
+};
+
 // Nome de exibição de um item de PEDIDO (histórico/impressão/KDS), com
 // adicionais entre parênteses — nunca travessão (regra do projeto).
 // Formato: "Pizza Marguerita (Catupiry)" ou, com múltiplos adicionais,
