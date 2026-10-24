@@ -150,6 +150,20 @@ export const parseItemNote = (fullNote: string): { client: string | null; observ
     return { client: null, observation: fullNote.trim() };
 };
 
+// Nome que vai no papel da cozinha/bar (24/10/2026, ODARA: "quando o garçom faz o pedido imprime Cliente: <nome do
+// garçom>; deixe só a mesa"). Só sai o nome que o CLIENTE digitou no QR (added_by_role 'cliente') e o do balcão;
+// pedido lançado pela equipe na mesa sai só com a mesa.
+export const clienteNoTicket = (
+    item: { notes?: string | null; added_by_role?: string | null },
+    orderType?: string | null,
+    customerName?: string | null,
+): string | null => {
+    const doBalcao = orderType === 'counter';
+    const nome = parseItemNote(item.notes || '').client;
+    if (item.added_by_role === 'cliente') return nome;
+    return doBalcao ? (nome || customerName || null) : null;
+};
+
 // Nome de exibição de um item de PEDIDO (histórico/impressão/KDS), com
 // adicionais entre parênteses — nunca travessão (regra do projeto).
 // Formato: "Pizza Marguerita (Catupiry)" ou, com múltiplos adicionais,

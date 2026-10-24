@@ -109,7 +109,7 @@ import { particionarPorIdade, MAX_IDADE_AUTOIMPRESSAO_MIN } from '@/lib/impressa
 import { PrinterConfig } from '@/types';
 import { playPrintFailureAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resolveOrderFlow } from '@/lib/storeModules';
-import { parseItemNote, getAllergenLabels } from '@/lib/labels';
+import { parseItemNote, getAllergenLabels, clienteNoTicket } from '@/lib/labels';
 import { Store, OrderItem, StoreUser, TableStatus } from '@/types';
 
 type Destination = 'kitchen' | 'bar';
@@ -743,7 +743,7 @@ async function reconcileDestination(
       observation: parseItemNote(it.notes || '').observation || undefined,
       alergenicos: getAllergenLabels((it.product as any)?.tags),
     }));
-    const client = parseItemNote(primeiro.notes || '').client;
+    const client = clienteNoTicket(primeiro as any, orderType, primeiro.order?.customer_name);
     const dadosTicket = {
       kind: kind as 'COZINHA' | 'BAR',
       storeName,

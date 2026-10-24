@@ -76,7 +76,7 @@ import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { roleCan, roleCanOr } from '@/lib/rolePermissions';
 import { dentroDoTempoLivre, limitarQuantidade, minutosLivres } from '@/lib/cancelamentoLivre';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote, clienteNoTicket } from '@/lib/labels';
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
 import { setorDoItem } from '@/lib/setores';
 import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
@@ -1899,7 +1899,7 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
           paperWidthMm: store.config?.printer_paper_width_mm,
           orderType,
           identifier,
-          client,
+          client: clienteNoTicket(item, item.order?.order_type, item.order?.customer_name),
           quantity: item.quantity,
           productName: item.product?.name || 'Produto Indisponível',
           addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
@@ -3721,7 +3721,7 @@ const TablesView: React.FC<{
                     destination,
                     addons: (item.selected_options || []).map(o => o.name).join(', ') || undefined,
                     observation: observation || undefined,
-                    client: client || (order.order_type === 'counter' ? order.customer_name : null),
+                    client: clienteNoTicket(item, order.order_type, order.customer_name),
                     closed,
                     printed: wasKitchenTicketPrinted(storeId, destination, item.id),
                     addedByName: item.added_by_role === 'garcom' ? item.added_by_name : ((order.payment_details as { operador_nome?: string } | null)?.operador_nome && order.order_type === 'counter' ? (order.payment_details as { operador_nome?: string }).operador_nome : null),
@@ -4785,7 +4785,7 @@ NOTIFY pgrst, 'reload schema';`;
                         storeName: store.name,
                         orderType: 'MESA',
                         identifier: `MESA ${mesa.number}`,
-                        client: nomeAutor,
+                        // 24/10/2026: pedido da equipe sai só com a mesa (ver clienteNoTicket em lib/labels.ts).
                         quantity: l.qty,
                         productName: l.product.name,
                         addons: (l.selectedOptions || []).map((o: any) => o.name).join(', ') || undefined,
