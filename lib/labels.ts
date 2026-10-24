@@ -168,13 +168,32 @@ export const clienteNoTicket = (
 // adicionais entre parênteses — nunca travessão (regra do projeto).
 // Formato: "Pizza Marguerita (Catupiry)" ou, com múltiplos adicionais,
 // "Pizza Quatro Queijos (Catupiry, Bacon Extra)".
+// Produto "A ou B ..." com a escolha feita (24/10/2026, ODARA: no papel saía "Acarajé ou Abará + 8 bolinhos de acarajé";
+// tem que sair só "8 bolinhos de acarajé"). A escolha que cita A ou B vira o nome: igual a A/B troca a dupla
+// ("Moqueca ou Ensopado de Camarão" + "Moqueca" = "Moqueca de Camarão"); senão a escolha inteira substitui a dupla
+// ("Acarajé ou Abará" + "8 bolinhos de acarajé" = "8 bolinhos de acarajé"). As outras opções continuam como adicionais.
+const semAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+export const nomeComEscolha = (
+    nomeProduto: string,
+    opcoes: { name: string }[],
+): { nome: string; adicionais: { name: string }[] } => {
+    const m = nomeProduto.match(/^(.+?) ou (\S+)(.*)$/i);
+    if (!m) return { nome: nomeProduto, adicionais: opcoes };
+    const [, a, b, resto] = m;
+    const idx = opcoes.findIndex((o) => { const n = semAcento(o.name || ''); return n.includes(semAcento(a)) || n.includes(semAcento(b)); });
+    if (idx < 0) return { nome: nomeProduto, adicionais: opcoes };
+    const escolha = opcoes[idx].name.trim();
+    const n = semAcento(escolha);
+    const nome = n === semAcento(a) || n === semAcento(b) ? `${escolha}${resto}` : `${escolha.charAt(0).toUpperCase()}${escolha.slice(1)}${resto}`;
+    return { nome, adicionais: opcoes.filter((_, i) => i !== idx) };
+};
+
 export const getOrderItemDisplayName = (
     item: { product?: { name: string } | null; selected_options?: { name: string }[] | null },
     fallback = 'Produto Indisponível',
 ): string => {
-    const base = item.product?.name || fallback;
-    const opts = item.selected_options || [];
-    return opts.length > 0 ? `${base} (${opts.map(o => o.name).join(', ')})` : base;
+    const { nome, adicionais } = nomeComEscolha(item.product?.name || fallback, item.selected_options || []);
+    return adicionais.length > 0 ? `${nome} (${adicionais.map(o => o.name).join(', ')})` : nome;
 };
 
 // Nome de exibição de um item do CARRINHO (antes de virar pedido), mesmo

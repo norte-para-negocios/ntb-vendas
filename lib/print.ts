@@ -12,7 +12,7 @@ import { formatServiceFeeRate, formatBRL } from './calc';
 // no comprovante impresso vem sempre daqui — nunca escrito inline aqui
 // (regra do projeto, já foi bug real 3x). Sem dependência de volta pra
 // print.ts em lib/labels.ts, então importar aqui não cria ciclo.
-import { getPaymentMethodLabel, getCardBrandLabel } from './labels';
+import { getPaymentMethodLabel, getCardBrandLabel, nomeComEscolha } from './labels';
 import { buildRelatorioHtml, buildTabelaHtml, RELATORIO_STYLES, type RelatorioMeta } from './reports/relatorioHtml';
 import type { PainelDia } from './reports/painelDia';
 
@@ -299,8 +299,15 @@ function kitchenTicketLines(opts: {
   addons?: string;
   observation?: string;
 }): KitchenTicketLine[] {
-  if (opts.items && opts.items.length > 0) return opts.items;
-  return [{ quantity: opts.quantity ?? 1, productName: opts.productName ?? '', addons: opts.addons, observation: opts.observation }];
+  const linhas = opts.items && opts.items.length > 0
+    ? opts.items
+    : [{ quantity: opts.quantity ?? 1, productName: opts.productName ?? '', addons: opts.addons, observation: opts.observation }];
+  // "Acarajé ou Abará" + "8 bolinhos de acarajé" sai só "8 bolinhos de acarajé" (nomeComEscolha, lib/labels.ts).
+  return linhas.map((l) => {
+    const opcoes = (l.addons || '').split(', ').filter(Boolean).map((name) => ({ name }));
+    const { nome, adicionais } = nomeComEscolha(l.productName, opcoes);
+    return nome === l.productName ? l : { ...l, productName: nome, addons: adicionais.map((o) => o.name).join(', ') || undefined };
+  });
 }
 
 export function printKitchenTicket(opts: {
