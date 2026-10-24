@@ -2916,3 +2916,10 @@ AUTORIZADA, a gente emitia contingência com o mesmo número e outra chave, e a 
   sai com UUID truncado e o ImportarNFCe recusa (5445) para sempre.
 - `lib/fiscal/inutilizacao.ts` + `scripts/fiscal/inutilizar.ts` (NFeInutilizacao4; consulta antes que a faixa não consta).
   Sertão série 002, 74–75 inutilizados em 23/10/2026, protocolo 229261383785768.
+
+## Pagar só a parte de uma pessoa (185, 24/10/2026, pedido da ODARA)
+`separar_parte_da_conta_secure` + `separarParteDaConta` (lib/api.ts): na tela de pagamento, "Receber só a parte de X"
+(aba Por pessoa) ou "Receber só os itens marcados" (Calculadora, com quantidade). Os itens viram uma CONTA AGUARDANDO
+da mesma mesa (mesmo mecanismo do Liberar mesa) e o pagamento dela abre na hora; a mesa continua com o resto. Parte de
+uma linha: a original (mesmo id, histórico de impressão) vai para a conta separada e uma linha nova fica na mesa com o
+resto (nada é inserido na conta aguardando; `ntb.dividindo_item` deixa o resto passar no gatilho de esgotado).

@@ -1965,6 +1965,29 @@ export const liberarMesa = async (tableId: string, operatorName: string): Promis
   return { success: !!r.success, message: r.message, standbyTableId: r.standby_table_id };
 };
 
+// Pagar só a parte de uma pessoa (migration 185, ODARA 24/10/2026): os itens escolhidos viram uma conta aguardando da
+// mesma mesa, recebida pelo caminho normal; a mesa continua aberta com o resto. Precisa de internet (mexe em duas contas).
+export const separarParteDaConta = async (
+  storeId: string,
+  tableId: string,
+  itens: { id: string; qtd?: number }[],
+  nome: string,
+  operatorUserId: string | null,
+  operatorName: string,
+): Promise<{ success: boolean; message?: string; standbyTableId?: string; valor?: number }> => {
+  const { data, error } = await supabase.rpc('separar_parte_da_conta_secure', {
+    p_store_id: storeId, p_table_id: tableId, p_itens: itens, p_nome: nome || null,
+    p_operator_user_id: operatorUserId, p_operator_name: operatorName || null,
+  });
+  if (error) {
+    if (isNetworkError(error)) return { success: false, message: 'Sem internet. Separar a parte precisa de conexão.' };
+    if ((error as { code?: string }).code === 'PGRST202') return { success: false, message: 'O servidor ainda não tem esta função. Atualize o sistema.' };
+    return { success: false, message: error.message };
+  }
+  const r = (data ?? {}) as { success?: boolean; message?: string; standby_table_id?: string; valor?: number };
+  return { success: !!r.success, message: r.message, standbyTableId: r.standby_table_id, valor: r.valor };
+};
+
 // Volta a conta aguardando para a mesa (foi sem querer). Só funciona se a mesa ainda estiver livre.
 export const reabrirContaAguardando = async (standbyTableId: string): Promise<{ success: boolean; message?: string }> => {
   const { data, error } = await supabase.rpc('reabrir_conta_aguardando_secure', { p_standby_id: standbyTableId });

@@ -42,7 +42,7 @@ import { completarFormas, completarCartoes, ticketMedio } from '@/lib/caixaResum
 import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
-import { liberarMesa, reabrirContaAguardando } from '@/lib/api';
+import { liberarMesa, reabrirContaAguardando, separarParteDaConta } from '@/lib/api';
 import { tokenLoja, limparTokenLoja, emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, createStoreUserInvite, linkDoConvite, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
@@ -4660,6 +4660,39 @@ NOTIFY pgrst, 'reload schema';`;
         loadData();
     };
 
+    // Pagar só a parte de uma pessoa (migration 185, ODARA 24/10/2026): os itens viram uma conta aguardando da mesma mesa
+    // e o pagamento dela abre na hora; a mesa continua aberta com o resto.
+    const [separandoParte, setSeparandoParte] = useState(false);
+    const [parteNome, setParteNome] = useState('');
+    const [abrirPagamentoDeId, setAbrirPagamentoDeId] = useState<string | null>(null);
+    const handleSepararParte = async (itens: { id: string; qtd?: number }[], nome: string) => {
+        if (!selectedTable || selectedTable.standby || separandoParte || itens.length === 0) return;
+        setSeparandoParte(true);
+        try {
+            const mesa = selectedTable;
+            const r = await separarParteDaConta(storeId, mesa.id, itens, nome.trim(), loggedUser.role === 'universal' ? null : loggedUser.id, loggedUser.name);
+            if (!r.success || !r.standbyTableId) { toast.error(r.message || 'Não deu para separar a parte.'); return; }
+            registrarAcao(storeId, 'conta.separada', { entity: 'tables', entityId: r.standbyTableId,
+                summary: `Mesa ${mesa.number}: parte de ${nome.trim() || 'uma pessoa'} separada para pagar (R$ ${formatBRL(r.valor ?? 0)})`,
+                details: { mesa: mesa.number, nome: nome.trim() || null, itens, valor: r.valor ?? null } });
+            toast.success(`Parte separada (R$ ${formatBRL(r.valor ?? 0)}). Receba agora; a mesa ${mesa.number} continua aberta.`);
+            setShowPaymentModal(false);
+            setParteNome('');
+            setAbrirPagamentoDeId(r.standbyTableId);
+            loadData();
+        } finally {
+            setSeparandoParte(false);
+        }
+    };
+    useEffect(() => {
+        if (!abrirPagamentoDeId) return;
+        const conta = tables.find((t) => t.id === abrirPagamentoDeId);
+        if (!conta || getTableSummary(conta.id).total <= 0) return;
+        setAbrirPagamentoDeId(null);
+        handleOpenPayment(conta);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [abrirPagamentoDeId, tables, activeOrders]);
+
     const handleDismissWaiter = async (tableId: string) => {
         try {
             await dismissWaiterRequest(tableId);
@@ -6505,6 +6538,18 @@ NOTIFY pgrst, 'reload schema';`;
                                             >
                                                 Lançar pagamento de {name}
                                             </Button>
+                                            {!selectedTable?.standby && data.items.length < (currentTableSummary?.allItems.length ?? 0) && (
+                                                <Button
+                                                    className="w-full sm:flex-1 max-sm:!h-11 !bg-[var(--surface)]"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    isLoading={separandoParte}
+                                                    disabled={separandoParte}
+                                                    onClick={() => handleSepararParte(data.items.filter((it: any) => it.status !== 'canceled').map((it: any) => ({ id: it.id })), name === 'Mesa / Geral' ? '' : name)}
+                                                >
+                                                    Receber só a parte de {name}
+                                                </Button>
+                                            )}
                                             {emissaoFiscalConfigurada && (
                                                 <Button
                                                     className="w-full sm:flex-1 max-sm:!h-11 !bg-[var(--surface)]"
@@ -6585,6 +6630,23 @@ NOTIFY pgrst, 'reload schema';`;
                                     >
                                         Preencher valor no pagamento
                                     </Button>
+                                    {!selectedTable?.standby && calculatorTotal > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-2">
+                                            <p className="text-[13px] text-[var(--text-muted)]">
+                                                Alguém vai embora? Os itens marcados viram uma conta separada para pagar agora; o resto continua na mesa.
+                                            </p>
+                                            <Input label="Nome de quem vai pagar (opcional)" placeholder="Ex.: Maria" value={parteNome} onChange={(e) => setParteNome(e.target.value)} maxLength={40} />
+                                            <Button
+                                                variant="outline"
+                                                className="w-full"
+                                                isLoading={separandoParte}
+                                                disabled={separandoParte}
+                                                onClick={() => handleSepararParte(Object.entries(paymentSelectedItems).filter(([, q]) => q > 0).map(([id, qtd]) => ({ id, qtd })), parteNome)}
+                                            >
+                                                Receber só os itens marcados
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
