@@ -26,6 +26,7 @@ import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { SPRING_TAP, SPRING_SHEET } from '@/lib/motion';
 import { resolveOrderFlow, OrderFlow } from '@/lib/storeModules';
 import { THEME_PRESETS, resolveThemePreset } from '@/lib/theme';
+import { corParaBotao } from '@/lib/colorContrast';
 import { lerSessaoSalva, decidirRestauracao, montarSessaoSalva, textoConfirmarSessao } from '@/lib/sessaoCardapio';
 
 // --- COMPONENTS ---
@@ -2755,11 +2756,12 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     useEffect(() => {
         if (typeof document === 'undefined' || !corDaLoja || !/^#[0-9a-fA-F]{6}$/.test(corDaLoja)) return;
         const raiz = document.documentElement.style;
+        const cor = corParaBotao(corDaLoja); // cor clara escurece no mesmo tom até a letra branca ler bem
         const vars: Record<string, string> = {
-            '--brand': corDaLoja,
-            '--brand-fill': corDaLoja,
-            '--brand-strong': `color-mix(in srgb, ${corDaLoja} 80%, black)`,
-            '--brand-soft': `color-mix(in srgb, ${corDaLoja} 12%, white)`,
+            '--brand': cor,
+            '--brand-fill': cor,
+            '--brand-strong': `color-mix(in srgb, ${cor} 80%, black)`,
+            '--brand-soft': `color-mix(in srgb, ${corDaLoja} 14%, white)`,
         };
         Object.entries(vars).forEach(([k, v]) => raiz.setProperty(k, v));
         return () => { Object.keys(vars).forEach((k) => raiz.removeProperty(k)); };

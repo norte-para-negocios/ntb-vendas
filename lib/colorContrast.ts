@@ -70,13 +70,18 @@ export function checkAccentColorContrast(hex: string): AccentColorCheck {
   if (!isValidHexColor(hex)) {
     return { legible: false, ratio: 0, message: 'Cor inválida. Use o seletor de cor.' };
   }
-  const ratio = contrastRatio(hex, '#ffffff');
-  if (ratio < MIN_BOTAO_CONTRAST_RATIO) {
-    return {
-      legible: false,
-      ratio,
-      message: `Essa cor é clara demais: a letra branca dos botões fica difícil de ler (contraste ${ratio.toFixed(2)}:1, mínimo ${MIN_BOTAO_CONTRAST_RATIO}:1). Escolha um tom mais escuro.`,
-    };
+  // Cor clara não é mais recusada: corParaBotao escurece no mesmo tom até a letra branca ficar legível.
+  return { legible: true, ratio: contrastRatio(corParaBotao(hex), '#ffffff') };
+}
+
+// Cor que vai de verdade nos botões: a escolhida, escurecida no mesmo tom só até a letra branca ficar legível (3:1).
+// 24/10/2026: em vez de recusar cor clara (bege recusado na ODARA), ajusta sozinho.
+export function corParaBotao(hex: string): string {
+  if (!isValidHexColor(hex)) return hex;
+  let [r, g, b] = hexToRgb(hex);
+  const paraHex = (x: number, y: number, z: number) => '#' + [x, y, z].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  for (let i = 0; i < 40 && contrastRatio(paraHex(r, g, b), '#ffffff') < MIN_BOTAO_CONTRAST_RATIO; i++) {
+    r *= 0.94; g *= 0.94; b *= 0.94;
   }
-  return { legible: true, ratio };
+  return paraHex(r, g, b);
 }

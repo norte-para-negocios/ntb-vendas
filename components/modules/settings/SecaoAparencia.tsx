@@ -1,5 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import { corParaBotao } from '@/lib/colorContrast';
 import { AlertCircle, Upload, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from '@/components/Toast';
@@ -100,7 +101,7 @@ export const SecaoAparencia: React.FC<{ store: Store; onStoreUpdate?: (s: Store)
                 <h4 className="font-semibold text-[15px] text-[var(--text)]">Cor do cardápio</h4>
                 <p className="text-[13px] text-[var(--text-muted)] mb-3">
                     Troca o azul dos botões, das abas e dos detalhes do cardápio do cliente pela cor da sua loja. Os textos
-                    continuam pretos. Sem cor própria, o cardápio usa o azul padrão.
+                    continuam pretos. Cor muito clara é escurecida no mesmo tom para a letra dos botões ficar legível.
                 </p>
                 <div className="flex items-center gap-4 flex-wrap">
                     <input type="color" aria-label="Escolher a cor do cardápio" value={cor}
@@ -110,9 +111,9 @@ export const SecaoAparencia: React.FC<{ store: Store; onStoreUpdate?: (s: Store)
                         <div>
                             <span className="text-[12px] text-[var(--text-muted)] block">Pré-visualização</span>
                             <span className="font-semibold text-[15px] text-[#111]">Moqueca de Camarão</span>
-                            <span className="text-[13px] font-semibold block" style={{ color: cor }}>Mais pedido</span>
+                            <span className="text-[13px] font-semibold block" style={{ color: corParaBotao(cor) }}>Mais pedido</span>
                         </div>
-                        <span className="h-10 px-4 rounded-full text-white text-[14px] font-semibold flex items-center" style={{ background: cor }}>Adicionar</span>
+                        <span className="h-10 px-4 rounded-full text-white text-[14px] font-semibold flex items-center" style={{ background: corParaBotao(cor) }}>Adicionar</span>
                     </div>
                     <div className="flex gap-2">
                         <Button onClick={() => salvarCor(cor)} isLoading={salvandoCor}>Salvar Cor</Button>
