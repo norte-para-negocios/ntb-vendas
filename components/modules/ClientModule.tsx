@@ -941,7 +941,7 @@ const LoginScreen: React.FC<{ onLogin: (name: string, tableId: string | null, is
                     </div>
                 )}
                 <h1 className="text-2xl font-bold text-[var(--text)] tracking-tight mb-1">{store?.name || 'Cardápio Digital'}</h1>
-                <p className="text-sm" style={{ color: store?.config?.accent_color || 'var(--brand)' }}>Identifique-se para continuar seu pedido</p>
+                <p className="text-sm text-[var(--text-muted)]">Identifique-se para continuar seu pedido</p>
             </div>
             <Card className={`u-grow-in relative w-full p-6 space-y-5 ${onClose ? 'pt-14' : ''}`} style={{ boxShadow: '0 30px 60px -18px rgba(0,0,0,0.55)' }}>
                 {onClose && (
@@ -2747,6 +2747,23 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
     // Fase 5, Task 18: preset de identidade visual (fonte de destaque, textura
     // do hero, emoji das abas) — ver lib/theme.ts.
     const theme = THEME_PRESETS[resolveThemePreset(currentStore?.config?.theme_preset)];
+
+    // Cor da loja (24/10/2026, pedido do dono: "se eu ponho vermelho, os botões e as partes azuis ficam vermelhas; a
+    // letra continua preta"). A cor escolhida SUBSTITUI o azul da marca (--brand e derivados) no cardápio inteiro,
+    // inclusive modais e carrinho (que abrem fora desta árvore, por isso vai no <html>). Texto não muda.
+    const corDaLoja = currentStore?.config?.accent_color;
+    useEffect(() => {
+        if (typeof document === 'undefined' || !corDaLoja || !/^#[0-9a-fA-F]{6}$/.test(corDaLoja)) return;
+        const raiz = document.documentElement.style;
+        const vars: Record<string, string> = {
+            '--brand': corDaLoja,
+            '--brand-fill': corDaLoja,
+            '--brand-strong': `color-mix(in srgb, ${corDaLoja} 80%, black)`,
+            '--brand-soft': `color-mix(in srgb, ${corDaLoja} 12%, white)`,
+        };
+        Object.entries(vars).forEach(([k, v]) => raiz.setProperty(k, v));
+        return () => { Object.keys(vars).forEach((k) => raiz.removeProperty(k)); };
+    }, [corDaLoja]);
 
     // Cardápio vitrine (pedido do Ramon/Sertão, 2026-09-26): a LOJA decide se
     // o cliente pode pedir pelo QR. `client_ordering` ausente = true (lojas
@@ -4665,7 +4682,7 @@ export const ClientModule: React.FC<{ slug: string }> = ({ slug }) => {
                 isLoading={isLoading}
                 onUpdateQty={(item, delta) => addToCart(item.product, delta, item.notes, item.selectedOptions)}
                 onRemove={(item) => removeFromCart(item.product, item.notes, item.selectedOptions)}
-                accentColor={currentStore?.config?.accent_color || 'var(--text)'}
+                accentColor="var(--text)"
                 storeId={currentStore?.id}
             />
 

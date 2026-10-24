@@ -6,7 +6,6 @@ import { toast } from '@/components/Toast';
 import type { Store } from '@/types';
 import { updateStoreAccentColor, uploadStoreCover, updateStoreCoverUrl } from '@/lib/api';
 import { THEME_PRESETS, resolveThemePreset, type ThemePreset } from '@/lib/theme';
-import { MENU_DARK_BG_HEX } from '@/lib/colorContrast';
 import { useSettingsConfig } from './SettingsConfigContext';
 
 const ACCENT_COLOR_DEFAULT = '#484DB5';
@@ -98,19 +97,22 @@ export const SecaoAparencia: React.FC<{ store: Store; onStoreUpdate?: (s: Store)
             </div>
 
             <div id="aj-cor_destaque" className="pb-4 border-b border-[var(--border)] scroll-mt-24">
-                <h4 className="font-semibold text-[15px] text-[var(--text)]">Cor de destaque da tela de identificação</h4>
+                <h4 className="font-semibold text-[15px] text-[var(--text)]">Cor do cardápio</h4>
                 <p className="text-[13px] text-[var(--text-muted)] mb-3">
-                    Cor usada no ícone e no texto de apoio da tela onde o cliente se identifica antes de pedir
-                    (&ldquo;Identifique-se para continuar seu pedido&rdquo;). Sem cor própria definida, o cardápio usa o
-                    azul padrão da marca.
+                    Troca o azul dos botões, das abas e dos detalhes do cardápio do cliente pela cor da sua loja. Os textos
+                    continuam pretos. Sem cor própria, o cardápio usa o azul padrão.
                 </p>
                 <div className="flex items-center gap-4 flex-wrap">
-                    <input type="color" aria-label="Escolher cor de destaque" value={cor}
+                    <input type="color" aria-label="Escolher a cor do cardápio" value={cor}
                         onChange={(e) => { setCor(e.target.value); setErroCor(null); }}
                         className="w-12 h-12 rounded-lg border border-[var(--border)] cursor-pointer p-0.5 bg-[var(--surface)]" />
-                    <div className="px-4 py-3 rounded-[14px] bg-[var(--surface-2)]" style={{ background: MENU_DARK_BG_HEX }}>
-                        <span className="text-[12px] text-white/50 block mb-1">Pré-visualização</span>
-                        <span className="font-semibold text-sm" style={{ color: cor }}>Identifique-se para continuar seu pedido</span>
+                    <div className="px-4 py-3 rounded-[14px] bg-white border border-[var(--border)] flex items-center gap-3">
+                        <div>
+                            <span className="text-[12px] text-[var(--text-muted)] block">Pré-visualização</span>
+                            <span className="font-semibold text-[15px] text-[#111]">Moqueca de Camarão</span>
+                            <span className="text-[13px] font-semibold block" style={{ color: cor }}>Mais pedido</span>
+                        </div>
+                        <span className="h-10 px-4 rounded-full text-white text-[14px] font-semibold flex items-center" style={{ background: cor }}>Adicionar</span>
                     </div>
                     <div className="flex gap-2">
                         <Button onClick={() => salvarCor(cor)} isLoading={salvandoCor}>Salvar Cor</Button>

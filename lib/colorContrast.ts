@@ -62,16 +62,20 @@ export interface AccentColorCheck {
 
 // Usado por `updateStoreAccentColor` (lib/api.ts) ANTES de persistir — recusa
 // salvar, não é só um aviso visual no picker.
+// 24/10/2026: a cor da loja virou a cor dos BOTÕES e detalhes (substitui o azul da marca), com letra branca dentro do
+// botão; o texto do cardápio continua preto. A trava agora confere a letra branca sobre a cor (3:1, texto de botão em
+// negrito); antes testava a cor como texto sobre fundo escuro e recusava vermelho.
+export const MIN_BOTAO_CONTRAST_RATIO = 3;
 export function checkAccentColorContrast(hex: string): AccentColorCheck {
   if (!isValidHexColor(hex)) {
     return { legible: false, ratio: 0, message: 'Cor inválida. Use o seletor de cor.' };
   }
-  const ratio = contrastRatio(hex, MENU_DARK_BG_HEX);
-  if (ratio < MIN_ACCENT_CONTRAST_RATIO) {
+  const ratio = contrastRatio(hex, '#ffffff');
+  if (ratio < MIN_BOTAO_CONTRAST_RATIO) {
     return {
       legible: false,
       ratio,
-      message: `Essa cor fica pouco legível sobre o fundo escuro do cardápio (contraste ${ratio.toFixed(2)}:1 — mínimo exigido ${MIN_ACCENT_CONTRAST_RATIO}:1). Escolha uma cor mais clara ou mais saturada.`,
+      message: `Essa cor é clara demais: a letra branca dos botões fica difícil de ler (contraste ${ratio.toFixed(2)}:1, mínimo ${MIN_BOTAO_CONTRAST_RATIO}:1). Escolha um tom mais escuro.`,
     };
   }
   return { legible: true, ratio };
