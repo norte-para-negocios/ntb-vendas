@@ -5,7 +5,7 @@ import { formatBRL } from '../calc';
 
 export interface RelatorioMeta { loja: string; periodoLabel: string; geradoEm: Date; geradoPor: string; titulo?: string }
 export const esc = (s: unknown): string => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
-const brl = (n: number) => `R$ ${formatBRL(Number.isFinite(n) ? n : 0)}`;
+export const brl = (n: number) => `R$ ${formatBRL(Number.isFinite(n) ? n : 0)}`;
 const pctTxt = (n: number) => `${(Number.isFinite(n) ? n * 100 : 0).toFixed(1).replace('.', ',')}%`;
 const RODAPE = 'Norte Vendas · Norte para Negócios · norteparanegocios.com.br';
 
@@ -37,12 +37,12 @@ export const RELATORIO_STYLES = `
   .rodape { margin-top: 14px; padding-top: 6px; border-top: 1px solid #E4E5F2; color: #8A8EA0; font-size: 8px; text-align: center; }
 `;
 
-const cabecalho = (m: RelatorioMeta, titulo: string) => `
+export const cabecalho = (m: RelatorioMeta, titulo: string) => `
   <div class="topo">${NORTE_SIMBOLO_SVG}<span>NORTE VENDAS · ${esc(titulo)}</span></div>
   <div class="capa"><h1>${esc(m.loja)}</h1><p>${esc(m.periodoLabel)} · gerado em ${esc(m.geradoEm.toLocaleString('pt-BR'))} por ${esc(m.geradoPor)}</p></div>`;
-const rodape = `<div class="rodape">${esc(RODAPE)}</div>`;
+export const rodape = `<div class="rodape">${esc(RODAPE)}</div>`;
 
-function tabela(titulo: string, cols: { rotulo: string; direita?: boolean }[], linhas: { cels: string[]; zero?: boolean; barra?: number }[], total?: string[]): string {
+export function tabela(titulo: string, cols: { rotulo: string; direita?: boolean }[], linhas: { cels: string[]; zero?: boolean; barra?: number }[], total?: string[]): string {
   const comBarra = linhas.some((l) => l.barra != null);
   return `<h2>${esc(titulo)}</h2><table><thead><tr>${cols.map((c) => `<th class="${c.direita ? 'd' : ''}">${esc(c.rotulo)}</th>`).join('')}${comBarra ? '<th style="width:28%"></th>' : ''}</tr></thead><tbody>
     ${linhas.map((l) => `<tr>${l.cels.map((c, i) => `<td class="${cols[i]?.direita ? 'd' : ''} ${l.zero ? 'zero' : ''}">${esc(c)}</td>`).join('')}${comBarra ? `<td><div class="bar"><i style="width:${Math.max(0, Math.min(100, Math.round((l.barra ?? 0) * 100)))}%"></i></div></td>` : ''}</tr>`).join('')}
@@ -51,7 +51,7 @@ function tabela(titulo: string, cols: { rotulo: string; direita?: boolean }[], l
 }
 
 // Barra relativa à maior linha (a maior ocupa 100%).
-const relativas = <T,>(xs: T[], valor: (x: T) => number): number[] => { const max = Math.max(0, ...xs.map(valor)); return xs.map((x) => (max > 0 ? valor(x) / max : 0)); };
+export const relativas = <T,>(xs: T[], valor: (x: T) => number): number[] => { const max = Math.max(0, ...xs.map(valor)); return xs.map((x) => (max > 0 ? valor(x) / max : 0)); };
 
 export function buildRelatorioHtml(p: PainelDia, m: RelatorioMeta): string {
   const k = p.kpis;

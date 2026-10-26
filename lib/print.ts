@@ -13,7 +13,9 @@ import { formatServiceFeeRate, formatBRL } from './calc';
 // (regra do projeto, já foi bug real 3x). Sem dependência de volta pra
 // print.ts em lib/labels.ts, então importar aqui não cria ciclo.
 import { getPaymentMethodLabel, getCardBrandLabel, nomeComEscolha } from './labels';
-import { buildRelatorioHtml, buildTabelaHtml, RELATORIO_STYLES, type RelatorioMeta } from './reports/relatorioHtml';
+import { buildRelatorioHtml, buildTabelaHtml, RELATORIO_STYLES, cabecalho, rodape, type RelatorioMeta } from './reports/relatorioHtml';
+import { buildRelatorioCompletoHtml, tabelaContas, ESTILO_COMPLETO, type SecaoRelatorio } from './reports/relatorioCompletoHtml';
+import type { Analise, ContaResumo } from './reports/analiseVendas';
 import type { PainelDia } from './reports/painelDia';
 
 // Nome do cliente e observação do pedido são texto livre digitado pelo cliente final e
@@ -874,6 +876,14 @@ export function printRelatorioDia(p: PainelDia, m: RelatorioMeta): Promise<boole
 }
 
 // Qualquer relatório em tabela (análise por hora/operador, turno, exceções) com o mesmo cabeçalho e rodapé.
+// Relatório completo (25/10/2026): o painel inteiro ou só as seções escolhidas, ou uma lista de contas clicada.
+export function printRelatorioCompleto(a: Analise, m: RelatorioMeta, secoes?: SecaoRelatorio[]): Promise<boolean> {
+  return printHtmlDocument(`${m.titulo ?? 'Relatório completo'} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildRelatorioCompletoHtml(a, m, secoes));
+}
+export function printListaDeContas(titulo: string, contas: ContaResumo[], m: RelatorioMeta): Promise<boolean> {
+  return printHtmlDocument(`${titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, `${cabecalho(m, titulo)}${tabelaContas(titulo, contas)}${rodape}`);
+}
+
 export function printTabela(t: Parameters<typeof buildTabelaHtml>[0], m: RelatorioMeta): Promise<boolean> {
   return printHtmlDocument(`${t.titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildTabelaHtml(t, m));
 }
