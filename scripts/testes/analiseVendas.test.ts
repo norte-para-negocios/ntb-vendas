@@ -1,6 +1,6 @@
 // rodar com: npx tsx scripts/testes/analiseVendas.test.ts
 import assert from 'node:assert/strict';
-import { analisarVendas, contasDoRecorte, opcoesDosFiltros, FILTROS_VAZIOS } from '../../lib/reports/analiseVendas';
+import { analisarVendas, contasDoRecorte, opcoesDosFiltros, serieComparada, FILTROS_VAZIOS } from '../../lib/reports/analiseVendas';
 
 const cats = [{ id: 'beb', name: 'Bebidas', group_id: 'g1' }, { id: 'pra', name: 'Pratos', group_id: null }];
 const it = (pid: string, nome: string, cat: string | null, q: number, preco: number, extra: Record<string, unknown> = {}) =>
@@ -64,4 +64,22 @@ assert.equal(v.kpis.faturamento, 0); assert.equal(v.kpis.ticket, 0); assert.equa
 const op = opcoesDosFiltros(vendas);
 assert.ok(op.pessoas.includes('Talislane') && op.pessoas.includes('Cliente pelo QR'));
 assert.deepEqual(op.formas.map((f) => f.chave).sort(), ['CASH', 'CREDIT', 'PIX']);
+
+// v2 (26/10): mapa de calor, mesa × balcão, picos, ticket por dia
+assert.equal(a.mapaCalor.length, 7);
+assert.equal(a.mapaCalor[6][13], 154); // sábado 24/10 13h
+assert.equal(a.porTipo.balcao.total, 10);
+assert.equal(a.porTipo.balcao.contas, 1);
+assert.equal(a.porTipo.mesa.total, 164);
+assert.equal(a.kpis.mesasAtendidas, 1);
+assert.equal(a.kpis.maiorConta, 154);
+assert.equal(a.kpis.horaPico, 13);
+assert.equal(a.kpis.diaPico, '2026-10-24');
+assert.equal(a.porDia[0].ticket, 154);
+assert.equal(a.porDia[1].ticket, 10);
+const vazia = analisarVendas([], cats);
+assert.equal(vazia.kpis.horaPico, null);
+assert.equal(vazia.kpis.diaPico, null);
+assert.deepEqual(serieComparada([{ dia: '2026-10-24', total: 10 }, { dia: '2026-10-25', total: 20 }], [{ dia: '2026-10-22', total: 5 }]),
+  [{ rotulo: '24/10', atual: 10, anterior: 5 }, { rotulo: '25/10', atual: 20, anterior: null }]);
 console.log('analiseVendas: ok');

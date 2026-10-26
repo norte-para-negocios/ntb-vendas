@@ -16,8 +16,11 @@ export type LinhaProduto = { chave: string; nome: string; categoriaId: string; c
 export type ContaResumo = { id: string; quando: string; local: string; operador: string; formas: string; total: number; itens: { nome: string; qtd: number; total: number }[] };
 export type Analise = {
   modoItens: boolean;
-  kpis: { faturamento: number; contas: number; ticket: number; itens: number; taxaServico: number; cortesia: number; cancelados: { qtd: number; valor: number } };
-  porDia: { dia: string; total: number; contas: number }[];
+  kpis: { faturamento: number; contas: number; ticket: number; itens: number; taxaServico: number; cortesia: number; cancelados: { qtd: number; valor: number }; mesasAtendidas: number; maiorConta: number; horaPico: number | null; diaPico: string | null };
+  porDia: { dia: string; total: number; contas: number; ticket: number }[];
+  /** 7 × 24: total vendido por dia da semana (0 = domingo) e hora, fuso da Bahia. */
+  mapaCalor: number[][];
+  porTipo: { mesa: { total: number; contas: number }; balcao: { total: number; contas: number } };
   porHora: { hora: number; total: number; contas: number }[];
   porDiaSemana: { dia: number; total: number; contas: number }[];
   produtos: LinhaProduto[];
@@ -97,7 +100,9 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
   const { linhas, modoItens } = aplicar(vendas, categorias, f);
   const nomeCat = new Map(categorias.map((c) => [c.id, c.name]));
   const contasVendidas = linhas.filter((l) => l.valor > 0);
-  const k = { faturamento: 0, contas: 0, ticket: 0, itens: 0, taxaServico: 0, cortesia: 0, cancelados: { qtd: 0, valor: 0 } };
+  const k: Analise['kpis'] = { faturamento: 0, contas: 0, ticket: 0, itens: 0, taxaServico: 0, cortesia: 0, cancelados: { qtd: 0, valor: 0 }, mesasAtendidas: 0, maiorConta: 0, horaPico: null, diaPico: null };
+  const mapaCalor = Array.from({ length: 7 }, () => new Array(24).fill(0) as number[]);
+  const porTipo = { mesa: { total: 0, contas: 0 }, balcao: { total: 0, contas: 0 } };
   const dias = new Map<string, { total: number; contas: number }>();
   const horas = new Map<number, { total: number; contas: number }>();
   const semana = new Map<number, { total: number; contas: number }>();
@@ -117,6 +122,9 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
     const t = partesBahia(o.created_at);
     soma(dias, t.dia, l.valor); soma(horas, t.hora, l.valor); soma(semana, t.dow, l.valor);
     soma(mesas, localDa(o), l.valor);
+    mapaCalor[t.dow][t.hora] += l.valor;
+    const tp = o.order_type === 'counter' ? porTipo.balcao : porTipo.mesa; tp.total += l.valor; tp.contas += 1;
+    if (l.valor > k.maiorConta) k.maiorConta = l.valor;
     const conta = chaveContaPaga(o);
     for (const m of metodosDoPagamento(o) ?? []) {
       if (!m.method || m.method === CORTESIA) continue;
@@ -138,6 +146,11 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
   k.faturamento = arred(k.faturamento); k.taxaServico = arred(k.taxaServico); k.cortesia = arred(k.cortesia);
   k.cancelados.valor = arred(k.cancelados.valor);
   k.ticket = k.contas ? arred(k.faturamento / k.contas) : 0;
+  k.maiorConta = arred(k.maiorConta);
+  k.mesasAtendidas = [...mesas.keys()].filter((r) => r !== 'Balcão').length;
+  const pico = <K,>(m: Map<K, { total: number }>) => { let best: K | null = null; let v = -1; for (const [key, x] of m) if (x.total > v) { v = x.total; best = key; } return best; };
+  k.horaPico = pico(horas); k.diaPico = pico(dias);
+  porTipo.mesa.total = arred(porTipo.mesa.total); porTipo.balcao.total = arred(porTipo.balcao.total);
 
   const produtos = [...prods.values()].map(({ _contas, ...p }) => ({ ...p, total: arred(p.total), contas: _contas.size }))
     .sort((a, b) => b.qtd - a.qtd || b.total - a.total || a.nome.localeCompare(b.nome));
@@ -148,7 +161,9 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
   return {
     modoItens,
     kpis: k,
-    porDia: [...dias.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([dia, v]) => ({ dia, total: arred(v.total), contas: v.contas })),
+    porDia: [...dias.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([dia, v]) => ({ dia, total: arred(v.total), contas: v.contas, ticket: arred(v.total / v.contas) })),
+    mapaCalor: mapaCalor.map((h) => h.map(arred)),
+    porTipo,
     porHora: [...horas.entries()].sort(([a], [b]) => a - b).map(([hora, v]) => ({ hora, total: arred(v.total), contas: v.contas })),
     porDiaSemana: [...semana.entries()].sort(([a], [b]) => a - b).map(([dia, v]) => ({ dia, total: arred(v.total), contas: v.contas })),
     produtos,
@@ -193,4 +208,9 @@ export function opcoesDosFiltros(vendas: Order[]): { pessoas: string[]; formas: 
     for (const m of formasDa(o)) fs.add(m);
   }
   return { pessoas: [...pessoas].sort((a, b) => a.localeCompare(b)), formas: [...fs].map((chave) => ({ chave, rotulo: getPaymentMethodLabel(chave) })).sort((a, b) => a.rotulo.localeCompare(b.rotulo)) };
+}
+
+/** Período atual × anterior no mesmo gráfico, alinhados pela posição (1º dia com 1º dia). */
+export function serieComparada(atual: { dia: string; total: number }[], anterior: { dia: string; total: number }[]): { rotulo: string; atual: number; anterior: number | null }[] {
+  return atual.map((d, i) => ({ rotulo: `${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}`, atual: d.total, anterior: anterior[i]?.total ?? null }));
 }
