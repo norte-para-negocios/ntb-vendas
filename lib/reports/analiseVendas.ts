@@ -32,7 +32,7 @@ type Item = NonNullable<Order['order_items']>[number] & { added_by_role?: string
 type Pd = { operador_nome?: string } | null;
 const SEM_CATEGORIA = '_sem';
 const arred = (n: number) => Math.round(n * 100) / 100;
-const partesBahia = (iso: string) => {
+export const partesBahia = (iso: string) => {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false, weekday: 'short' }).formatToParts(new Date(iso));
   const g = (t: string) => p.find((x) => x.type === t)?.value ?? '';
   const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(g('weekday'));
@@ -40,8 +40,8 @@ const partesBahia = (iso: string) => {
 };
 const assinatura = (i: Item) => (i.selected_options || []).map((o) => o.name).slice().sort().join('|');
 export const chaveDoProduto = (i: Item) => `${i.product_id ?? i.product?.name ?? '?'}::${assinatura(i)}`;
-const ehProduto = (i: Item) => i.status !== ('canceled' as never) && !i.product?.fee_type;
-const localDa = (o: Order) => (o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as { tables?: { number?: number | string } }).tables?.number ?? '?'}`);
+export const ehProduto = (i: Item) => i.status !== ('canceled' as never) && !i.product?.fee_type;
+export const localDa = (o: Order) => (o.order_type === 'counter' ? 'Balcão' : `Mesa ${(o as { tables?: { number?: number | string } }).tables?.number ?? '?'}`);
 const operadorDa = (o: Order) => ((o.payment_details as Pd)?.operador_nome || 'Equipe').trim();
 export const quemLancou = (i: Item, o: Order) => (i.added_by_role === 'cliente' ? 'Cliente pelo QR' : (i.added_by_name || operadorDa(o)).trim());
 const formasDa = (o: Order) => (metodosDoPagamento(o) ?? []).filter((m) => m.method && m.method !== CORTESIA).map((m) => m.method as string);

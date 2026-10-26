@@ -1900,6 +1900,13 @@ export const fetchExceptionsReport = async (storeId: string, from: Date, to: Dat
   return data as import('@/lib/excecoes').ExceptionsReport;
 };
 
+// Relatórios → Equipe (migration 189): entrou/saiu, pré-conta, troca de mesa, abriu mesa por pessoa. null = falhou.
+export const fetchAtividadeEquipe = async (storeId: string, from: Date, to: Date): Promise<import('@/lib/reports/analiseEquipe').AtividadeEquipe | null> => {
+  const { data, error } = await supabase.rpc('fetch_atividade_equipe_secure', { p_store_id: storeId, p_from: from.toISOString(), p_to: to.toISOString() });
+  if (error || !data) { if (error) console.error('fetchAtividadeEquipe falhou:', error); return null; }
+  return data as import('@/lib/reports/analiseEquipe').AtividadeEquipe;
+};
+
 // Abertura manual pelo lojista (ex.: balcão abrindo mesa direto) — sem PIN,
 // mas ainda grava a sessão para entrar na métrica de tempo médio de ocupação.
 // Devolve `{queued}` pra quem chama saber se a mesa realmente abriu no
