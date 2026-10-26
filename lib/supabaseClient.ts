@@ -42,7 +42,7 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   // Conferência da senha do PEDIDO (não é login): sem internet confere no aparelho na hora, sem esperar o servidor.
   const ehSenhaPedido = url.includes('/rest/v1/rpc/verify_store_staff_');
   // Relatórios de período longo podem passar de 15 s com a internet boa: teto próprio, para não "falhar como rede".
-  const ehRelatorio = /\/rest\/v1\/rpc\/fetch_(sales_history|exceptions_report|cash_shifts_history)/.test(url);
+  const ehRelatorio = /\/rest\/v1\/rpc\/fetch_(sales_history|exceptions_report|cash_shifts_history|atividade_equipe)/.test(url);
   const off = (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt;
   if ((ehLeitura || ehSenhaPedido) && off && Date.now() - off < OFFLINE_FLAG_MS && url.includes('/rest/v1/') && !url.endsWith('/rest/v1/')) {
     return Promise.reject(new TypeError('Failed to fetch (offline detectado)'));
@@ -74,11 +74,17 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   const timer = setTimeout(() => controller.abort(), ehSenhaPedido ? 5000 : ehLogin ? LOGIN_TIMEOUT_MS : ehRelatorio ? 60000 : REST_TIMEOUT_MS);
   if (init?.signal?.aborted) controller.abort();
   init?.signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  // Leitura que não chegou ao servidor (tempo esgotado ou rede): marca "sem internet" na hora, para as próximas
-  // falharem em instantes e o app usar o que tem no aparelho, em vez de travar 8 s em cada tela.
+  // Leitura que não chegou ao servidor: marca "sem internet", para as próximas falharem em instantes e o app usar o que
+  // tem no aparelho, em vez de travar 6 s em cada tela. Erro de rede marca na hora. Tempo esgotado (26/10/2026) só marca
+  // se o servidor também não responder ao teste rápido: uma consulta pesada e lenta (relatório, equipe) com a internet
+  // boa marcava o app inteiro como sem internet e as leituras seguintes falhavam caladas (Excel saía sem a aba Exceções,
+  // relatório dizia "não consegui carregar").
   const marcaSemInternet = (e: unknown) => {
-    if (!init?.signal?.aborted) (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now();
-    throw e;
+    if (init?.signal?.aborted) throw e;
+    const marcar = () => { (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now(); };
+    const tempoEsgotado = controller.signal.aborted;
+    if (!tempoEsgotado) { marcar(); throw e; }
+    return pingRapido().then((ok) => { if (!ok) marcar(); throw e; });
   };
   return fetch(input, { ...init, signal: controller.signal }).then(limpaAviso, marcaSemInternet).finally(() => clearTimeout(timer));
 };

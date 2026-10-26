@@ -117,8 +117,8 @@ export const AbaVisaoGeral: React.FC<PropsAba> = ({ analise, analiseAnt, periodo
           </Card>
         )}
         <Card className={cardCls}>
-          <CabecalhoSecao icone={<TrendingUp size={17} className="text-[var(--text-muted)]" />} titulo="Ticket médio por dia" sub={umDia ? 'Escolha um período maior para ver a evolução' : `Média do período: ${brl(k.ticket)}`} />
-          <Linha dados={umDia ? [] : analise.porDia.map((d) => ({ rotulo: diaCurto(d.dia), valor: d.ticket }))} />
+          <CabecalhoSecao icone={<TrendingUp size={17} className="text-[var(--text-muted)]" />} titulo={umDia ? 'Ticket médio por hora' : 'Ticket médio por dia'} sub={`Média do período: ${brl(k.ticket)}`} />
+          <Linha dados={umDia ? analise.porHora.map((h) => ({ rotulo: hh(h.hora), valor: Math.round((h.total / h.contas) * 100) / 100 })) : analise.porDia.map((d) => ({ rotulo: diaCurto(d.dia), valor: d.ticket }))} />
         </Card>
       </div>
 

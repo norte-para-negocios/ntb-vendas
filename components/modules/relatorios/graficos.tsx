@@ -121,7 +121,7 @@ export function Barras({ dados, onClick, altura = 260, formatar = brl }: { dados
 
 /** Linha simples (ex.: ticket médio por dia). */
 export function Linha({ dados, altura = 200, cor = 'var(--info)' }: { dados: { rotulo: string; valor: number }[]; altura?: number; cor?: string }) {
-  if (dados.length < 2) return <div style={{ height: altura }}><SemDados texto="Precisa de pelo menos 2 dias com venda" /></div>;
+  if (dados.length < 2) return <div style={{ height: altura }}><SemDados texto="Precisa de pelo menos 2 pontos com venda" /></div>;
   return (
     <div style={{ height: altura }}>
       <ResponsiveContainer width="100%" height="100%">

@@ -78,7 +78,9 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
     if (!periodo.de || !periodo.ate || periodo.ate < periodo.de) return;
     const meu = ++pedido.current;
     setCarregando(true); setErro(null); setAnteriores(null);
-    const buscar = (ini: string, fim: string) => fetchSalesHistory(storeId, ini, fim, () => { throw new Error('falha'); });
+    // Um dia que falhar (internet oscilando) é buscado de novo uma vez antes de dar erro na tela.
+    const umaVez = (ini: string, fim: string) => new Promise<Order[]>((ok, falha) => { fetchSalesHistory(storeId, ini, fim, falha).then(ok, falha); });
+    const buscar = (ini: string, fim: string) => umaVez(ini, fim).catch(() => new Promise((r) => setTimeout(r, 1200)).then(() => umaVez(ini, fim)));
     carregarVendasPeriodo(buscar, periodo.de, periodo.ate)
       .then((r) => {
         if (meu !== pedido.current) return;
