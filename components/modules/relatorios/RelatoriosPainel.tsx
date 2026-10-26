@@ -13,7 +13,7 @@ import { printEquipe, printPessoa, printRelatorioCompleto } from '@/lib/print';
 import { periodoDoPreset, periodoAnterior, rotuloDoPeriodo, type PresetPeriodo } from '@/lib/reports/periodo';
 import { carregarVendasPeriodo } from '@/lib/reports/carregarVendasPeriodo';
 import { analisarVendas, contasDoRecorte, opcoesDosFiltros, FILTROS_VAZIOS, type Analise, type ContaResumo, type FiltrosRelatorio, type Recorte } from '@/lib/reports/analiseVendas';
-import { analisarEquipe, linhaDoTempo, type AtividadeEquipe, type FontesEquipe } from '@/lib/reports/analiseEquipe';
+import { APARELHOS, analisarEquipe, linhaDoTempo, montarResolvedor, normalizarNome, type AtividadeEquipe, type FontesEquipe } from '@/lib/reports/analiseEquipe';
 import { limitesDoDia } from '@/lib/reports/dia';
 import type { SecaoRelatorio } from '@/lib/reports/relatorioCompletoHtml';
 import { montarPainelDeVendas } from '@/lib/reports/painelDia';
@@ -96,8 +96,14 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
       .finally(() => { if (meu === pedido.current) setCarregando(false); });
   }, [storeId, periodo.de, periodo.ate]);
 
+  // Atividade, exceções e ponto só quando a aba Equipe (ou uma pessoa) é aberta: períodos longos pesam.
+  const equipeVisivel = aba === 'equipe' || !!pessoaAberta;
+  const equipeDoPeriodo = useRef('');
+  // Período trocado: a atividade antiga não vale mais (não mistura fontes de períodos diferentes).
+  useEffect(() => { setAtividade(null); setAtividadeOk(null); setExcecoes(null); setCheckins([]); equipeDoPeriodo.current = ''; }, [storeId, periodo.de, periodo.ate]);
   useEffect(() => {
-    if (!periodo.de || !periodo.ate || periodo.ate < periodo.de) return;
+    if (!equipeVisivel || !periodo.de || !periodo.ate || periodo.ate < periodo.de) return;
+    if (equipeDoPeriodo.current === `${storeId}|${periodo.de}|${periodo.ate}`) return;
     const meu = ++pedidoEquipe.current;
     const [ini] = limitesDoDia(periodo.de); const [, fim] = limitesDoDia(periodo.ate);
     setCarregandoEquipe(true);
@@ -108,8 +114,9 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
     ]).then(([a, e, c]) => {
       if (meu !== pedidoEquipe.current) return;
       setAtividade(a); setAtividadeOk(a != null); setExcecoes(e); setCheckins(c);
+      equipeDoPeriodo.current = `${storeId}|${periodo.de}|${periodo.ate}`;
     }).finally(() => { if (meu === pedidoEquipe.current) setCarregandoEquipe(false); });
-  }, [storeId, periodo.de, periodo.ate]);
+  }, [storeId, periodo.de, periodo.ate, equipeVisivel]);
 
   const analise: Analise = useMemo(() => analisarVendas(vendas, categorias, filtros, cfgTaxa), [vendas, categorias, filtros, cfgTaxa]);
   const analiseAnt = useMemo(() => (anteriores ? analisarVendas(anteriores, categorias, filtros, cfgTaxa) : null), [anteriores, categorias, filtros, cfgTaxa]);
@@ -133,7 +140,8 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
     return p.filter(Boolean).join(' · ');
   }
 
-  const abrirLista = (titulo: string, r: Recorte) => setLista({ titulo, contas: contasDoRecorte(vendas, categorias, filtros, r) });
+  const abrirLista = (titulo: string, r: Recorte, semFiltros = false) => setLista({ titulo, contas: contasDoRecorte(vendas, categorias, semFiltros ? FILTROS_VAZIOS : filtros, r) });
+  const resolverNome = useMemo(() => montarResolvedor(fontesEquipe), [fontesEquipe]);
   const avisoJanela = () => toast.error('Não consegui abrir a impressão. Confira o bloqueador de janelas.');
   const pdf = async (secoes?: SecaoRelatorio[], titulo?: string) => {
     const ok = await printRelatorioCompleto(analise, meta(titulo), secoes).catch(() => false);
@@ -157,7 +165,11 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
   const propsAba: PropsAba = {
     analise, analiseAnt, periodo, umDia: periodo.de === periodo.ate, carregando, abrirLista, pdf,
     irParaDia: (dia) => { setPreset('personalizado'); setDe(dia); setAte(dia); topo(); },
-    irParaPessoa: (nome) => { setAba('equipe'); setPessoaAberta(equipe.pessoas.some((p) => p.nome === nome) ? nome : equipe.pessoas.find((p) => p.nome.startsWith(nome))?.nome ?? null); },
+    irParaPessoa: (nome) => {
+      // "Equipe" (sem operador) e "Cliente pelo QR" não são pessoas: abre as vendas deles.
+      if (APARELHOS.has(normalizarNome(nome))) { abrirLista(`Itens lançados por ${nome}`, { pessoa: nome }); return; }
+      setAba('equipe'); setPessoaAberta(resolverNome(nome));
+    },
     filtrarCategoria: (id) => { setValorCategoria(`c:${id}`); setFiltros((f) => ({ ...f, categoria: { tipo: 'categoria', id } })); topo(); },
   };
 
@@ -234,6 +246,7 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
       <div className={carregando ? 'opacity-60 pointer-events-none u-motion' : 'u-motion'}>
         {aba === 'geral' && <AbaVisaoGeral {...propsAba} />}
         {aba === 'produtos' && <AbaProdutos {...propsAba} />}
+        {aba === 'equipe' && filtrosAtivos() && <p className="mb-3 text-[13px] text-[var(--text-muted)]">A aba Equipe mostra o período inteiro, sem os filtros de categoria, pessoa, forma e local.</p>}
         {aba === 'equipe' && (
           <AbaEquipe pessoas={equipe.pessoas} aparelhos={equipe.aparelhos} atividadeOk={atividadeOk} cortado={!!atividade?.cortado} carregandoAtividade={carregandoEquipe}
             abrirPessoa={setPessoaAberta} pdfEquipe={async () => { const ok = await printEquipe(equipe.pessoas, meta('Equipe')).catch(() => false); if (!ok) avisoJanela(); }} />
@@ -244,7 +257,7 @@ export const RelatoriosPainel: React.FC<{ storeId: string; storeName: string; st
       <ListaDetalhe titulo={lista?.titulo ?? null} contas={lista?.contas ?? []} meta={meta(lista?.titulo)} onClose={() => setLista(null)} />
       <PessoaDetalhe key={pessoa?.nome ?? 'nenhuma'} pessoa={pessoa} indice={pessoa ? equipe.pessoas.indexOf(pessoa) : 0} linha={linhaPessoa} periodoLabel={rotuloDoPeriodo(periodo.de, periodo.ate)}
         onClose={() => setPessoaAberta(null)}
-        verContas={(nome) => { setPessoaAberta(null); abrirLista(`Itens lançados por ${nome}`, { pessoa: nome }); }}
+        verContas={(nome) => { setPessoaAberta(null); abrirLista(`Itens lançados por ${nome}`, { pessoaOk: (cru) => resolverNome(cru) === nome }, true); }}
         pdf={async (p, l) => { const ok = await printPessoa(p, l, meta(p.nome)).catch(() => false); if (!ok) avisoJanela(); }} />
     </div>
   );

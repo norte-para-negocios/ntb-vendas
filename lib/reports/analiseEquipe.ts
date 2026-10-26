@@ -37,7 +37,7 @@ export type FontesEquipe = {
 
 type Item = NonNullable<Order['order_items']>[number] & { added_by_role?: string | null; added_by_name?: string | null };
 type Pd = { operador_nome?: string } | null;
-const APARELHOS = new Set(['mesas', 'equipe', 'cliente pelo qr', '(sem login)']);
+export const APARELHOS = new Set(['mesas', 'equipe', 'cliente pelo qr', '(sem login)']);
 const DOZE_HORAS = 12 * 60 * 60 * 1000;
 const arred = (n: number) => Math.round(n * 100) / 100;
 const ms = (iso: string) => new Date(iso).getTime();
@@ -46,7 +46,7 @@ export const normalizarNome = (n: string) => n.normalize('NFD').replace(/[̀-ͯ]
 const recebedor = (o: Order) => ((o.payment_details as Pd)?.operador_nome || '').trim();
 
 /** Todos os nomes crus das fontes → nome de exibição da pessoa (a variante mais longa do grupo). */
-function montarResolvedor(f: FontesEquipe): (cru: string) => string {
+export function montarResolvedor(f: FontesEquipe): (cru: string) => string {
   const crus: string[] = [];
   for (const o of f.vendas) {
     for (const i of (o.order_items ?? []) as Item[]) crus.push(quemLancou(i, o));

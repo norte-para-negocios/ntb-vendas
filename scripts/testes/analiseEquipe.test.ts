@@ -1,6 +1,7 @@
 // rodar com: npx tsx scripts/testes/analiseEquipe.test.ts
 import assert from 'node:assert/strict';
-import { analisarEquipe, linhaDoTempo, normalizarNome, type AtividadeEquipe } from '../../lib/reports/analiseEquipe';
+import { analisarEquipe, linhaDoTempo, montarResolvedor, normalizarNome, type AtividadeEquipe } from '../../lib/reports/analiseEquipe';
+import { contasDoRecorte, FILTROS_VAZIOS } from '../../lib/reports/analiseVendas';
 
 const cats = [{ id: 'beb', name: 'Bebidas' }, { id: 'pra', name: 'Pratos' }];
 const it = (nome: string, cat: string, q: number, preco: number, quem: string, quando: string, extra: Record<string, unknown> = {}) =>
@@ -107,5 +108,17 @@ assert.ok(lt.every((e, i) => i === 0 || lt[i - 1].quando >= e.quando));
 // alias: linha do tempo pelo nome curto acha a mesma pessoa
 assert.ok(linhaDoTempo('Herica Santos Uchoa Lacerda', fontes).some((e) => e.tipo === 'recebeu' && e.valor === 125));
 assert.ok(linhaDoTempo('Herica Santos Uchoa Lacerda', fontes).some((e) => e.tipo === 'pre_conta'));
+
+// "Contas que lançou": nome juntado acha os itens gravados com o nome curto/em caixa diferente
+const vendas2 = [
+  conta('x1', '2026-10-24T16:30:00Z', [it('Cerveja', 'beb', 1, 10, 'HERICA', '2026-10-24T13:00:00Z'), it('Água', 'beb', 1, 5, 'Herica', '2026-10-24T13:01:00Z')], [{ method: 'PIX', amount: 15 }], 'Herica Santos'),
+];
+const f2 = { ...fontes, vendas: vendas2, atividade: null, excecoes: null, checkins: [] };
+const q = montarResolvedor(f2);
+const herica = analisarEquipe(f2).pessoas.find((p) => p.nome === 'Herica Santos')!;
+assert.equal(herica.lancou.itens, 2);
+const lista = contasDoRecorte(vendas2, cats, FILTROS_VAZIOS, { pessoaOk: (n) => q(n) === 'Herica Santos' });
+assert.equal(lista.length, 1);
+assert.equal(lista[0].itens.reduce((s, i) => s + i.qtd, 0), 2);
 
 console.log('analiseEquipe: ok');

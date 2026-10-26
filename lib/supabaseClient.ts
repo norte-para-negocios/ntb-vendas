@@ -74,16 +74,15 @@ const fetchComFalhaRapida: typeof fetch = (input, init) => {
   const timer = setTimeout(() => controller.abort(), ehSenhaPedido ? 5000 : ehLogin ? LOGIN_TIMEOUT_MS : ehRelatorio ? 60000 : REST_TIMEOUT_MS);
   if (init?.signal?.aborted) controller.abort();
   init?.signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  // Leitura que não chegou ao servidor: marca "sem internet", para as próximas falharem em instantes e o app usar o que
-  // tem no aparelho, em vez de travar 6 s em cada tela. Erro de rede marca na hora. Tempo esgotado (26/10/2026) só marca
-  // se o servidor também não responder ao teste rápido: uma consulta pesada e lenta (relatório, equipe) com a internet
-  // boa marcava o app inteiro como sem internet e as leituras seguintes falhavam caladas (Excel saía sem a aba Exceções,
-  // relatório dizia "não consegui carregar").
+  // Leitura que não chegou ao servidor (tempo esgotado ou rede): marca "sem internet" na hora, para as próximas
+  // falharem em instantes e o app usar o que tem no aparelho, em vez de travar 6 s em cada tela.
+  // Exceção (26/10/2026): relatório pesado que esgota o tempo só marca se o servidor também não responder ao teste
+  // rápido. Antes, um relatório lento com a internet boa marcava o app inteiro como sem internet e as leituras
+  // seguintes falhavam caladas (Excel sem a aba Exceções). Caixa, garçom, login e senha seguem marcando na hora.
   const marcaSemInternet = (e: unknown) => {
     if (init?.signal?.aborted) throw e;
     const marcar = () => { (globalThis as { __ntbOfflineAt?: number }).__ntbOfflineAt = Date.now(); };
-    const tempoEsgotado = controller.signal.aborted;
-    if (!tempoEsgotado) { marcar(); throw e; }
+    if (!(ehRelatorio && controller.signal.aborted)) { marcar(); throw e; }
     return pingRapido().then((ok) => { if (!ok) marcar(); throw e; });
   };
   return fetch(input, { ...init, signal: controller.signal }).then(limpaAviso, marcaSemInternet).finally(() => clearTimeout(timer));

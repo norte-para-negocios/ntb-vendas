@@ -176,7 +176,7 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
 }
 
 /** Contas para o clique numa linha do painel (mesmos filtros + o recorte clicado). */
-export type Recorte = { produto?: string; categoria?: string; forma?: string; pessoa?: string; local?: string; dia?: string; hora?: number; diaSemana?: number };
+export type Recorte = { produto?: string; categoria?: string; forma?: string; pessoa?: string; local?: string; dia?: string; hora?: number; diaSemana?: number; /** Mesma pessoa com nomes diferentes (aba Equipe): decide pelo nome cru de quem lançou. */ pessoaOk?: (nomeCru: string) => boolean };
 export function contasDoRecorte(vendas: Order[], categorias: CategoriaRel[], f: FiltrosRelatorio, r: Recorte): ContaResumo[] {
   const { linhas, modoItens } = aplicar(vendas, categorias, f);
   const out: ContaResumo[] = [];
@@ -193,7 +193,8 @@ export function contasDoRecorte(vendas: Order[], categorias: CategoriaRel[], f: 
     if (r.produto) itens = itens.filter((i) => chaveDoProduto(i) === r.produto);
     if (r.categoria) itens = itens.filter((i) => (i.product?.category_id || SEM_CATEGORIA) === r.categoria);
     if (r.pessoa) itens = itens.filter((i) => quemLancou(i, o) === r.pessoa);
-    const porItem = !!(r.produto || r.categoria || r.pessoa);
+    if (r.pessoaOk) itens = itens.filter((i) => r.pessoaOk!(quemLancou(i, o)));
+    const porItem = !!(r.produto || r.categoria || r.pessoa || r.pessoaOk);
     if (porItem && itens.length === 0) continue;
     const valor = porItem ? arred(itens.reduce((s, i) => s + Number(i.price_at_time) * i.quantity, 0)) : (modoItens ? l.valor : valorFaturado(o));
     out.push(resumoDaConta(o, itens, valor));
