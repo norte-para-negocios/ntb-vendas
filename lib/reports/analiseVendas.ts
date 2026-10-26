@@ -176,7 +176,7 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
 }
 
 /** Contas para o clique numa linha do painel (mesmos filtros + o recorte clicado). */
-export type Recorte = { produto?: string; categoria?: string; forma?: string; pessoa?: string; local?: string; dia?: string; hora?: number };
+export type Recorte = { produto?: string; categoria?: string; forma?: string; pessoa?: string; local?: string; dia?: string; hora?: number; diaSemana?: number };
 export function contasDoRecorte(vendas: Order[], categorias: CategoriaRel[], f: FiltrosRelatorio, r: Recorte): ContaResumo[] {
   const { linhas, modoItens } = aplicar(vendas, categorias, f);
   const out: ContaResumo[] = [];
@@ -186,6 +186,7 @@ export function contasDoRecorte(vendas: Order[], categorias: CategoriaRel[], f: 
     const t = partesBahia(o.created_at);
     if (r.dia && t.dia !== r.dia) continue;
     if (r.hora != null && t.hora !== r.hora) continue;
+    if (r.diaSemana != null && t.dow !== r.diaSemana) continue;
     if (r.local && localDa(o) !== r.local) continue;
     if (r.forma && !formasDa(o).includes(r.forma)) continue;
     let itens = l.itens;

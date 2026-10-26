@@ -28,9 +28,9 @@ const atividade: AtividadeEquipe = {
     ev('2026-10-24T10:00:00Z', 'Herica', 'login.entrou'),
     ev('2026-10-24T12:30:00Z', 'Herica', 'login.saiu'),
     ev('2026-10-24T13:00:00Z', 'Herica', 'reimpressao.pre_conta', 'cashier', 'Imprimiu pré-conta da mesa 12'),
-    ev('2026-10-24T14:00:00Z', 'Talislane', 'login.entrou', 'garcom'),
+    ev('2026-10-24T14:00:00Z', 'Talislane', 'login.entrou', 'open'),
     ev('2026-10-24T14:05:00Z', 'Mesas', 'mesa.abriu', 'open'),
-    ev('2026-10-24T14:06:00Z', 'Talislane', 'mesa.trocada', 'garcom', 'Mesa 1 → Mesa 12'),
+    ev('2026-10-24T14:06:00Z', 'Talislane', 'mesa.trocada', 'open', 'Mesa 1 → Mesa 12'),
   ],
 };
 const excecoes = {
@@ -63,8 +63,9 @@ assert.equal(tal.lancou.porHora[10], 4); // 13:10Z = 10h na Bahia
 assert.deepEqual(tal.excecoes.cancelados, { qtd: 1, valor: 8 });
 assert.equal(tal.mesasTrocadas, 1);
 assert.equal(tal.ponto.minutos, 120);
-// entrou 14:00Z sem saída, período acaba 18:00Z → 240 min
-assert.equal(tal.login.minutos, 240);
+// entrou 14:00Z sem saída: vai até a última atividade dela (troca de mesa 14:06Z)
+assert.equal(tal.login.minutos, 6);
+assert.equal(tal.papel, 'waiter'); // Modo Aberto conta como garçom
 
 const her = r.pessoas.find((p) => p.nome === 'Herica Santos Uchoa Lacerda')!;
 assert.equal(her.recebeu.contas, 1); // cortesia total não conta
@@ -80,9 +81,11 @@ const ana = r.pessoas.find((p) => p.nome === 'Ana Lima')!;
 assert.equal(ana.lancou.valor, 30);
 assert.equal(ana.recebeu.valor, 30);
 
-// login sem saída em período longo: no máximo 12 h
-const longo = analisarEquipe({ ...fontes, atividade: { cortado: false, eventos: [ev('2026-10-24T10:00:00Z', 'Zé', 'login.entrou')] }, fimPeriodo: '2026-10-26T10:00:00Z' });
-assert.equal(longo.pessoas.find((p) => p.nome === 'Zé')!.login.minutos, 720);
+// login sem saída: atividade 20 h depois não conta (teto de 12 h); sem atividade nenhuma = 0
+const longo = analisarEquipe({ ...fontes, atividade: { cortado: false, eventos: [ev('2026-10-24T10:00:00Z', 'Zé', 'login.entrou'), ev('2026-10-24T13:00:00Z', 'Zé', 'reimpressao.pre_conta'), ev('2026-10-25T06:00:00Z', 'Zé', 'reimpressao.pre_conta')] }, fimPeriodo: '2026-10-26T10:00:00Z' });
+assert.equal(longo.pessoas.find((p) => p.nome === 'Zé')!.login.minutos, 180);
+const parado = analisarEquipe({ ...fontes, atividade: { cortado: false, eventos: [ev('2026-10-24T10:00:00Z', 'Zé', 'login.entrou')] } });
+assert.equal(parado.pessoas.find((p) => p.nome === 'Zé')!.login.minutos, 0);
 
 // sem atividade (RPC falhou): só vendas, sem erro
 const sem = analisarEquipe({ ...fontes, atividade: null, excecoes: null, checkins: [] });

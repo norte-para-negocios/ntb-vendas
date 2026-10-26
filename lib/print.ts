@@ -15,6 +15,7 @@ import { formatServiceFeeRate, formatBRL } from './calc';
 import { getPaymentMethodLabel, getCardBrandLabel, nomeComEscolha } from './labels';
 import { buildRelatorioHtml, buildTabelaHtml, RELATORIO_STYLES, cabecalho, rodape, type RelatorioMeta } from './reports/relatorioHtml';
 import { buildRelatorioCompletoHtml, tabelaContas, ESTILO_COMPLETO, type SecaoRelatorio } from './reports/relatorioCompletoHtml';
+import { buildEquipeHtml, buildPessoaHtml } from './reports/relatorioEquipeHtml';
 import type { Analise, ContaResumo } from './reports/analiseVendas';
 import type { PainelDia } from './reports/painelDia';
 
@@ -882,6 +883,13 @@ export function printRelatorioCompleto(a: Analise, m: RelatorioMeta, secoes?: Se
 }
 export function printListaDeContas(titulo: string, contas: ContaResumo[], m: RelatorioMeta): Promise<boolean> {
   return printHtmlDocument(`${titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, `${cabecalho(m, titulo)}${tabelaContas(titulo, contas)}${rodape}`);
+}
+
+export function printEquipe(pessoas: import('./reports/analiseEquipe').Pessoa[], m: RelatorioMeta): Promise<boolean> {
+  return printHtmlDocument(`Equipe - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildEquipeHtml(pessoas, m));
+}
+export function printPessoa(p: import('./reports/analiseEquipe').Pessoa, linha: import('./reports/analiseEquipe').EventoLinha[], m: RelatorioMeta): Promise<boolean> {
+  return printHtmlDocument(`${p.nome} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildPessoaHtml(p, linha, m));
 }
 
 export function printTabela(t: Parameters<typeof buildTabelaHtml>[0], m: RelatorioMeta): Promise<boolean> {

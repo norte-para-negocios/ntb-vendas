@@ -25,7 +25,7 @@ export type Pessoa = {
   mesasAbertas: number;
   ponto: { minutos: number };
 };
-export type EventoLinha = { quando: string; tipo: 'login' | 'logout' | 'lancou' | 'recebeu' | 'cancelou' | 'pre_conta' | 'mesa' | 'ponto' | 'outro'; texto: string; valor?: number };
+export type EventoLinha = { quando: string; tipo: 'login' | 'logout' | 'lancou' | 'recebeu' | 'cancelou' | 'excecao' | 'pre_conta' | 'mesa' | 'ponto' | 'outro'; texto: string; valor?: number };
 export type FontesEquipe = {
   vendas: Order[];
   categorias: { id: string; name: string }[];
@@ -78,16 +78,20 @@ const pessoaVazia = (nome: string): Pessoa => ({
   preContas: 0, mesasTrocadas: 0, mesasAbertas: 0, ponto: { minutos: 0 },
 });
 
-/** Minutos logados: cada "entrou" vai até o "saiu" seguinte; sem saída, até o próximo "entrou", 12 h ou o fim do período. */
-function minutosLogado(evs: EventoAtividade[], fim: string): number {
+/**
+ * Minutos logados. Cada "entrou" vai até o "saiu" seguinte. Sem saída (app fechado, computador que fica logado), vai até a
+ * última coisa que a pessoa fez antes do próximo "entrou" (no máximo 12 h e nunca depois do fim do período); sem nenhuma
+ * atividade depois de entrar, não conta tempo.
+ */
+function minutosLogado(evs: EventoAtividade[], atividades: number[], fim: string): number {
   const ord = evs.filter((e) => e.acao === 'login.entrou' || e.acao === 'login.saiu').sort((a, b) => a.quando.localeCompare(b.quando));
   let total = 0;
   ord.forEach((e, i) => {
     if (e.acao !== 'login.entrou') return;
     const ini = ms(e.quando);
     const prox = ord[i + 1];
-    let ate = Math.min(ini + DOZE_HORAS, ms(fim));
-    if (prox) ate = Math.min(ms(prox.quando), ate); // o "saiu" seguinte ou o próximo "entrou"
+    const teto = Math.min(ini + DOZE_HORAS, ms(fim), prox ? ms(prox.quando) : Infinity);
+    const ate = prox?.acao === 'login.saiu' ? teto : Math.max(ini, ...atividades.filter((t) => t > ini && t <= teto));
     if (ate > ini) total += ate - ini;
   });
   return Math.round(total / 60000);
@@ -107,6 +111,8 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     if (!pessoas.has(n)) { pessoas.set(n, pessoaVazia(n)); extra.set(n, { contasL: new Set(), mesas: new Set(), prods: new Map(), cats: new Map(), formas: new Map() }); }
     return pessoas.get(n)!;
   };
+  const momentos = new Map<string, number[]>();
+  const marca = (n: string, iso: string | null | undefined) => { if (!iso) return; (momentos.get(n) ?? momentos.set(n, []).get(n)!).push(ms(iso)); };
   const anotaPapel = (n: string, papel: string | null | undefined) => { if (!papel) return; const m = papeis.get(n) ?? new Map(); m.set(papel, (m.get(papel) ?? 0) + 1); papeis.set(n, m); };
 
   for (const o of f.vendas) {
@@ -120,6 +126,7 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
       const x = extra.get(p.nome)!;
       const v = Number(i.price_at_time) * i.quantity;
       p.lancou.itens += i.quantity; p.lancou.valor += v;
+      marca(p.nome, i.created_at || o.created_at);
       x.contasL.add(conta); if (local !== 'Balcão') x.mesas.add(local);
       p.lancou.porHora[partesBahia(i.created_at || o.created_at).hora] += i.quantity;
       const nome = getOrderItemDisplayName(i);
@@ -131,6 +138,7 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
       const p = de(recebedor(o));
       if (p) {
         p.recebeu.contas += 1; p.recebeu.valor += pago;
+        marca(p.nome, (o as { updated_at?: string }).updated_at || o.created_at);
         const x = extra.get(p.nome)!;
         for (const m of metodosDoPagamento(o) ?? []) if (m.method && m.method !== CORTESIA) x.formas.set(m.method, (x.formas.get(m.method) ?? 0) + (Number(m.amount) || 0));
       }
@@ -140,7 +148,8 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
   const evsPorPessoa = new Map<string, EventoAtividade[]>();
   for (const e of f.atividade?.eventos ?? []) {
     const p = de(e.quem); if (!p) continue;
-    anotaPapel(p.nome, e.papel);
+    anotaPapel(p.nome, e.papel === 'open' ? 'waiter' : e.papel);
+    if (!e.acao.startsWith('login.')) marca(p.nome, e.quando);
     (evsPorPessoa.get(p.nome) ?? evsPorPessoa.set(p.nome, []).get(p.nome)!).push(e);
     if (e.acao === 'login.entrou' || e.acao === 'login.modo_aberto') {
       p.login.entradas += 1;
@@ -151,7 +160,6 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     if (e.acao === 'mesa.trocada') p.mesasTrocadas += 1;
     if (e.acao === 'mesa.abriu') p.mesasAbertas += 1;
   }
-  for (const [n, evs] of evsPorPessoa) pessoas.get(n)!.login.minutos = minutosLogado(evs, f.fimPeriodo);
 
   for (const r of f.excecoes?.by_operator ?? []) {
     const p = de(r.operator_name); if (!p) continue;
@@ -159,6 +167,9 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     p.excecoes.cancelados.qtd += Number(r.counts.item_cancelado ?? 0);
     p.excecoes.cancelados.valor = arred(p.excecoes.cancelados.valor + Number(r.values.item_cancelado ?? 0));
   }
+
+  for (const e of f.excecoes?.events ?? []) { if (!ehAparelho(e.operator_name)) marca(quem(e.operator_name), e.created_at); }
+  for (const [n, evs] of evsPorPessoa) pessoas.get(n)!.login.minutos = minutosLogado(evs, momentos.get(n) ?? [], f.fimPeriodo);
 
   for (const c of f.checkins) {
     const p = de(c.user_name); if (!p) continue;
@@ -174,7 +185,7 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     p.lancou.produtos = [...x.prods.values()].map((v) => ({ ...v, total: arred(v.total) })).sort((a, b) => b.qtd - a.qtd || b.total - a.total);
     p.lancou.categorias = [...x.cats.entries()].map(([nome, total]) => ({ nome, total: arred(total) })).sort((a, b) => b.total - a.total);
     p.recebeu.porForma = [...x.formas.entries()].map(([chave, total]) => ({ chave, rotulo: getPaymentMethodLabel(chave), total: arred(total) })).sort((a, b) => b.total - a.total);
-    const pp = papeis.get(p.nome); p.papel = pp ? [...pp.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+    const pp = papeis.get(p.nome); p.papel = pp ? [...pp.entries()].sort((a, b) => b[1] - a[1])[0][0] : p.lancou.itens > 0 ? 'waiter' : null;
   }
   return {
     pessoas: [...pessoas.values()].sort((a, b) => b.lancou.valor + b.recebeu.valor - (a.lancou.valor + a.recebeu.valor) || b.login.entradas - a.login.entradas || a.nome.localeCompare(b.nome)),
@@ -191,6 +202,11 @@ const TEXTO_ACAO: Record<string, { tipo: EventoLinha['tipo']; texto: string }> =
   'mesa.trocada': { tipo: 'mesa', texto: 'Trocou de mesa' },
   'mesa.pediu_conta': { tipo: 'mesa', texto: 'Pediu a conta' },
   'pedido.senha_nao_conferida': { tipo: 'outro', texto: 'Pedido sem senha conferida' },
+};
+
+const VERBO_EXCECAO: Record<string, string> = {
+  item_cancelado: 'Cancelou', nota_cancelada: 'Cancelou a nota', item_transferido: 'Transferiu de mesa', taxa_editada: 'Editou a taxa',
+  taxa_removida: 'Tirou a taxa', pagamento_estornado: 'Estornou pagamento', sangria_grande: 'Sangria grande', tolerancia_excedida: 'Diferença no caixa',
 };
 
 /** Tudo o que a pessoa fez no período, mais recente primeiro. */
@@ -234,8 +250,9 @@ export function linhaDoTempo(nome: string, f: FontesEquipe): EventoLinha[] {
   for (const e of f.excecoes?.events ?? []) {
     if (!eu(e.operator_name)) continue;
     const d = e.details as { produto?: string; motivo?: string; valor?: number };
-    const rot = e.event_type === 'item_cancelado' ? 'Cancelou' : (EXCEPTION_LABELS[e.event_type] ?? e.event_type);
-    out.push({ quando: e.created_at, tipo: 'cancelou', texto: `${rot}${d.produto ? ` ${d.produto}` : ''}${d.motivo ? ` — ${d.motivo}` : ''}`, ...(Number.isFinite(Number(d.valor)) ? { valor: arred(Number(d.valor)) } : {}) });
+    const rot = VERBO_EXCECAO[e.event_type] ?? EXCEPTION_LABELS[e.event_type] ?? e.event_type;
+    const cancel = e.event_type === 'item_cancelado' || e.event_type === 'nota_cancelada';
+    out.push({ quando: e.created_at, tipo: cancel ? 'cancelou' : 'excecao', texto: `${rot}${d.produto ? ` ${d.produto}` : ''}${d.motivo ? ` — ${d.motivo}` : ''}`, ...(Number.isFinite(Number(d.valor)) ? { valor: arred(Number(d.valor)) } : {}) });
   }
   for (const c of f.checkins) {
     if (!eu(c.user_name)) continue;
