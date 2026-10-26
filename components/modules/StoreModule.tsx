@@ -12833,7 +12833,7 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
             {activeTab === 'settings' && <StoreSettingsView store={store} onStoreUpdate={onStoreUpdate} />}
             {activeTab === 'cupons' && <CouponManagementView storeId={storeId} />}
             {activeTab === 'precos' && podeEditarPrecosHorario && <PriceSchedulesView storeId={storeId} />}
-            {activeTab === 'relatorios' && <ReportsView storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} />}
+            {activeTab === 'relatorios' && <ReportsView storeId={storeId} storeName={store.name} storeSlug={store.slug} userName={loggedUser.name} storeConfig={store.config as Record<string, unknown> | null} />}
             {activeTab === 'excecoes' && roleCan(loggedUser, store, 'ver_excecoes') && <ExceptionsReportView storeId={storeId} storeName={store.name} userName={loggedUser.name} />}
 
             {activeTab === 'sales' && (

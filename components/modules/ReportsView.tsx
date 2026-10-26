@@ -17,8 +17,9 @@ import { buildFechamentoWorkbook, fechamentoFileName } from '@/lib/reports/fecha
 import { hojeISO, limitesDoDia, turnosDoPeriodo, mensagemPeriodoInvalido } from '@/lib/reports/dia';
 import { carregarFechamento } from '@/lib/reports/carregarFechamento';
 import { baixarWorkbook } from '@/lib/reports/baixar';
+import { RelatoriosPainel } from '@/components/modules/relatorios/RelatoriosPainel';
 
-export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSlug: string; userName: string }> = ({ storeId, storeName, storeSlug, userName }) => {
+export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSlug: string; userName: string; storeConfig?: Record<string, unknown> | null }> = ({ storeId, storeName, storeSlug, userName, storeConfig }) => {
   const [dia, setDia] = useState(hojeISO());
   const [ate, setAte] = useState('');
   const [gerando, setGerando] = useState(false);
@@ -158,8 +159,10 @@ export const ReportsView: React.FC<{ storeId: string; storeName: string; storeSl
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-[17px] font-semibold text-[var(--text)]">Relatórios</h3>
+      {/* Painel completo (25/10/2026): qualquer período, filtros, tudo clicável e PDF de tudo. */}
+      <RelatoriosPainel storeId={storeId} storeName={storeName} storeSlug={storeSlug} userName={userName} storeConfig={storeConfig} />
+      <div className="pt-4">
+        <h3 className="text-[17px] font-semibold text-[var(--text)]">Arquivos e conferência de caixa</h3>
         <p className="text-[13px] text-[var(--text-muted)]">Arquivos prontos para o contador conciliar. O Excel traz as abas Painel, Formas de pagamento, Cartões, Caixa, Vendas, Itens e Exceções.</p>
       </div>
       <Card className="p-5 space-y-4">

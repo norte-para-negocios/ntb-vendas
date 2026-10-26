@@ -84,7 +84,12 @@ export function resumoDaConta(o: Order, itens?: Item[], valor?: number): ContaRe
     operador: operadorDa(o),
     formas: [...new Set(formasDa(o))].map((m) => getPaymentMethodLabel(m)).join(', ') || (cortesiaDaVenda(o) > 0 ? 'Cortesia' : '—'),
     total: valor ?? valorFaturado(o),
-    itens: lista.map((i) => ({ nome: getOrderItemDisplayName(i), qtd: i.quantity, total: arred(Number(i.price_at_time) * i.quantity) })),
+    // Mesmo item lançado várias vezes vira uma linha só (4x Itaipava, não 4 linhas de 1x).
+    itens: [...lista.reduce((m, i) => {
+      const nome = getOrderItemDisplayName(i); const preco = Number(i.price_at_time);
+      const k = `${nome}§${preco}`; const c = m.get(k) ?? { nome, qtd: 0, total: 0 };
+      c.qtd += i.quantity; c.total = arred(c.total + preco * i.quantity); m.set(k, c); return m;
+    }, new Map<string, { nome: string; qtd: number; total: number }>()).values()],
   };
 }
 
