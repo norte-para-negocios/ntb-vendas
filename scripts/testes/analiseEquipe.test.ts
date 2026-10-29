@@ -121,4 +121,23 @@ const lista = contasDoRecorte(vendas2, cats, FILTROS_VAZIOS, { pessoaOk: (n) => 
 assert.equal(lista.length, 1);
 assert.equal(lista[0].itens.reduce((s, i) => s + i.qtd, 0), 2);
 
+// Pedido do Ramon 27/10: o que o cliente pediu pelo QR aparece como cartão próprio, não só na linha de aparelhos.
+const vendasQR = [
+  conta('q1', '2026-10-24T18:00:00Z', [
+    it('Cerveja', 'beb', 3, 10, '', '2026-10-24T17:00:00Z', { added_by_role: 'cliente', added_by_name: null }),
+    it('Moqueca', 'pra', 1, 100, 'Talislane', '2026-10-24T17:05:00Z'),
+  ], [{ method: 'pix', amount: 130 }], 'Claudia'),
+];
+const fQR = { vendas: vendasQR, categorias: cats, atividade: null, excecoes: null, checkins: [], fimPeriodo: '2026-10-25T03:00:00Z' };
+const rQR = analisarEquipe(fQR);
+const cli = rQR.pessoas.find((p) => p.nome === 'Cliente pelo QR')!;
+assert.ok(cli, 'cartão do cliente pelo QR');
+assert.equal(cli.papel, 'cliente');
+assert.equal(cli.lancou.itens, 3);
+assert.equal(cli.lancou.valor, 30);
+assert.equal(cli.lancou.contas, 1);
+assert.equal(rQR.aparelhos.length, 0);
+assert.equal(rQR.pessoas.find((p) => p.nome === 'Talislane')!.lancou.itens, 1);
+assert.ok(linhaDoTempo('Cliente pelo QR', fQR).some((e) => e.tipo === 'lancou' && e.texto.includes('3× Cerveja')));
+
 console.log('analiseEquipe: ok');

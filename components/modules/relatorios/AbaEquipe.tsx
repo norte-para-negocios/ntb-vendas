@@ -11,7 +11,7 @@ import { BarrasEquipe, CabecalhoSecao, KpiHero, MiniHoras, SemDados, brl, cardCl
 
 type Ordem = 'movimento' | 'lancou' | 'recebeu' | 'tempo' | 'cancelou';
 const CORES_AVATAR = ['var(--brand)', 'var(--info)', 'var(--ok)', 'var(--warn)'];
-export const papelDe = (papel: string | null) => (!papel ? 'Equipe' : papel === 'universal' ? 'Conta da Norte' : papel === 'open' ? 'Garçom' : getRoleLabel(papel));
+export const papelDe = (papel: string | null) => (!papel ? 'Equipe' : papel === 'universal' ? 'Conta da Norte' : papel === 'open' ? 'Garçom' : papel === 'cliente' ? 'Pedidos feitos pelo cliente no celular' : getRoleLabel(papel));
 export const iniciais = (n: string) => n.split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]?.toUpperCase()).join('');
 
 export function Avatar({ nome, i, grande = false }: { nome: string; i: number; grande?: boolean }) {

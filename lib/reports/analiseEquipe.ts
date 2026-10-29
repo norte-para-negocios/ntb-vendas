@@ -4,6 +4,8 @@
 // - O mesmo funcionário aparece com nomes diferentes nas fontes ("Herica" no login, nome completo no item): nome de uma
 //   palavra se junta ao ÚNICO nome completo com o mesmo primeiro nome; dois nomes completos diferentes nunca se juntam.
 // - "Mesas" (computador do Modo Aberto), "Equipe" (sem operador) e "Cliente pelo QR" são aparelhos, não pessoas.
+// - Exceção (pedido do Ramon 27/10/2026, "e o que foi lançado pelo cliente?"): o que o cliente pediu pelo QR vira um
+//   cartão próprio ("Cliente pelo QR", papel 'cliente'), para acompanhar se os clientes estão pedindo sozinhos.
 import type { Order, OperatorCheckin } from '@/types';
 import { CORTESIA, chaveContaPaga, metodosDoPagamento, valorFaturado } from '../faturamento';
 import { getOrderItemDisplayName, getPaymentMethodLabel } from '../labels';
@@ -38,6 +40,7 @@ export type FontesEquipe = {
 type Item = NonNullable<Order['order_items']>[number] & { added_by_role?: string | null; added_by_name?: string | null };
 type Pd = { operador_nome?: string } | null;
 export const APARELHOS = new Set(['mesas', 'equipe', 'cliente pelo qr', '(sem login)']);
+export const CLIENTE_QR = 'Cliente pelo QR';
 const DOZE_HORAS = 12 * 60 * 60 * 1000;
 const arred = (n: number) => Math.round(n * 100) / 100;
 const ms = (iso: string) => new Date(iso).getTime();
@@ -111,6 +114,11 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     if (!pessoas.has(n)) { pessoas.set(n, pessoaVazia(n)); extra.set(n, { contasL: new Set(), mesas: new Set(), prods: new Map(), cats: new Map(), formas: new Map() }); }
     return pessoas.get(n)!;
   };
+  // Itens que o cliente pediu pelo QR: cartão próprio (só "lançou"; o resto das fontes nunca tem o cliente).
+  const doCliente = (): Pessoa => {
+    if (!pessoas.has(CLIENTE_QR)) { pessoas.set(CLIENTE_QR, { ...pessoaVazia(CLIENTE_QR), papel: 'cliente' }); extra.set(CLIENTE_QR, { contasL: new Set(), mesas: new Set(), prods: new Map(), cats: new Map(), formas: new Map() }); }
+    return pessoas.get(CLIENTE_QR)!;
+  };
   const momentos = new Map<string, number[]>();
   const marca = (n: string, iso: string | null | undefined) => { if (!iso) return; (momentos.get(n) ?? momentos.set(n, []).get(n)!).push(ms(iso)); };
   const anotaPapel = (n: string, papel: string | null | undefined) => { if (!papel) return; const m = papeis.get(n) ?? new Map(); m.set(papel, (m.get(papel) ?? 0) + 1); papeis.set(n, m); };
@@ -122,7 +130,8 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     const local = localDa(o);
     for (const i of (o.order_items ?? []) as Item[]) {
       if (!ehProduto(i) || pago <= 0) continue;
-      const p = de(quemLancou(i, o)); if (!p) continue;
+      const cru = quemLancou(i, o);
+      const p = cru === CLIENTE_QR ? doCliente() : de(cru); if (!p) continue;
       const x = extra.get(p.nome)!;
       const v = Number(i.price_at_time) * i.quantity;
       p.lancou.itens += i.quantity; p.lancou.valor += v;
@@ -185,7 +194,7 @@ export function analisarEquipe(f: FontesEquipe): { pessoas: Pessoa[]; aparelhos:
     p.lancou.produtos = [...x.prods.values()].map((v) => ({ ...v, total: arred(v.total) })).sort((a, b) => b.qtd - a.qtd || b.total - a.total);
     p.lancou.categorias = [...x.cats.entries()].map(([nome, total]) => ({ nome, total: arred(total) })).sort((a, b) => b.total - a.total);
     p.recebeu.porForma = [...x.formas.entries()].map(([chave, total]) => ({ chave, rotulo: getPaymentMethodLabel(chave), total: arred(total) })).sort((a, b) => b.total - a.total);
-    const pp = papeis.get(p.nome); p.papel = pp ? [...pp.entries()].sort((a, b) => b[1] - a[1])[0][0] : p.lancou.itens > 0 ? 'waiter' : null;
+    const pp = papeis.get(p.nome); p.papel = p.nome === CLIENTE_QR ? 'cliente' : pp ? [...pp.entries()].sort((a, b) => b[1] - a[1])[0][0] : p.lancou.itens > 0 ? 'waiter' : null;
   }
   return {
     pessoas: [...pessoas.values()].sort((a, b) => b.lancou.valor + b.recebeu.valor - (a.lancou.valor + a.recebeu.valor) || b.login.entradas - a.login.entradas || a.nome.localeCompare(b.nome)),
