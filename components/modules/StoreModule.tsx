@@ -46,6 +46,7 @@ import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa 
 import { liberarMesa, reabrirContaAguardando, separarParteDaConta } from '@/lib/api';
 import { tokenLoja, limparTokenLoja, emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, createStoreUserInvite, linkDoConvite, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
+import { atribuirUnidade, devolverUnidade, montarDivisao, type Atribuicao, type DivisaoDaConta, type ItemDaConta } from '@/lib/divisaoPorPessoa';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
 import { CASH_DENOMINATIONS, sumDenominationBreakdown } from '@/lib/cashDenominations';
 import { supabase } from '@/lib/supabaseClient';
@@ -90,7 +91,7 @@ import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceip
 import { downloadSalesReportCsv } from '@/lib/csv';
 import { playPreparingAlert, playNewOrderAlert, playItemLateAlert, vibrateAlert } from '@/lib/audioAlert';
 import { resumirPedidosDaMesa } from '@/lib/mesaPedidos';
-import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateSplitByPerson, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
+import { calculateServiceFee, calculateOrderTotal, vendaTemCobranca, calculateChangeForMethods, getPaymentMethodsForRecord, SplitItem, getEffectivePrice, resolveServiceFeeRate, formatServiceFeeRate, formatBRL, getOrderDisplayTotal, calculateCartItemUnitPrice, resolveSelectedOptions, displayOptionDelta, sortKitchenItems } from '@/lib/calc';
 import { decomporVenda, configTaxaDaLoja, cortesiaDaVenda } from '@/lib/faturamento';
 import { mesasComFila } from '@/lib/offline/pendingOrders';
 import { iniciarRedeLocal, imprimirPeloComputador } from '@/lib/offline/rede';
@@ -3587,38 +3588,25 @@ const TablesView: React.FC<{
         return { subtotal, serviceFee, total, allItems: items, isServiceFeeEnabled, isServiceFeeRemovedForTable, hasFeeItem };
     }, [selectedTable, activeOrders, store, removedServiceFees]);
 
-    const usersBreakdown = useMemo(() => {
-        if (!currentTableSummary) return {};
-        const breakdown: { [name: string]: { subtotal: number, serviceFee: number, total: number, items: any[] } } = {};
-
-        currentTableSummary.allItems.forEach(item => {
-            const match = item.notes ? item.notes.match(/^\[(.*?)\]/) : null;
-            const userName = match ? match[1] : 'Mesa / Geral';
-
-            if (!breakdown[userName]) {
-                breakdown[userName] = { subtotal: 0, serviceFee: 0, total: 0, items: [] };
-            }
-            breakdown[userName].items.push(item);
-            breakdown[userName].subtotal += (item.price_at_time * item.quantity);
-        });
-
-        const splitItems: SplitItem[] = Object.entries(breakdown).map(([userName, data]) => ({ userName, subtotal: data.subtotal }));
-        const totalsByUser = calculateSplitByPerson(splitItems, currentTableSummary.isServiceFeeEnabled, serviceFeeRate);
-
-        Object.keys(breakdown).forEach(userName => {
-            const userSubtotal = breakdown[userName].subtotal;
-            breakdown[userName].serviceFee = currentTableSummary.isServiceFeeEnabled ? calculateServiceFee(userSubtotal, serviceFeeRate) : 0;
-            breakdown[userName].total = totalsByUser.get(userName) ?? userSubtotal;
-        });
-
-        return breakdown;
-    }, [currentTableSummary]);
+    // Por pessoa: ver lib/divisaoPorPessoa.ts. A divisão vale só para esta mesa; trocou de mesa, começa de novo.
+    const [pessoasDaConta, setPessoasDaConta] = useState<string[]>(['Pessoa 1', 'Pessoa 2']);
+    const [atribuicaoConta, setAtribuicaoConta] = useState<Atribuicao>({});
+    useEffect(() => { setPessoasDaConta(['Pessoa 1', 'Pessoa 2']); setAtribuicaoConta({}); }, [selectedTable?.id]);
+    const adicionarPessoaDaConta = () => setPessoasDaConta((atual) => {
+        let n = atual.length + 1;
+        while (atual.includes(`Pessoa ${n}`)) n++;
+        return [...atual, `Pessoa ${n}`];
+    });
+    const divisaoDaConta = useMemo(() => {
+        if (!currentTableSummary) return { pessoas: [], soltos: [] } as DivisaoDaConta<OrderItem>;
+        return montarDivisao(currentTableSummary.allItems as (OrderItem & ItemDaConta)[], atribuicaoConta, pessoasDaConta) as DivisaoDaConta<OrderItem>;
+    }, [currentTableSummary, atribuicaoConta, pessoasDaConta]);
 
     // Nota fiscal individualizada por pessoa (migration 055, pedido real da
     // reunião com o Ramon, 2026-08-25): "se a pessoa paga separado, não vai
     // ser só uma nota... hoje você não consegue individualizar" — antes só
     // dava pra emitir o pedido inteiro de uma vez, no fechamento da mesa.
-    // Reaproveita o mesmo agrupamento de usersBreakdown; itens já cobertos
+    // Reaproveita o agrupamento da aba Por pessoa (divisaoDaConta); itens já cobertos
     // por essa chamada saem pendentes de faturamento no fechamento final
     // automático da mesa (route.ts filtra fiscal_nota_id is null).
     const [emitindoNotaDe, setEmitindoNotaDe] = useState<string | null>(null);
@@ -6468,14 +6456,14 @@ NOTIFY pgrst, 'reload schema';`;
                                     quem estava dividindo a conta nunca chegou lá — "não
                                     entendi nada disso aqui". Esta ponte é o fix real: o
                                     problema era descoberta, não falta de funcionalidade. */}
-                                {Object.keys(usersBreakdown).length > 1 && (
+                                {currentTableSummary.allItems.length > 1 && (
                                     <button
                                         type="button"
                                         onClick={() => setPaymentTab('users')}
                                         className="w-full flex items-center justify-between gap-2 p-3 rounded-[14px] bg-[var(--brand-soft)] text-left u-motion u-press-sm"
                                     >
                                         <span className="text-[13px] font-medium text-[var(--brand)]">
-                                            Esta mesa tem {Object.keys(usersBreakdown).length} pessoas identificadas — dá pra cobrar e emitir nota fiscal separada pra cada uma.
+                                            Cada um paga o que consumiu? Escolha os itens de cada pessoa e cobre separado.
                                         </span>
                                         <ArrowRight size={16} className="text-[var(--brand)] shrink-0" />
                                     </button>
@@ -6533,25 +6521,64 @@ NOTIFY pgrst, 'reload schema';`;
                                             : 'Esta loja não cobra taxa de serviço'}
                                     </p>
                                 )}
-                                {Object.entries(usersBreakdown).map(([name, data]: [string, any]) => (
+                                {divisaoDaConta.soltos.length > 0 && (
+                                    <div className="bg-[var(--surface-2)] rounded-[14px] p-3 space-y-2">
+                                        <p className="font-semibold text-[var(--text)]">Quem paga cada item?</p>
+                                        {divisaoDaConta.soltos.map(({ item, restante }) => (
+                                            <div key={item.id} className="space-y-1.5 py-1.5 border-t border-[var(--border)]">
+                                                <div className="flex justify-between gap-2 text-[14px] text-[var(--text)]">
+                                                    <span className="min-w-0">{restante}x {getOrderItemDisplayName(item)}</span>
+                                                    <span className="num shrink-0">{formatBRL(item.price_at_time * restante)}</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {pessoasDaConta.map((nome) => (
+                                                        <button
+                                                            key={nome}
+                                                            type="button"
+                                                            onClick={() => setAtribuicaoConta((at) => atribuirUnidade(at, item as ItemDaConta, nome))}
+                                                            className="min-h-10 px-3 rounded-full text-[13px] font-semibold bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--brand)] u-press-sm"
+                                                        >
+                                                            {nome}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {divisaoDaConta.soltos.length > 0 && (
+                                    <Button variant="outline" size="sm" className="w-full" onClick={adicionarPessoaDaConta}><Plus size={15} className="mr-1"/> Adicionar pessoa</Button>
+                                )}
+                                {divisaoDaConta.pessoas.filter((p) => p.linhas.length > 0).map(({ nome: name, linhas, subtotal }) => {
+                                    const taxaDaPessoa = currentTableSummary?.isServiceFeeEnabled ? calculateServiceFee(subtotal, serviceFeeRate) : 0;
+                                    const totalDaPessoa = calculateOrderTotal(subtotal, !!currentTableSummary?.isServiceFeeEnabled, serviceFeeRate);
+                                    const manual = pessoasDaConta.includes(name);
+                                    const linhaInteira = linhas.every((l) => l.qtd === l.item.quantity);
+                                    const contaInteira = linhaInteira && divisaoDaConta.soltos.length === 0 && divisaoDaConta.pessoas.filter((p) => p.linhas.length > 0).length === 1;
+                                    return (
                                     <div key={name} className="bg-[var(--surface-2)] rounded-[14px] overflow-hidden">
                                         <div className="px-4 py-3 flex justify-between items-center">
                                             <span className="font-semibold text-[var(--text)] flex items-center gap-2"><User size={15} className="text-[var(--text-muted)]"/> {name}</span>
-                                            <span className="font-semibold num text-[var(--text)]">R$ {formatBRL(data.total)}</span>
+                                            <span className="font-semibold num text-[var(--text)]">R$ {formatBRL(totalDaPessoa)}</span>
                                         </div>
                                         <div className="p-2 space-y-1">
-                                            {data.items.map((it: any) => (
-                                                <div key={it.id} className="flex justify-between items-center text-[13px] text-[var(--text-muted)] px-2 py-1">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span>{it.quantity}x {getOrderItemDisplayName(it)}</span>
-                                                    </div>
-                                                    <span className="num">{formatBRL(it.price_at_time * it.quantity)}</span>
+                                            {linhas.map(({ item: it, qtd }) => (
+                                                <div key={it.id} className="flex justify-between items-center gap-2 text-[13px] text-[var(--text-muted)] px-2 py-1">
+                                                    <span className="min-w-0">{qtd}x {getOrderItemDisplayName(it)}</span>
+                                                    <span className="flex items-center gap-2 shrink-0">
+                                                        <span className="num">{formatBRL(it.price_at_time * qtd)}</span>
+                                                        {manual && (
+                                                            <button type="button" aria-label={`Tirar ${getOrderItemDisplayName(it)} de ${name}`} onClick={() => setAtribuicaoConta((at) => devolverUnidade(at, it.id, name))} className="w-8 h-8 grid place-items-center rounded-full hover:bg-[var(--surface)] text-[var(--text-muted)]">
+                                                                <X size={14}/>
+                                                            </button>
+                                                        )}
+                                                    </span>
                                                 </div>
                                             ))}
                                             {currentTableSummary?.isServiceFeeEnabled && (
-                                                <div className="flex justify-between items-center text-[13px] text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)] mt-1 pt-1">
+                                                <div className="flex justify-between items-center text-[13px] text-[var(--text-muted)] px-2 py-1 border-t border-[var(--border)]">
                                                     <span>Taxa de serviço ({formatServiceFeeRate(serviceFeeRate)})</span>
-                                                    <span className="num">{formatBRL(data.serviceFee)}</span>
+                                                    <span className="num">{formatBRL(taxaDaPessoa)}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -6561,39 +6588,40 @@ NOTIFY pgrst, 'reload schema';`;
                                                 size="sm"
                                                 variant="primary"
                                                 onClick={() => {
-                                                    setCurrentPaymentAmount(data.total.toFixed(2));
+                                                    setCurrentPaymentAmount(totalDaPessoa.toFixed(2));
                                                     setPaymentTab('payment');
                                                 }}
                                             >
                                                 Lançar pagamento de {name}
                                             </Button>
-                                            {!selectedTable?.standby && data.items.length < (currentTableSummary?.allItems.length ?? 0) && (
+                                            {!selectedTable?.standby && !contaInteira && (
                                                 <Button
                                                     className="w-full sm:flex-1 max-sm:!h-11 !bg-[var(--surface)]"
                                                     size="sm"
                                                     variant="outline"
                                                     isLoading={separandoParte}
                                                     disabled={separandoParte}
-                                                    onClick={() => handleSepararParte(data.items.filter((it: any) => it.status !== 'canceled').map((it: any) => ({ id: it.id })), name === 'Mesa / Geral' ? '' : name)}
+                                                    onClick={() => handleSepararParte(linhas.map((l) => (l.qtd === l.item.quantity ? { id: l.item.id } : { id: l.item.id, qtd: l.qtd })), name)}
                                                 >
                                                     Receber só a parte de {name}
                                                 </Button>
                                             )}
-                                            {emissaoFiscalConfigurada && (
+                                            {emissaoFiscalConfigurada && linhaInteira && (
                                                 <Button
                                                     className="w-full sm:flex-1 max-sm:!h-11 !bg-[var(--surface)]"
                                                     size="sm"
                                                     variant="outline"
                                                     isLoading={emitindoNotaDe === name}
                                                     disabled={emitindoNotaDe !== null}
-                                                    onClick={() => handleEmitirNotaIndividual(name, data.items)}
+                                                    onClick={() => handleEmitirNotaIndividual(name, linhas.map((l) => l.item))}
                                                 >
                                                     Emitir nota fiscal de {name}
                                                 </Button>
                                             )}
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
                                 {(!currentTableSummary || currentTableSummary.allItems.length === 0) && <p className="text-center text-[var(--text-muted)]">Nenhum pedido realizado.</p>}
                             </div>
                         )}
