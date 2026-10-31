@@ -698,10 +698,10 @@ const fetchMenuDaRede = async (storeId: string, onlyAvailable = true, includeUna
   }
 };
 
-export const createCategory = async (storeId: string, name: string) => {
+export const createCategory = async (storeId: string, name: string, groupId?: string | null) => {
   const { data: maxOrderData } = await supabase.from('categories').select('order').eq('store_id', storeId).order('order', { ascending: false }).limit(1);
   const nextOrder = (maxOrderData?.[0]?.order || 0) + 1;
-  const { error } = await supabase.from('categories').insert({ store_id: storeId, name, order: nextOrder });
+  const { error } = await supabase.from('categories').insert({ store_id: storeId, name, order: nextOrder, group_id: groupId || null });
   if (error) throw error;
 };
 

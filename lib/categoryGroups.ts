@@ -20,7 +20,9 @@ export type TopLevelItem =
   | { kind: 'category'; category: Category; label?: string }
   | { kind: 'group'; group: CategoryGroup; categories: Category[] };
 
-export function buildTopLevelItems(categories: Category[], groups: CategoryGroup[]): TopLevelItem[] {
+// `incluirGruposVazios` (31/10/2026): só o painel do lojista usa. Grupo recém-criado precisa aparecer para receber abas;
+// cliente e garçom continuam sem ver grupo vazio.
+export function buildTopLevelItems(categories: Category[], groups: CategoryGroup[], opcoes?: { incluirGruposVazios?: boolean }): TopLevelItem[] {
   type Entry = { order: number; isCategory: boolean; groupOrder: number; item: TopLevelItem };
 
   const looseEntries: Entry[] = categories
@@ -30,8 +32,8 @@ export function buildTopLevelItems(categories: Category[], groups: CategoryGroup
   const groupEntries: Entry[] = groups
     .map(g => {
       const members = categories.filter(c => c.group_id === g.id).sort((a, b) => a.order - b.order);
-      if (members.length === 0) return null;
-      const minOrder = Math.min(...members.map(c => c.order));
+      if (members.length === 0 && !opcoes?.incluirGruposVazios) return null;
+      const minOrder = members.length ? Math.min(...members.map(c => c.order)) : Number.MAX_SAFE_INTEGER;
       const entry: Entry = { order: minOrder, isCategory: false, groupOrder: g.order, item: { kind: 'group', group: g, categories: members } };
       return entry;
     })

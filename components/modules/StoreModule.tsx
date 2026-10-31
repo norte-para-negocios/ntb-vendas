@@ -9652,6 +9652,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [newCatName, setNewCatName] = useState('');
+    const [newCatGroupId, setNewCatGroupId] = useState('');
     const [newGroupName, setNewGroupName] = useState('');
 
     // Redesign da navegação do cardápio (2026-09-04, pedido direto do dono):
@@ -9914,10 +9915,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     const handleAddCategory = async () => {
         if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
-        if (!newCatName) return;
-        await createCategory(storeId, newCatName);
-        setNewCatName('');
-        loadMenu();
+        const nome = newCatName.trim();
+        if (!nome) return;
+        try {
+            await createCategory(storeId, nome, newCatGroupId || null);
+            if (newCatGroupId) setOpenSidebarGroups(prev => new Set(prev).add(newCatGroupId));
+            setNewCatName('');
+            loadMenu();
+        } catch (e: any) {
+            console.error('Error creating category', e);
+            toast.error('Erro ao criar categoria: ' + (e.message || 'Tente novamente.'));
+        }
     };
 
     const handleDeleteCategory = async (id: string) => {
@@ -9930,9 +9938,10 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
 
     const handleAddCategoryGroup = async () => {
         if (!podeEditar) { toast.error('Seu perfil só pode consultar o cardápio.'); return; }
-        if (!newGroupName) return;
+        const nomeGrupo = newGroupName.trim();
+        if (!nomeGrupo) return;
         try {
-            await createCategoryGroup(storeId, newGroupName);
+            await createCategoryGroup(storeId, nomeGrupo);
             setNewGroupName('');
             loadMenu();
         } catch (e: any) {
@@ -10062,7 +10071,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
             setPPrice('');
             setPCostPrice('');
             setPStockThreshold('');
-            setPCat(categories[0]?.id || '');
+            setPCat(categories.some(c => c.id === activeMenuCategoryId) ? activeMenuCategoryId! : (categories[0]?.id || ''));
             setPTime('15');
             setPPreview(null);
             setPDestination('kitchen');
@@ -10319,26 +10328,25 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
         ? [...categories, { id: UNCATEGORIZED_ID, store_id: storeId, name: 'Sem categoria', order: Number.MAX_SAFE_INTEGER }]
         : categories;
 
-    // Categorias com pelo menos 1 produto — só essas viram aba (uma categoria
-    // vazia não tem o que mostrar na navegação de produtos, mas continua
-    // existindo/editável no modal de gestão).
-    const categoriesWithItems = useMemo(
+    // Toda categoria aparece no painel, mesmo vazia (31/10/2026, ODARA: aba e grupo criados "sumiam" até ter produto e
+    // parecia que o cadastro não funcionava). Cliente e garçom têm os próprios filtros e continuam sem ver aba vazia.
+    const categoriasDoPainel = useMemo(() => productGroups, [productGroups]);
+    const categoriasComProduto = useMemo(
         () => productGroups.filter(cat => products.some(p => groupIdOf(p) === cat.id)),
         [productGroups, products]
     );
 
-    // Aba ativa sempre cai numa categoria válida (a primeira com produto) —
-    // se a categoria ativa for apagada ou esvaziar, cai pra próxima
-    // automaticamente em vez de mostrar uma aba morta.
+    // Aba ativa sempre cai numa categoria que existe (de preferência a primeira com produto) —
+    // se a categoria ativa for apagada, cai pra próxima automaticamente.
     useEffect(() => {
-        if (categoriesWithItems.length === 0) {
+        if (categoriasDoPainel.length === 0) {
             if (activeMenuCategoryId !== null) setActiveMenuCategoryId(null);
             return;
         }
-        if (!activeMenuCategoryId || !categoriesWithItems.some(c => c.id === activeMenuCategoryId)) {
-            setActiveMenuCategoryId(categoriesWithItems[0].id);
+        if (!activeMenuCategoryId || !categoriasDoPainel.some(c => c.id === activeMenuCategoryId)) {
+            setActiveMenuCategoryId((categoriasComProduto[0] ?? categoriasDoPainel[0]).id);
         }
-    }, [categoriesWithItems, activeMenuCategoryId]);
+    }, [categoriasDoPainel, categoriasComProduto, activeMenuCategoryId]);
 
     useEffect(() => {
         const gid = categories.find(c => c.id === activeMenuCategoryId)?.group_id;
@@ -10500,7 +10508,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                 className="pl-9 pr-3 h-[38px] w-full sm:w-64 rounded-full border-0 bg-[var(--surface-2)] text-[15px] text-[var(--text)] placeholder:text-[var(--text-muted)]/80 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 max-sm:text-base"
                             />
                         </div>
-                        <Button variant="secondary" onClick={() => setIsCategoryModalOpen(true)} disabled={!podeEditar}>
+                        <Button variant="secondary" onClick={() => { setNewCatGroupId(''); setIsCategoryModalOpen(true); }} disabled={!podeEditar}>
                             <List size={16} className="mr-1.5"/> Categorias
                         </Button>
                     </div>
@@ -10511,9 +10519,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     a barra de pílulas enfileirava mal com 8-10 categorias reais). Só
                     aparecem fora do modo de busca, já que buscar mistura produtos de
                     todas as categorias de propósito. */}
-                {!isSearchingProducts && categoriesWithItems.length > 0 && (
+                {!isSearchingProducts && categoriasDoPainel.length > 0 && (
                     <div className="lg:hidden flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
-                        {categoriesWithItems.map(cat => {
+                        {categoriasDoPainel.map(cat => {
                             const count = products.filter(p => groupIdOf(p) === cat.id).length;
                             const isActive = cat.id === activeMenuCategoryId;
                             return (
@@ -10530,7 +10538,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                 )}
 
                 <div className="flex flex-col lg:flex-row gap-6">
-                    {!isSearchingProducts && categoriesWithItems.length > 0 && (
+                    {!isSearchingProducts && (categoriasDoPainel.length > 0 || categoryGroups.length > 0) && (
                         <nav className="hidden lg:block lg:w-56 lg:shrink-0">
                             <ul className="space-y-0.5">
                                 {/* Fix I2 (2026-09-22): mesma fonte de ordenação (buildTopLevelItems)
@@ -10538,9 +10546,9 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                     input e sempre anexada por último, como já era antes da feature de
                                     grupos — nunca entra na intercalação por order. */}
                                 {(() => {
-                                    const realCategories = categoriesWithItems.filter(cat => cat.id !== UNCATEGORIZED_ID);
-                                    const uncategorized = categoriesWithItems.find(cat => cat.id === UNCATEGORIZED_ID);
-                                    const items = buildTopLevelItems(realCategories, categoryGroups);
+                                    const realCategories = categoriasDoPainel.filter(cat => cat.id !== UNCATEGORIZED_ID);
+                                    const uncategorized = categoriasDoPainel.find(cat => cat.id === UNCATEGORIZED_ID);
+                                    const items = buildTopLevelItems(realCategories, categoryGroups, { incluirGruposVazios: true });
                                     const renderCategoryLi = (cat: Category) => {
                                         const count = products.filter(p => groupIdOf(p) === cat.id).length;
                                         const isActive = cat.id === activeMenuCategoryId;
@@ -10592,6 +10600,17 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                                                         className="overflow-hidden space-y-0.5 pl-3"
                                                                     >
                                                                         {item.categories.map(renderCategoryLi)}
+                                                                        {podeEditar && (
+                                                                            <li>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => { setNewCatGroupId(item.group.id); setIsCategoryModalOpen(true); }}
+                                                                                    className="w-full flex items-center gap-1.5 py-2 pl-3 pr-2.5 rounded-[10px] text-left text-[13px] font-medium text-[var(--brand)] hover:bg-[var(--surface-2)] u-motion"
+                                                                                >
+                                                                                    <Plus size={14} /> Nova categoria neste grupo
+                                                                                </button>
+                                                                            </li>
+                                                                        )}
                                                                     </motion.ul>
                                                                 )}
                                                             </AnimatePresence>
@@ -10656,6 +10675,11 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                                             ))}
                                         </div>
                                     )
+                                ) : activeMenuCategoryId && activeCategoryProducts.length === 0 ? (
+                                    <div className="py-10 text-center">
+                                        <p className="text-sm text-[var(--text-muted)] mb-3">Nenhum produto nesta categoria. O cliente só vê a categoria depois que ela tiver produto.</p>
+                                        <Button onClick={() => openProductModal()} disabled={!podeEditar}><Plus size={18} className="-ml-1"/> Novo produto</Button>
+                                    </div>
                                 ) : activeMenuCategoryId ? (
                                     <DragDropContext onDragEnd={handleDragEnd}>
                                         <Droppable droppableId={activeMenuCategoryId} type="product">
@@ -10692,7 +10716,7 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div>
                         <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Grupos (opcional)</p>
                         <div className="flex gap-2 mb-2">
-                            <Input placeholder="Novo Grupo (ex.: Bebidas)" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+                            <Input placeholder="Novo Grupo (ex.: Bebidas)" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategoryGroup(); } }} />
                             <Button onClick={handleAddCategoryGroup}><Plus size={20}/></Button>
                         </div>
                         {/* Fix I2 (2026-09-22): drag-and-drop de grupo removido — a posição
@@ -10718,7 +10742,18 @@ const MenuManagementView: React.FC<{ store: Store, onStoreUpdate?: (store: Store
                     <div>
                         <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Categorias</p>
                         <div className="flex gap-2 mb-2">
-                            <Input placeholder="Nova Categoria" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+                            <Input placeholder="Nova Categoria" value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }} />
+                            {categoryGroups.length > 0 && (
+                                <select
+                                    aria-label="Grupo da nova categoria"
+                                    value={newCatGroupId}
+                                    onChange={e => setNewCatGroupId(e.target.value)}
+                                    className="shrink-0 max-w-[40%] text-sm bg-[var(--surface)] border border-[var(--border)] rounded-lg px-2 text-[var(--text)]"
+                                >
+                                    <option value="">Sem grupo</option>
+                                    {categoryGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                            )}
                             <Button onClick={handleAddCategory}><Plus size={20}/></Button>
                         </div>
                         <DragDropContext onDragEnd={handleDragEnd}>
