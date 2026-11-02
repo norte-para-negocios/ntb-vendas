@@ -685,6 +685,31 @@ app.whenReady().then(() => {
     }
   });
 
+  // Relatórios: gera o PDF em janela invisível e pergunta onde salvar. Nunca passa pela impressora (ver lib/print.ts).
+  ipcMain.handle('ntb-salvar-pdf', async (event, params) => {
+    const { title, html } = params || {};
+    if (!html) return { ok: false, reason: 'sem conteúdo' };
+    const tmpHtml = path.join(app.getPath('temp'), `ntb-relatorio-${Date.now()}.html`);
+    const janela = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
+    try {
+      fs.writeFileSync(tmpHtml, html, 'utf8');
+      await janela.loadFile(tmpHtml);
+      const pdf = await janela.webContents.printToPDF({ printBackground: true, pageSize: 'A4', preferCSSPageSize: true });
+      const nome = `${String(title || 'Relatório').replace(/[\\/:*?"<>|]/g, '-').slice(0, 120)}.pdf`;
+      const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), { title: 'Salvar relatório em PDF', defaultPath: path.join(app.getPath('documents'), nome), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (canceled || !filePath) return { ok: true, cancelado: true };
+      fs.writeFileSync(filePath, pdf);
+      shell.openPath(filePath);
+      return { ok: true };
+    } catch (e) {
+      logPrint(`ERROR ao salvar relatório em PDF: ${e.message}`);
+      return { ok: false, reason: e.message };
+    } finally {
+      janela.destroy();
+      try { fs.unlinkSync(tmpHtml); } catch { /* ignore */ }
+    }
+  });
+
   ipcMain.handle('ntb-print-pdf-silent', async (_event, params) => {
     const { pdfUrl, printerName } = params || {};
     if (!pdfUrl || !printerName) {

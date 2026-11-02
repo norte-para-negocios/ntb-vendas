@@ -4678,12 +4678,13 @@ NOTIFY pgrst, 'reload schema';`;
     };
     useEffect(() => {
         if (!abrirPagamentoDeId) return;
-        const conta = tables.find((t) => t.id === abrirPagamentoDeId);
+        // A conta separada é "aguardando pagamento": fica em contasAguardando, não em tables (mesas físicas).
+        const conta = contasAguardando.find((t) => t.id === abrirPagamentoDeId);
         if (!conta || getTableSummary(conta.id).total <= 0) return;
         setAbrirPagamentoDeId(null);
         handleOpenPayment(conta);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [abrirPagamentoDeId, tables, activeOrders]);
+    }, [abrirPagamentoDeId, contasAguardando, activeOrders]);
 
     const handleDismissWaiter = async (tableId: string) => {
         try {
@@ -14398,13 +14399,15 @@ export const StoreModule: React.FC = () => {
     // App desktop: liga a impressão de rede/USB da loja logada (ver
     // desktop/electron/print-engine.js). Fica aqui, e não no login, porque
     // a sessão também volta sozinha depois de F5 — nos dois caminhos o
-    // efeito roda com a loja certa, e desliga ao sair/trocar de loja. No
-    // navegador, os dois são no-op.
+    // efeito roda com a loja certa. Sair da conta NÃO desliga a impressão do computador da loja (ODARA, 31/10: a caixa
+    // saiu às 10:26 e os pedidos pararam de sair); trocar de loja troca o motor sozinho. Só a conta universal (equipe
+    // Norte, em qualquer computador) desliga ao sair. No navegador, os dois são no-op.
     useEffect(() => {
         if (!user?.store?.id) return;
-        iniciarMotorImpressaoDesktop(user.store.id, user.role !== 'universal');
-        return () => pararMotorImpressaoDesktop();
-    }, [user?.store?.id]);
+        const universal = user.role === 'universal';
+        iniciarMotorImpressaoDesktop(user.store.id, !universal);
+        return () => { if (universal) pararMotorImpressaoDesktop(); };
+    }, [user?.store?.id, user?.role]);
 
     // Auditoria: o ator da sessão vai em toda requisição (lib/supabaseClient.ts) — também quando a sessão volta sozinha após F5.
     useEffect(() => {

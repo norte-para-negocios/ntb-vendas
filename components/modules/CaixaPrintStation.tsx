@@ -103,7 +103,7 @@ import { Button, Modal } from '@/components/ui';
 import { toast } from '@/components/Toast';
 import { impressoraRecebe } from '@/lib/printDocs';
 import { montarPreConta, chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
-import { fetchEquipePedido, fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, enqueuePrintJob, fetchOfflinePrintedSigs, fetchItensJaImpressos, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
+import { fetchEquipePedido, fetchKitchenOrders, fetchTables, fetchActiveOrdersForTables, enqueueReceiptPrintJobs, subscribeToStoreOrderChanges, StoreOrdersConnectionStatus, fetchPrinterConfigs, impressorasGuardadasNoAparelho, enqueuePrintJob, fetchOfflinePrintedSigs, fetchItensJaImpressos, printerServesSector, fetchImpressaoPausada, fetchStoreById } from '@/lib/api';
 import { printKitchenTicket, buildKitchenTicketText, buildBillReceiptText } from '@/lib/print';
 import { particionarPorIdade, MAX_IDADE_AUTOIMPRESSAO_MIN } from '@/lib/impressaoIdade';
 import { PrinterConfig } from '@/types';
@@ -990,6 +990,9 @@ export function useCaixaPrintStation(store: Store | null, loggedUser: StoreUser 
       // significa "nenhuma impressora de rede/USB entra nesta passada",
       // o window.print() de sempre continua rodando normalmente.
       const networkPrinters = await fetchPrinterConfigs(s.id).catch(() => [] as PrinterConfig[]);
+      // Leitura falhou e a loja tem impressoras guardadas: tenta de novo na próxima passada. Sem isto o pedido ia para a
+      // impressora padrão do Windows (a do caixa) e ficava marcado como impresso.
+      if (networkPrinters.length === 0 && impressorasGuardadasNoAparelho(s.id) > 0) { fetchFailed = true; return; }
       for (const destination of ['kitchen', 'bar'] as const) {
         // eslint-disable-next-line no-await-in-loop -- sequencial de propósito, mesmo motivo do print sequencial dentro de reconcileDestination.
         const failed = await reconcileDestination(s.id, destination, s.name, activatedAtRef.current, printedIdsRef, failedRef, setFailedItemsState, networkPrinters, puladosPorIdadeRef);

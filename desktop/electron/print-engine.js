@@ -27,6 +27,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const net = require('net');
+const { PORTA: PORTA_RAW, alvosDaVarredura, ipsDasPortas, resultadoDaVarredura, resumoDaFila } = require('./varredura-rede');
 const dns = require('dns').promises;
 const { execFile } = require('child_process');
 
@@ -382,6 +383,26 @@ async function syncDiscoveredPrinters(storeId) {
 }
 
 let redePublicadaPorEstaMaquina = new Set();
+// IPs das impressoras de rede cadastradas na loja: como as instaladas no Windows, nunca entram na varredura.
+let ipsConfigurados = new Set();
+
+// Fila do Windows desta máquina, gravada no servidor para ser vista sem acesso ao computador. Só lê; não mexe na fila.
+const PS_FILA = "$l=@(); foreach($p in Get-Printer){ foreach($j in @(Get-PrintJob -PrinterName $p.Name -ErrorAction SilentlyContinue)){ $l+=[pscustomobject]@{impressora=$p.Name;documento=$j.DocumentName;estado=[string]$j.JobStatus;bytes=$j.Size;enviado=$j.SubmittedTime.ToUniversalTime().ToString('o')} } }; if($l.Count){ ConvertTo-Json -InputObject @($l) -Compress } else { '[]' }";
+let filaAvisadaEm = 0;
+
+async function informarFilaWindows(storeId) {
+  if (process.platform !== 'win32') return;
+  const resumo = resumoDaFila(await runCommand('powershell.exe', ['-NoProfile', '-Command', PS_FILA]));
+  if (!resumo) return;
+  if (resumo.mais_antigo_s >= 60 && Date.now() - filaAvisadaEm > 300000) {
+    filaAvisadaEm = Date.now();
+    log(`WARN fila do Windows: ${resumo.total} trabalho(s), o mais antigo há ${resumo.mais_antigo_s} s: ${resumo.trabalhos.map((t) => `${t.impressora}/${t.estado}`).join(', ')}`);
+  }
+  await rest(`app_instances?store_id=eq.${storeId}&machine=eq.${encodeURIComponent(os.hostname())}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fila_windows: resumo, fila_windows_em: new Date().toISOString() }),
+  });
+}
 
 function sub24DasInterfaces() {
   const bases = new Set();
@@ -410,21 +431,29 @@ function portaAberta(ip, porta, timeoutMs) {
 }
 
 // Varre cada /24 desta máquina procurando a porta 9100 (RAW/ESC-POS) aberta.
+async function impressorasJaConhecidas() {
+  if (process.platform !== 'win32') return new Set();
+  const saida = await runCommand('powershell.exe', ['-NoProfile', '-Command', 'Get-PrinterPort | Where-Object { $_.PrinterHostAddress } | Select-Object -ExpandProperty PrinterHostAddress']);
+  return saida === null ? null : ipsDasPortas(saida);
+}
+
 async function detectNetworkPrinters() {
   const meus = new Set(Object.values(os.networkInterfaces()).flat().filter(Boolean).map((i) => i.address));
-  const alvos = [];
-  for (const base of sub24DasInterfaces()) for (let n = 1; n <= 254; n++) alvos.push(`${base}.${n}`);
+  const reservados = await impressorasJaConhecidas();
+  // Sem saber quais estão instaladas, não arrisca conectar nelas: desiste desta rodada.
+  if (reservados === null) return null;
+  for (const ip of ipsConfigurados) reservados.add(ip);
+  const alvos = alvosDaVarredura(sub24DasInterfaces(), meus, reservados);
   const achados = [];
   let idx = 0;
   const worker = async () => {
     while (idx < alvos.length) {
       const ip = alvos[idx++];
-      if (meus.has(ip)) continue;
-      if (await portaAberta(ip, 9100, 600)) achados.push(`${ip}:9100`);
+      if (await portaAberta(ip, PORTA_RAW, 1000)) achados.push(ip);
     }
   };
-  await Promise.all(Array.from({ length: 64 }, worker));
-  const lista = achados.sort();
+  await Promise.all(Array.from({ length: 16 }, worker));
+  const lista = resultadoDaVarredura(achados, reservados);
   const rotulos = {};
   await Promise.all(lista.map(async (nome) => {
     const ip = nome.split(':')[0];
@@ -439,6 +468,7 @@ async function detectNetworkPrinters() {
 
 async function syncNetworkPrinters(storeId) {
   const nomes = await detectNetworkPrinters();
+  if (nomes === null) { log('WARN varredura de rede pulada: não consegui ler as impressoras instaladas'); return; }
   if (nomes.length > 0) {
     await rest('discovered_printers?on_conflict=store_id,name', {
       method: 'POST',
@@ -671,6 +701,7 @@ function start(storeId, options) {
         `printer_configs?select=*&store_id=eq.${storeId}&is_active=eq.true&connection_type=in.(network,usb)`
       ).then((r) => r.json());
       printersById = new Map((Array.isArray(data) ? data : []).map((p) => [p.id, p]));
+      ipsConfigurados = new Set([...printersById.values()].filter((p) => p.connection_type === 'network' && p.ip_address).map((p) => p.ip_address));
       const pub = await rest(`discovered_printers?select=name,machine&store_id=eq.${storeId}&kind=eq.system`).then((r) => r.json());
       const m = new Map();
       for (const r of Array.isArray(pub) ? pub : []) { if (!r.machine) continue; if (!m.has(r.name)) m.set(r.name, new Set()); m.get(r.name).add(r.machine); }
@@ -799,7 +830,8 @@ function start(storeId, options) {
     await sendHeartbeat(storeId, printersById.size);
   }, HEARTBEAT_INTERVAL_MS));
   timers.push(setInterval(() => syncDiscoveredPrinters(storeId).catch(() => {}), DISCOVER_INTERVAL_MS));
-  timers.push(setInterval(() => syncNetworkPrinters(storeId).catch(() => {}), 5 * 60 * 1000));
+  timers.push(setInterval(() => syncNetworkPrinters(storeId).catch(() => {}), 60 * 60 * 1000));
+  timers.push(setInterval(() => informarFilaWindows(storeId).catch((e) => log(`WARN informe da fila falhou (ignorado): ${e.message}`)), 60000));
   timers.push(setInterval(tick, POLL_INTERVAL_MS));
 
   return { ok: true };

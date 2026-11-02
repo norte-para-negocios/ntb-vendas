@@ -825,6 +825,15 @@ export interface SalesReportRow {
   serviceFee?: number;
 }
 
+// Relatório no app do computador: o Chromium roda com kiosk-printing, e window.print() mandaria o relatório inteiro, sem
+// perguntar, para a impressora padrão (a térmica do caixa). Lá vira "Salvar PDF"; no navegador segue a janela de impressão.
+function imprimirRelatorio(title: string, styles: string, bodyHtml: string): Promise<boolean> {
+  const salvar = typeof window !== 'undefined' ? (window as unknown as { electronApp?: { salvarPdf?: (p: { title: string; html: string }) => Promise<{ ok: boolean }> } }).electronApp?.salvarPdf : undefined;
+  if (!salvar) return printHtmlDocument(title, styles, bodyHtml);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${styles}</style></head><body>${bodyHtml}</body></html>`;
+  return salvar({ title, html }).then((r) => !!r?.ok, () => false);
+}
+
 export function printSalesReport(opts: {
   storeName: string;
   periodLabel: string;
@@ -868,32 +877,32 @@ export function printSalesReport(opts: {
       </tfoot>
     </table>
   `;
-  return printHtmlDocument(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
+  return imprimirRelatorio(`Relatório de Vendas - ${opts.storeName}`, REPORT_STYLES, body);
 }
 
 // Relatório do dia (A4). "Salvar como PDF" é pelo próprio diálogo de impressão do navegador.
 export function printRelatorioDia(p: PainelDia, m: RelatorioMeta): Promise<boolean> {
-  return printHtmlDocument(`Relatório do dia - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildRelatorioHtml(p, m));
+  return imprimirRelatorio(`Relatório do dia - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildRelatorioHtml(p, m));
 }
 
 // Qualquer relatório em tabela (análise por hora/operador, turno, exceções) com o mesmo cabeçalho e rodapé.
 // Relatório completo (25/10/2026): o painel inteiro ou só as seções escolhidas, ou uma lista de contas clicada.
 export function printRelatorioCompleto(a: Analise, m: RelatorioMeta, secoes?: SecaoRelatorio[]): Promise<boolean> {
-  return printHtmlDocument(`${m.titulo ?? 'Relatório completo'} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildRelatorioCompletoHtml(a, m, secoes));
+  return imprimirRelatorio(`${m.titulo ?? 'Relatório completo'} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildRelatorioCompletoHtml(a, m, secoes));
 }
 export function printListaDeContas(titulo: string, contas: ContaResumo[], m: RelatorioMeta): Promise<boolean> {
-  return printHtmlDocument(`${titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, `${cabecalho(m, titulo)}${tabelaContas(titulo, contas)}${rodape}`);
+  return imprimirRelatorio(`${titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, `${cabecalho(m, titulo)}${tabelaContas(titulo, contas)}${rodape}`);
 }
 
 export function printEquipe(pessoas: import('./reports/analiseEquipe').Pessoa[], m: RelatorioMeta): Promise<boolean> {
-  return printHtmlDocument(`Equipe - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildEquipeHtml(pessoas, m));
+  return imprimirRelatorio(`Equipe - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildEquipeHtml(pessoas, m));
 }
 export function printPessoa(p: import('./reports/analiseEquipe').Pessoa, linha: import('./reports/analiseEquipe').EventoLinha[], m: RelatorioMeta): Promise<boolean> {
-  return printHtmlDocument(`${p.nome} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildPessoaHtml(p, linha, m));
+  return imprimirRelatorio(`${p.nome} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES + ESTILO_COMPLETO, buildPessoaHtml(p, linha, m));
 }
 
 export function printTabela(t: Parameters<typeof buildTabelaHtml>[0], m: RelatorioMeta): Promise<boolean> {
-  return printHtmlDocument(`${t.titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildTabelaHtml(t, m));
+  return imprimirRelatorio(`${t.titulo} - ${m.loja} - ${m.periodoLabel}`, RELATORIO_STYLES, buildTabelaHtml(t, m));
 }
 
 // Relatório de fechamento de caixa ("POSIÇÃO DO CAIXA") — pedido do Ramon, 2026-09-29: sai sozinho ao fechar

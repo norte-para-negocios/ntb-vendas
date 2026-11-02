@@ -3343,6 +3343,7 @@ export const setImpressaoPausada = async (storeId: string, pausada: boolean): Pr
 
 // Existe impressora física ativa que recebe este tipo de documento? (respeita a config "documentos" da impressora)
 // Impressoras de rede/USB guardadas no aparelho (sem internet, ou servidor demorando mais de 1,5 s).
+export const impressorasGuardadasNoAparelho = (storeId: string): number => readCachedPrinters(storeId).filter((p) => p.is_active).length;
 const impressorasDoAparelho = (storeId: string) => readCachedPrinters(storeId).filter((p) => p.is_active && (p.connection_type === 'network' || p.connection_type === 'usb'));
 async function lerComTeto<T>(chamada: PromiseLike<{ data: T | null; error: unknown }>): Promise<{ data: T | null; error: unknown }> {
   return Promise.race([Promise.resolve(chamada), new Promise<{ data: null; error: TypeError }>((ok) => setTimeout(() => ok({ data: null, error: new TypeError('Failed to fetch (sem resposta em 1,5 s)') }), 1500))]);
