@@ -2,6 +2,9 @@
 import { normalizarNcm } from '@/lib/fiscal/ncm';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
+import { useRecargaAgrupada } from '@/lib/useRecargaAgrupada';
+import { chaveRascunho, serializarRascunho, restaurarRascunho } from '@/lib/rascunhoMesa';
+import { fetchDisponibilidade, fundirDisponibilidade } from '@/lib/disponibilidade';
 import { agruparItensIguais } from '@/lib/agruparItens';
 import { publicarMesas, publicarKds } from '@/lib/dadosAoVivo';
 import Image from 'next/image';
@@ -1786,17 +1789,18 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
       setOrders(data);
   };
 
+  const recargaKds = useRecargaAgrupada(() => loadOrders(true));
   useEffect(() => {
     loadOrders();
     const channel = supabase.channel(`${destination}_updates_${storeId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => {
-            loadOrders(true); // Refresh on any change + alerta sonoro se surgiu item novo
+            recargaKds.pedir(); // Refresh agrupado (800 ms) + alerta sonoro se surgiu item novo
         })
         .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [storeId, destination]);
-  usePolling(() => loadOrders(true));
+  usePolling(recargaKds.rodar, 5000, true, recargaKds.ultima);
 
   const isItemLate = (item: OrderItem) => {
       const prepMinutes = item.product?.prep_time_minutes;
@@ -2295,8 +2299,9 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     // Esgotado em tempo real (migration 151): atualiza a lista a cada 15 s e ao voltar pra aba,
     // sem mexer na navegação nem mostrar "carregando".
     useEffect(() => {
+        // A cada 15 s só busca disponibilidade/esgotado (3 colunas); o cardápio inteiro vem só ao abrir.
         const refrescar = () => {
-            fetchMenu(storeId, true).then(({ products, error }) => { if (!error && products.length > 0) setProducts(semTaxas(products)); }).catch(() => {});
+            fetchDisponibilidade(storeId).then((disp) => { if (disp && disp.length > 0) setProducts((prev) => fundirDisponibilidade(prev, disp)); }).catch(() => {});
         };
         const id = setInterval(refrescar, 15000);
         const onVis = () => { if (document.visibilityState === 'visible') refrescar(); };
@@ -3299,6 +3304,39 @@ const TablesView: React.FC<{
     // Menu Mode State
     const [showMenuMode, setShowMenuMode] = useState(false);
     useEffect(() => { if (!showMenuMode) setMesaCarrinho([]); }, [showMenuMode]);
+    // Rascunho do carrinho da mesa (localStorage): restaura ao reabrir o cardápio da mesma mesa/loja, só com produtos que
+    // ainda existem no cardápio; apagado ao enviar ou descartar.
+    const rascunhoRestauradoPara = useRef<string | null>(null);
+    const apagarRascunho = () => { try { if (selectedTable) localStorage.removeItem(chaveRascunho(storeId, selectedTable.id)); } catch { /* */ } };
+    useEffect(() => {
+        if (!showMenuMode || !selectedTable) { rascunhoRestauradoPara.current = null; return; }
+        const chave = chaveRascunho(storeId, selectedTable.id);
+        const tableId = selectedTable.id;
+        let vivo = true;
+        let raw: string | null = null;
+        try { raw = localStorage.getItem(chave); } catch { /* */ }
+        if (!raw) { rascunhoRestauradoPara.current = chave; return; }
+        fetchMenu(storeId, true).then(({ products, error }) => {
+            if (!vivo) return;
+            if (!error && products.length > 0) {
+                const linhas = restaurarRascunho(raw, storeId, tableId, products);
+                if (linhas.length > 0) {
+                    setMesaCarrinho((prev) => (prev.length > 0 ? prev : linhas as CounterSaleLine[]));
+                    toast.info('Itens que ficaram pendentes nesta mesa foram recuperados.');
+                } else { try { localStorage.removeItem(chave); } catch { /* */ } }
+            }
+            rascunhoRestauradoPara.current = chave;
+        }).catch(() => { rascunhoRestauradoPara.current = chave; });
+        return () => { vivo = false; };
+    }, [showMenuMode, selectedTable?.id, storeId]);
+    useEffect(() => {
+        if (!showMenuMode || !selectedTable) return;
+        const chave = chaveRascunho(storeId, selectedTable.id);
+        try {
+            if (mesaCarrinho.length > 0) localStorage.setItem(chave, serializarRascunho(storeId, selectedTable.id, mesaCarrinho as any));
+            else if (rascunhoRestauradoPara.current === chave) localStorage.removeItem(chave);
+        } catch { /* */ }
+    }, [mesaCarrinho, showMenuMode, selectedTable?.id, storeId]);
     // Quando o cardápio da mesa fecha (pedido confirmado), a janela da mesa volta com "Pedir conta" embaixo do dedo:
     // o toque que chega logo depois não conta (lib/pedirConta.ts).
     const cardapioFechouEm = useRef<number | null>(null);
@@ -3314,7 +3352,7 @@ const TablesView: React.FC<{
     // Itens iguais agrupados na comanda (lib/agruparItens.ts): quais grupos estão abertos.
     const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
     const alternarGrupo = (chave: string) => setGruposAbertos((g) => { const n = new Set(g); if (n.has(chave)) n.delete(chave); else n.add(chave); return n; });
-    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; senha: string; enviando: boolean } | null>(null);
+    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; senha: string; enviando: boolean; tambem: string[] } | null>(null);
     // Trocar de mesa e mover item pedem o motivo por escrito (13/10/2026): fica na auditoria (Equipe/Relatórios).
     const [trocaMesaMotivo, setTrocaMesaMotivo] = useState('');
     const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; senha: string; enviando: boolean; total: number; qtd: number; livre: boolean } | null>(null);
@@ -3896,16 +3934,17 @@ NOTIFY pgrst, 'reload schema';`;
         });
     };
 
+    const recargaMesas = useRecargaAgrupada(() => loadData());
     useEffect(() => {
         loadData();
         // Subscribe to relevant tables to keep card summary updated
         const channel = supabase.channel(`tables_dashboard_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => loadData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => loadData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaMesas.pedir())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaMesas.pedir())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    usePolling(() => loadData());
+    usePolling(recargaMesas.rodar, 5000, true, recargaMesas.ultima);
 
     // Config fiscal (Task 17) — só pra saber se mostra o campo opcional de
     // CPF/CNPJ do destinatário ao fechar a mesa. Falha silenciosa de
@@ -4722,6 +4761,7 @@ NOTIFY pgrst, 'reload schema';`;
     const fecharPedidoMesa = async () => {
         if (isAddingItemRef.current) return;
         if (mesaCarrinho.length > 0 && !(await confirm({ message: 'Descartar os itens que ainda não foram confirmados?', variant: 'danger', confirmLabel: 'Descartar' }))) return;
+        apagarRascunho();
         setMesaCarrinho([]);
         setShowMenuMode(false);
     };
@@ -4842,6 +4882,7 @@ NOTIFY pgrst, 'reload schema';`;
             // Quem imprime é a Estação de Impressão do Caixa (o celular do garçom
             // não alcança a impressora da cozinha) — ver CaixaPrintStation.tsx.
             toast.success(mesaCarrinhoQtd === 1 ? 'Pedido enviado.' : `Pedido enviado (${mesaCarrinhoQtd} itens).`);
+            apagarRascunho();
             setMesaCarrinho([]);
             setShowMenuMode(false);
         } catch (e: any) {
@@ -4919,7 +4960,7 @@ NOTIFY pgrst, 'reload schema';`;
         // o servidor confere a permissão dessa pessoa (operator_can_secure 'mover_item').
         if (!isAberto && !roleCan(loggedUser, store, 'mover_item')) { toast.error('Você não tem permissão para mover item.'); return; }
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
-        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', motivo: '', senha: '', enviando: false });
+        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', motivo: '', senha: '', enviando: false, tambem: [] });
     };
 
     const confirmarMoverItem = async () => {
@@ -4944,18 +4985,21 @@ NOTIFY pgrst, 'reload schema';`;
             }
             operadorId = quem.user_id; operadorNome = quem.name;
         }
-        const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, operadorId, operadorNome);
+        // "Mover também": só ids que ainda estão na mesa e não foram cancelados (a lista pode ter mudado com o diálogo aberto).
+        const aindaNaMesa = new Set((selectedTable ? getTableSummary(selectedTable.id).allItems : []).map((i: any) => i.id));
+        const idsMover = [dlg.itemId, ...dlg.tambem.filter((id) => id !== dlg.itemId && aindaNaMesa.has(id))];
+        const r = await transferItems(storeId, idsMover, dlg.targetId, operadorId, operadorNome);
         setMoveItemDlg(null);
         if (r.success) {
             const destino = tables.find((t) => t.id === dlg.targetId);
             registrarAcao(storeId, 'item.transferido', { entity: 'order_items', entityId: dlg.itemId,
-                summary: `${dlg.nome}: Mesa ${selectedTable?.number ?? '?'} → Mesa ${destino?.number ?? '?'} · Motivo: ${dlg.motivo.trim()}`,
-                details: { motivo: dlg.motivo.trim(), de: selectedTable?.number ?? null, para: destino?.number ?? null, item: dlg.nome } });
+                summary: `${dlg.nome}${idsMover.length > 1 ? ` e mais ${idsMover.length - 1} item(ns)` : ''}: Mesa ${selectedTable?.number ?? '?'} → Mesa ${destino?.number ?? '?'} · Motivo: ${dlg.motivo.trim()}`,
+                details: { motivo: dlg.motivo.trim(), de: selectedTable?.number ?? null, para: destino?.number ?? null, item: dlg.nome, itens: idsMover } });
             loadData();
-            toast.undo('Item movido para a outra mesa.', 'Desfazer', async () => {
+            toast.undo(idsMover.length > 1 ? `${idsMover.length} itens movidos para a outra mesa.` : 'Item movido para a outra mesa.', 'Desfazer', async () => {
                 // O servidor só devolve se o item ainda está na mesa de destino (p_from_table_id).
-                const volta = origemId ? await transferItems(storeId, [dlg.itemId], origemId, operadorId, operadorNome, dlg.targetId) : { success: false as const };
-                if (volta.success) { toast.success('Item devolvido para a mesa de origem.'); loadData(); }
+                const volta = origemId ? await transferItems(storeId, idsMover, origemId, operadorId, operadorNome, dlg.targetId) : { success: false as const };
+                if (volta.success) { toast.success(idsMover.length > 1 ? 'Itens devolvidos para a mesa de origem.' : 'Item devolvido para a mesa de origem.'); loadData(); }
                 else toast.info('Outra pessoa já mexeu neste item. Nada foi desfeito.');
             });
         }
@@ -5487,7 +5531,7 @@ NOTIFY pgrst, 'reload schema';`;
             <Modal isOpen={!!moveItemDlg} onClose={() => !moveItemDlg?.enviando && setMoveItemDlg(null)} title="Mover item para outra mesa" size="sm">
                 {moveItemDlg && (
                     <div className="space-y-4">
-                        <p className="text-sm text-[var(--text)]">Mover <b>{moveItemDlg.nome}</b> da Mesa {selectedTable?.number} para:</p>
+                        <p className="text-sm text-[var(--text)]">Mover <b>{moveItemDlg.nome}</b>{moveItemDlg.tambem.length > 0 ? ` e mais ${moveItemDlg.tambem.length}` : ''} da Mesa {selectedTable?.number} para:</p>
                         <select
                             className="w-full h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-[15px] text-[var(--text)]"
                             value={moveItemDlg.targetId}
@@ -5499,6 +5543,24 @@ NOTIFY pgrst, 'reload schema';`;
                                 <option key={t.id} value={t.id}>Mesa {t.number}{t.status === 'available' ? ' (livre)' : ''}</option>
                             ))}
                         </select>
+                        {(() => {
+                            const outros = (selectedTable ? getTableSummary(selectedTable.id).allItems : []).filter((i: any) => i.id !== moveItemDlg.itemId);
+                            if (outros.length === 0) return null;
+                            return (
+                                <div className="rounded-xl border border-[var(--border)] p-3">
+                                    <p className="text-[13px] font-semibold text-[var(--text)] mb-2">Mover também</p>
+                                    <div className="max-h-40 overflow-y-auto space-y-1">
+                                        {outros.map((i: any) => (
+                                            <label key={i.id} className="flex items-center gap-2 min-h-[36px] text-[14px] text-[var(--text)]">
+                                                <input type="checkbox" className="h-4 w-4" checked={moveItemDlg.tambem.includes(i.id)} disabled={moveItemDlg.enviando}
+                                                    onChange={(e) => setMoveItemDlg({ ...moveItemDlg, tambem: e.target.checked ? [...moveItemDlg.tambem, i.id] : moveItemDlg.tambem.filter((x) => x !== i.id) })} />
+                                                <span>{i.quantity}x {getOrderItemDisplayName(i)}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         <Input label="Motivo (obrigatório)" placeholder="Ex.: lançado na mesa errada" value={moveItemDlg.motivo} onChange={(e) => setMoveItemDlg({ ...moveItemDlg, motivo: e.target.value })} maxLength={120} />
                         {isAberto && (
                             <Input label="Senha de quem autoriza" type="password" autoComplete="off" value={moveItemDlg.senha} onChange={(e) => setMoveItemDlg({ ...moveItemDlg, senha: e.target.value })} />
@@ -5506,7 +5568,7 @@ NOTIFY pgrst, 'reload schema';`;
                         <p className="text-[12px] text-[var(--text-muted)]">O item não é impresso de novo na cozinha. Fica registrado quem moveu e o motivo.</p>
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="secondary" onClick={() => setMoveItemDlg(null)} disabled={moveItemDlg.enviando}>Voltar</Button>
-                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando} disabled={!moveItemDlg.targetId || moveItemDlg.motivo.trim().length < 3 || (isAberto && !moveItemDlg.senha)}>Mover item</Button>
+                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando} disabled={!moveItemDlg.targetId || moveItemDlg.motivo.trim().length < 3 || (isAberto && !moveItemDlg.senha)}>{moveItemDlg.tambem.length > 0 ? `Mover ${moveItemDlg.tambem.length + 1} itens` : 'Mover item'}</Button>
                         </div>
                     </div>
                 )}
@@ -7143,14 +7205,15 @@ const CounterView: React.FC<{
         setOrders([...data, ...pendingCounterOrders]);
     };
 
+    const recargaBalcao = useRecargaAgrupada(() => load());
     useEffect(() => {
         load();
         const channel = supabase.channel(`counter_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => load())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaBalcao.pedir())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    usePolling(() => load());
+    usePolling(recargaBalcao.rodar, 5000, true, recargaBalcao.ultima);
 
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
@@ -8252,6 +8315,7 @@ const CaixaViewMeu: React.FC<{
         setCounterOrders(c);
     };
 
+    const recargaCaixa = useRecargaAgrupada(() => { loadQueue(); loadShift(); });
     useEffect(() => {
         loadShift();
         loadQueue();
@@ -8260,12 +8324,12 @@ const CaixaViewMeu: React.FC<{
         // desta loja atualiza a fila e o estado do turno (ex.: outro
         // operador abriu/fechou o caixa em outro aparelho).
         const channel = supabase.channel(`caixa_queue_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => { loadQueue(); loadShift(); })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => { loadQueue(); loadShift(); })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaCaixa.pedir())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaCaixa.pedir())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    usePolling(() => { loadQueue(); loadShift(); });
+    usePolling(recargaCaixa.rodar, 5000, true, recargaCaixa.ultima);
 
     const handleOpenShift = async () => {
         const value = parseFloat(openingFloat.replace(',', '.'));
