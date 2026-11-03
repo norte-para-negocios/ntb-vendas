@@ -1722,12 +1722,22 @@ export const triggerOrdemProducao = (body: { orderId?: string; tableId?: string 
 // pra loja em modelo NF-e — a rota ignora o campo pra NFC-e/nenhuma, então é
 // seguro sempre repassar o que a UI capturou (ou undefined), sem checar o
 // modelo aqui de novo.
+// 02/11/2026: falha de rede ou resposta HTTP ≠ 2xx (servidor reiniciando, proxy 502/504) não some mais no console — vai
+// para a fila offline ('emitir_nota_fiscal', ver lib/offline/sync.ts), que reenvia quando a conexão volta. Reenviar é
+// seguro: a rota trava por venda e não emite de novo se a nota já existe (autorizada/contingência). Resposta 200 com
+// {ok:false}/{skipped} é decisão da rota (sem CSC, cortesia...) e NÃO entra na fila.
 export const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string; destinatario?: { cpfCnpj: string; nome: string } }) => {
+  const enfileirar = (motivo: string) => {
+    console.error('Emissão fiscal automática falhou, vai para a fila:', motivo);
+    enqueue('emitir_nota_fiscal', { ...body, motivo }).catch((e) => console.error('Emissão fiscal: não deu para guardar na fila:', e));
+  };
   fetch(resolverUrlApi('/api/fiscal/emitir'), {
     method: 'POST',
     headers: cabecalhosApi(),
     body: JSON.stringify(body),
-  }).catch((e) => console.error('Emissão fiscal automática falhou:', e));
+  })
+    .then((res) => { if (!res.ok) enfileirar(`HTTP ${res.status}`); })
+    .catch((e) => enfileirar(e instanceof Error ? e.message : String(e)));
 };
 
 // Fase 5, Task 19 (plano "Fora do Cardápio"): push real (funciona com o app
@@ -4142,35 +4152,48 @@ export const fetchCoupons = async (storeId: string): Promise<DiscountCoupon[]> =
   return (data || []) as DiscountCoupon[];
 };
 
+// Escrita de cupom só por função com sessão (migration 192): a tabela não aceita mais insert/update/delete direto.
+const respostaCupom = (data: unknown, error: { message: string; code?: string } | null): { success: boolean; message?: string } => {
+  if (error) {
+    if (error.code === 'PGRST202') return { success: false, message: 'O servidor ainda não tem esta função. Atualize o sistema.' };
+    return { success: false, message: error.message };
+  }
+  const r = (data ?? {}) as { success?: boolean; message?: string };
+  return { success: !!r.success, message: r.message };
+};
+
 export const createCoupon = async (storeId: string, coupon: {
   code: string; type: 'percent' | 'fixed'; value: number;
   max_uses?: number | null; min_order_value?: number | null; expires_at?: string | null;
 }): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.from('discount_coupons').insert({
-    store_id: storeId,
-    code: coupon.code.toUpperCase().trim(),
-    type: coupon.type,
-    value: coupon.value,
-    max_uses: coupon.max_uses ?? null,
-    min_order_value: coupon.min_order_value ?? null,
-    expires_at: coupon.expires_at ?? null,
+  const { data, error } = await supabase.rpc('create_coupon_secure', {
+    p_store_id: storeId,
+    p_code: coupon.code.toUpperCase().trim(),
+    p_type: coupon.type,
+    p_value: coupon.value,
+    p_max_uses: coupon.max_uses ?? null,
+    p_min_order_value: coupon.min_order_value ?? null,
+    p_expires_at: coupon.expires_at ?? null,
+    p_token: tokenLoja(),
   });
-  if (error) return { success: false, message: error.message.includes('unique') ? 'Já existe um cupom com este código.' : error.message };
-  return { success: true };
+  return respostaCupom(data, error);
 };
 
-export const updateCoupon = async (id: string, updates: Partial<{
+export const updateCoupon = async (storeId: string, id: string, updates: Partial<{
   code: string; type: string; value: number; max_uses: number | null;
   min_order_value: number | null; expires_at: string | null; active: boolean;
 }>): Promise<{ success: boolean; message?: string }> => {
-  const { error } = await supabase.from('discount_coupons').update(updates).eq('id', id);
-  if (error) return { success: false, message: error.message };
-  return { success: true };
+  const { data, error } = await supabase.rpc('update_coupon_secure', {
+    p_store_id: storeId, p_coupon_id: id, p_fields: updates, p_token: tokenLoja(),
+  });
+  return respostaCupom(data, error);
 };
 
-export const deleteCoupon = async (id: string): Promise<{ success: boolean }> => {
-  const { error } = await supabase.from('discount_coupons').delete().eq('id', id);
-  return { success: !error };
+export const deleteCoupon = async (storeId: string, id: string): Promise<{ success: boolean; message?: string }> => {
+  const { data, error } = await supabase.rpc('delete_coupon_secure', {
+    p_store_id: storeId, p_coupon_id: id, p_token: tokenLoja(),
+  });
+  return respostaCupom(data, error);
 };
 
 export const validateAndApplyCoupon = async (

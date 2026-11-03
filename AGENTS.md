@@ -2538,6 +2538,13 @@ Vendas, configuração fica em Configurações** (nota fiscal emitida = venda; c
 - **A OP do Estoque NÃO é idempotente** (`cCodIntOP = NTBV+Date.now()`, saída em `movimentos` sem dedupe por pedido). Por isso só reenvia sozinho item com
   erro comprovadamente não gravado (`pulada`, conexão recusada, 4xx). Timeout, 5xx, OP criada sem saída, servidor caído em voo = `incerto`: nunca reenvia;
   o gerente confere no Estoque e usa "Já conferi" (Administração > Configurações > Integrações > Baixas de estoque).
+- **Incerto por timeout se confere sozinho (02/11/2026)**: o Estoque (migration 308 de lá) registra cada POST antes de baixar e responde
+  `GET /api/integracao/ordem-producao/status?pedidoRef=`. O job (`conferirIncertosPorTimeout`, passo 4 de `ciclarBaixasDeEstoque`) pega `incerto`
+  com erro "O Estoque não respondeu a tempo" e mais de 10 min e decide por item (`decidirIncerto`, `lib/baixaEstoque.ts`, teste
+  `scripts/testes/baixaIncertoConferencia.test.ts`): o Estoque processou -> `ok` ("Conferido sozinho no Estoque"); envio sem conclusão,
+  resultado incerto/ausente ou Estoque sem a rota -> continua incerto; volta a `erro` retentável SÓ com prova (o Estoque registrou pedidos da loja
+  antes E depois do envio, folga de 5 min). Um item 'manter' na linha bloqueia os reenvios dela. Grava com trava otimista (`status='incerto'` +
+  `updated_at`); `proxima_tentativa` da linha incerta vira "próxima pergunta". Desliga com `DISABLE_BAIXA_CONFERE_INCERTO=1`.
 - **Varredura**: pedidos `delivered` depois de `integracao_baixas_marco.desde` sem linha (navegador fechou/sem rede) entram sozinhos. **No deploy, rodar
   `update integracao_baixas_marco set desde = now()`** para não reprocessar nada anterior (o dono decidiu não reprocessar as mesas antigas do Sertão).
 - **Testar conexão** (`/api/integracao/testar-conexao`, `lib/estoqueConexao.ts`): GET locais-estoque (chave) + GET `/api/integracao/status` do Estoque novo

@@ -34,8 +34,15 @@ export function taxaPercentualParaConfig(percentual: number): number {
   return Math.round(pct * 100) / 10000;
 }
 
+/** Arredonda para centavos (meio centavo para cima), tirando antes o ruído de ponto flutuante (1,005 -> 1,01). */
+export function centavos(valor: number): number {
+  if (!Number.isFinite(valor)) return 0;
+  return Math.round(Number((valor * 100).toFixed(6))) / 100;
+}
+
+// Em centavos (02/11/2026): antes 33,33 x 10% = 3,333 seguia com 3 casas até o pagamento/impressão.
 export function calculateServiceFee(subtotal: number, rate: number = SERVICE_FEE_RATE): number {
-  return subtotal * rate;
+  return centavos(subtotal * rate);
 }
 
 // Formata a taxa como percentual pra exibição (0.10 -> "10%", 0.125 -> "12,5%").
@@ -56,7 +63,7 @@ export function formatServiceFeeRate(rate: number): string {
 
 export function calculateOrderTotal(subtotal: number, chargeServiceFee: boolean, rate: number = SERVICE_FEE_RATE, serviceFeeRemoved?: boolean): number {
   if (!chargeServiceFee || serviceFeeRemoved) return subtotal;
-  return subtotal + calculateServiceFee(subtotal, rate);
+  return centavos(subtotal + calculateServiceFee(subtotal, rate));
 }
 
 export interface SplitItem {
@@ -69,10 +76,20 @@ export function calculateSplitByPerson(items: SplitItem[], chargeServiceFee: boo
   for (const item of items) {
     bySubtotal.set(item.userName, (bySubtotal.get(item.userName) || 0) + item.subtotal);
   }
+  // Cada parte em centavos; o centavo que sobra/falta (arredondamento) vai para a ÚLTIMA parte, para a soma das
+  // partes bater com o total da mesa (calculateOrderTotal sobre a soma dos subtotais).
   const result = new Map<string, number>();
-  for (const [name, subtotal] of bySubtotal) {
-    result.set(name, calculateOrderTotal(subtotal, chargeServiceFee, rate));
-  }
+  const nomes = [...bySubtotal.keys()];
+  if (!nomes.length) return result;
+  const totalMesa = calculateOrderTotal(centavos([...bySubtotal.values()].reduce((s, v) => s + v, 0)), chargeServiceFee, rate);
+  let acumulado = 0;
+  nomes.forEach((name, i) => {
+    const parte = i === nomes.length - 1
+      ? centavos(totalMesa - acumulado)
+      : calculateOrderTotal(centavos(bySubtotal.get(name) || 0), chargeServiceFee, rate);
+    acumulado = centavos(acumulado + parte);
+    result.set(name, parte);
+  });
   return result;
 }
 

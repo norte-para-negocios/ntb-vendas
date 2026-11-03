@@ -19,7 +19,9 @@ export type QueuedActionType =
   | 'open_table_manually'
   // Pedir conta / cancelar o pedido de conta sem internet (08/10/2026).
   | 'request_table_bill'
-  | 'cancel_table_bill_request';
+  | 'cancel_table_bill_request'
+  // Emissão fiscal que não chegou ao servidor (rede caiu / HTTP ≠ 2xx) — 02/11/2026, ver triggerEmissaoFiscal.
+  | 'emitir_nota_fiscal';
 
 export interface QueuedAction {
   id: string; // uuid gerado no client — idempotency key, e também serve

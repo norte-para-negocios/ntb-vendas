@@ -62,16 +62,16 @@ const CouponManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
   };
 
   const handleToggleActive = async (coupon: DiscountCoupon) => {
-    const result = await updateCoupon(coupon.id, { active: !coupon.active });
+    const result = await updateCoupon(storeId, coupon.id, { active: !coupon.active });
     if (result.success) load();
-    else toast.error('Erro ao alterar cupom.');
+    else toast.error(result.message || 'Erro ao alterar cupom.');
   };
 
   const handleDelete = async (coupon: DiscountCoupon) => {
     if (!confirm(`Excluir cupom "${coupon.code}"?`)) return;
-    const result = await deleteCoupon(coupon.id);
+    const result = await deleteCoupon(storeId, coupon.id);
     if (result.success) { toast.success('Cupom excluído.'); load(); }
-    else toast.error('Erro ao excluir.');
+    else toast.error(result.message || 'Erro ao excluir.');
   };
 
   const formatValue = (c: DiscountCoupon) =>

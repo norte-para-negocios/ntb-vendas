@@ -5,7 +5,8 @@ import { setorDoItem, localEstoqueDoItem } from '@/lib/setores';
 import {
   indicesParaReenviar, interpretarResposta, resultadoDeFalhaDeRede, mesclarResultados, statusDaBaixa, proximaTentativa,
   resumoDoErro, marcarIncertosComoConferidos, marcarEnvioInterrompido, MAX_TENTATIVAS,
-  type ItemBaixa, type ResultadoItem, type StatusBaixa,
+  ehIncertoPorTimeout, decidirIncerto, aplicarDecisoesIncerto, IDADE_MINIMA_CONFERENCIA_MS,
+  type ItemBaixa, type ResultadoItem, type StatusBaixa, type DecisaoIncerto,
 } from '@/lib/baixaEstoque';
 
 export interface PayloadBaixa { itens: ItemBaixa[]; pedidoRef: string; ambiente: 'homologacao' | 'producao' | null }
@@ -13,6 +14,7 @@ export interface PayloadBaixa { itens: ItemBaixa[]; pedidoRef: string; ambiente:
 export interface LinhaBaixa {
   id: string; store_id: string; order_id: string; rotulo: string | null; status: StatusBaixa; tentativas: number;
   ultimo_erro: string | null; payload: PayloadBaixa; resultado: (ResultadoItem | null)[]; enviando: number[];
+  iniciada_em?: string | null; updated_at?: string; created_at?: string; proxima_tentativa?: string;
 }
 
 export interface PedidoParaBaixa { id: string; payment_details: Record<string, unknown> | null }
@@ -184,6 +186,8 @@ export async function processarBaixa(admin: SupabaseClient, linha: LinhaBaixa, o
   const { data: claim } = await admin.rpc('iniciar_integracao_baixa_secure', { p_id: linha.id, p_enviando: indices });
   if (!claim) return { id: linha.id, status: linha.status, processada: false, motivo: 'Em processamento por outro envio', enviados: 0 };
   const tentativasLinha = (claim as LinhaBaixa).tentativas;
+  // Hora de início deste envio em cada resultado: a conferência do incerto (conferirIncertosPorTimeout) precisa dela.
+  const enviadoEm = (claim as LinhaBaixa).iniciada_em ?? new Date().toISOString();
 
   const { data: secret } = await admin.from('store_ntb_estoque_secrets').select('ntb_estoque_url, ntb_estoque_api_key, ativo').eq('store_id', linha.store_id).maybeSingle();
   const enviados = indices.map((i) => itens[i]);
@@ -199,9 +203,9 @@ export async function processarBaixa(admin: SupabaseClient, linha: LinhaBaixa, o
   } else {
     try {
       const r = await chamarEstoque(secret.ntb_estoque_url, secret.ntb_estoque_api_key, { itens: enviados, pedidoRef: linha.payload.pedidoRef, ambiente: linha.payload.ambiente });
-      novos = interpretarResposta(r.status, r.json, codigos).map((n, k) => ({ ...n, tentativas: tentativaDoItem(indices[k]) }));
+      novos = interpretarResposta(r.status, r.json, codigos).map((n, k) => ({ ...n, tentativas: tentativaDoItem(indices[k]), enviadoEm }));
     } catch (e) {
-      novos = resultadoDeFalhaDeRede(e, codigos).map((n, k) => ({ ...n, tentativas: tentativaDoItem(indices[k]) }));
+      novos = resultadoDeFalhaDeRede(e, codigos).map((n, k) => ({ ...n, tentativas: tentativaDoItem(indices[k]), enviadoEm }));
     }
   }
 
@@ -237,6 +241,98 @@ export async function tratarInterrompidas(admin: SupabaseClient, soLoja: string 
     await salvar(admin, l.id, statusDaBaixa(resultado, l.payload.itens?.length ?? 0), resultado, resumoDoErro(resultado) || null, null, false);
   }
   return linhas.length;
+}
+
+// ---------------------------------------------------------------------------------------------- incerto por timeout
+/** GET de status do pedido no Estoque. Devolve o JSON (200) ou null (qualquer falha: quem chama mantém incerto). */
+export async function consultarStatusEstoque(url: string, chave: string, pedidoRef: string): Promise<{ http: number; json: unknown } | null> {
+  try {
+    const res = await fetch(`${url.replace(/\/$/, '')}/api/integracao/ordem-producao/status?pedidoRef=${encodeURIComponent(pedidoRef)}`, {
+      headers: { Authorization: `Bearer ${chave}` },
+      signal: AbortSignal.timeout(20000),
+    });
+    const json = await res.json().catch(() => null);
+    return { http: res.status, json };
+  } catch {
+    return null;
+  }
+}
+
+export interface ResumoConferencia { conferidas: number; resolvidasOk: number; reabertas: number }
+
+/**
+ * Baixas 'incerto' POR TIMEOUT com mais de 10 min: pergunta ao Estoque o que aconteceu com o pedido e, item a item,
+ * marca ok (o Estoque processou) ou volta a erro retentável (provado que nada foi gravado: o reenvio normal do job
+ * cuida). Sem resposta do Estoque ou com qualquer dúvida, continua incerto e só volta a perguntar mais tarde
+ * (proxima_tentativa, que a linha incerta não usava). Nunca reenvia nada aqui.
+ */
+export async function conferirIncertosPorTimeout(admin: SupabaseClient, soLoja: string | null = null, limite = 20): Promise<ResumoConferencia> {
+  const resumo: ResumoConferencia = { conferidas: 0, resolvidasOk: 0, reabertas: 0 };
+  const agora = Date.now();
+  let q = admin.from('integracao_baixas').select('*')
+    .eq('status', 'incerto')
+    .lte('proxima_tentativa', new Date(agora).toISOString())
+    .lt('updated_at', new Date(agora - IDADE_MINIMA_CONFERENCIA_MS).toISOString())
+    .gt('created_at', new Date(agora - 30 * 24 * 3600 * 1000).toISOString())
+    .order('proxima_tentativa', { ascending: true })
+    .limit(limite);
+  if (soLoja) q = q.eq('store_id', soLoja);
+  const { data, error } = await q;
+  if (error) throw new Error(`listar baixas incertas: ${error.message}`);
+
+  const segredos = new Map<string, { ntb_estoque_url: string | null; ntb_estoque_api_key: string | null; ativo: boolean } | null>();
+  for (const linha of (data ?? []) as LinhaBaixa[]) {
+    // Adia a próxima pergunta sem mexer em mais nada (e só se ninguém mexeu na linha desde a leitura).
+    const adiar = async (minutos: number) => {
+      await admin.from('integracao_baixas').update({ proxima_tentativa: new Date(Date.now() + minutos * 60000).toISOString() })
+        .eq('id', linha.id).eq('status', 'incerto').eq('updated_at', linha.updated_at!);
+    };
+    try {
+      const resultadoAtual = (linha.resultado ?? []) as (ResultadoItem | null)[];
+      const indices = resultadoAtual.map((r, i) => (ehIncertoPorTimeout(r) ? i : -1)).filter((i) => i >= 0);
+      if (!indices.length) { await adiar(60 * 24 * 30); continue; } // incerto por outro motivo: é do gerente
+
+      if (!segredos.has(linha.store_id)) {
+        const { data: sec } = await admin.from('store_ntb_estoque_secrets').select('ntb_estoque_url, ntb_estoque_api_key, ativo').eq('store_id', linha.store_id).maybeSingle();
+        segredos.set(linha.store_id, sec ?? null);
+      }
+      const sec = segredos.get(linha.store_id);
+      if (!sec?.ativo || !sec.ntb_estoque_url || !sec.ntb_estoque_api_key) { await adiar(60); continue; }
+
+      resumo.conferidas++;
+      const resp = await consultarStatusEstoque(sec.ntb_estoque_url, sec.ntb_estoque_api_key, linha.payload.pedidoRef);
+      // 404 = Estoque sem a rota (versão antiga): pergunta de novo em 6 h.
+      if (!resp || resp.http !== 200) { await adiar(resp?.http === 404 ? 360 : 60); continue; }
+
+      const decisoes = new Map<number, DecisaoIncerto>();
+      for (const i of indices) decisoes.set(i, decidirIncerto(resultadoAtual[i]!, resultadoAtual[i]!.enviadoEm ?? linha.iniciada_em ?? null, resp.json));
+      const aplicado = aplicarDecisoesIncerto(resultadoAtual, decisoes);
+      if (!aplicado.mudou) { await adiar(aplicado.reverEmMin ?? 60); continue; }
+
+      const status = statusDaBaixa(aplicado.resultado, linha.payload.itens?.length ?? 0);
+      const reabre = status === 'erro' || status === 'parcial';
+      const agoraIso = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        status, resultado: aplicado.resultado, ultimo_erro: resumoDoErro(aplicado.resultado) || null,
+        proxima_tentativa: reabre ? agoraIso : new Date(Date.now() + (aplicado.reverEmMin ?? 60) * 60000).toISOString(),
+        resolvido_em: status === 'ok' ? agoraIso : null, updated_at: agoraIso,
+      };
+      // Reaberta: garante pelo menos UM reenvio automático (o envio que estourou o tempo gastou uma tentativa).
+      if (reabre && linha.tentativas >= MAX_TENTATIVAS) patch.tentativas = MAX_TENTATIVAS - 1;
+      // Trava otimista: só grava se a linha continua incerta e igual à lida (o gerente pode ter apertado "Já conferi").
+      const { data: gravada, error: errUp } = await admin.from('integracao_baixas').update(patch)
+        .eq('id', linha.id).eq('status', 'incerto').eq('updated_at', linha.updated_at!).select('id');
+      if (errUp) throw new Error(errUp.message);
+      if (!gravada?.length) continue;
+      if (status === 'ok') { resumo.resolvidasOk++; await marcarPedidoEnviado(admin, linha.order_id); }
+      if (reabre) resumo.reabertas++;
+      console.log(`Baixa de estoque: incerto conferido no Estoque (${linha.id}) -> ${status}:`,
+        [...decisoes.entries()].map(([i, d]) => `${resultadoAtual[i]?.codigo}=${d.acao} (${d.motivo})`).join('; '));
+    } catch (e) {
+      console.error(`Baixa de estoque: erro ao conferir a baixa incerta ${linha.id}:`, e);
+    }
+  }
+  return resumo;
 }
 
 export { MAX_TENTATIVAS };

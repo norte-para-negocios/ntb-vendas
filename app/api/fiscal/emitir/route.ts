@@ -23,6 +23,7 @@ import { montarPayloadIncluirNfce } from '@/lib/omie/nota-fiscal';
 import { interpretarErroEnvioNfce } from '@/lib/omieEnvio';
 import { enviarNfceAutorizadaAoOmie, registrarEnvioOmie } from '@/lib/omieEnvioServidor';
 import { salvarNotaAutorizada } from '@/lib/fiscal/salvarNotaAutorizada';
+import { chaveDaVendaResolvida, ordenarPedidosDaVenda, type PedidoDaVenda } from '@/lib/fiscal/chaveVenda';
 
 // O pipeline completo (download+parse de certificado, XML, assinatura,
 // SOAP até 30s pra SEFAZ, geração de PDF) pode passar do limite padrão de
@@ -112,6 +113,9 @@ async function chaveDaVenda(request: NextRequest): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
+  // 1ª barreira: trava em memória pelo corpo da requisição (mesmo processo). A trava do BANCO é pega dentro de
+  // emitirNotaFiscal, DEPOIS de resolver os pedidos da venda (lib/fiscal/chaveVenda.ts): assim {tableId} e {orderId}
+  // da mesma venda disputam a mesma trava.
   const chave = await chaveDaVenda(request);
   let liberar: () => void = () => {};
   let cauda: Promise<unknown> | null = null;
@@ -122,28 +126,37 @@ export async function POST(request: NextRequest) {
     emissoesEmAndamento.set(chave, cauda);
     await anterior;
   }
-  // Trava no BANCO (migration 167): vale para qualquer processo/reinício. Se a função ainda não existe (banco sem a 167), segue só com a
-  // trava em memória acima — nunca deixa de emitir por falha de infraestrutura.
-  let travaDoBanco = false;
-  if (chave) {
-    try {
-      const { data: ganhou, error } = await getSupabaseAdmin().rpc('adquirir_trava_emissao', { p_chave: chave });
-      if (error) console.error('Emissão fiscal: trava do banco indisponível (segue com a trava em memória):', error.message);
-      else if (ganhou === false) { liberar(); if (emissoesEmAndamento.get(chave) === cauda) emissoesEmAndamento.delete(chave); return NextResponse.json({ skipped: true, reason: 'Já existe uma emissão em andamento para esta venda' }); }
-      else travaDoBanco = true;
-    } catch (e) { console.error('Emissão fiscal: falha ao pegar a trava do banco:', e); }
-  }
+  const travaDoBanco: TravaDoBanco = { chave: null };
   try {
-    return await emitirNotaFiscal(request);
+    return await emitirNotaFiscal(request, travaDoBanco);
   } catch (e) {
     // Rede de segurança final: nenhum bug de código nesta rota pode virar
     // um 500 não tratado (constraint do Task 13) — sempre volta JSON.
     console.error('Emissão fiscal: falha não tratada na rota:', e);
     return NextResponse.json({ ok: false, reason: e instanceof Error ? e.message : 'Erro desconhecido' });
   } finally {
-    if (travaDoBanco && chave) { try { await getSupabaseAdmin().rpc('liberar_trava_emissao', { p_chave: chave }); } catch { /* expira sozinha em 5 min */ } }
+    if (travaDoBanco.chave) { try { await getSupabaseAdmin().rpc('liberar_trava_emissao', { p_chave: travaDoBanco.chave }); } catch { /* expira sozinha em 5 min */ } }
     liberar();
     if (chave && emissoesEmAndamento.get(chave) === cauda) emissoesEmAndamento.delete(chave);
+  }
+}
+
+type TravaDoBanco = { chave: string | null };
+
+// Trava no BANCO (migration 167), por VENDA resolvida: vale para qualquer processo/reinício. Devolve false se outra
+// emissão da mesma venda está em andamento. Se a função não existe (banco sem a 167) ou falha, segue só com a trava em
+// memória — nunca deixa de emitir por falha de infraestrutura (o índice único da 192 continua de backstop).
+async function adquirirTravaDaVenda(trava: TravaDoBanco, chave: string | null): Promise<boolean> {
+  if (!chave) return true;
+  try {
+    const { data: ganhou, error } = await getSupabaseAdmin().rpc('adquirir_trava_emissao', { p_chave: chave });
+    if (error) { console.error('Emissão fiscal: trava do banco indisponível (segue com a trava em memória):', error.message); return true; }
+    if (ganhou === false) return false;
+    trava.chave = chave;
+    return true;
+  } catch (e) {
+    console.error('Emissão fiscal: falha ao pegar a trava do banco:', e);
+    return true;
   }
 }
 
@@ -326,7 +339,7 @@ async function emitirEmContingencia(params: {
   }
 }
 
-async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
+async function emitirNotaFiscal(request: NextRequest, travaDoBanco: TravaDoBanco): Promise<NextResponse> {
   const body = (await request.json().catch(() => null)) as RequestBody | null;
   if (!body?.orderId && !body?.tableId) {
     return NextResponse.json({ skipped: true, reason: 'orderId ou tableId ausente' });
@@ -337,6 +350,8 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // 1. Resolve store_id e os itens da venda.
   let storeId: string | null = null;
   let orderIds: string[] = [];
+  // Pedidos da venda com created_at, em ordem estável (ordenarPedidosDaVenda) — o primeiro é a âncora e a chave da trava.
+  let pedidosDaVenda: PedidoDaVenda[] = [];
   // Task 4 (2026-08-23, resolução backlog pendente): payment_details da
   // order-âncora (a mesma usada como âncora de idempotência logo abaixo),
   // buscado junto pra checar o opt-out por venda sem uma query extra.
@@ -345,12 +360,13 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   if (body.orderId) {
     const { data: order } = await admin
       .from('orders')
-      .select('id, store_id, payment_details')
+      .select('id, store_id, payment_details, created_at')
       .eq('id', body.orderId)
       .maybeSingle();
     if (order) {
       storeId = order.store_id;
       orderIds = [order.id];
+      pedidosDaVenda = [{ id: order.id, created_at: String(order.created_at) }];
       paymentDetailsAncora = order.payment_details as Record<string, unknown> | null;
     }
   } else if (body.tableId) {
@@ -377,7 +393,7 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
     // idempotência (duas chamadas pra a MESMA sessão de fechamento
     // poderiam resolver âncoras diferentes e não se reconhecerem como a
     // mesma venda).
-    let queryOrders = admin.from('orders').select('id, store_id, payment_details, updated_at').eq('table_id', body.tableId);
+    let queryOrders = admin.from('orders').select('id, store_id, payment_details, updated_at, created_at').eq('table_id', body.tableId);
     queryOrders = body.itemIds?.length
       ? queryOrders.neq('status', 'canceled')
       : queryOrders.eq('status', 'delivered').gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
@@ -394,13 +410,16 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
           return ordersJanela.filter((o: any) => new Date(o.updated_at).getTime() >= maisRecente - 30000);
         })();
     if (orders?.length) {
-      storeId = orders[0].store_id;
-      orderIds = orders.map((o) => o.id);
+      // Mesma ordem do .order('created_at') acima, com desempate por id: a âncora não muda entre duas execuções.
+      const ordenados = ordenarPedidosDaVenda(orders.map((o: any) => ({ ...o, created_at: String(o.created_at) })));
+      storeId = ordenados[0].store_id;
+      orderIds = ordenados.map((o) => o.id);
+      pedidosDaVenda = ordenados.map((o) => ({ id: o.id, created_at: o.created_at }));
       // close_table_orders_secure grava o MESMO payment_details em todas as
       // orders da mesa fechada junto (ver migration 021) — a âncora
       // (orders[0], mesmo critério de sempre) já basta, não precisa reler
       // as outras.
-      paymentDetailsAncora = orders[0].payment_details as Record<string, unknown> | null;
+      paymentDetailsAncora = ordenados[0].payment_details as Record<string, unknown> | null;
     }
   }
 
@@ -494,18 +513,30 @@ async function emitirNotaFiscal(request: NextRequest): Promise<NextResponse> {
   // já teve nota cancelada também bloqueia o caminho automático; reemitir depois de
   // cancelar continua possível na mão (Notas fiscais → Reemitir, caminho por orderId).
   const emissaoAutomaticaDeMesa = !!body.tableId && !body.orderId && !body.itemIds?.length;
+  // Trava do banco por VENDA (02/11/2026): pega aqui, com os pedidos já resolvidos e ANTES da guarda abaixo — senão
+  // {tableId} (fechamento) e {orderId} (reenvio/reemissão) da mesma venda passavam juntos pela consulta.
+  if (!(await adquirirTravaDaVenda(travaDoBanco, chaveDaVendaResolvida({ storeId, pedidos: pedidosDaVenda, pessoa: pessoaNome })))) {
+    return NextResponse.json({ skipped: true, reason: 'Já existe uma emissão em andamento para esta venda' });
+  }
+  // 'contingencia' também bloqueia (02/11/2026): o cupom em contingência JÁ foi entregue ao cliente e a retransmissão
+  // em background vai autorizá-lo — emitir de novo aqui seria a segunda nota da mesma venda.
+  const statusQueBloqueiam = emissaoAutomaticaDeMesa ? ['autorizada', 'contingencia', 'cancelada'] : ['autorizada', 'contingencia'];
   let checagemIdempotencia = admin
     .from('fiscal_notas')
     .select('id')
     .eq('store_id', storeId)
     .eq('order_id', orderIdParaChecagem)
-    .in('status', emissaoAutomaticaDeMesa ? ['autorizada', 'cancelada'] : ['autorizada']);
-  checagemIdempotencia = tableIdParaChecagem
-    ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
-    : checagemIdempotencia.is('table_id', null);
-  checagemIdempotencia = pessoaNome
-    ? checagemIdempotencia.eq('pessoa_identificador', pessoaNome)
-    : checagemIdempotencia.is('pessoa_identificador', null);
+    .in('status', statusQueBloqueiam);
+  // Nota da venda inteira (sem pessoa): a âncora (order_id) já identifica a venda, sem olhar table_id — igual ao índice
+  // único fiscal_notas_unico_venda_v2 (192). Antes, uma reemissão por {orderId} (table_id null) não via a nota do
+  // fechamento por {tableId} e emitia de novo. Nota por pessoa continua com table_id (índice fiscal_notas_unico_por_pessoa).
+  if (pessoaNome) {
+    checagemIdempotencia = (tableIdParaChecagem
+      ? checagemIdempotencia.eq('table_id', tableIdParaChecagem)
+      : checagemIdempotencia.is('table_id', null)).eq('pessoa_identificador', pessoaNome);
+  } else {
+    checagemIdempotencia = checagemIdempotencia.is('pessoa_identificador', null);
+  }
   const { data: notasExistentes } = await checagemIdempotencia.limit(1);
   if (notasExistentes && notasExistentes.length > 0) {
     return NextResponse.json({ skipped: true, reason: 'Nota já existe para esta venda' });
