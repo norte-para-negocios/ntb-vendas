@@ -104,6 +104,13 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
         body: JSON.stringify({ orderId, tableId, destinatario }),
       });
       if (!res.ok) throw new Error(`Emissão da nota fiscal falhou (HTTP ${res.status}).`);
+      // Revisão 02/11: venda não encontrada (passou a janela de 5 min) não pode sumir calada: vira falha visível.
+      const corpo = await res.json().catch(() => null);
+      if (corpo?.skipped && /não encontrad/i.test(String(corpo.reason ?? ''))) {
+        const err = new Error('A nota fiscal desta venda não saiu sozinha. Emita pela tela Notas fiscais (Reemitir).');
+        (err as any).definitiva = true;
+        throw err;
+      }
       break;
     }
     case 'close_counter_order': {
@@ -348,7 +355,7 @@ export async function runSync(): Promise<void> {
       } catch (e) {
         // Falta de rede não é falha da ação: não gasta tentativa, encerra a rodada e tenta de novo no próximo ciclo.
         if (isNetworkError(e)) break;
-        await markFailed(action.id, (e as Error).message || 'Erro desconhecido');
+        await markFailed(action.id, (e as Error).message || 'Erro desconhecido', (e as any)?.definitiva ? MAX_ATTEMPTS : undefined);
         // Continua pra próxima ação da fila mesmo com esta falhando —
         // Global Constraint: uma falha nunca trava as ações seguintes.
       }

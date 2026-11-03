@@ -2077,7 +2077,14 @@ export const fecharPedidosDaMesa = async (tableId: string, paymentMethod: string
   }
   if (error) throw error;
   const r = data as RespostaRpc;
-  if (r && r.success === false) throw new Error(r.message || 'Não foi possível fechar a mesa.');
+  if (r && r.success === false) {
+    const err = new Error(r.code === 'valor'
+      ? `${r.message || 'O valor pago é menor que o total da mesa.'} A conta mudou no servidor (pode ter entrado pedido de outro computador): abra a mesa e receba de novo.`
+      : (r.message || 'Não foi possível fechar a mesa.'));
+    // Valor/pagamento recusado não se resolve repetindo: na fila sem internet vai direto para "falhas".
+    (err as any).definitiva = r.code === 'valor' || r.code === 'pagamento';
+    throw err;
+  }
 };
 
 export const closeTableSession = async (

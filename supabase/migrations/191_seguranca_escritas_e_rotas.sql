@@ -267,7 +267,9 @@ grant execute on function public.close_table_orders_v2(uuid, text, jsonb, uuid, 
 -- "Toque no seu nome" + senha (166/180): bloqueio por PESSOA, não pela loja inteira. Antes 10 erros de qualquer um
 -- travavam o login de todo mundo da loja por 1 min (e quem errasse de propósito travava o salão). Agora cada pessoa:
 -- a cada 10 erros seguidos, trava 1 min, 2 min, 3 min... até 15 min. Acertar zera. Mesmo retorno de antes.
--- Usa store_users.login_attempts/login_locked_until (008), as mesmas do login por e-mail: a senha é a mesma.
+-- Colunas próprias (staff_login_*): erro no toque no nome não trava o login por e-mail (008) e vice-versa (revisão 02/11).
+alter table public.store_users add column if not exists staff_login_attempts int not null default 0;
+alter table public.store_users add column if not exists staff_login_locked_until timestamptz;
 create or replace function public.verify_store_staff_login_secure(p_store_id uuid, p_user_id uuid, p_password text)
  returns jsonb
  language plpgsql
@@ -287,20 +289,20 @@ begin
     return jsonb_build_object('success', false, 'error', 'invalid');
   end if;
 
-  if v_u.login_locked_until is not null and v_u.login_locked_until > now() then
-    return jsonb_build_object('success', false, 'error', 'locked', 'seconds', ceil(extract(epoch from v_u.login_locked_until - now())));
+  if v_u.staff_login_locked_until is not null and v_u.staff_login_locked_until > now() then
+    return jsonb_build_object('success', false, 'error', 'locked', 'seconds', ceil(extract(epoch from v_u.staff_login_locked_until - now())));
   end if;
 
   if v_u.password = p_password then
-    update store_users set login_attempts = 0, login_locked_until = null where id = v_u.id;
+    update store_users set staff_login_attempts = 0, staff_login_locked_until = null where id = v_u.id;
     return jsonb_build_object('success', true, 'user_id', v_u.id, 'name', v_u.name, 'role', v_u.role);
   end if;
 
-  v_tentativas := coalesce(v_u.login_attempts, 0) + 1;
+  v_tentativas := coalesce(v_u.staff_login_attempts, 0) + 1;
   update store_users set
-    login_attempts = v_tentativas,
-    login_locked_until = case when v_tentativas % 10 = 0
-      then now() + make_interval(mins => least(15, v_tentativas / 10)) else login_locked_until end
+    staff_login_attempts = v_tentativas,
+    staff_login_locked_until = case when v_tentativas % 10 = 0
+      then now() + make_interval(mins => least(15, v_tentativas / 10)) else staff_login_locked_until end
   where id = v_u.id;
   return jsonb_build_object('success', false, 'error', 'invalid');
 end;

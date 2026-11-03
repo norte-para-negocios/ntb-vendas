@@ -5544,7 +5544,7 @@ NOTIFY pgrst, 'reload schema';`;
                             ))}
                         </select>
                         {(() => {
-                            const outros = (selectedTable ? getTableSummary(selectedTable.id).allItems : []).filter((i: any) => i.id !== moveItemDlg.itemId);
+                            const outros = (selectedTable ? getTableSummary(selectedTable.id).allItems : []).filter((i: any) => i.id !== moveItemDlg.itemId && i.status !== 'canceled' && !i.product?.fee_type);
                             if (outros.length === 0) return null;
                             return (
                                 <div className="rounded-xl border border-[var(--border)] p-3">

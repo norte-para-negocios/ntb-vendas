@@ -12,10 +12,10 @@
 -- ser apagada (documento fiscal real) e impediria criar o índice sem esse corte.
 -- Conferir antes de aplicar (deve voltar 0 linhas):
 --   select store_id, order_id, count(*) from fiscal_notas
---    where status = 'autorizada' and order_id is not null and pessoa_identificador is null and created_at >= '2026-11-03'
+--    where status = 'autorizada' and order_id is not null and pessoa_identificador is null and created_at >= '2026-11-03 04:00:00-03'
 --    group by 1, 2 having count(*) > 1;
 create unique index if not exists fiscal_notas_unico_venda_v2 on fiscal_notas (store_id, order_id)
-  where status = 'autorizada' and order_id is not null and pessoa_identificador is null and created_at >= '2026-11-03';
+  where status = 'autorizada' and order_id is not null and pessoa_identificador is null and created_at >= '2026-11-03 04:00:00-03';
 
 -- ─── 2. Cupom: escrita só por função com sessão ─────────────────────────────────────────────────────────────────────
 -- Leitura continua pública (validateAndApplyCoupon lê). Insert/update/delete direto pela chave anônima saem.

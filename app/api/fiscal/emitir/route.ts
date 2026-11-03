@@ -394,9 +394,16 @@ async function emitirNotaFiscal(request: NextRequest, travaDoBanco: TravaDoBanco
     // poderiam resolver âncoras diferentes e não se reconhecerem como a
     // mesma venda).
     let queryOrders = admin.from('orders').select('id, store_id, payment_details, updated_at, created_at').eq('table_id', body.tableId);
-    queryOrders = body.itemIds?.length
-      ? queryOrders.neq('status', 'canceled')
-      : queryOrders.eq('status', 'delivered').gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+    if (body.itemIds?.length) {
+      // Revisão 02/11: com itemIds (nota por pessoa), só os pedidos que contêm esses itens. Antes pegava todo pedido
+      // não cancelado da mesa, inclusive de sessões antigas já fechadas: a âncora virava o pedido mais antigo da mesa
+      // e a 2ª "Pessoa 1" da mesma mesa batia na nota antiga ("já existe").
+      const { data: itensDaNota } = await admin.from('order_items').select('order_id').in('id', body.itemIds);
+      const pedidosDosItens = [...new Set((itensDaNota ?? []).map((i: any) => i.order_id).filter(Boolean))];
+      queryOrders = queryOrders.neq('status', 'canceled').in('id', pedidosDosItens.length ? pedidosDosItens : ['00000000-0000-0000-0000-000000000000']);
+    } else {
+      queryOrders = queryOrders.eq('status', 'delivered').gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+    }
     const { data: ordersJanela } = await queryOrders.order('created_at', { ascending: true });
     // Mesa fechada duas vezes em <5 min: a janela pegava também o pedido do
     // fechamento anterior e a âncora (orders[0]) virava a venda velha,

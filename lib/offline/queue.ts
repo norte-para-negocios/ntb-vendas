@@ -30,11 +30,13 @@ export async function markDone(id: string): Promise<void> {
   await db.delete('queue', id);
 }
 
-export async function markFailed(id: string, error: string): Promise<void> {
+export async function markFailed(id: string, error: string, tentativasMinimas?: number): Promise<void> {
   const db = await getOfflineDb();
   const action = await db.get('queue', id);
   if (!action) return;
   action.attempts += 1;
+  // Falha definitiva (ex.: a conta mudou no servidor): vai direto para "falhas", sem repetir às cegas.
+  if (tentativasMinimas && action.attempts < tentativasMinimas) action.attempts = tentativasMinimas;
   action.lastError = error;
   await db.put('queue', action);
 }
