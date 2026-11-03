@@ -36,6 +36,8 @@ export interface ResultadoItem {
   nCodOP?: number;
   op?: string;
   baixa?: string;
+  /** Início do envio que gerou este resultado (02/11/2026; resultados antigos não têm). */
+  enviadoEm?: string;
 }
 
 /** Item como o Estoque devolve (loja real: com op/baixa; loja de teste: só ok/nCodOP/erro). */
@@ -205,4 +207,110 @@ export function resumoDoErro(resultado: (ResultadoItem | null)[]): string {
   const r = ruins[0];
   const prefixo = ruins.length > 1 ? `${ruins.length} itens: ` : `${r.codigo}: `;
   return `${prefixo}${r.erro ?? r.detalhe ?? 'falha'}`.slice(0, 200);
+}
+
+// ---------------------------------------------------------------------------------------------- incerto por timeout
+// 02/11/2026: 341 baixas do Sertão em 30 dias ficaram 'incerto' porque o Estoque demorou mais que o timeout (150 s) e
+// ninguém conferia. O Estoque novo registra cada pedido ANTES de mexer no estoque e responde
+// GET /api/integracao/ordem-producao/status?pedidoRef= (ntb-estoque lib/vendas/registro-pedido-venda.ts). Aqui decide,
+// item a item, o que fazer com um incerto POR TIMEOUT. Regra de ouro: reenviar só com PROVA de que nada foi gravado
+// (reenvio de baixa já processada = baixa em dobro no Omie). Qualquer dúvida = continua incerto.
+
+/** Início da mensagem gravada por classificarErroDeRede para timeout (só esses são conferidos sozinhos). */
+export const MSG_INCERTO_TIMEOUT = 'O Estoque não respondeu a tempo';
+/** Folga para a diferença de relógio entre o servidor do Vendas e o do Estoque. */
+export const MARGEM_RELOGIO_MS = 5 * 60 * 1000;
+/** Só confere incerto com mais de 10 min (o Estoque pode ainda estar processando o envio que estourou o tempo). */
+export const IDADE_MINIMA_CONFERENCIA_MS = 10 * 60 * 1000;
+
+export function ehIncertoPorTimeout(r: ResultadoItem | null | undefined): boolean {
+  return !!r && r.status === 'incerto' && (r.erro ?? '').startsWith(MSG_INCERTO_TIMEOUT);
+}
+
+export interface EnvioNoEstoque { recebidoEm: string; concluidoEm: string | null; itens: (RespostaItemEstoque & { codigo: string })[] }
+export interface StatusPedidoNoEstoque {
+  versao: number; primeiroRegistro: string | null; ultimoRegistro: string | null; envios: EnvioNoEstoque[];
+}
+
+export type DecisaoIncerto =
+  | { acao: 'ok' | 'erro'; motivo: string; resultado: ResultadoItem }
+  | { acao: 'manter'; motivo: string; reverEmMin: number };
+
+const manter = (motivo: string, reverEmMin = 30): DecisaoIncerto => ({ acao: 'manter', motivo, reverEmMin });
+
+function statusValido(s: unknown): s is StatusPedidoNoEstoque {
+  const x = s as StatusPedidoNoEstoque | null;
+  return !!x && x.versao === 1 && Array.isArray(x.envios)
+    && x.envios.every((e) => e && typeof e.recebidoEm === 'string' && Array.isArray(e.itens));
+}
+
+/**
+ * O que fazer com UM item incerto por timeout, dada a resposta de status do Estoque.
+ * `enviadoEm` = início do envio que estourou o tempo (ResultadoItem.enviadoEm ou integracao_baixas.iniciada_em).
+ *  - envio do item ainda sem conclusão no Estoque -> manter (processando ou interrompido no meio);
+ *  - último envio concluído com o item: resultado ok -> 'ok'; resultado incerto ou sem resultado -> manter;
+ *  - resultado de "nada gravado" ou envio não registrado -> 'erro' retentável SÓ se o Estoque registrava pedidos desta
+ *    loja antes E depois do envio (prova de que um envio que chegou estaria lá). Senão manter.
+ */
+export function decidirIncerto(item: ResultadoItem, enviadoEm: string | null | undefined, status: unknown): DecisaoIncerto {
+  if (!ehIncertoPorTimeout(item)) return manter('Não é incerto por tempo esgotado', 60 * 24 * 30);
+  if (!statusValido(status)) return manter('Resposta do Estoque sem o formato esperado', 60);
+  const envio = enviadoEm ? Date.parse(enviadoEm) : NaN;
+  if (Number.isNaN(envio)) return manter('Sem a hora do envio', 60 * 24 * 30);
+
+  const comItem = status.envios
+    .filter((e) => e.itens.some((i) => i && i.codigo === item.codigo))
+    .sort((a, b) => Date.parse(a.recebidoEm) - Date.parse(b.recebidoEm));
+  if (comItem.some((e) => !e.concluidoEm)) return manter('O Estoque ainda está processando este envio (ou parou no meio)', 15);
+
+  const ultimo = comItem[comItem.length - 1];
+  if (ultimo) {
+    const r = ultimo.itens.find((i) => i && i.codigo === item.codigo)!;
+    if (typeof r.ok !== 'boolean') return manter('O Estoque registrou o envio mas não o resultado deste item', 60 * 24);
+    const c = classificarItemEstoque(r);
+    if (c.status === 'ok') {
+      return {
+        acao: 'ok', motivo: 'O Estoque processou este item',
+        resultado: { ...item, ...c, status: 'ok', retentavel: false, erro: undefined, detalhe: `Conferido sozinho no Estoque${c.detalhe ? `: ${c.detalhe}` : ''}` },
+      };
+    }
+    if (c.status === 'incerto') return manter(`O Estoque processou com dúvida: ${c.erro ?? 'confira no Estoque'}`, 60 * 24 * 30);
+    // c.status === 'erro' (nada gravado naquele envio): cai na prova abaixo, porque pode ser um envio ANTERIOR.
+  }
+
+  const primeiro = status.primeiroRegistro ? Date.parse(status.primeiroRegistro) : NaN;
+  const ultimoReg = status.ultimoRegistro ? Date.parse(status.ultimoRegistro) : NaN;
+  if (Number.isNaN(primeiro) || primeiro > envio - MARGEM_RELOGIO_MS) {
+    // O Estoque só começou a registrar depois deste envio: nunca vai dar para provar. Fica para o gerente.
+    return manter('O envio é de antes de o Estoque registrar os pedidos', 60 * 24 * 30);
+  }
+  if (Number.isNaN(ultimoReg) || ultimoReg < envio + MARGEM_RELOGIO_MS) {
+    return manter('Ainda sem prova de que o Estoque registrava pedidos nessa hora', 30);
+  }
+  return {
+    acao: 'erro', motivo: ultimo ? 'O Estoque não gravou este item' : 'O envio não chegou ao Estoque',
+    resultado: {
+      ...item, status: 'erro', retentavel: true,
+      erro: ultimo ? 'O Estoque confirmou que não baixou este item' : 'O envio não chegou ao Estoque (conferido)',
+      detalhe: 'Conferido sozinho no Estoque: reenvio seguro',
+    },
+  };
+}
+
+/**
+ * Junta as decisões de uma baixa. Se algum item incerto por timeout fica 'manter', só os 'ok' são aplicados: assim
+ * nenhum reenvio acontece enquanto sobra item do MESMO envio sem resposta (o reenvio troca a hora de envio da linha).
+ */
+export function aplicarDecisoesIncerto(resultado: (ResultadoItem | null)[], decisoes: Map<number, DecisaoIncerto>): { resultado: (ResultadoItem | null)[]; mudou: boolean; reverEmMin: number | null } {
+  const algumManter = [...decisoes.values()].some((d) => d.acao === 'manter');
+  const out = resultado.slice();
+  let mudou = false;
+  let reverEmMin: number | null = null;
+  for (const [i, d] of decisoes) {
+    if (d.acao === 'manter') { reverEmMin = reverEmMin == null ? d.reverEmMin : Math.min(reverEmMin, d.reverEmMin); continue; }
+    if (d.acao === 'erro' && algumManter) { reverEmMin = reverEmMin == null ? 15 : Math.min(reverEmMin, 15); continue; }
+    out[i] = d.resultado;
+    mudou = true;
+  }
+  return { resultado: out, mudou, reverEmMin };
 }

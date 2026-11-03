@@ -3,17 +3,20 @@
 //   1. envios interrompidos (servidor caiu no meio): o que estava em voo vira "incerto" — nunca é reenviado sozinho;
 //   2. varredura: pedidos entregues (depois do marco da migration 156) que o navegador não chegou a registrar;
 //   3. reenvio: SÓ itens com erro comprovadamente não gravado, com backoff e no máximo MAX_TENTATIVAS vezes.
+//   4. conferência (02/11/2026): incerto POR TIMEOUT com mais de 10 min pergunta ao Estoque (GET .../status) e vira ok
+//      ou erro retentável (aí o passo 3 do próximo ciclo reenvia). Sem resposta/dúvida = continua incerto.
+//      Desliga com DISABLE_BAIXA_CONFERE_INCERTO=1.
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { enviarFechamentos } from '@/lib/fechamentoFaturamento';
 import {
   montarPayloadsPorPedido, registrarBaixa, registrarSemItens, carregarLinha, processarBaixa, tratarInterrompidas,
-  MAX_TENTATIVAS, type LinhaBaixa,
+  conferirIncertosPorTimeout, MAX_TENTATIVAS, type LinhaBaixa,
 } from '@/lib/baixaEstoqueServidor';
 
 // Trava de ciclo (processo único, systemd no Contabo) + trava por linha no banco (iniciar_integracao_baixa_secure).
 let cicloEmExecucao = false;
 
-export interface ResumoCiclo { interrompidas: number; varridas: number; reenviadas: number; fechamentos?: number }
+export interface ResumoCiclo { interrompidas: number; varridas: number; reenviadas: number; fechamentos?: number; incertosOk?: number; incertosReabertos?: number }
 
 /**
  * `soLoja` (ou BAIXA_RETRY_SO_LOJA): restringe o ciclo a UMA loja. Existe para testar o job contra o banco compartilhado
@@ -43,13 +46,21 @@ export async function ciclarBaixasDeEstoque(opts: { soLoja?: string } = {}): Pro
       }
     } catch (e) { console.error('Baixa de estoque: erro ao listar baixas para reenvio:', e); }
 
+    if (process.env.DISABLE_BAIXA_CONFERE_INCERTO !== '1') {
+      try {
+        const c = await conferirIncertosPorTimeout(admin, soLoja);
+        if (c.resolvidasOk) resumo.incertosOk = c.resolvidasOk;
+        if (c.reabertas) resumo.incertosReabertos = c.reabertas;
+      } catch (e) { console.error('Baixa de estoque: erro ao conferir incertos no Estoque:', e); }
+    }
+
     // Lojas de estoque próprio: reenvia ao Estoque a venda fechada que ainda não foi confirmada (faturamento e lucro).
     try { resumo.fechamentos = await reenviarFechamentosPendentes(admin, soLoja); }
     catch (e) { console.error('Fechamento de venda: erro ao reenviar pendentes:', e); }
   } finally {
     cicloEmExecucao = false;
   }
-  if (resumo.interrompidas || resumo.varridas || resumo.reenviadas || resumo.fechamentos) console.log('Baixa de estoque, ciclo:', JSON.stringify(resumo));
+  if (resumo.interrompidas || resumo.varridas || resumo.reenviadas || resumo.fechamentos || resumo.incertosOk || resumo.incertosReabertos) console.log('Baixa de estoque, ciclo:', JSON.stringify(resumo));
   return resumo;
 }
 
