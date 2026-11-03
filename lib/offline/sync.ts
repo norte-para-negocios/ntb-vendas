@@ -7,7 +7,6 @@ import { supabase } from '../supabaseClient';
 import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal, fecharPedidosDaMesa } from '../api';
 import { cabecalhosApi } from '../atorAtual';
 import { vendaTemCobranca } from '../calc';
-import { cabecalhosApi } from '../atorAtual';
 
 const MAX_ATTEMPTS = 3;
 
