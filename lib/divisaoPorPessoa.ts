@@ -1,3 +1,4 @@
+import { centavos } from './calc';
 // Aba "Por pessoa" do pagamento (31/10/2026, ODARA). O prefixo "[Nome]" das observações do item é de quem lançou: em item
 // de garçom é o GARÇOM, não quem paga. Só o que o cliente pediu pelo QR já tem dono (o nome dele); o resto o garçom
 // escolhe para Pessoa 1, Pessoa 2..., até por unidade (2 cervejas, uma para cada).
@@ -51,7 +52,8 @@ export function montarDivisao<T extends ItemDaConta>(itens: T[], at: Atribuicao,
   }
   const pessoas = [...clientes, ...pessoasManuais].map((nome) => {
     const doNome = linhas.get(nome) ?? [];
-    return { nome, linhas: doNome, subtotal: doNome.reduce((s, l) => s + l.item.price_at_time * l.qtd, 0) };
+    // Em centavos (02/11/2026): somar preço x qtd em ponto flutuante dava 0,30000000000000004.
+    return { nome, linhas: doNome, subtotal: centavos(doNome.reduce((s, l) => s + l.item.price_at_time * l.qtd, 0)) };
   });
   return { pessoas, soltos };
 }
