@@ -3314,7 +3314,7 @@ const TablesView: React.FC<{
     // Itens iguais agrupados na comanda (lib/agruparItens.ts): quais grupos estão abertos.
     const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
     const alternarGrupo = (chave: string) => setGruposAbertos((g) => { const n = new Set(g); if (n.has(chave)) n.delete(chave); else n.add(chave); return n; });
-    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; enviando: boolean } | null>(null);
+    const [moveItemDlg, setMoveItemDlg] = useState<{ itemId: string; nome: string; targetId: string; motivo: string; senha: string; enviando: boolean } | null>(null);
     // Trocar de mesa e mover item pedem o motivo por escrito (13/10/2026): fica na auditoria (Equipe/Relatórios).
     const [trocaMesaMotivo, setTrocaMesaMotivo] = useState('');
     const [cancelItemDlg, setCancelItemDlg] = useState<{ itemId: string; nome: string; motivo: string; outro: string; senha: string; enviando: boolean; total: number; qtd: number; livre: boolean } | null>(null);
@@ -4915,10 +4915,11 @@ NOTIFY pgrst, 'reload schema';`;
     };
 
     const abrirMoverItem = (itemId: string) => {
-        if (isAberto) { avisarSoComLogin(); return; }
-        if (!roleCan(loggedUser, store, 'mover_item')) { toast.error('Você não tem permissão para mover item.'); return; }
+        // ODARA 02/11: no modo Aberto o item também se move, com a senha de quem autoriza (como cancelar, migration 178);
+        // o servidor confere a permissão dessa pessoa (operator_can_secure 'mover_item').
+        if (!isAberto && !roleCan(loggedUser, store, 'mover_item')) { toast.error('Você não tem permissão para mover item.'); return; }
         const itemAlvo = selectedTable ? getTableSummary(selectedTable.id).allItems.find((i: any) => i.id === itemId) : undefined;
-        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', motivo: '', enviando: false });
+        setMoveItemDlg({ itemId, nome: itemAlvo ? `${itemAlvo.quantity}x ${getOrderItemDisplayName(itemAlvo)}` : 'este item', targetId: '', motivo: '', senha: '', enviando: false });
     };
 
     const confirmarMoverItem = async () => {
@@ -4926,10 +4927,24 @@ NOTIFY pgrst, 'reload schema';`;
         if (!dlg || dlg.enviando) return;
         if (!dlg.targetId) { toast.error('Escolha a mesa de destino.'); return; }
         if (dlg.motivo.trim().length < 3) { toast.error('Escreva o motivo da transferência.'); return; }
+        if (isAberto && !dlg.senha) { toast.error('Digite a senha de quem autoriza.'); return; }
         setMoveItemDlg({ ...dlg, enviando: true });
         const origemId = selectedTable?.id ?? null;
-        const operadorId = loggedUser.id;
-        const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, operadorId, loggedUser.name);
+        let operadorId: string | null = loggedUser.id;
+        let operadorNome = loggedUser.name;
+        if (isAberto) {
+            const quem = await verificarSenhaEquipe(storeId, dlg.senha);
+            if (!quem.success) {
+                toast.error(quem.error === 'ambiguous' ? 'Essa senha está repetida na loja. Use outra pessoa para autorizar.'
+                    : quem.error === 'locked' ? `Muitas tentativas. Espere ${quem.seconds ?? 60} segundos.`
+                    : quem.error === 'offline' ? 'Sem internet: não dá para conferir a senha agora.'
+                    : 'Senha não confere.');
+                setMoveItemDlg({ ...dlg, senha: '', enviando: false });
+                return;
+            }
+            operadorId = quem.user_id; operadorNome = quem.name;
+        }
+        const r = await transferItems(storeId, [dlg.itemId], dlg.targetId, operadorId, operadorNome);
         setMoveItemDlg(null);
         if (r.success) {
             const destino = tables.find((t) => t.id === dlg.targetId);
@@ -4939,7 +4954,7 @@ NOTIFY pgrst, 'reload schema';`;
             loadData();
             toast.undo('Item movido para a outra mesa.', 'Desfazer', async () => {
                 // O servidor só devolve se o item ainda está na mesa de destino (p_from_table_id).
-                const volta = origemId ? await transferItems(storeId, [dlg.itemId], origemId, operadorId, loggedUser.name, dlg.targetId) : { success: false as const };
+                const volta = origemId ? await transferItems(storeId, [dlg.itemId], origemId, operadorId, operadorNome, dlg.targetId) : { success: false as const };
                 if (volta.success) { toast.success('Item devolvido para a mesa de origem.'); loadData(); }
                 else toast.info('Outra pessoa já mexeu neste item. Nada foi desfeito.');
             });
@@ -5485,10 +5500,13 @@ NOTIFY pgrst, 'reload schema';`;
                             ))}
                         </select>
                         <Input label="Motivo (obrigatório)" placeholder="Ex.: lançado na mesa errada" value={moveItemDlg.motivo} onChange={(e) => setMoveItemDlg({ ...moveItemDlg, motivo: e.target.value })} maxLength={120} />
+                        {isAberto && (
+                            <Input label="Senha de quem autoriza" type="password" autoComplete="off" value={moveItemDlg.senha} onChange={(e) => setMoveItemDlg({ ...moveItemDlg, senha: e.target.value })} />
+                        )}
                         <p className="text-[12px] text-[var(--text-muted)]">O item não é impresso de novo na cozinha. Fica registrado quem moveu e o motivo.</p>
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="secondary" onClick={() => setMoveItemDlg(null)} disabled={moveItemDlg.enviando}>Voltar</Button>
-                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando} disabled={!moveItemDlg.targetId || moveItemDlg.motivo.trim().length < 3}>Mover item</Button>
+                            <Button onClick={confirmarMoverItem} isLoading={moveItemDlg.enviando} disabled={!moveItemDlg.targetId || moveItemDlg.motivo.trim().length < 3 || (isAberto && !moveItemDlg.senha)}>Mover item</Button>
                         </div>
                     </div>
                 )}
@@ -5852,7 +5870,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                         </div>
                                                         <div className="flex items-center gap-3 shrink-0">
                                                             <span className="num text-[var(--text)]">R$ {formatBRL(item.price_at_time * item.quantity)}</span>
-                                                            {roleCan(loggedUser, store, 'mover_item') && (
+                                                            {(isAberto || roleCan(loggedUser, store, 'mover_item')) && (
                                                             <button
                                                                 onClick={() => abrirMoverItem(item.id)}
                                                                 className="relative hit-44 text-[var(--text-muted)]/60 hover:text-[var(--brand)] p-1 u-motion u-press"
@@ -6090,7 +6108,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                     <div className="text-[13px] font-medium text-[var(--warn)] mt-0.5">Obs: {parseItemNote(item.notes || '').observation}</div>
                                                 )}
                                             </div>
-                                            {roleCan(loggedUser, store, 'mover_item') && (
+                                            {(isAberto || roleCan(loggedUser, store, 'mover_item')) && (
                                             <button
                                                 type="button"
                                                 onClick={() => abrirMoverItem(item.id)}
@@ -6269,6 +6287,41 @@ NOTIFY pgrst, 'reload schema';`;
             {/* PAYMENT MODAL */}
             <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Receber pagamento" size="lg">
                 <div className="space-y-4">
+                    {/* ODARA 02/11 (Herica): o caixa chega aqui direto da fila do Caixa e não achava como cancelar/mover item.
+                        Os botões abrem os MESMOS diálogos da comanda (senha de quem autoriza, motivo); a janela de pagamento
+                        fecha antes para o diálogo ficar na frente, e o caixa volta com "Receber pagamento". */}
+                    {selectedTable && (() => {
+                        const itensConta = getTableSummary(selectedTable.id).allItems.filter((i: any) => i.status !== 'canceled' && !i.product?.fee_type);
+                        if (itensConta.length === 0) return null;
+                        const podeMover = isAberto || roleCan(loggedUser, store, 'mover_item');
+                        return (
+                            <details className="rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface)]">
+                                <summary className="cursor-pointer select-none px-3 py-2 text-[14px] font-medium text-[var(--text)]">
+                                    Cancelar ou mover itens desta conta
+                                </summary>
+                                <div className="max-h-[220px] overflow-y-auto border-t border-[var(--border)]">
+                                    {itensConta.map((item: any) => (
+                                        <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] last:border-b-0 text-[14px]">
+                                            <span className="text-[var(--text-muted)] num">{item.quantity}×</span>
+                                            <span className="flex-1 min-w-0 truncate text-[var(--text)]">{getOrderItemDisplayName(item)}</span>
+                                            {podeMover && (
+                                                <button type="button" onClick={() => { setShowPaymentModal(false); abrirMoverItem(item.id); }}
+                                                    className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)] hover:text-[var(--brand)] hover:bg-[var(--surface-2)] u-motion u-press"
+                                                    title="Mover para outra mesa" aria-label={`Mover ${getOrderItemDisplayName(item)} para outra mesa`}>
+                                                    <ArrowRightLeft size={15} />
+                                                </button>
+                                            )}
+                                            <button type="button" onClick={() => { setShowPaymentModal(false); handleDeleteItem(item.id); }}
+                                                className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--err)]/10 u-motion u-press"
+                                                title="Cancelar item" aria-label={`Cancelar ${getOrderItemDisplayName(item)}`}>
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                        );
+                    })()}
                     {/* Tabs — Reunião 2026-09-10 (min 32:14): "Por Cliente" virou
                         "Por pessoa" porque ninguém associava ao recurso de nota
                         fiscal por pessoa (migration 055). */}
