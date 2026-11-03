@@ -512,13 +512,15 @@ async function secPermissoesAcoes(C) {
   const iExtra = (await itemDoProduto(amb, P.extra.id))[0]; const iExtra2 = (await itemDoProduto(amb, P.extra2.id))[0];
   ok(iExtra && iExtra2, 'itens descartáveis não foram gravados');
 
-  await rel.passo('garçom: a comanda NÃO tem Trocar nem Mover item; Cancelar item e Cancelar pedido aparecem (pedem a senha de quem autoriza)', async () => {
+  await rel.passo('garçom (PC do salão, modo Aberto): a comanda NÃO tem Trocar; Mover item, Cancelar item e Cancelar pedido aparecem (pedem a senha de quem autoriza)', async () => {
     await abrirMesa(g, mesaA.number);
     await g.page.getByRole('button', { name: /Ver Comanda/ }).click();
     await sleep(1000);
     const dlg = g.page.getByRole('dialog').last();
     ok(await dlg.locator('button[title="Cancelar Item"]').count() >= 2, 'botões "Cancelar item" deveriam aparecer para o garçom (pedem senha)');
-    igual(await dlg.locator('button[aria-label="Mover item para outra mesa"]').count(), 0, 'botões "Mover item" visíveis para o garçom');
+    // ODARA 02/11 (Herica): no modo Aberto mover item também aparece e pede a senha de quem autoriza (como cancelar);
+    // o servidor recusa o garçom (passo "garçom chamando direto o servidor" abaixo).
+    ok(await dlg.locator('button[aria-label="Mover item para outra mesa"]').count() >= 2, 'botões "Mover item" deveriam aparecer no modo Aberto (pedem senha)');
     igual(await dlg.getByRole('button', { name: 'Trocar', exact: true }).count(), 0, 'botão Trocar visível para o garçom');
     igual(await dlg.getByRole('button', { name: /Cancelar pedido/ }).count(), 1, 'botão Cancelar pedido deveria aparecer para o garçom (pede senha)');
     ok(await dlg.getByRole('button', { name: 'Imprimir' }).count() === 1 && await dlg.getByRole('button', { name: /Pedir conta/ }).count() === 1, 'garçom deveria ter Imprimir e Pedir conta');
