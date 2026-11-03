@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { planejarNovos, type NovoOmie } from '@/lib/produtosNovosOmie';
 
 // Rota externa (não-sessão) pro ntb-estoque criar ou ATUALIZAR produtos aqui
 // automaticamente. Dois métodos:
 //   POST  — cria um produto novo (Direção 2 do cadastro unificado, 2026-08-16)
 //   PATCH — atualiza nome/preço de produtos já vinculados por omie_codigo
 //           (sync automática Omie → Vendas, 2026-10-02, pedido do usuário)
+//           e, com `novos`, cria os produtos novos do Omie que ainda não estão no
+//           cardápio (03/11/2026, pedido do Ramon; regras em lib/produtosNovosOmie.ts)
 //
 // Autenticação: Bearer = integracao_api_key da loja (mesma chave bidirecional
 // usada pra Ordem de Produção e criar produto). Resolve o store_id procurando
@@ -25,6 +28,7 @@ interface UpdateItem {
 
 interface PatchBody {
   updates?: UpdateItem[];
+  novos?: NovoOmie[];
 }
 
 export async function POST(request: NextRequest) {
@@ -74,12 +78,14 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Authorization: Bearer <chave> ausente' }, { status: 401 });
   }
   const body = (await request.json().catch(() => null)) as PatchBody | null;
-  if (!body?.updates?.length) {
-    return NextResponse.json({ error: 'Informe updates[] com pelo menos 1 item' }, { status: 400 });
+  const updatesIn = Array.isArray(body?.updates) ? body!.updates : [];
+  const novosIn = Array.isArray(body?.novos) ? body!.novos : [];
+  if (!updatesIn.length && !novosIn.length) {
+    return NextResponse.json({ error: 'Informe updates[] ou novos[] com pelo menos 1 item' }, { status: 400 });
   }
-  // Limite de segurança: max 500 updates por chamada (mesmo teto do sync de produtos do Omie)
-  if (body.updates.length > 500) {
-    return NextResponse.json({ error: 'Máximo de 500 updates por chamada' }, { status: 400 });
+  // Limite de segurança: max 500 por chamada (mesmo teto do sync de produtos do Omie)
+  if (updatesIn.length > 500 || novosIn.length > 500) {
+    return NextResponse.json({ error: 'Máximo de 500 itens por chamada' }, { status: 400 });
   }
   const admin = getSupabaseAdmin();
   const { data: secret } = await admin
@@ -94,10 +100,37 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Integração desativada por essa loja' }, { status: 403 });
   }
 
+  // Produtos novos do Omie: cria no cardápio o que ainda não existe (por código ou mesmo nome).
+  const criados: { omieCodigo: string; categoria: boolean }[] = [];
+  let pulados: { omieCodigo: string; motivo: string }[] = [];
+  const errors: string[] = [];
+  if (novosIn.length) {
+    const [{ data: todos, error: e1 }, { data: cats, error: e2 }] = await Promise.all([
+      admin.from('products').select('omie_codigo, name, category_id').eq('store_id', secret.store_id),
+      admin.from('categories').select('id, name').eq('store_id', secret.store_id),
+    ]);
+    if (e1 || e2) return NextResponse.json({ error: (e1 ?? e2)!.message }, { status: 500 });
+    const plano = planejarNovos(novosIn, todos ?? [], cats ?? []);
+    pulados = plano.pulados;
+    for (const c of plano.criar) {
+      const { error } = await admin.from('products').insert({
+        store_id: secret.store_id,
+        category_id: c.categoryId,
+        name: c.nome,
+        price: c.preco,
+        // sem categoria não aparece no cardápio de qualquer jeito; fica pausado até o lojista escolher
+        available: c.categoryId !== null,
+        omie_codigo: c.omieCodigo,
+      });
+      if (error) errors.push(`${c.omieCodigo}: ${error.message}`);
+      else criados.push({ omieCodigo: c.omieCodigo, categoria: c.categoryId !== null });
+    }
+  }
+
   // Buscar todos os produtos da loja que têm omie_codigo matching
-  const omieCodigos = body.updates.map(u => u.omieCodigo.trim()).filter(Boolean);
+  const omieCodigos = updatesIn.map(u => (u.omieCodigo ?? '').trim()).filter(Boolean);
   if (!omieCodigos.length) {
-    return NextResponse.json({ ok: true, updated: 0, notFound: 0 });
+    return NextResponse.json({ ok: true, updated: 0, notFound: 0, criados, pulados, errors: errors.length ? errors : undefined });
   }
 
   const { data: existingProducts } = await admin
@@ -110,9 +143,8 @@ export async function PATCH(request: NextRequest) {
 
   let updated = 0;
   let notFound = 0;
-  const errors: string[] = [];
 
-  for (const item of body.updates) {
+  for (const item of updatesIn) {
     const codigo = item.omieCodigo.trim();
     const existing = existingMap.get(codigo);
     if (!existing) {
@@ -149,6 +181,8 @@ export async function PATCH(request: NextRequest) {
     ok: true,
     updated,
     notFound,
+    criados,
+    pulados,
     errors: errors.length ? errors : undefined,
   });
 }
