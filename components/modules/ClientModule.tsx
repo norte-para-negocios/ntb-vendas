@@ -29,6 +29,9 @@ import { THEME_PRESETS, resolveThemePreset } from '@/lib/theme';
 import { corParaBotao } from '@/lib/colorContrast';
 import { lerSessaoSalva, decidirRestauracao, montarSessaoSalva, textoConfirmarSessao } from '@/lib/sessaoCardapio';
 
+// Cupom de desconto no carrinho do cliente: desligado até o desconto ser cobrado de verdade no pedido (02/11/2026).
+const CUPOM_LIGADO = false as boolean;
+
 // --- COMPONENTS ---
 
 // Identidade "carta de vinhos" original (dourado só pra preço/valor,
@@ -1918,7 +1921,9 @@ const CartModal: React.FC<{
         setCouponDiscount(null);
         setCouponError('');
     };
-    const finalTotal = couponDiscount != null ? Math.max(0, total - couponDiscount) : total;
+    // Cupom DESLIGADO (02/11/2026): o desconto só aparecia na tela do cliente, nunca era cobrado no pedido (1 cupom
+    // cadastrado, 0 usos). Fica escondido até o desconto passar a valer no servidor; o código fica para religar.
+    const finalTotal = CUPOM_LIGADO && couponDiscount != null ? Math.max(0, total - couponDiscount) : total;
     return (
         <BottomSheet isOpen={isOpen} onClose={onClose} title="Seu Pedido">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
@@ -1983,8 +1988,8 @@ const CartModal: React.FC<{
                 </div>
 
                 <div className="p-4 border-t border-[var(--border)] bg-[var(--surface-2)] space-y-3">
-                    {/* Cupom de desconto (migration 142/143) */}
-                    {storeId && (
+                    {/* Cupom de desconto (migration 142/143) — desligado, ver CUPOM_LIGADO */}
+                    {CUPOM_LIGADO && storeId && (
                         <div className="space-y-2">
                             <div className="flex gap-2">
                                 <input

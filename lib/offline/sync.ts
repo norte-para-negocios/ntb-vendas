@@ -6,6 +6,7 @@ import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
 import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal } from '../api';
 import { vendaTemCobranca } from '../calc';
+import { cabecalhosApi } from '../atorAtual';
 
 const MAX_ATTEMPTS = 3;
 
@@ -91,6 +92,20 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
         const body = await res.json().catch(() => null);
         throw new Error(body?.reason || `Falha ao registrar a nota feita sem internet (HTTP ${res.status}).`);
       }
+      break;
+    }
+    case 'emitir_nota_fiscal': {
+      // Reenvio da emissão que caiu (triggerEmissaoFiscal). Chama a rota direto, aguardando: HTTP ≠ 2xx lança e a fila
+      // tenta de novo. Repetir é seguro: a rota trava por venda e pula se a nota já existe (autorizada/contingência).
+      // Limite: fechamento por {tableId} só acha a venda até 5 min depois de fechada (janela da rota) — passou disso,
+      // a rota responde "Pedido(s) não encontrado(s)" e a nota sai pela Reemissão manual em Notas fiscais.
+      const { orderId, tableId, destinatario } = action.payload as any;
+      const res = await fetch(resolverUrlApi('/api/fiscal/emitir'), {
+        method: 'POST',
+        headers: cabecalhosApi(),
+        body: JSON.stringify({ orderId, tableId, destinatario }),
+      });
+      if (!res.ok) throw new Error(`Emissão da nota fiscal falhou (HTTP ${res.status}).`);
       break;
     }
     case 'close_counter_order': {
@@ -410,6 +425,10 @@ export function descreverAcaoFila(action: QueuedAction): string {
         refCurta(p.tableId) && `mesa ${refCurta(p.tableId)}`,
         emReais(p.paymentData?.total),
       ]);
+    case 'emitir_nota_fiscal':
+      return comDetalhe('Emissão de nota fiscal', [
+        p.tableId ? refCurta(p.tableId) && `mesa ${refCurta(p.tableId)}` : refCurta(p.orderId) && `pedido ${refCurta(p.orderId)}`,
+      ]);
     case 'registrar_nota_offline':
       return comDetalhe('Nota fiscal feita sem internet', [p.nota?.numero ? `NFC-e ${p.nota.numero} série ${p.nota.serie}` : '', emReais(p.nota?.valorTotal)]);
     case 'close_counter_order':
@@ -465,6 +484,8 @@ export function explicarDescarteAcao(action: QueuedAction): string {
       return 'O item vai continuar com o status antigo no servidor (quem olha o KDS não vai ver essa mudança). Refaça pela tela depois de descartar, se ainda valer.';
     case 'close_table_session':
       return 'A conta desta mesa NÃO vai ser fechada nem o pagamento registrado: a mesa continua ocupada e o dinheiro não entra no turno. Só descarte se já fechou essa mesa por outro caminho.';
+    case 'emitir_nota_fiscal':
+      return 'A nota fiscal desta venda não vai ser pedida de novo automaticamente. Confira em Administração > Vendas > Notas fiscais e use Reemitir se ela não estiver lá.';
     case 'registrar_nota_offline':
       return 'A nota feita sem internet (já entregue ao cliente) NÃO vai para a SEFAZ: fica sem autorização. Só descarte se a nota foi resolvida por outro caminho.';
     case 'close_counter_order':
