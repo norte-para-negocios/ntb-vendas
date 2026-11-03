@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 
 // Configura a integração ntb-vendas -> ntb-estoque (Ordem de Produção
 // automática, ver app/api/integracao/ordem-producao/route.ts e migration
@@ -23,6 +24,9 @@ export async function POST(request: NextRequest) {
   if (!body?.storeId || !UUID_RE.test(body.storeId)) {
     return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
   }
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(request, body.storeId);
+  if (semSessao) return semSessao;
 
   const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
 

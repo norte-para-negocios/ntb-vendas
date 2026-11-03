@@ -84,7 +84,7 @@ import { setorDoItem } from '@/lib/setores';
 import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
 import { itensAtivos, qtdItensAtivos, subtotalItensAtivos, rotuloQtdItens, itemCancelado } from '@/lib/itensVenda';
 import { descreverHoraDoPedido } from '@/lib/tempo';
-import { definirAtor, cabecalhosApi } from '@/lib/atorAtual';
+import { definirAtor, cabecalhosApi, cabecalhoSessao } from '@/lib/atorAtual';
 import { grupoViraVariacoes, validarVariacoes, variacoesParaGrupo, type Variacao } from '@/lib/variacoes';
 import { registrarAcao } from '@/lib/auditoria';
 import { printKitchenTicket, printBillReceipt, printSalesReport, buildBillReceiptText, buildFiscalCupomText, buildKitchenTicketText, buildCashClosingText, printPlainTextThermal } from '@/lib/print';
@@ -13778,7 +13778,7 @@ const FiscalNotasView: React.FC<{ storeId: string; storeName?: string; modoCaixa
             const params = new URLSearchParams({ storeId });
             if (exportStartDate) params.set('startDate', exportStartDate);
             if (exportEndDate) params.set('endDate', exportEndDate);
-            const res = await fetch(`${resolverUrlApi('/api/fiscal/exportar')}?${params.toString()}`);
+            const res = await fetch(`${resolverUrlApi('/api/fiscal/exportar')}?${params.toString()}`, { headers: cabecalhoSessao() });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 throw new Error(body?.message || 'Falha ao exportar notas fiscais.');

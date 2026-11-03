@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { PAYMENT_METHOD_LABELS, CARD_BRAND_LABELS } from '@/lib/labels';
 import { getPaymentMethodsForRecord } from '@/lib/calc';
+import { exigirSessao } from '@/lib/server/exigirSessao';
+import { totalDosItens, conferirValorPago } from '@/lib/pagamentoValor';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -158,6 +160,9 @@ export async function POST(request: NextRequest) {
     if (typeof body.storeId !== 'string' || !UUID_RE.test(body.storeId)) {
       return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
     }
+    // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+    const semSessaoEstorno = await exigirSessao(request, body.storeId);
+    if (semSessaoEstorno) return semSessaoEstorno;
     // C1: identidade do operador é OBRIGATÓRIA no estorno — é o dado que
     // faltava pra trilha de auditoria existir. `operatorUserId` null é
     // legítimo (conta universal, que não é uma linha de `store_users`);
@@ -443,6 +448,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'paymentDetails inválido.' }, { status: 400 });
   }
 
+  // Task 5 (02/11/2026): a loja vem do PRÓPRIO pedido (apps antigos, 1.2.117, não mandam storeId no pagamento; exigir
+  // quebraria o caixa deles já). Se o app mandou storeId, tem que bater. A sessão é conferida contra a loja do pedido
+  // (dormente até seg_flags.exigir_sessao), e o valor pago é conferido contra os itens do pedido no servidor.
+  if (body.storeId !== undefined && (typeof body.storeId !== 'string' || !UUID_RE.test(body.storeId))) {
+    return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
+  }
+  const { data: pedidoAtual, error: erroPedido } = await admin
+    .from('orders')
+    .select('id, store_id, payment_details, order_items(quantity, price_at_time, status)')
+    .eq('id', body.orderId)
+    .eq('order_type', 'counter')
+    .maybeSingle();
+  if (erroPedido) {
+    console.error('pagamento-balcao: falha ao ler o pedido:', erroPedido);
+    return NextResponse.json({ success: false, message: 'Falha ao registrar o pagamento.' }, { status: 500 });
+  }
+  if (!pedidoAtual || (body.storeId && pedidoAtual.store_id !== body.storeId)) {
+    return NextResponse.json(
+      { success: false, message: 'Pedido de balcão não encontrado ou já estava fechado.' },
+      { status: 404 }
+    );
+  }
+  const semSessao = await exigirSessao(request, pedidoAtual.store_id as string);
+  if (semSessao) return semSessao;
+  if (!pedidoAtual.payment_details) {
+    const problemaValor = conferirValorPago(
+      body.paymentDetails,
+      totalDosItens(pedidoAtual.order_items as { quantity: number; price_at_time: number; status: string }[]),
+    );
+    if (problemaValor) {
+      return NextResponse.json({ success: false, valorMenor: true, message: problemaValor }, { status: 400 });
+    }
+  }
+
   // Defesa em profundidade (achado real, reunião com o Ramon, 2026-08-25):
   // não confiar que o client já normalizou o troco embutido no método CASH
   // antes de mandar pra cá — esta rota roda com service role e é a
@@ -471,6 +510,7 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', body.orderId)
+    .eq('store_id', pedidoAtual.store_id)
     // Fix round 4 (Group A1): sem este filtro, o `id` sozinho bastava pra
     // reescrever payment_method/payment_details de um pedido de MESA — a
     // rota se chama pagamento-balcao e o comentário do topo do arquivo diz

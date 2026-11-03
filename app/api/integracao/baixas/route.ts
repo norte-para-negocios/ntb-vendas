@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { carregarLinha, processarBaixa, conferirBaixa } from '@/lib/baixaEstoqueServidor';
 
@@ -15,6 +16,9 @@ export async function POST(request: NextRequest) {
   if (!body?.storeId || !UUID_RE.test(body.storeId) || !body.id || !UUID_RE.test(body.id) || (body.acao !== 'reprocessar' && body.acao !== 'conferir')) {
     return NextResponse.json({ success: false, message: 'Dados inválidos.' }, { status: 400 });
   }
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(request, body.storeId);
+  if (semSessao) return semSessao;
   const admin = getSupabaseAdmin(request.headers.get('x-ntb-actor'));
   const linha = await carregarLinha(admin, body.id, body.storeId);
   if (!linha) return NextResponse.json({ success: false, message: 'Baixa não encontrada.' }, { status: 404 });

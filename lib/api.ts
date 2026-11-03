@@ -2,7 +2,7 @@ import { mesasComFila } from './offline/pendingOrders';
 import { agruparPorConta } from './faturamento';
 import type { PriceSchedule } from '@/lib/priceSchedule';
 import { supabase, supabaseUrlForConnectivityCheck, supabaseKeyForConnectivityCheck } from '@/lib/supabaseClient';
-import { cabecalhosApi } from '@/lib/atorAtual';
+import { cabecalhosApi, cabecalhoSessao, obterAtor, CHAVE_TOKEN_LOJA, CHAVE_TOKEN_ADMIN } from '@/lib/atorAtual';
 import { vendaTemCobranca } from '@/lib/calc';
 import { dividirEmLotes } from '@/lib/planta';
 import type { VendasCanceladas } from '@/lib/vendasCanceladas';
@@ -108,14 +108,18 @@ export function resolverUrlApi(caminho: string): string {
 
 // Migration 182: o login devolve um token de sessão; as funções de conta/senha mandam esse token e o servidor confere quem chama.
 // Dois tokens porque o Master (admin) e o lojista podem estar abertos no mesmo navegador.
-const CHAVE_TOKEN_LOJA = 'ntb-sessao-token-loja';
-const CHAVE_TOKEN_ADMIN = 'ntb-sessao-token-admin';
 const lerToken = (k: string): string | null => { try { return typeof window === 'undefined' ? null : window.localStorage.getItem(k); } catch { return null; } };
 const guardarToken = (k: string, t: unknown) => { try { if (typeof t === 'string' && t) window.localStorage.setItem(k, t); } catch { /* sem armazenamento: segue sem token */ } };
 export const tokenLoja = () => lerToken(CHAVE_TOKEN_LOJA);
 export const tokenAdmin = () => lerToken(CHAVE_TOKEN_ADMIN);
 export const limparTokenLoja = () => { try { window.localStorage.removeItem(CHAVE_TOKEN_LOJA); } catch { /* nada a limpar */ } };
 export const limparTokenAdmin = () => { try { window.localStorage.removeItem(CHAVE_TOKEN_ADMIN); } catch { /* nada a limpar */ } };
+// Task 5 (migration 191): escrita da loja vai com o token do lojista (ou, sem ele, o do Master); escrita do Master Admin, o contrário.
+const tokenDaLoja = () => tokenLoja() || tokenAdmin();
+const tokenDoMaster = () => tokenAdmin() || tokenLoja();
+// Servidor ainda sem a 191 (PGRST202): cai no caminho antigo, para o deploy do app não depender da ordem da migration.
+const semFuncaoNova = (error: unknown) => (error as { code?: string } | null)?.code === 'PGRST202';
+type RespostaRpc = { success?: boolean; message?: string; id?: string; code?: string } | null;
 export const authenticateAdmin = async (username: string, password: string): Promise<{ success: boolean; mustChangePass?: boolean; userId?: string }> => {
   const { data, error } = await supabase.rpc('authenticate_admin_secure', {
     p_username: username,
@@ -134,11 +138,15 @@ export const updateAdminPassword = async (userId: string, newPassword: string) =
 };
 
 export const updateStoreConfig = async (storeId: string, config: any) => {
-  const { error } = await supabase
-    .from('stores')
-    .update({ config })
-    .eq('id', storeId);
+  const { data, error } = await supabase.rpc('update_store_config_secure', { p_store_id: storeId, p_config: config, p_token: tokenDaLoja() });
+  if (error && semFuncaoNova(error)) {
+    const { error: e2 } = await supabase.from('stores').update({ config }).eq('id', storeId);
+    if (e2) throw e2;
+    return;
+  }
   if (error) throw error;
+  const r = data as RespostaRpc;
+  if (r && r.success === false) throw new Error(r.message || 'Não foi possível salvar a configuração.');
 };
 
 // Cor de destaque por loja (Task 6, stores.config.accent_color) — mesmo padrão
@@ -171,11 +179,15 @@ export const updateStoreAccentColor = async (storeId: string, currentConfig: any
 // de `updateStoreConfig` acima.
 export const updateStoreCoverUrl = async (storeId: string, coverUrl: string | null): Promise<{ success: boolean; message?: string }> => {
   try {
-    const { error } = await supabase
-      .from('stores')
-      .update({ cover_url: coverUrl })
-      .eq('id', storeId);
+    const { data, error } = await supabase.rpc('update_store_cover_secure', { p_store_id: storeId, p_cover_url: coverUrl, p_token: tokenDaLoja() });
+    if (error && semFuncaoNova(error)) {
+      const { error: e2 } = await supabase.from('stores').update({ cover_url: coverUrl }).eq('id', storeId);
+      if (e2) throw e2;
+      return { success: true };
+    }
     if (error) throw error;
+    const r = data as RespostaRpc;
+    if (r && r.success === false) return { success: false, message: r.message };
     return { success: true };
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro desconhecido ao salvar a capa.' };
@@ -699,15 +711,45 @@ const fetchMenuDaRede = async (storeId: string, onlyAvailable = true, includeUna
 };
 
 export const createCategory = async (storeId: string, name: string, groupId?: string | null) => {
-  const { data: maxOrderData } = await supabase.from('categories').select('order').eq('store_id', storeId).order('order', { ascending: false }).limit(1);
-  const nextOrder = (maxOrderData?.[0]?.order || 0) + 1;
-  const { error } = await supabase.from('categories').insert({ store_id: storeId, name, order: nextOrder, group_id: groupId || null });
+  const { data, error } = await supabase.rpc('create_category_secure', { p_store_id: storeId, p_name: name, p_group_id: groupId || null, p_token: tokenDaLoja() });
+  if (error && semFuncaoNova(error)) {
+    const { data: maxOrderData } = await supabase.from('categories').select('order').eq('store_id', storeId).order('order', { ascending: false }).limit(1);
+    const nextOrder = (maxOrderData?.[0]?.order || 0) + 1;
+    const { error: e2 } = await supabase.from('categories').insert({ store_id: storeId, name, order: nextOrder, group_id: groupId || null });
+    if (e2) throw e2;
+    return;
+  }
   if (error) throw error;
+  const r = data as RespostaRpc;
+  if (r && r.success === false) throw new Error(r.message || 'Não foi possível criar a categoria.');
 };
 
 export const deleteCategory = async (id: string) => {
-  const { error } = await supabase.from('categories').delete().eq('id', id);
+  const { data, error } = await supabase.rpc('delete_category_secure', { p_category_id: id, p_token: tokenDaLoja() });
+  if (error && semFuncaoNova(error)) {
+    const { error: e2 } = await supabase.from('categories').delete().eq('id', id);
+    if (e2) throw e2;
+    return;
+  }
   if (error) throw error;
+  const r = data as RespostaRpc;
+  if (r && r.success === false) throw new Error(r.message || 'Não foi possível apagar a categoria.');
+};
+
+// Horário, grupo e local de preparo da categoria (migration 191). Banco sem a 191: update direto, como antes.
+const atualizarCamposCategoria = async (
+  categoryId: string,
+  campos: { available_from?: string | null; available_until?: string | null; available_days?: number[] | null; group_id?: string | null; sector_id?: string | null },
+) => {
+  const { data, error } = await supabase.rpc('update_category_fields_secure', { p_category_id: categoryId, p_fields: campos, p_token: tokenDaLoja() });
+  if (error && semFuncaoNova(error)) {
+    const { error: e2 } = await supabase.from('categories').update(campos).eq('id', categoryId);
+    if (e2) throw e2;
+    return;
+  }
+  if (error) throw error;
+  const r = data as RespostaRpc;
+  if (r && r.success === false) throw new Error(r.message || 'Não foi possível salvar a categoria.');
 };
 
 // Achado critico de seguranca (2026-07-07): insert direto em `products`
@@ -916,8 +958,7 @@ export const updateCategorySchedule = async (
   categoryId: string,
   updates: { available_from: string | null; available_until: string | null; available_days: number[] | null }
 ) => {
-  const { error } = await supabase.from('categories').update(updates).eq('id', categoryId);
-  if (error) throw error;
+  await atualizarCamposCategoria(categoryId, updates);
 };
 
 export const fetchCategoryGroups = async (storeId: string): Promise<CategoryGroup[]> => {
@@ -939,8 +980,7 @@ export const deleteCategoryGroup = async (id: string) => {
 };
 
 export const updateCategoryGroupAssignment = async (categoryId: string, groupId: string | null) => {
-  const { error } = await supabase.from('categories').update({ group_id: groupId }).eq('id', categoryId);
-  if (error) throw error;
+  await atualizarCamposCategoria(categoryId, { group_id: groupId });
 };
 
 // Setores de produção (migration 087): ex. Pizzaria, além de Cozinha/Bar.
@@ -981,8 +1021,7 @@ export const fetchCategorySectors = async (storeId: string): Promise<Record<stri
   return Object.fromEntries((data || []).map((c: { id: string; sector_id: string | null }) => [c.id, c.sector_id]));
 };
 export const updateCategorySector = async (categoryId: string, sectorId: string | null) => {
-  const { error } = await supabase.from('categories').update({ sector_id: sectorId }).eq('id', categoryId);
-  if (error) throw error;
+  await atualizarCamposCategoria(categoryId, { sector_id: sectorId });
 };
 // Marca a categoria inteira como Cozinha ou Bar (migration 155): products.destination de todos os produtos dela
 // + categories.sector_id = null. Devolve quantos produtos mudaram. Banco sem a 155 (PGRST202): erro claro.
@@ -1558,7 +1597,7 @@ export const registrarPagamentoBalcao = async (
     const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
       method: 'POST',
       headers: cabecalhosApi(),
-      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData }),
+      body: JSON.stringify({ orderId, paymentMethod, paymentDetails: paymentData, ...(storeId ? { storeId } : {}) }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => null);
@@ -1570,7 +1609,7 @@ export const registrarPagamentoBalcao = async (
     triggerEmissaoFiscal({ orderId, destinatario });
   } catch (e) {
     if (!isNetworkError(e)) throw e;
-    await enqueue('registrar_pagamento_balcao', { orderId, paymentData, destinatario });
+    await enqueue('registrar_pagamento_balcao', { orderId, paymentData, destinatario, ...(storeId ? { storeId } : {}) });
     // Marca como pago TAMBÉM no cache local. Sem isto (achado de revisão
     // independente, 2026-09-13), offline o pedido voltava pra tela ainda
     // como "Receber pagamento": o `load()` seguinte relê do cache, onde o
@@ -1700,7 +1739,7 @@ export const triggerEmissaoFiscal = (body: { orderId?: string; tableId?: string;
 export const triggerPushForOrder = (orderId: string, title: string, body: string) => {
   fetch(resolverUrlApi('/api/push/send'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosApi(),
     body: JSON.stringify({ orderId, title, body }),
   }).catch((e) => console.error('Push notification falhou:', e));
 };
@@ -2007,6 +2046,30 @@ export const cancelPendingTableItems = async (tableId: string) => {
   await supabase.rpc('cancel_pending_table_items_secure', { p_table_id: tableId });
 };
 
+// Fecha os pedidos abertos da mesa (migration 191, close_table_orders_v2: confere sessão e valor pago). Banco sem a 191
+// (PGRST202): a antiga. Recusa de negócio (valor menor, sessão vencida) vira Error com a mensagem para a tela.
+// Exportada para a fila offline (lib/offline/sync.ts) usar o mesmo caminho.
+export const fecharPedidosDaMesa = async (tableId: string, paymentMethod: string | null, paymentData: unknown) => {
+  const ator = obterAtor();
+  const { data, error } = await supabase.rpc('close_table_orders_v2', {
+    p_table_id: tableId,
+    p_payment_method: paymentMethod,
+    p_payment_details: paymentData ?? null,
+    p_operator_user_id: ator && ator.role !== 'universal' ? ator.id : null,
+    p_token: tokenDaLoja(),
+  });
+  if (error && semFuncaoNova(error)) {
+    const { error: e2 } = await supabase.rpc('close_table_orders_secure', {
+      p_table_id: tableId, p_payment_method: paymentMethod, p_payment_details: paymentData ?? null,
+    });
+    if (e2) throw e2;
+    return;
+  }
+  if (error) throw error;
+  const r = data as RespostaRpc;
+  if (r && r.success === false) throw new Error(r.message || 'Não foi possível fechar a mesa.');
+};
+
 export const closeTableSession = async (
   tableId: string,
   // Fix round 2 (Group A3): `brand` faltava neste tipo declarado — o
@@ -2027,12 +2090,7 @@ export const closeTableSession = async (
     : null;
 
   try {
-    const { error: closeErr } = await supabase.rpc('close_table_orders_secure', {
-      p_table_id: tableId,
-      p_payment_method: paymentMethod,
-      p_payment_details: paymentData || null,
-    });
-    if (closeErr) throw closeErr;
+    await fecharPedidosDaMesa(tableId, paymentMethod, paymentData || null);
 
     const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: tableId });
     if (finalizeErr) throw finalizeErr;
@@ -2497,7 +2555,7 @@ const postCertificado = async (fields: Record<string, string | File>): Promise<{
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
   try {
-    const res = await fetch(resolverUrlApi('/api/certificado'), { method: 'POST', body: form });
+    const res = await fetch(resolverUrlApi('/api/certificado'), { method: 'POST', body: form, headers: cabecalhoSessao() });
     return await res.json();
   } catch (error: any) {
     return { success: false, message: error.message };
@@ -3004,24 +3062,36 @@ export const applyModulesConfigFields = (config: Record<string, any>, params: { 
   return next;
 };
 
+// Lojas no Master Admin (migration 191): create_store_secure / update_store_secure / delete_store_secure com o token do
+// Master. Banco sem a 191 (PGRST202): escrita direta em `stores`, como antes. `undefined` some no JSON = "não mexe".
+const inserirLoja = async (campos: Record<string, unknown>): Promise<{ id?: string; slugEmUso?: boolean; message?: string }> => {
+  const { data, error } = await supabase.rpc('create_store_secure', { p_fields: campos, p_token: tokenDoMaster() });
+  if (error && semFuncaoNova(error)) {
+    const { data: linha, error: e2 } = await supabase.from('stores').insert(campos).select('id').single();
+    if (e2) {
+      if (e2.code === '23505') return { slugEmUso: true };
+      throw e2;
+    }
+    return { id: linha.id };
+  }
+  if (error) throw error;
+  const r = data as RespostaRpc;
+  if (!r?.success) return r?.code === 'slug' ? { slugEmUso: true } : { message: r?.message || 'Não foi possível criar a loja.' };
+  return { id: r.id };
+};
+
 export const createStore = async (params: CreateStoreParams): Promise<{ success: boolean; message?: string; storeId?: string }> => {
   try {
-    const { data: storeData, error: storeError } = await supabase
-      .from('stores')
-      .insert({
-        name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
-        contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
-        cover_url: params.coverUrl || null,
-        ...stockModeFields(params.stockMode),
-        config: applyModulesConfigFields({ service_fee_rate: params.serviceFeeRate, ...(params.chargeServiceFee ? { charge_service_fee: true } : {}) }, params),
-      })
-      .select()
-      .single();
-
-    if (storeError) {
-      if (storeError.code === '23505') return { success: false, message: 'Este slug (URL) já está em uso.' };
-      throw storeError;
-    }
+    const criada = await inserirLoja({
+      name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
+      contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl || null,
+      cover_url: params.coverUrl || null,
+      ...stockModeFields(params.stockMode),
+      config: applyModulesConfigFields({ service_fee_rate: params.serviceFeeRate, ...(params.chargeServiceFee ? { charge_service_fee: true } : {}) }, params),
+    });
+    if (criada.slugEmUso) return { success: false, message: 'Este slug (URL) já está em uso.' };
+    if (!criada.id) return { success: false, message: criada.message };
+    const storeData = { id: criada.id };
 
     if (params.contractType === 'balcao_mesas' && params.tableCount > 0) {
       const { error: tablesError } = await supabase.rpc('sync_store_tables_secure', { p_store_id: storeData.id, p_target_count: params.tableCount });
@@ -3043,13 +3113,10 @@ export const duplicateStore = async (storeId: string): Promise<{ success: boolea
     const { data: existingSlug } = await supabase.from('stores').select('id').eq('slug', newSlug).maybeSingle();
     if (existingSlug) newSlug = `${newSlug}-${Math.random().toString(36).substring(2, 7)}`;
 
-    const { data: newStore, error: createError } = await supabase
-      .from('stores')
-      .insert({ name: `${originalStore.name} (1)`, cnpj: originalStore.cnpj, slug: newSlug, contract_type: originalStore.contract_type, contract_period_months: originalStore.contract_period_months, is_active: originalStore.is_active, logo_url: originalStore.logo_url, cover_url: originalStore.cover_url, config: originalStore.config, ...stockModeFields(originalStore.stock_mode) })
-      .select()
-      .single();
-
-    if (createError) throw createError;
+    const criada = await inserirLoja({ name: `${originalStore.name} (1)`, cnpj: originalStore.cnpj, slug: newSlug, contract_type: originalStore.contract_type, contract_period_months: originalStore.contract_period_months, is_active: originalStore.is_active, logo_url: originalStore.logo_url, cover_url: originalStore.cover_url, config: originalStore.config, ...stockModeFields(originalStore.stock_mode) });
+    if (criada.slugEmUso) throw new Error('Este slug (URL) já está em uso.');
+    if (!criada.id) throw new Error(criada.message || 'Não foi possível duplicar a loja.');
+    const newStore = { id: criada.id };
 
     // Duplicação completa (categorias + produtos + grupos de opção +
     // opções) numa RPC atômica só, com mapeamento de ID via tabela
@@ -3117,20 +3184,24 @@ export const updateStore = async (id: string, params: CreateStoreParams): Promis
       if (temBaixas) return { success: false, message: 'Esta loja já tem baixas de estoque: o modo de estoque não pode mais ser trocado.' };
       stockModeUpdate = { stock_mode: normalizarModo(params.stockMode) };
     }
-    const { error } = await supabase
-      .from('stores')
-      .update({
-        name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
-        contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
-        cover_url: params.coverUrl,
-        ...stockModeUpdate,
-        config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate, ...(params.chargeServiceFee !== undefined ? { charge_service_fee: params.chargeServiceFee } : {}) }, params),
-      })
-      .eq('id', id);
-
-    if (error) {
-      if (error.code === '23505') return { success: false, message: 'Este slug (URL) já está em uso por outra loja.' };
-      throw error;
+    const campos = {
+      name: params.name, cnpj: params.cnpj, slug: params.slug, contract_type: params.contractType,
+      contract_period_months: params.periodMonths, is_active: params.isActive, logo_url: params.logoUrl,
+      cover_url: params.coverUrl,
+      ...stockModeUpdate,
+      config: applyModulesConfigFields({ ...(current?.config || {}), service_fee_rate: params.serviceFeeRate, ...(params.chargeServiceFee !== undefined ? { charge_service_fee: params.chargeServiceFee } : {}) }, params),
+    };
+    const { data: resp, error: rpcErr } = await supabase.rpc('update_store_secure', { p_store_id: id, p_fields: campos, p_token: tokenDoMaster() });
+    if (rpcErr && semFuncaoNova(rpcErr)) {
+      const { error } = await supabase.from('stores').update(campos).eq('id', id);
+      if (error) {
+        if (error.code === '23505') return { success: false, message: 'Este slug (URL) já está em uso por outra loja.' };
+        throw error;
+      }
+    } else {
+      if (rpcErr) throw rpcErr;
+      const r = resp as RespostaRpc;
+      if (!r?.success) return { success: false, message: r?.message || 'Não foi possível salvar a loja.' };
     }
 
     if (params.contractType === 'balcao_mesas') {
@@ -3167,7 +3238,7 @@ export const deleteStore = async (id: string): Promise<{ success: boolean; messa
     try {
       const res = await fetch(resolverUrlApi('/api/certificado'), {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: cabecalhosApi(),
         body: JSON.stringify({ storeId: id }),
       });
       const data = await res.json();
@@ -3176,8 +3247,15 @@ export const deleteStore = async (id: string): Promise<{ success: boolean; messa
       console.error('Erro ao remover certificado órfão da loja:', certError);
     }
 
-    const { error } = await supabase.from('stores').update({ is_active: false }).eq('id', id);
-    if (error) throw error;
+    const { data: resp, error: rpcErr } = await supabase.rpc('delete_store_secure', { p_store_id: id, p_token: tokenDoMaster() });
+    if (rpcErr && semFuncaoNova(rpcErr)) {
+      const { error } = await supabase.from('stores').update({ is_active: false }).eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    }
+    if (rpcErr) throw rpcErr;
+    const r = resp as RespostaRpc;
+    if (!r?.success) return { success: false, message: r?.message || 'Erro ao excluir loja.' };
     return { success: true };
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro ao excluir loja.' };

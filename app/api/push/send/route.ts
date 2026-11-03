@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 
 // Fase 5, Task 19 (plano "Fora do Cardápio"): dispara push de verdade (chega
 // com o app fechado/tela bloqueada) pra todas as assinaturas de um pedido.
@@ -29,6 +30,14 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = getSupabaseAdmin();
+  // Task 5: sessão da loja do pedido (só barra com seg_flags.exigir_sessao ligada). Pedido inexistente = nada a enviar.
+  if (typeof orderId !== 'string' || !/^[0-9a-f-]{36}$/i.test(orderId)) {
+    return NextResponse.json({ ok: false, reason: 'Payload inválido' }, { status: 400 });
+  }
+  const { data: pedido } = await admin.from('orders').select('store_id').eq('id', orderId).maybeSingle();
+  if (!pedido) return NextResponse.json({ ok: true, sent: 0 });
+  const semSessao = await exigirSessao(req, pedido.store_id as string);
+  if (semSessao) return semSessao;
   const { data: subs } = await admin.from('push_subscriptions').select('*').eq('order_id', orderId);
   if (!subs?.length) return NextResponse.json({ ok: true, sent: 0 });
 

@@ -26,7 +26,8 @@ function withCorsHeaders(res: NextResponse, origin: string | null) {
   if (origin === ALLOWED_ORIGIN) {
     res.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
     res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-NTB-Actor');
+    // X-NTB-Sessao (Task 5): token de sessão nas rotas sensíveis; sem ele aqui o preflight do app desktop barra a chamada.
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-NTB-Actor, X-NTB-Sessao');
   }
   return res;
 }

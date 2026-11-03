@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Chamada pelo browser (AdminModule.tsx, checkbox "Criar no NTB Estoque
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
   if (!body?.storeId || !UUID_RE.test(body.storeId) || !body.nome?.trim()) {
     return NextResponse.json({ success: false, message: 'storeId e nome são obrigatórios.' }, { status: 400 });
   }
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(request, body.storeId);
+  if (semSessao) return semSessao;
 
   const segredo = process.env.CROSS_SYSTEM_BOOTSTRAP_KEY;
   const estoqueUrl = process.env.NTB_ESTOQUE_INTERNAL_URL;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 
 // Única rota de API deste projeto (ver AGENTS.md). Existe porque TODA
 // escrita relacionada ao certificado digital fiscal (arquivo + metadados +
@@ -52,6 +53,9 @@ export async function POST(req: NextRequest) {
   if (typeof storeId !== 'string' || !UUID_RE.test(storeId)) {
     return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
   }
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(req, storeId);
+  if (semSessao) return semSessao;
 
   const file = form.get('file');
   const originalFilename = form.get('originalFilename');
@@ -286,6 +290,9 @@ export async function DELETE(req: NextRequest) {
   if (typeof storeId !== 'string' || !UUID_RE.test(storeId)) {
     return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
   }
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(req, storeId);
+  if (semSessao) return semSessao;
 
   try {
     const supabaseAdmin = getSupabaseAdmin();

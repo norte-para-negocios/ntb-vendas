@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Exporta em lote (ZIP: XMLs + CSV índice) as notas fiscais de UMA loja num
@@ -80,6 +81,9 @@ export async function GET(req: NextRequest) {
   if (typeof storeId !== 'string' || !storeId) {
     return NextResponse.json({ success: false, message: 'storeId inválido.' }, { status: 400 });
   }
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(req, storeId);
+  if (semSessao) return semSessao;
 
   const admin = getSupabaseAdmin();
 

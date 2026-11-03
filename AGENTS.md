@@ -2888,6 +2888,18 @@ na tela de mesas"; comanda da ODARA com "Cliente: Talislane Silva" embaixo de ca
 - Entra DESLIGADO: `seg_flags.exigir_sessao = false`, para apps antigos e sessões abertas antes não quebrarem. Ligar só depois que os apps novos (≥ 1.2.110 / 1.0.45) estiverem nos aparelhos: `update seg_flags set valor = true where chave = 'exigir_sessao';`. Desligar de novo é o mesmo comando com false.
 - Cadastro não tem mais senha padrão 123456 (`createStoreTeamMember` exige 6+).
 
+## Escritas de loja/categoria e fechamento de mesa com sessão (migration 191, 02/11/2026)
+- Tudo dormente atrás de `seg_flags.exigir_sessao` (182); nada revogado (o corte é a Task 9 do plano 2026-11-02-melhorias-vendas).
+- RPCs novas com `p_token`: `update_store_config_secure`, `update_store_cover_secure`, `create_category_secure`, `delete_category_secure`,
+  `update_category_fields_secure` (só horário/grupo/local de preparo), `create_store_secure`/`update_store_secure`/`delete_store_secure`
+  (Master/universal) e `close_table_orders_v2` (fecha só pedidos abertos e seus itens; recusa pago < itens − R$ 0,01, exceto cortesia).
+  Loja/categoria/mesa usam `_sessao_equipe_ok` (qualquer pessoa da equipe da loja; a conta "Aberto" só no fechamento), não `_sessao_ok`
+  (que exige gerente e travaria caixa/garçom). `lib/api.ts` chama as novas e cai no caminho antigo em `PGRST202` (banco sem a 191).
+- Rotas `/api` sensíveis chamam `exigirSessao(req, storeId)` (`lib/server/exigirSessao.ts`): cabeçalho `x-ntb-sessao` (token da loja e do
+  Master, separados por vírgula, montado por `cabecalhosApi()`/`cabecalhoSessao()`); `proxy.ts` libera esse cabeçalho no CORS do desktop.
+- `pagamento-balcao` (pagar): loja vem do próprio pedido (apps antigos não mandam `storeId`), valor pago conferido contra os itens.
+- `verify_store_staff_login_secure`: bloqueio por pessoa (`store_users.login_attempts`), 10 erros → 1, 2, 3… até 15 min.
+
 ## Cancelar parte de um item e tempo livre (22/10/2026, migration 183)
 Reunião 21/10 (André/Ramon, ODARA): "pediu duas águas, quer cancelar uma". `cancelar_itens_v3(p_itens jsonb [{id, qtd?}], senha, motivo, ação, solicitado_por)`:
 - Cancelar PARTE divide a linha: a original fica com o resto (mesmo id: não reimprime, mantém status da cozinha) e uma linha NOVA já `canceled`

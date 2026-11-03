@@ -4,7 +4,8 @@ import { acoesDosOutros, anotarSubida, idsJaSubidos, planejarSincronizacao } fro
 import { chamarCriarPedido } from './criarPedido';
 import type { QueuedAction } from './types';
 import { supabase } from '../supabaseClient';
-import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal } from '../api';
+import { resolverUrlApi, triggerOrdemProducao, triggerEmissaoFiscal, fecharPedidosDaMesa } from '../api';
+import { cabecalhosApi } from '../atorAtual';
 import { vendaTemCobranca } from '../calc';
 
 const MAX_ATTEMPTS = 3;
@@ -64,10 +65,8 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
         const realShiftId = idMap.get(paymentData.cash_shift_id) ?? paymentData.cash_shift_id;
         paymentData = { ...paymentData, cash_shift_id: realShiftId };
       }
-      const { error: closeErr } = await supabase.rpc('close_table_orders_secure', {
-        p_table_id: payload.tableId, p_payment_method: payload.paymentMethod, p_payment_details: paymentData,
-      });
-      if (closeErr) throw closeErr;
+      // Migration 191: v2 (sessão + valor pago conferidos no servidor), com a antiga se o banco ainda não tem a 191.
+      await fecharPedidosDaMesa(payload.tableId, payload.paymentMethod, paymentData);
       const { error: finalizeErr } = await supabase.rpc('finalize_table_secure', { p_table_id: payload.tableId });
       if (finalizeErr) throw finalizeErr;
       if (vendaTemCobranca(paymentData)) {
@@ -144,7 +143,7 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
         const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
         const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: cabecalhosApi(),
           body: JSON.stringify({ orderId: payload.orderId, paymentMethod, paymentDetails: paymentData }),
         });
         if (!res.ok) {
@@ -178,8 +177,8 @@ async function processAction(action: QueuedAction, idMap: Map<string, string>): 
       const paymentMethod = paymentData.methods.length === 1 ? paymentData.methods[0].method : 'MULTIPLE';
       const res = await fetch(resolverUrlApi('/api/orders/pagamento-balcao'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: payload.orderId, paymentMethod, paymentDetails: paymentData }),
+        headers: cabecalhosApi(),
+        body: JSON.stringify({ orderId: payload.orderId, paymentMethod, paymentDetails: paymentData, ...(payload.storeId ? { storeId: payload.storeId } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exigirSessao } from '@/lib/server/exigirSessao';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   carregarMetadadosCertificadoDaLoja,
@@ -56,6 +57,9 @@ async function cancelarNotaFiscal(request: NextRequest): Promise<NextResponse> {
   const storeId = typeof body?.storeId === 'string' ? body.storeId : '';
   const notaId = typeof body?.notaId === 'string' ? body.notaId : '';
   if (!UUID.test(storeId) || !UUID.test(notaId)) return falha('Loja ou nota inválida.');
+  // Task 5: sessão da loja (só barra com seg_flags.exigir_sessao ligada).
+  const semSessao = await exigirSessao(request, storeId);
+  if (semSessao) return semSessao;
 
   const justificativa = normalizarJustificativa(typeof body?.justificativa === 'string' ? body.justificativa : '');
   if (justificativa.length < JUSTIFICATIVA_MIN) {
