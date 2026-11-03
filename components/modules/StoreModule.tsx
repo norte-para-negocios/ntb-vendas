@@ -2,6 +2,8 @@
 import { normalizarNcm } from '@/lib/fiscal/ncm';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/usePolling';
+import { useRecargaAgrupada } from '@/lib/useRecargaAgrupada';
+import { fetchDisponibilidade, fundirDisponibilidade } from '@/lib/disponibilidade';
 import { agruparItensIguais } from '@/lib/agruparItens';
 import { publicarMesas, publicarKds } from '@/lib/dadosAoVivo';
 import Image from 'next/image';
@@ -1786,17 +1788,18 @@ const KdsView: React.FC<{ destination: 'kitchen' | 'bar'; store: Store; fixedLoc
       setOrders(data);
   };
 
+  const recargaKds = useRecargaAgrupada(() => loadOrders(true));
   useEffect(() => {
     loadOrders();
     const channel = supabase.channel(`${destination}_updates_${storeId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => {
-            loadOrders(true); // Refresh on any change + alerta sonoro se surgiu item novo
+            recargaKds.pedir(); // Refresh agrupado (800 ms) + alerta sonoro se surgiu item novo
         })
         .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [storeId, destination]);
-  usePolling(() => loadOrders(true));
+  usePolling(recargaKds.rodar, 5000, true, recargaKds.ultima);
 
   const isItemLate = (item: OrderItem) => {
       const prepMinutes = item.product?.prep_time_minutes;
@@ -2295,8 +2298,9 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     // Esgotado em tempo real (migration 151): atualiza a lista a cada 15 s e ao voltar pra aba,
     // sem mexer na navegação nem mostrar "carregando".
     useEffect(() => {
+        // A cada 15 s só busca disponibilidade/esgotado (3 colunas); o cardápio inteiro vem só ao abrir.
         const refrescar = () => {
-            fetchMenu(storeId, true).then(({ products, error }) => { if (!error && products.length > 0) setProducts(semTaxas(products)); }).catch(() => {});
+            fetchDisponibilidade(storeId).then((disp) => { if (disp && disp.length > 0) setProducts((prev) => fundirDisponibilidade(prev, disp)); }).catch(() => {});
         };
         const id = setInterval(refrescar, 15000);
         const onVis = () => { if (document.visibilityState === 'visible') refrescar(); };
@@ -3896,16 +3900,17 @@ NOTIFY pgrst, 'reload schema';`;
         });
     };
 
+    const recargaMesas = useRecargaAgrupada(() => loadData());
     useEffect(() => {
         loadData();
         // Subscribe to relevant tables to keep card summary updated
         const channel = supabase.channel(`tables_dashboard_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => loadData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => loadData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaMesas.pedir())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaMesas.pedir())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    usePolling(() => loadData());
+    usePolling(recargaMesas.rodar, 5000, true, recargaMesas.ultima);
 
     // Config fiscal (Task 17) — só pra saber se mostra o campo opcional de
     // CPF/CNPJ do destinatário ao fechar a mesa. Falha silenciosa de
@@ -7143,14 +7148,15 @@ const CounterView: React.FC<{
         setOrders([...data, ...pendingCounterOrders]);
     };
 
+    const recargaBalcao = useRecargaAgrupada(() => load());
     useEffect(() => {
         load();
         const channel = supabase.channel(`counter_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => load())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaBalcao.pedir())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    usePolling(() => load());
+    usePolling(recargaBalcao.rodar, 5000, true, recargaBalcao.ultima);
 
     useEffect(() => {
         fetchStoreFiscalConfig(storeId)
@@ -8252,6 +8258,7 @@ const CaixaViewMeu: React.FC<{
         setCounterOrders(c);
     };
 
+    const recargaCaixa = useRecargaAgrupada(() => { loadQueue(); loadShift(); });
     useEffect(() => {
         loadShift();
         loadQueue();
@@ -8260,12 +8267,12 @@ const CaixaViewMeu: React.FC<{
         // desta loja atualiza a fila e o estado do turno (ex.: outro
         // operador abriu/fechou o caixa em outro aparelho).
         const channel = supabase.channel(`caixa_queue_${storeId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => { loadQueue(); loadShift(); })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => { loadQueue(); loadShift(); })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'table_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaCaixa.pedir())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_change_pings', filter: `store_id=eq.${storeId}` }, () => recargaCaixa.pedir())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [storeId]);
-    usePolling(() => { loadQueue(); loadShift(); });
+    usePolling(recargaCaixa.rodar, 5000, true, recargaCaixa.ultima);
 
     const handleOpenShift = async () => {
         const value = parseFloat(openingFloat.replace(',', '.'));
