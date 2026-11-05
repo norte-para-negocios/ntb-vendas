@@ -68,7 +68,8 @@ export class Dispositivo {
   marcaErros() { return this.erros.length; }
   errosDesde(marca) { return this.erros.slice(marca); }
   async ir(caminho = '/loja') { Dispositivo.ultimo = this; await this.page.goto(`${this.baseUrl}${caminho}`, { waitUntil: 'domcontentloaded' }); }
-  async fechar() { try { await this.ctx.close(); } catch { /* já fechado */ } }
+  // Fechar o aparelho de propósito corta as buscas em andamento ("Failed to fetch"): não é erro do app (05/11/2026).
+  async fechar() { this.silencio = true; try { await this.ctx.close(); } catch { /* já fechado */ } }
 
   async tentarLogin(email, senha) {
     const p = this.page;
