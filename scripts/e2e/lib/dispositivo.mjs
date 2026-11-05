@@ -57,7 +57,12 @@ export class Dispositivo {
     return this;
   }
   _ouvir(page) {
-    const guarda = (tipo, texto, extra) => { if (this.silencio) return; const e = { nome: this.nome, tipo, texto: String(texto).slice(0, 300), url: page.url(), t: Date.now(), ...extra }; this.erros.push(e); Dispositivo.errosTodos.push(e); };
+    // Recarregar/trocar de página corta as buscas da página antiga ("Failed to fetch" logado pelo app): não é erro do app.
+    // Só esse texto, só até 5 s depois do início da navegação (05/11/2026).
+    let navEm = 0;
+    page.on('request', (r) => { if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navEm = Date.now(); });
+    const cortePorNavegacao = (tipo, texto) => tipo === 'console' && /Failed to fetch/.test(String(texto)) && Date.now() - navEm < 5000;
+    const guarda = (tipo, texto, extra) => { if (this.silencio || cortePorNavegacao(tipo, texto)) return; const e = { nome: this.nome, tipo, texto: String(texto).slice(0, 300), url: page.url(), t: Date.now(), ...extra }; this.erros.push(e); Dispositivo.errosTodos.push(e); };
     page.on('console', (m) => { if (m.type() === 'error') guarda('console', m.text()); });
     page.on('pageerror', (e) => guarda('pageerror', e.message));
     page.on('requestfailed', (r) => { const f = r.failure()?.errorText || ''; if (!/ERR_ABORTED|NS_BINDING_ABORTED/.test(f)) guarda('requestfailed', `${r.method()} ${r.url().slice(0, 140)} ${f}`); });
