@@ -63,6 +63,7 @@ import { SincronizacaoCatalogo } from './settings/SincronizacaoCatalogo';
 import { useConexaoEstoque, SeloConexao, PainelConexao, BaixasEstoque } from '@/components/modules/settings/IntegracaoEstoque';
 import { useStoreNotifications } from '@/lib/useStoreNotifications';
 import { NotificacoesProvider } from '@/components/NotificacoesContext';
+import type { DestinoAviso } from '@/lib/avisoDestino';
 import { LocaisPreparoView } from '@/components/modules/LocaisPreparoView';
 import { LocaisEstoqueView } from '@/components/modules/LocaisEstoqueView';
 import { modoDaLoja, usaEstoque, ehOmie, nomeSistemaEstoque, rotuloCodigo, rotuloCodigoCurto } from '@/lib/modoEstoque';
@@ -1054,7 +1055,7 @@ const SidebarAvatar: React.FC<{ photoUrl?: string | null; name: string; classNam
     </div>
 );
 
-const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store }, onUserUpdate?: (patch: Partial<StoreUser>) => void }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user, onUserUpdate }) => {
+const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentTab: string, onTabChange: (t: string) => void, storeName: string, onLogout: () => void, onSwitchStore?: () => void, user: StoreUser & { store: Store }, onUserUpdate?: (patch: Partial<StoreUser>) => void, onAbrirDestinoAviso?: (d: DestinoAviso) => void }> = ({ children, title, currentTab, onTabChange, storeName, onLogout, onSwitchStore, user, onUserUpdate, onAbrirDestinoAviso }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   // "Meu Perfil" (migration 078, 2026-09-22: "um local de meu login pra
@@ -1235,6 +1236,14 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
     toast.info('Sem permissão para esta área. Peça ao gerente.');
     return false;
   };
+  // Toque num aviso do sino: leva à tela do problema (Administração) só se a pessoa tem acesso a ela.
+  const podeAbrirDestino = (d: DestinoAviso) => !!onAbrirDestinoAviso && tabAcessivel(d.tab);
+  const abrirDestino = (d: DestinoAviso): boolean => {
+    if (!podeAbrirDestino(d)) return false;
+    onAbrirDestinoAviso!(d);
+    return true;
+  };
+  const notifComDestino = { ...notif, abrirDestino, podeAbrirDestino };
   const rotuloCadeado = isAberto ? 'Só com login' : 'Sem permissão';
 
   // Loja ganhou/perdeu abas de KDS com a aba aberta: leva para a aba equivalente.
@@ -1245,7 +1254,7 @@ const StoreLayout: React.FC<{ children: React.ReactNode, title: string, currentT
   }, [abaProdutoAlvo]);
 
   return (
-    <NotificacoesProvider value={notif}>
+    <NotificacoesProvider value={notifComDestino}>
     <div className={`min-h-screen supports-[height:100dvh]:min-h-dvh bg-[var(--bg)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 transition-all duration-[var(--dur-slow)] ${isCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
       <StaffOfflineBanner />
       <CaixaPrintStationOfflineBanner status={caixaPrintStatus} />
@@ -12032,7 +12041,7 @@ const UserManagementView: React.FC<{ storeId: string }> = ({ storeId }) => {
 
 // --- SUB-MODULE: ADMIN (SALES HISTORY) ---
 
-const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpdate?: (store: Store) => void }> = ({ store, loggedUser, onStoreUpdate }) => {
+const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpdate?: (store: Store) => void; destino?: { aba: AbaId; secao?: string; n: number } | null }> = ({ store, loggedUser, onStoreUpdate, destino }) => {
     const storeId = store.id;
     // Permissões por função (lib/rolePermissions.ts): sem config salva, quem entra na Administração continua vendo.
     const podeEditarPrecosHorario = roleCanOr(loggedUser, store, 'editar_precos_horario', true);
@@ -12722,6 +12731,9 @@ const StoreAdminView: React.FC<{ store: Store; loggedUser: StoreUser; onStoreUpd
     const adminStatus = useAdminStatus({ storeId, sales: salesLoaded ? sales : null, incluirCardapio: navCtx.can?.('editar_cardapio') === true, modoEstoque: store.stock_mode });
     const [secaoAlvo, setSecaoAlvo] = useState<string | null>(null);
     const irPara = React.useCallback((id: AbaId, alvo?: string) => { setActiveTab(id); setSecaoAlvo(alvo ?? null); }, []);
+    // Vindo de um aviso do sino: abre a aba pedida (e rola até a seção).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    useEffect(() => { if (destino) irPara(destino.aba, destino.secao); }, [destino, irPara]);
     // Depois da troca de aba (crossfade de 120 ms), rola até o ajuste achado na busca e o destaca.
     useEffect(() => {
         if (!secaoAlvo) return;
@@ -13789,6 +13801,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
                 </div>
             </Collapsible>
 
+            <div id="baixas-estoque" className="rounded-[var(--r-md)] u-motion scroll-mt-24">
             <Collapsible
                 title="Baixas de estoque"
                 defaultOpen={true}
@@ -13796,6 +13809,7 @@ const IntegracoesView: React.FC<{ storeId: string; podeEditarEstoque: boolean; o
             >
                 <BaixasEstoque storeId={storeId} podeAgir={podeEditarEstoque} operador={operador} onResumo={setBaixasResumo} />
             </Collapsible>
+            </div>
 
             {/* Integração direta com a Omie (2026-09-05) — só pra loja que NÃO usa
                 ntb-estoque; se a loja tiver ntb-estoque configurado E ativo, esse
@@ -14511,6 +14525,10 @@ const pickInitialStoreTab = (u: StoreUser & { store: Store }): string => {
 export const StoreModule: React.FC = () => {
     const [user, setUser] = useState<(StoreUser & { store: Store }) | null>(null);
     const [tab, setTab] = useState('tables');
+    // Destino pedido por um aviso do sino; some ao sair da Administração para não reabrir sozinho depois.
+    const [destinoAdmin, setDestinoAdmin] = useState<{ aba: AbaId; secao?: string; n: number } | null>(null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    useEffect(() => { if (tab !== 'admin') setDestinoAdmin(null); }, [tab]);
     // Task 3 (frente-de-caixa): "ponte" entre a aba Caixa (CaixaView, fila
     // consolidada) e TablesView/CounterView — tocar num item da fila troca
     // de aba E passa o id pra view de destino abrir sozinha o modal
@@ -14769,6 +14787,7 @@ export const StoreModule: React.FC = () => {
             }
             currentTab={tab}
             onTabChange={setTab}
+            onAbrirDestinoAviso={(d) => { setDestinoAdmin({ aba: d.aba, secao: d.secao, n: Date.now() }); setTab(d.tab); }}
             storeName={user.store.name}
             onLogout={handleLogout}
             onSwitchStore={handleSwitchStore}
@@ -14806,7 +14825,7 @@ export const StoreModule: React.FC = () => {
             {tab === 'kitchen' && canAccess('kitchen') && <KdsView destination="kitchen" store={user.store} loggedUser={user} />}
             {tab === 'bar' && canAccess('bar') && <KdsView destination="bar" store={user.store} loggedUser={user} />}
             {tab === 'menu' && canAccess('menu') && <MenuManagementView store={user.store} podeEditar={roleCanOr(user, user.store, 'editar_cardapio', true)} podeEsgotar={user.role === 'manager' || user.role === 'owner' || user.role === 'universal'} operadorId={user.role === 'universal' ? null : user.id} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
-            {tab === 'admin' && canAccess('admin') && <StoreAdminView store={user.store} loggedUser={user} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
+            {tab === 'admin' && canAccess('admin') && <StoreAdminView destino={destinoAdmin} store={user.store} loggedUser={user} onStoreUpdate={(updatedStore) => setUser({ ...user, store: updatedStore })} />}
 
             {!canAccess(tab) && (
                 <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">

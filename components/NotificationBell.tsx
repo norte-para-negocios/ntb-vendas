@@ -7,6 +7,7 @@ import { Button, Modal } from '@/components/ui';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { useNotificacoes } from '@/components/NotificacoesContext';
 import { LIST_ITEM_MOTION, SPRING_TAP } from '@/lib/motion';
+import { destinoDoAviso } from '@/lib/avisoDestino';
 import { tempoRelativo, type TipoNotificacao } from '@/lib/notificacoes';
 
 const ICONE: Record<TipoNotificacao, React.ElementType> = {
@@ -15,7 +16,7 @@ const ICONE: Record<TipoNotificacao, React.ElementType> = {
 };
 
 export const NotificationBell: React.FC<{ variant: 'header' | 'sidebar'; collapsed?: boolean }> = ({ variant, collapsed }) => {
-  const { eventos, naoLidos, marcarLidos, pausado } = useNotificacoes();
+  const { eventos, naoLidos, marcarLidos, pausado, abrirDestino, podeAbrirDestino } = useNotificacoes();
   const [aberto, setAberto] = useState(false);
   // O cabeçalho do celular tem backdrop-blur, que vira o "bloco de contenção" do `fixed` e empurra o Modal para fora da tela.
   // Por isso a janela vai para o <body> (portal). Fechada, ela não renderiza nada, então não há diferença entre servidor e cliente.
@@ -54,13 +55,16 @@ export const NotificationBell: React.FC<{ variant: 'header' | 'sidebar'; collaps
               <AnimatePresence mode="popLayout">
                 {eventos.map((e) => {
                   const Icone = ICONE[e.tipo];
+                  const destino = destinoDoAviso(e.tipo);
+                  const semAcesso = destino !== null && !podeAbrirDestino(destino);
                   return (
                     <motion.li key={e.id} {...LIST_ITEM_MOTION}>
-                      <button type="button" onClick={() => marcarLidos([e.id])} className={`w-full min-h-11 flex items-start gap-3 px-3 py-3 text-left u-press-sm ${e.ativo ? '' : 'opacity-60'}`}>
+                      <button type="button" onClick={() => { marcarLidos([e.id]); if (destino && abrirDestino(destino)) setAberto(false); }} className={`w-full min-h-11 flex items-start gap-3 px-3 py-3 text-left u-press-sm ${e.ativo ? '' : 'opacity-60'}`}>
                         <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface)] text-[var(--text)]"><Icone size={16} /></span>
                         <span className="min-w-0 flex-1">
                           <span className={`block text-[15px] text-[var(--text)] ${e.lido ? 'font-medium' : 'font-semibold'}`}>{e.titulo}</span>
                           {e.detalhe && <span className="block text-[13px] text-[var(--text-muted)]">{e.detalhe}</span>}
+                          {semAcesso && destino && <span className="block text-[12px] text-[var(--text-muted)]">{destino.semAcesso}</span>}
                         </span>
                         <span className="shrink-0 text-right text-[12px] text-[var(--text-muted)] num">
                           {e.ativo ? tempoRelativo(e.criadoEm, agora) : 'resolvido'}
