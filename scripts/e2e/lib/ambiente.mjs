@@ -105,6 +105,7 @@ export class Ambiente {
       else if (t === 'orders') linhas = (await this.admin.from('orders').select('id,customer_name,table_id').in('id', ids)).data ?? [];
       else if (t === 'table_sessions') linhas = (await this.admin.from('table_sessions').select('id,table_id').in('id', ids)).data ?? [];
       else if (t === 'print_jobs') linhas = (await this.admin.from('print_jobs').select('id,title,printer_config_id').in('id', ids)).data ?? [];
+      else if (t === 'integracao_baixas') linhas = (await this.admin.from('integracao_baixas').select('id,order_id,orders(customer_name,table_id)').in('id', ids)).data ?? [];
       else linhas = ids.map((id) => ({ id }));
       for (const l of linhas) {
         let meu = false;
@@ -116,7 +117,9 @@ export class Ambiente {
         else if (t === 'printer_configs') meu = (e.printerIds ?? []).includes(l.id);
         else if (t === 'print_sectors') meu = (e.sectorIds ?? []).includes(l.id);
         else if (t === 'store_ntb_estoque_secrets') meu = !!e.estoqueSecretCriado;
-        else if (t === 'integracao_baixas' || t === 'fiscal_notas' || t === 'cash_shifts' || t === 'cash_movements' || t === 'cash_shift_audit_events') meu = true; // só existem por causa de pedidos/usuários do teste
+        // 05/11: baixa de pedido real reenviada no meio do teste (Casa Norte) não é do teste: confere pelo pedido.
+        else if (t === 'integracao_baixas') meu = (e.ordemIds ?? []).includes(l.order_id) || /^QA Portao/.test(l.orders?.customer_name ?? '') || mesaIds.has(l.orders?.table_id) || !l.order_id;
+        else if (t === 'fiscal_notas' || t === 'cash_shifts' || t === 'cash_movements' || t === 'cash_shift_audit_events') meu = true; // só existem por causa de pedidos/usuários do teste
         add(meu ? nossas : alheias, t, l.id);
       }
     }

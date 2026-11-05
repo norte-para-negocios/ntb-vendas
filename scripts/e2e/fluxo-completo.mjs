@@ -867,6 +867,10 @@ async function secBaixaEstoque(C) {
   });
   await rel.passo('baixa que falha NÃO some: item sem cadastro no Estoque vira erro e aparece em Configurações > Integrações > Baixas de estoque', async () => {
     await amb.mockReq('/__mock/regra', { codigo: 'QA-PORTAO-X', tipo: 'pulada' });
+    // A loja de teste pode já ter baixa com erro de outra pessoa (05/11: pedido real da Casa Norte às 20:59): o contador
+    // esperado é o de antes + 1, não "1" fixo.
+    const { count: errosAntes } = await amb.admin.from('integracao_baixas').select('id', { count: 'exact', head: true }).eq('store_id', LOJA).in('status', ['erro', 'parcial']);
+    const esperado = new RegExp(`${(errosAntes ?? 0) + 1} com erro`);
     const { data: o, error } = await amb.admin.from('orders').insert({ store_id: LOJA, table_id: null, order_type: 'counter', customer_name: 'QA Portao baixa com erro', status: 'delivered', total: 19.9, payment_details: { total: 19.9, emitir_nota: false } }).select('id').single();
     ok(o, `pedido de teste: ${error?.message}`);
     amb.estado.ordemIds.push(o.id); amb.salvar();
@@ -877,7 +881,7 @@ async function secBaixaEstoque(C) {
     ok(linha && ['erro', 'parcial'].includes(linha.status), `esperava erro na baixa, obtive ${linha?.status} (${JSON.stringify(resp).slice(0, 160)})`);
     ok(!(await amb.admin.from('orders').select('payment_details').eq('id', o.id).single()).data.payment_details?.op_enviada_em, 'pedido com baixa em erro foi marcado como enviado');
     await abrirAdmin(m, 'Configurações', 'Integrações');
-    await esperar(async () => /1 com erro/.test(await m.page.locator('main').innerText()), { timeout: 15000, motivo: 'contador "1 com erro" na tela de Integrações' });
+    await esperar(async () => esperado.test(await m.page.locator('main').innerText()), { timeout: 15000, motivo: `contador "${(errosAntes ?? 0) + 1} com erro" na tela de Integrações` });
     const t = await m.page.locator('main').innerText();
     ok(/sem cadastro/i.test(t), 'a tela de Integrações não mostra o motivo do erro');
     await amb.mockReq('/__mock/regra', { codigo: 'QA-PORTAO-X', tipo: 'ok' });
