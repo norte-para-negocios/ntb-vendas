@@ -1,8 +1,8 @@
 // Produto novo cadastrado no Omie entra sozinho no cardápio (03/11/2026, pedido do Ramon: "cadastrei o Mousse de coco
 // aniversário e ele não apareceu no Norte Vendas"). Quem escolhe O QUE é novo é o Norte Estoque (só tipo 00/04 e só o
 // que foi incluído no Omie depois do início da regra); aqui decide a categoria e garante que nada duplica.
-// Categoria: a mais usada entre os produtos do cardápio da mesma família do Omie ("irmãos"); sem irmão no cardápio, a
-// categoria com o mesmo nome da família; senão, sem categoria. O preço é o do Omie, inclusive R$ 0,01 (brinde).
+// Categoria: a que tem o mesmo nome da família do Omie; senão, a mais usada entre os produtos do cardápio da mesma família
+// ("irmãos"); senão, sem categoria. O preço é o do Omie, inclusive R$ 0,01 (brinde).
 
 export type NovoOmie = { omieCodigo: string; nome: string; preco: number; familia?: string | null; irmaos?: string[] };
 export type ProdutoLoja = { omie_codigo: string | null; name: string; category_id: string | null };
@@ -44,7 +44,9 @@ export function planejarNovos(novos: NovoOmie[], produtos: ProdutoLoja[], catego
     if (nomes.has(normalizarNome(nome))) { pulados.push({ omieCodigo: codigo, motivo: 'mesmo_nome' }); continue; }
     const preco = Math.round(Number(n.preco) * 100) / 100;
     if (!(preco > 0)) { pulados.push({ omieCodigo: codigo, motivo: 'sem_preco' }); continue; }
-    const categoryId = categoriaDosIrmaos(n.irmaos ?? [], porCodigo, validas) ?? catPorNome.get(normalizarNome(n.familia)) ?? null;
+    // Categoria com o nome da família vem primeiro (05/11: a família SOBREMESAS do Sertão tem mais embalagem que doce e o
+    // mousse caiu em Embalagens); senão, a mais usada pelos irmãos.
+    const categoryId = catPorNome.get(normalizarNome(n.familia)) ?? categoriaDosIrmaos(n.irmaos ?? [], porCodigo, validas) ?? null;
     vistos.add(codigo);
     nomes.add(normalizarNome(nome));
     criar.push({ omieCodigo: codigo, nome, preco, categoryId });

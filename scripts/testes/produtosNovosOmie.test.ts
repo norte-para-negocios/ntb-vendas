@@ -25,6 +25,16 @@ assert.deepEqual(r.criar, [{ omieCodigo: '98165', nome: 'Mousse de Coco (anivers
 r = planejarNovos([{ omieCodigo: '91010', nome: 'Água Tônica', preco: 8, familia: 'sem alcool', irmaos: [] }], produtos, categorias);
 assert.equal(r.criar[0].categoryId, 'c-sem');
 
+// 05/11 (Sertão): a família SOBREMESAS do Omie tem 4 embalagens e 3 sobremesas. Categoria com o nome da família ganha dos irmãos.
+const produtosSertao = [
+  ...produtos,
+  { omie_codigo: '90643', name: 'Emb. Viagem 250 ML', category_id: 'c-emb' },
+  { omie_codigo: '90644', name: 'Emb Viagem 500 ML', category_id: 'c-emb' },
+  { omie_codigo: '90645', name: 'Emb. Viagem 1000 ML', category_id: 'c-emb' },
+];
+r = planejarNovos([{ omieCodigo: '98165', nome: 'Mousse de Coco (aniversário)', preco: 0.01, familia: 'SOBREMESAS', irmaos: ['90643', '90644', '90645', '90700'] }], produtosSertao, [...categorias, { id: 'c-emb', name: 'Embalagens' }]);
+assert.equal(r.criar[0].categoryId, 'c-sob');
+
 // Nenhuma categoria encontrada: cria sem categoria (o lojista escolhe depois).
 r = planejarNovos([{ omieCodigo: '91011', nome: 'Drink X', preco: 30, familia: 'DRINKS', irmaos: ['99999'] }], produtos, categorias);
 assert.deepEqual(r.criar, [{ omieCodigo: '91011', nome: 'Drink X', preco: 30, categoryId: null }]);
