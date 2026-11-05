@@ -1,3 +1,4 @@
+import type { Cancelamento } from './cancelamentosDetalhados';
 import { mesasComFila } from './offline/pendingOrders';
 import { agruparPorConta } from './faturamento';
 import type { PriceSchedule } from '@/lib/priceSchedule';
@@ -1428,7 +1429,8 @@ export const fetchCounterOrders = async (storeId: string): Promise<Order[]> => {
     }
     return [];
   }
-  const orders = (data as any) || [];
+  // 193: venda de balcão cancelada fica em Vendas > Canceladas, não na fila do Balcão/Caixa.
+  const orders = ((data as any) || []).filter((o: Order) => o.status !== 'canceled');
   setCachedCounterOrders(storeId, orders).catch(() => {});
   return orders;
 };
@@ -1470,6 +1472,15 @@ export const fetchCanceledSales = async (storeId: string, startDate?: string, en
   });
   if (error) { console.error('Fetch Canceled Sales Error', error); return null; }
   return (data as VendasCanceladas) ?? { pedidos: [], itens: [] };
+};
+
+// Migration 193: um registro por cancelamento de item (hora do pedido e do cancelamento, local, setor, quem pediu e autorizou).
+export const fetchCancelamentos = async (storeId: string, inicio?: string, fim?: string): Promise<Cancelamento[] | null> => {
+  const { data, error } = await supabase.rpc('fetch_cancelamentos_secure', {
+    p_store_id: storeId, p_inicio: inicio || null, p_fim: fim || null, p_token: tokenLoja(),
+  });
+  if (error) { console.error('Fetch Cancelamentos Error', error); return null; }
+  return (data as Cancelamento[]) ?? [];
 };
 
 export const fetchTableSessions = async (storeId: string, sinceDate?: string): Promise<TableSession[]> => {

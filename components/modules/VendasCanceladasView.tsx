@@ -2,7 +2,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { fetchCanceledSales, subscribeToStoreOrderChanges } from '@/lib/api';
+import { fetchCanceledSales, fetchCancelamentos, subscribeToStoreOrderChanges } from '@/lib/api';
+import { CancelamentosDetalhados } from '@/components/modules/CancelamentosDetalhados';
+import type { Cancelamento } from '@/lib/cancelamentosDetalhados';
 import { formatBRL } from '@/lib/calc';
 import { getPaymentMethodLabel } from '@/lib/labels';
 import { motivoCancelamento, resumoCanceladas, valorCancelado, VendasCanceladas } from '@/lib/vendasCanceladas';
@@ -13,6 +15,7 @@ const onde = (tipo: string, mesa: number | null) => (tipo === 'counter' ? 'Balc�
 
 export const VendasCanceladasView: React.FC<{ storeId: string }> = ({ storeId }) => {
   const [dados, setDados] = useState<VendasCanceladas | null>(null);
+  const [detalhes, setDetalhes] = useState<Cancelamento[] | null>(null);
   const [carregado, setCarregado] = useState(false);
   const [inicio, setInicio] = useState('');
   const [fim, setFim] = useState('');
@@ -22,9 +25,12 @@ export const VendasCanceladasView: React.FC<{ storeId: string }> = ({ storeId })
   const carregar = useCallback(async () => {
     // fim do dia inclusivo
     const fimIso = fim ? new Date(new Date(fim).getTime() + 24 * 3600 * 1000).toISOString() : undefined;
-    const r = await fetchCanceledSales(storeId, inicio || undefined, fimIso);
+    const inicioIso = inicio ? new Date(`${inicio}T00:00:00`).toISOString() : undefined;
+    const fimLocal = fim ? new Date(new Date(`${fim}T00:00:00`).getTime() + 24 * 3600 * 1000).toISOString() : undefined;
+    const [r, d] = await Promise.all([fetchCanceledSales(storeId, inicio || undefined, fimIso), fetchCancelamentos(storeId, inicioIso, fimLocal)]);
     if (!ativo.current) return;
     if (r) setDados(r); // falha de rede mantém o que já estava na tela
+    if (d) setDetalhes(d);
     setCarregado(true);
   }, [storeId, inicio, fim]);
 
@@ -41,7 +47,6 @@ export const VendasCanceladasView: React.FC<{ storeId: string }> = ({ storeId })
 
   if (!carregado) return <div className="p-8 text-center text-[var(--text-muted)]">Carregando vendas canceladas…</div>;
   const pedidos = dados?.pedidos ?? [];
-  const itens = dados?.itens ?? [];
   const resumo = resumoCanceladas(pedidos);
 
   return (
@@ -104,22 +109,7 @@ export const VendasCanceladasView: React.FC<{ storeId: string }> = ({ storeId })
         )}
       </section>
 
-      <section>
-        <h4 className="text-[13px] font-semibold text-[var(--text-muted)] mb-1">Itens cancelados (a venda continuou)</h4>
-        <p className="text-[12px] text-[var(--text-muted)] mb-2">Itens tirados de uma comanda que seguiu valendo.</p>
-        {itens.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)] py-3">Nenhum item cancelado neste período.</p>
-        ) : (
-          <div className="rounded-xl bg-[var(--surface-2)] divide-y divide-[var(--border)] overflow-hidden">
-            {itens.map((it) => (
-              <div key={it.id} className="flex justify-between gap-2 px-3 py-2.5 text-sm">
-                <div className="min-w-0"><p className="font-medium text-[var(--text)]">{it.quantity}× {it.product_name ?? 'Produto'}</p><p className="text-[12px] text-[var(--text-muted)]">{onde(it.order_type, it.mesa)} · {dia(it.created_at)} {hora(it.created_at)}</p></div>
-                <span className="num shrink-0">R$ {formatBRL(it.price_at_time * it.quantity)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <CancelamentosDetalhados lista={detalhes ?? []} />
     </div>
   );
 };

@@ -4899,61 +4899,9 @@ NOTIFY pgrst, 'reload schema';`;
     // confirmado/enviado → sai um papel "CANCELAMENTO" na cozinha/bar do destino dele.
     // Itens do mesmo destino saem numa comanda só. Sem impressora cadastrada pro
     // destino, abre a janela de imprimir do aparelho de quem cancelou.
-    const imprimirCancelamento = async (itens: OrderItem[], mesaNumero: number | string, motivo?: string) => {
-        // Mesmo critério da Estação de Impressão: setor do produto, senão o da categoria (a pizza herda
-        // "Pizzaria" da categoria). Sem isso o cancelamento da pizza saía na impressora da cozinha.
-        // Os setores (Pizzaria etc.) só eram carregados com o painel "Pedidos do Dia" aberto; fora dele
-        // a lista vinha vazia e o cancelamento da pizza caía no destino padrão (cozinha). Busca na hora
-        // (04/10, achado do Ramon: "cancelamento de pizza tem que ir pra pizzaria, de acordo com o produto").
-        const [setoresAgora, catSetorAgora] = await Promise.all([
-            fetchPrintSectors(storeId).catch(() => locaisInfo.setores),
-            fetchCategorySectors(storeId).catch(() => locaisInfo.catSetor),
-        ]);
-        const grupos = new Map<string, { destino: 'kitchen' | 'bar'; setorId: string | null; lista: OrderItem[] }>();
-        itens.forEach((it) => {
-            const setorId = setorDoItem(it.product, catSetorAgora);
-            const setor = setorId ? setoresAgora.find((x) => x.id === setorId) : undefined;
-            const destino: 'kitchen' | 'bar' = setor ? setor.base : (it.product?.destination === 'bar' ? 'bar' : 'kitchen');
-            const chave = `${destino}|${setorId ?? ''}`;
-            const g = grupos.get(chave) ?? { destino, setorId, lista: [] };
-            g.lista.push(it);
-            grupos.set(chave, g);
-        });
-        for (const { destino, setorId, lista } of grupos.values()) {
-            const dados = {
-                kind: (destino === 'bar' ? 'BAR' : 'COZINHA') as 'BAR' | 'COZINHA',
-                storeName: store.name,
-                orderType: 'MESA',
-                identifier: `MESA ${mesaNumero}`,
-                client: null,
-                items: lista.map((it) => ({
-                    quantity: it.quantity,
-                    productName: it.product?.name || 'Produto indisponível',
-                    addons: (it.selected_options || []).map((o) => o.name).join(', ') || undefined,
-                    observation: parseItemNote(it.notes || '').observation || undefined,
-                })),
-                orderIdShort: String(lista[0].order_id).slice(0, 8),
-                cancelamento: { por: loggedUser.name, motivo: motivo || null },
-            };
-            let enviadas = 0;
-            try {
-                enviadas = await enfileirarCancelamento({
-                    storeId,
-                    destination: destino,
-                    sectorId: setorId,
-                    title: `CANCELAMENTO — ${lista.length} ${lista.length === 1 ? 'item' : 'itens'} — Mesa ${mesaNumero}`,
-                    content: (printer) => buildKitchenTicketText({ ...dados, paperWidthMm: printer.paper_width_mm, modoDireto: printer.print_mode === 'raw', titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined }),
-                    dedupeKey: `cancel:${lista.map((i) => i.id).sort().join(',')}`,
-                });
-            } catch (e) {
-                console.error('enfileirarCancelamento falhou:', e);
-            }
-            if (enviadas === 0) {
-                const ok = await printKitchenTicket({ ...dados, interativo: true }).catch(() => false);
-                if (!ok) toast.warning('O item foi cancelado, mas o pedido de cancelamento não imprimiu. Avise a cozinha.');
-            }
-        }
-    };
+    const imprimirCancelamento = (itens: OrderItem[], mesaNumero: number | string, motivo?: string) =>
+        imprimirCancelamentoNaCozinha({ storeId, storeName: store.name, operador: loggedUser.name, itens, motivo,
+            orderType: 'MESA', identifier: `MESA ${mesaNumero}`, rotulo: `Mesa ${mesaNumero}`, fallback: locaisInfo });
 
     const abrirMoverItem = (itemId: string) => {
         // ODARA 02/11: no modo Aberto o item também se move, com a senha de quem autoriza (como cancelar, migration 178);
@@ -6948,6 +6896,67 @@ NOTIFY pgrst, 'reload schema';`;
 // `key` = produto + opções + observação: repetir o mesmo item soma quantidade.
 type CounterSaleLine = { key: string; product: Product; qty: number; notes: string; selectedOptions: SelectedOption[] };
 
+// Comanda de cancelamento na impressora do setor do item (mesa e balcão; extraído de TablesView em 04/11/2026).
+const imprimirCancelamentoNaCozinha = async ({ storeId, storeName, operador, itens, motivo, orderType, identifier, rotulo, fallback }: {
+    storeId: string; storeName: string; operador: string; itens: OrderItem[]; motivo?: string;
+    orderType: 'MESA' | 'BALCAO'; identifier: string; rotulo: string;
+    fallback?: { setores: PrintSector[]; catSetor: Record<string, string | null> };
+}) => {
+    // Mesmo critério da Estação de Impressão: setor do produto, senão o da categoria (a pizza herda
+    // "Pizzaria" da categoria). Sem isso o cancelamento da pizza saía na impressora da cozinha.
+    // Os setores (Pizzaria etc.) só eram carregados com o painel "Pedidos do Dia" aberto; fora dele
+    // a lista vinha vazia e o cancelamento da pizza caía no destino padrão (cozinha). Busca na hora
+    // (04/10, achado do Ramon: "cancelamento de pizza tem que ir pra pizzaria, de acordo com o produto").
+    const [setoresAgora, catSetorAgora] = await Promise.all([
+        fetchPrintSectors(storeId).catch(() => fallback?.setores ?? []),
+        fetchCategorySectors(storeId).catch(() => fallback?.catSetor ?? {}),
+    ]);
+    const grupos = new Map<string, { destino: 'kitchen' | 'bar'; setorId: string | null; lista: OrderItem[] }>();
+    itens.forEach((it) => {
+        const setorId = setorDoItem(it.product, catSetorAgora);
+        const setor = setorId ? setoresAgora.find((x) => x.id === setorId) : undefined;
+        const destino: 'kitchen' | 'bar' = setor ? setor.base : (it.product?.destination === 'bar' ? 'bar' : 'kitchen');
+        const chave = `${destino}|${setorId ?? ''}`;
+        const g = grupos.get(chave) ?? { destino, setorId, lista: [] };
+        g.lista.push(it);
+        grupos.set(chave, g);
+    });
+    for (const { destino, setorId, lista } of grupos.values()) {
+        const dados = {
+            kind: (destino === 'bar' ? 'BAR' : 'COZINHA') as 'BAR' | 'COZINHA',
+            storeName,
+            orderType,
+            identifier,
+            client: null,
+            items: lista.map((it) => ({
+                quantity: it.quantity,
+                productName: it.product?.name || 'Produto indisponível',
+                addons: (it.selected_options || []).map((o) => o.name).join(', ') || undefined,
+                observation: parseItemNote(it.notes || '').observation || undefined,
+            })),
+            orderIdShort: String(lista[0].order_id).slice(0, 8),
+            cancelamento: { por: operador, motivo: motivo || null },
+        };
+        let enviadas = 0;
+        try {
+            enviadas = await enfileirarCancelamento({
+                storeId,
+                destination: destino,
+                sectorId: setorId,
+                title: `CANCELAMENTO — ${lista.length} ${lista.length === 1 ? 'item' : 'itens'} — ${rotulo}`,
+                content: (printer) => buildKitchenTicketText({ ...dados, paperWidthMm: printer.paper_width_mm, modoDireto: printer.print_mode === 'raw', titulo: printer.sector_id ? String(printer.name).toUpperCase() : undefined }),
+                dedupeKey: `cancel:${lista.map((i) => i.id).sort().join(',')}`,
+            });
+        } catch (e) {
+            console.error('enfileirarCancelamento falhou:', e);
+        }
+        if (enviadas === 0) {
+            const ok = await printKitchenTicket({ ...dados, interativo: true }).catch(() => false);
+            if (!ok) toast.warning('O item foi cancelado, mas o pedido de cancelamento não imprimiu. Avise a cozinha.');
+        }
+    }
+};
+
 const CounterView: React.FC<{
     store: Store;
     loggedUser: StoreUser;
@@ -6961,6 +6970,46 @@ const CounterView: React.FC<{
     const storeId = store.id;
     const orderFlow = resolveOrderFlow(store);
     const [orders, setOrders] = useState<Order[]>([]);
+
+    // Cancelar venda de balcão (04/11/2026, pedido do dono: "não dá para cancelar pedido de balcão"). Mesma regra da
+    // mesa (cancelar_itens_v3): motivo + senha de quem autoriza, ou sem senha no tempo livre. Escolhe os itens; todos
+    // = pedido inteiro, que vira "cancelado" (migration 193). Venda paga: estornar o pagamento antes.
+    const [cancelarBalcao, setCancelarBalcao] = useState<{ order: Order; ids: string[]; motivo: string; senha: string; enviando: boolean } | null>(null);
+    const motivosBalcao = resolveCancelReasons(store.config as any);
+    const itensVivos = (o: Order) => (o.order_items ?? []).filter((i) => i.status !== OrderStatus.CANCELED);
+    const abrirCancelarBalcao = (order: Order) => {
+        if (String(order.id).startsWith('local_')) { toast.error('Esta venda ainda está esperando a internet. Cancele depois que ela sincronizar.'); return; }
+        if (pedidoJaPago(order)) { toast.error('Esta venda já foi paga. Estorne o pagamento antes de cancelar.'); return; }
+        const vivos = itensVivos(order);
+        if (vivos.length === 0) return;
+        if (vivos.some((i) => (i as any).fiscal_nota_id)) { toast.error('Esta venda tem nota fiscal. Cancele a nota antes (Administração → Notas fiscais).'); return; }
+        setCancelarBalcao({ order, ids: vivos.map((i) => i.id), motivo: '', senha: '', enviando: false });
+    };
+    const balcaoNoTempoLivre = !!cancelarBalcao
+        && dentroDoTempoLivre(itensVivos(cancelarBalcao.order).filter((i) => cancelarBalcao.ids.includes(i.id)) as any[], store.config as any);
+    const confirmarCancelarBalcao = async () => {
+        const dlg = cancelarBalcao;
+        if (!dlg || dlg.enviando) return;
+        const motivo = dlg.motivo.trim();
+        if (motivo.length < 3) { toast.error('Escolha ou escreva o motivo do cancelamento.'); return; }
+        if (dlg.ids.length === 0) { toast.error('Marque pelo menos um item.'); return; }
+        if (!dlg.senha && !balcaoNoTempoLivre) { toast.error('Digite a senha de quem autoriza.'); return; }
+        setCancelarBalcao({ ...dlg, enviando: true });
+        const todos = dlg.ids.length === itensVivos(dlg.order).length;
+        const r = await cancelarItensComSenha(dlg.ids, dlg.senha, motivo, todos ? 'cancelar_pedido' : 'cancelar_item', loggedUser.role === 'open' ? null : loggedUser.name);
+        if (!r.success) {
+            toast.error(mensagemCancelarComSenha(r));
+            setCancelarBalcao({ ...dlg, senha: '', enviando: false });
+            return;
+        }
+        const itens = itensVivos(dlg.order).filter((i) => dlg.ids.includes(i.id));
+        const nome = dlg.order.customer_name ? `Balcão · ${dlg.order.customer_name}` : 'Balcão';
+        await imprimirCancelamentoNaCozinha({ storeId, storeName: store.name, operador: r.name || loggedUser.name, itens, motivo,
+            orderType: 'BALCAO', identifier: nome.toUpperCase(), rotulo: nome });
+        toast.success(`${todos ? 'Venda cancelada' : (itens.length === 1 ? 'Item cancelado' : 'Itens cancelados')}${r.sem_senha ? '' : ` (autorizado por ${r.name})`}.`);
+        setCancelarBalcao(null);
+        load();
+    };
 
     // Destinatário da NF-e (Task 17) — mesma lógica de TablesView: config
     // fiscal buscada à parte (não compartilhada com MenuManagementView), só
@@ -7779,6 +7828,11 @@ const CounterView: React.FC<{
                              <Button size="sm" variant="secondary" className="shrink-0 !px-0 w-8 max-sm:!h-11 max-sm:w-11" onClick={() => printCounterReceipt(order)} title="Imprimir comprovante" aria-label="Imprimir comprovante">
                                  <Printer size={15} />
                              </Button>
+                             {itensVivos(order).length > 0 && (
+                                 <Button size="sm" variant="secondary" className="shrink-0 !px-0 w-8 max-sm:!h-11 max-sm:w-11 text-[var(--err)]" onClick={() => abrirCancelarBalcao(order)} title="Cancelar venda ou item" aria-label="Cancelar venda ou item">
+                                     <Ban size={15} />
+                                 </Button>
+                             )}
                              {/* Achado ao vivo (2026-09-10): loja `direct_print` (sem tela de
                                  acompanhamento/KDS) forçava o mesmo "Enviar p/ Cozinha" das
                                  lojas com KDS antes de liberar Receber/Entregar — mas nessa
@@ -7971,6 +8025,58 @@ const CounterView: React.FC<{
                         </Button>
                     </div>
                 </div>
+            </Modal>
+
+            <Modal isOpen={!!cancelarBalcao} onClose={() => !cancelarBalcao?.enviando && setCancelarBalcao(null)} title={`Cancelar venda de balcão${cancelarBalcao?.order.customer_name ? ` · ${cancelarBalcao.order.customer_name}` : ''}`}>
+                {cancelarBalcao && (
+                    <div className="space-y-4">
+                        <div>
+                            <p className="text-[13px] font-medium text-[var(--text-muted)] mb-1.5">Itens a cancelar</p>
+                            <div className="rounded-lg bg-[var(--surface-2)] divide-y divide-[var(--border)] overflow-hidden">
+                                {itensVivos(cancelarBalcao.order).map((it) => {
+                                    const marcado = cancelarBalcao.ids.includes(it.id);
+                                    return (
+                                        <label key={it.id} className="flex items-center justify-between gap-2 px-3 py-2.5 max-sm:min-h-[48px] text-sm cursor-pointer">
+                                            <span className="flex items-center gap-2 min-w-0">
+                                                <input type="checkbox" className="w-4 h-4 max-sm:w-5 max-sm:h-5" checked={marcado}
+                                                    onChange={() => setCancelarBalcao({ ...cancelarBalcao, ids: marcado ? cancelarBalcao.ids.filter((x) => x !== it.id) : [...cancelarBalcao.ids, it.id] })} />
+                                                <span className="truncate">{it.quantity}x {getOrderItemDisplayName(it)}</span>
+                                            </span>
+                                            <span className="num shrink-0">R$ {formatBRL(it.price_at_time * it.quantity)}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[12px] text-[var(--text-muted)] mt-1.5">
+                                {cancelarBalcao.ids.length === itensVivos(cancelarBalcao.order).length ? 'A venda inteira será cancelada.' : 'Só os itens marcados saem; o resto da venda continua.'} A cozinha/bar recebe o aviso de cancelamento.
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-[13px] font-medium text-[var(--text-muted)] mb-1.5">Motivo</p>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {motivosBalcao.filter((m) => m !== 'Outro').map((m) => (
+                                    <button key={m} type="button" onClick={() => setCancelarBalcao({ ...cancelarBalcao, motivo: m })}
+                                        className={`px-3 py-1.5 max-sm:py-2.5 rounded-full text-[13px] u-motion ${cancelarBalcao.motivo === m ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)]'}`}>{m}</button>
+                                ))}
+                            </div>
+                            <Input placeholder="Ou escreva o motivo" value={cancelarBalcao.motivo} maxLength={120} onChange={(e) => setCancelarBalcao({ ...cancelarBalcao, motivo: e.target.value })} />
+                        </div>
+                        {balcaoNoTempoLivre ? (
+                            <p className="text-[13px] text-[var(--text-muted)]">Lançado agora há pouco: cancela sem senha (tempo livre de {minutosLivres(store.config as any)} min).</p>
+                        ) : (
+                            <form onSubmit={(e) => { e.preventDefault(); confirmarCancelarBalcao(); }}>
+                                <Input label="Senha de quem autoriza" type="password" autoComplete="off" placeholder="Gerente, caixa ou quem tem permissão" value={cancelarBalcao.senha} onChange={(e) => setCancelarBalcao({ ...cancelarBalcao, senha: e.target.value })} />
+                            </form>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button variant="secondary" className="max-sm:h-11" onClick={() => setCancelarBalcao(null)} disabled={cancelarBalcao.enviando}>Voltar</Button>
+                            <Button variant="danger" className="max-sm:h-11" onClick={confirmarCancelarBalcao} isLoading={cancelarBalcao.enviando}
+                                disabled={cancelarBalcao.motivo.trim().length < 3 || cancelarBalcao.ids.length === 0 || (!cancelarBalcao.senha && !balcaoNoTempoLivre)}>
+                                {cancelarBalcao.ids.length === itensVivos(cancelarBalcao.order).length ? 'Cancelar venda' : 'Cancelar itens'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Modal>
 
             {/* Módulo Caixa (Task 5, 2026-08-22): captura de pagamento do
