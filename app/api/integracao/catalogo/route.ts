@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 // (a mesma de /api/integracao/produtos: store_ntb_estoque_secrets.ntb_estoque_api_key).
 //   POST: o Estoque entrega mudanças (grupos e produtos) -> aplicar_catalogo_estoque (idempotente, sem eco); ou só `mapa`
 //         (códigos que o Estoque criou para produtos que só existiam aqui) -> aplicar_mapa_estoque.
+//         `grupos_apagados` (ids do Estoque) -> desligar_grupos_estoque: categoria vazia some, com produto só perde a ligação (194).
 //   GET : snapshot do catálogo do Vendas no formato do Estoque (reconciliação do Estoque).
 // Modelo e regras de conflito: ntb-estoque/docs/superpowers/specs/2026-10-06-sync-catalogo-design.md
 
@@ -24,13 +25,27 @@ async function lojaPelaChave(request: NextRequest): Promise<{ storeId: string } 
 export async function POST(request: NextRequest) {
   const r = await lojaPelaChave(request);
   if (r instanceof NextResponse) return r;
-  const body = (await request.json().catch(() => null)) as { grupos?: unknown[]; produtos?: unknown[]; mapa?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { grupos?: unknown[]; produtos?: unknown[]; mapa?: unknown; grupos_apagados?: unknown } | null;
   if (!body) return NextResponse.json({ ok: false, error: 'Corpo inválido' }, { status: 400 });
   const admin = getSupabaseAdmin();
   if (body.mapa) {
     const { error } = await admin.rpc('aplicar_mapa_estoque', { p_store: r.storeId, p_mapa: body.mapa });
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
+  }
+  // grupos apagados no Estoque: tratados antes (um grupo recriado com outro id no mesmo lote entra depois pelo aplicar)
+  let apagados: { apagados: number; desligados: number } | null = null;
+  if (body.grupos_apagados !== undefined) {
+    const ids = Array.isArray(body.grupos_apagados) ? body.grupos_apagados : null;
+    if (!ids || ids.length > 1000 || !ids.every((x) => Number.isSafeInteger(x) && (x as number) > 0)) {
+      return NextResponse.json({ ok: false, error: 'grupos_apagados: lista de ids inteiros (máximo 1000)' }, { status: 400 });
+    }
+    if (ids.length) {
+      const { data, error } = await admin.rpc('desligar_grupos_estoque', { p_store: r.storeId, p_ids: ids });
+      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      apagados = data as { apagados: number; desligados: number };
+    }
+    if (!(body.grupos?.length) && !(body.produtos?.length)) return NextResponse.json({ ok: true, grupos: [], produtos: [], grupos_apagados: apagados });
   }
   if (!Array.isArray(body.grupos) && !Array.isArray(body.produtos)) {
     return NextResponse.json({ ok: false, error: 'Informe grupos[] e/ou produtos[]' }, { status: 400 });
@@ -40,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
   const { data, error } = await admin.rpc('aplicar_catalogo_estoque', { p_store: r.storeId, p_payload: { grupos: body.grupos ?? [], produtos: body.produtos ?? [] } });
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(apagados ? { ...(data as object), grupos_apagados: apagados } : data);
 }
 
 export async function GET(request: NextRequest) {
