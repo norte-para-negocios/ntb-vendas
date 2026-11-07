@@ -2,7 +2,7 @@
 // Envio da NFC-e autorizada ao Omie (ImportarNFCe via Estoque, ou direto): o resultado precisa ser registrado na nota,
 // nunca engolido. A rota do Estoque responde HTTP 200 mesmo quando falha (ok:false), então o corpo é que manda.
 import assert from 'node:assert/strict';
-import { interpretarEnvioNfceEstoque, interpretarErroEnvioNfce, ENVIO_OMIE_OK } from '../../lib/omieEnvio';
+import { interpretarEnvioNfceEstoque, interpretarErroEnvioNfce, ENVIO_OMIE_OK, ehFalhaPassageiraOmie } from '../../lib/omieEnvio';
 
 // Estoque: registrou
 assert.deepEqual(interpretarEnvioNfceEstoque(200, { ok: true, resultado: {} }), ENVIO_OMIE_OK);
@@ -34,4 +34,14 @@ assert.match(r.erro ?? '', /SOAP-ENV/);
 assert.equal(interpretarErroEnvioNfce('texto').status, 'erro');
 // mensagem enorme é cortada (cabe numa coluna e na tela)
 assert.ok((interpretarErroEnvioNfce(new Error('x'.repeat(5000))).erro ?? '').length <= 500);
+// reenvio automático só para falha passageira (07/11/2026: 2 notas do Sertão ficaram fora do Omie por um 502)
+assert.equal(ehFalhaPassageiraOmie('O Estoque respondeu HTTP 502'), true);
+assert.equal(ehFalhaPassageiraOmie('fetch failed'), true);
+assert.equal(ehFalhaPassageiraOmie('The operation was aborted due to timeout'), true);
+assert.equal(ehFalhaPassageiraOmie('Omie não respondeu em 30s (ImportarNFCe). Tente novamente.'), true);
+assert.equal(ehFalhaPassageiraOmie('API do Omie bloqueada para esta loja por consumo indevido'), true);
+assert.equal(ehFalhaPassageiraOmie('ImportarNFCe 5445: O código de produto informado na tag [cProd=461d3e16] não foi encontrado!'), false);
+assert.equal(ehFalhaPassageiraOmie('Chave de integração inválida'), false);
+assert.equal(ehFalhaPassageiraOmie('NCM inválido para o produto 90001'), false);
+assert.equal(ehFalhaPassageiraOmie(null), false);
 console.log('ok');

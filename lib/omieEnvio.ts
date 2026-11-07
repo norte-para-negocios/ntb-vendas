@@ -26,3 +26,13 @@ export function interpretarEnvioNfceEstoque(httpStatus: number, json: unknown): 
 export function interpretarErroEnvioNfce(e: unknown): ResultadoEnvioOmie {
   return { status: 'erro', erro: corta(e instanceof Error ? e.message : String(e)) };
 }
+
+/**
+ * Falha passageira do envio (rede, Estoque reiniciando, Omie lento): vale reenviar sozinho (scripts/fiscal/reenviar-omie-falhas.ts).
+ * Recusa de conteúdo (produto inexistente no Omie, NCM, chave inválida) nunca: reenviar daria o mesmo erro.
+ */
+export function ehFalhaPassageiraOmie(erro: string | null | undefined): boolean {
+  const m = erro ?? '';
+  if (/5445|n[aã]o foi encontrad|inv[aá]lid|NCM|recusad/i.test(m)) return false;
+  return /HTTP 5\d\d|fetch failed|timed? ?out|aborted|ECONN|ETIMEDOUT|EAI_AGAIN|socket|n[aã]o respondeu|consumo redundante|REDUNDANT|bloquead|SOAP-ENV:Server/i.test(m);
+}
