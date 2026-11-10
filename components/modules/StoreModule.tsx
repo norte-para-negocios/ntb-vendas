@@ -5856,7 +5856,7 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <Receipt size={18}/> Pedir conta
                                              </Button>
                                          )}
-                                         {!canFinalize && selectedTable && (
+                                         {!canFinalize && selectedTable && store.config?.receber_com_senha_caixa === true && (
                                 <button
                                     type="button"
                                     onClick={pedirSenhaDoCaixa}
@@ -6171,7 +6171,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     <Receipt size={18}/> Pedir conta
                                 </Button>
                             )}
-                            {!canFinalize && selectedTable && (
+                            {!canFinalize && selectedTable && store.config?.receber_com_senha_caixa === true && (
                                 <button
                                     type="button"
                                     onClick={pedirSenhaDoCaixa}

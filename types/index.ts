@@ -66,6 +66,8 @@ export interface Store {
     client_ordering?: boolean;
     /** Pede a senha de quem lança a cada pedido de mesa (pedido do Ramon, 2026-10-03). */
     pedido_pede_senha?: boolean;
+    /** Garçom recebe a mesa com a senha de quem tem caixa (Ramon 10/11: desligado por padrão, a critério da gerência). */
+    receber_com_senha_caixa?: boolean;
     // Perfil de módulos por loja (Task 1, plano 2026-08-22). undefined =
     // todos os módulos ligados e fluxo 'kds' — comportamento atual de todas
     // as 6 lojas reais, nenhuma delas tem essa chave. Ver

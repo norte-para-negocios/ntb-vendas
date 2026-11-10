@@ -8,6 +8,8 @@ import type { Store } from '@/types';
 
 export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
     const [pedeSenha, setPedeSenha] = useSetting<boolean>('pedido_pede_senha', false, 'Pedir a senha de quem lança', (b) => b === true);
+    // Pedido do Ramon 10/11: fica a critério da gerência; desligado = só quem tem caixa recebe.
+    const [receberSenhaCaixa, setReceberSenhaCaixa] = useSetting<boolean>('receber_com_senha_caixa', false, 'Receber mesa com a senha do caixa', (b) => b === true);
     const [taxa, setTaxa] = useSetting<boolean>('charge_service_fee', false, 'Taxa de serviço', (b) => (b ?? false) as boolean);
     const [ocupada, setOcupada] = useSetting<number>('table_alert_occupied_minutes', 0, 'Aviso de mesa ocupada');
     const [semPedido, setSemPedido] = useSetting<number>('table_alert_no_order_minutes', 0, 'Aviso de mesa sem pedido');
@@ -28,6 +30,15 @@ export const SecaoAtendimento: React.FC<{ store: Store }> = ({ store }) => {
                     : 'Desligado: o pedido sai no nome de quem está logado no aparelho.'}
             >
                 <Switch ligado={pedeSenha} onChange={() => setPedeSenha(!pedeSenha)} rotulo="Pedir a senha de quem lança o pedido" />
+            </SettingRow>
+            <SettingRow
+                id="aj-receber_com_senha_caixa"
+                titulo="Receber a mesa em qualquer aparelho com a senha do caixa"
+                descricao={receberSenhaCaixa
+                    ? 'Ligado: o garçom vê "Receber com senha do caixa"; alguém com caixa digita a senha e o pagamento cai no caixa dessa pessoa.'
+                    : 'Desligado: só quem tem caixa recebe a conta.'}
+            >
+                <Switch ligado={receberSenhaCaixa} onChange={() => setReceberSenhaCaixa(!receberSenhaCaixa)} rotulo="Receber a mesa com a senha do caixa" />
             </SettingRow>
             <SettingRow
                 id="aj-cancel_free_minutes"
