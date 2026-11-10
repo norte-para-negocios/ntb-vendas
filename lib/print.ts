@@ -570,6 +570,8 @@ export interface BillPaymentMethodDetail {
   amount: number;
   /** Só relevante pra CREDIT/DEBIT — catálogo fechado, ver CARD_BRAND_LABELS. */
   brand?: string | null;
+  /** Cortesia que é desconto na conta (10/11/2026): sai como "Desconto". */
+  desconto?: boolean;
 }
 
 export interface BillPaymentInfo {
@@ -617,7 +619,7 @@ export function printBillReceipt(opts: {
     ? opts.payment.methods
         .map((m) => {
           const brandSuffix = m.brand ? ` (${escapeHtml(getCardBrandLabel(m.brand))})` : '';
-          return `<tr><td>${escapeHtml(getPaymentMethodLabel(m.method))}${brandSuffix}</td><td class="right">R$ ${formatBRL(m.amount)}</td></tr>`;
+          return `<tr><td>${escapeHtml(m.desconto ? 'Desconto' : getPaymentMethodLabel(m.method))}${brandSuffix}</td><td class="right">R$ ${formatBRL(m.amount)}</td></tr>`;
         })
         .join('')
     : '';
@@ -733,7 +735,7 @@ export function buildBillReceiptText(opts: {
     lines.push('FORMA DE PAGAMENTO');
     opts.payment.methods.forEach((m) => {
       const brandSuffix = m.brand ? ` (${getCardBrandLabel(m.brand)})` : '';
-      lines.push(esqDir(`${getPaymentMethodLabel(m.method)}${brandSuffix}`, `R$ ${formatBRL(m.amount)}`, W));
+      lines.push(esqDir(`${m.desconto ? 'Desconto' : getPaymentMethodLabel(m.method)}${brandSuffix}`, `R$ ${formatBRL(m.amount)}`, W));
     });
     if (opts.payment.changeDue > 0) lines.push(esqDir('Troco', `R$ ${formatBRL(opts.payment.changeDue)}`, W));
     lines.push(simples);

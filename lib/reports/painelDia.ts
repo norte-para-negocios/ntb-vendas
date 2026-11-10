@@ -5,6 +5,7 @@ import type { FechamentoData } from './fechamentoXlsx';
 import { groupSales, type GroupRow } from './groupSales';
 import { salesOfShift } from './shiftSales';
 import { completarFormas, completarCartoes, ticketMedio } from '../caixaResumo';
+import { chaveDoCartao } from './cartoes';
 
 export interface TopProduto { nome: string; qtd: number; total: number }
 export interface PainelDia {
@@ -124,7 +125,9 @@ function somarPagamentos(vendas: Order[]) {
       const v = Number(m.amount) || 0;
       if (m.method !== CORTESIA) recebido += v;
       formas[m.method] = (formas[m.method] ?? 0) + v;
-      if (m.brand && (m.method === 'CREDIT' || m.method === 'DEBIT')) { const k = `${m.method}|${m.brand}`; cartoes[k] = (cartoes[k] ?? 0) + v; }
+      // Aqui (folha do caixa) cartão sem bandeira fica de fora, como no totals_by_card do turno.
+      const k = m.brand ? chaveDoCartao(m) : null;
+      if (k) cartoes[k] = (cartoes[k] ?? 0) + v;
     });
   });
   return { formas, cartoes, contas, recebido };

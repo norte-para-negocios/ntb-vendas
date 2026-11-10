@@ -82,4 +82,19 @@ assert.equal(vazia.kpis.horaPico, null);
 assert.equal(vazia.kpis.diaPico, null);
 assert.deepEqual(serieComparada([{ dia: '2026-10-24', total: 10 }, { dia: '2026-10-25', total: 20 }], [{ dia: '2026-10-22', total: 5 }]),
   [{ rotulo: '24/10', atual: 10, anterior: 5 }, { rotulo: '25/10', atual: 20, anterior: null }]);
+// Cartões por bandeira (10/11/2026): crédito e débito separados, cortesia/PIX fora, sem bandeira em linha própria.
+const vc = [
+  conta('k1', '2026-10-24T16:10:00Z', [it('moq', 'Moqueca', 'pra', 1, 100)], [{ method: 'CREDIT', brand: 'visa', amount: 60 } as never, { method: 'DEBIT', brand: 'visa', amount: 30 } as never, { method: 'COURTESY', amount: 10 }]),
+  conta('k2', '2026-10-24T17:10:00Z', [it('moq', 'Moqueca', 'pra', 1, 100)], [{ method: 'CREDIT', brand: 'mastercard', amount: 100 } as never]),
+  conta('k3', '2026-10-24T18:10:00Z', [it('cer', 'Cerveja', 'beb', 2, 10)], [{ method: 'CREDIT', brand: 'visa', amount: 20 } as never]),
+  conta('k4', '2026-10-24T19:10:00Z', [it('cer', 'Cerveja', 'beb', 1, 10)], [{ method: 'CREDIT', amount: 10 }, { method: 'PIX', amount: 0 }]),
+];
+const ac = analisarVendas(vc, cats);
+assert.deepEqual(ac.cartoes.credito.linhas.map((l) => [l.rotulo, l.qtd, l.total]), [['Mastercard', 1, 100], ['Visa', 2, 80], ['Sem bandeira', 1, 10]]);
+assert.deepEqual([ac.cartoes.credito.qtd, ac.cartoes.credito.total], [4, 190]);
+assert.deepEqual(ac.cartoes.debito.linhas.map((l) => [l.chave, l.rotulo, l.qtd, l.total]), [['DEBIT|visa', 'Visa', 1, 30]]);
+assert.equal(ac.cartoes.debito.total, 30);
+assert.deepEqual(contasDoRecorte(vc, cats, FILTROS_VAZIOS, { cartao: 'CREDIT|visa' }).map((c) => c.id).sort(), ['k1', 'k3']);
+assert.deepEqual(contasDoRecorte(vc, cats, FILTROS_VAZIOS, { cartao: 'DEBIT|visa' }).map((c) => c.id), ['k1']);
+assert.deepEqual(analisarVendas([], []).cartoes, { credito: { total: 0, qtd: 0, linhas: [] }, debito: { total: 0, qtd: 0, linhas: [] } });
 console.log('analiseVendas: ok');

@@ -16,4 +16,9 @@ const so = buildRelatorioCompletoHtml(a, meta, ['produtos']);
 assert.ok(so.includes('Produtos vendidos') && !so.includes('Formas de pagamento') && !so.includes('Mesas e balcão'));
 const vazio = buildRelatorioCompletoHtml(analisarVendas([], []), meta, ['produtos', 'contas']);
 assert.equal((vazio.match(/Nada para mostrar neste período\./g) || []).length, 2);
+// Seção de cartões por bandeira: vazia sem cartão; com cartão, crédito e débito com totais.
+assert.ok(tudo.includes('Cartões por bandeira') && tudo.includes('Nada para mostrar'));
+const comCartao = buildRelatorioCompletoHtml(analisarVendas([{ ...venda, payment_details: { payment_id: 'p1', methods: [{ method: 'CREDIT', brand: 'elo', amount: 1000 }, { method: 'DEBIT', brand: 'visa', amount: 234.5 }] } }], [{ id: 'pra', name: 'Pratos' }]), meta, ['cartoes']);
+for (const t of ['Cartões por bandeira · crédito', 'Cartões por bandeira · débito', 'Elo', 'Visa', 'TOTAL CRÉDITO', 'TOTAL DÉBITO', 'R$ 1.000,00', 'R$ 234,50']) assert.ok(comCartao.includes(t), t);
+assert.ok(!comCartao.includes('Produtos vendidos'));
 console.log('relatorioCompletoHtml: ok');

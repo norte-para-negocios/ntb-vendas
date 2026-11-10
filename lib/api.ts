@@ -4099,6 +4099,25 @@ export const verificarSenhaEquipe = async (storeId: string, senha: string): Prom
   return r;
 };
 
+// Receber a mesa no lançador com a SENHA DE QUEM TEM CAIXA (migration 195): garçom ou modo Aberto não finalizam a conta,
+// mas a pessoa do caixa digita a senha dela ali mesmo e o pagamento sai no nome (e no turno) dela. Só online: quem recebe
+// precisa do turno de caixa do servidor e a nota fiscal sai do servidor.
+export type ResultadoSenhaCaixa =
+  | { success: true; user_id: string; name: string; role: string }
+  | { success: false; error: 'invalid' | 'ambiguous' | 'locked' | 'offline' | 'conta_aberta' | 'sem_permissao' | 'sem_funcao'; seconds?: number; name?: string };
+export const verificarSenhaCaixa = async (storeId: string, senha: string): Promise<ResultadoSenhaCaixa> => {
+  try {
+    const { data, error } = await supabase.rpc('verify_caixa_password_secure', { p_store_id: storeId, p_password: senha });
+    if (error) {
+      if (error.code === 'PGRST202') return { success: false, error: 'sem_funcao' }; // banco ainda sem a 195
+      return { success: false, error: isNetworkError(error) ? 'offline' : 'invalid' };
+    }
+    return (data || { success: false, error: 'invalid' }) as ResultadoSenhaCaixa;
+  } catch (e) {
+    return { success: false, error: isNetworkError(e) ? 'offline' : 'invalid' };
+  }
+};
+
 // Garçom confirma o pedido com NOME + SENHA (migration 166). A lista de nomes vem do servidor e fica guardada no aparelho:
 // sem internet o garçom ainda escolhe o nome e a senha é conferida contra o cache (12 h) daquela pessoa.
 export type PessoaEquipe = { id: string; name: string; role: string };

@@ -25,7 +25,7 @@ import RegrasCaixaView from '@/components/modules/admin/RegrasCaixaView';
 import type { AbaId, NavCtx } from '@/lib/adminNav';
 import CouponManagementView from '@/components/modules/CouponManagementView';
 import { dentroDoPrazoCancelamento, limiteCancelamento, mensagemPrazoEncerrado, PRAZO_CANCELAMENTO_TEXTO } from '@/lib/fiscal/prazoCancelamento';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Tag, UtensilsCrossed, ChefHat, LogOut, CheckCircle, Clock, RotateCcw, Lock, Store as StoreIcon, AlertCircle, Plus, Edit2, Trash2, Image as ImageIcon, ToggleLeft, ToggleRight, X, Coffee, Receipt, LayoutGrid, RefreshCw, Upload, Camera, Settings, Ban, Unlock, User, BellRing, Search, Minus, BarChart3, Printer, Wallet, CreditCard, Banknote, QrCode, Gift, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical, Wine, Users, List, Calculator, CheckSquare, Square, Menu, Download, Star, FileText, Pencil, Pause, Play, TrendingDown, TrendingUp, History, Shield, WifiOff, AlertTriangle, ChevronDown } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Button, Card, Badge, Modal, Input, Collapsible, SegmentedControl } from '@/components/ui';
@@ -47,7 +47,7 @@ import { resolveCancelReasons } from '@/lib/excecoes';
 import { vendaDoLinkAtual, limparLinkVenda } from '@/lib/linkVenda';
 import { separarContasAguardando, contasDaMesa, idDaMesaFisica, podeLiberarMesa } from '@/lib/contasAguardando';
 import { liberarMesa, reabrirContaAguardando, separarParteDaConta } from '@/lib/api';
-import { tokenLoja, limparTokenLoja, emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, createStoreUserInvite, linkDoConvite, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
+import { tokenLoja, limparTokenLoja, emitirNotaSemInternet, notaSemInternetPronta, enfileirarNotaSemInternet, ativarNotaSemInternet, fetchEquipePedido, verificarLoginEquipe, type PessoaEquipe, fetchFeeProducts, addFeeItem, setProductFee, fetchKitchenOrders, updateOrderItemStatus, fetchTables, authenticateStoreUser, type LojaDoLogin, updateStoreUserPassword, fetchMenu, createCategory, deleteCategory, createProduct, updateProduct, deleteProduct, fetchCounterOrders, closeCounterOrder, uploadProductImage, uploadUserPhoto, updateOrderStatus, sendOrderToKitchen, fetchActiveOrdersForTables, toggleTableBlock, closeTableSession, dismissWaiterRequest, createOrder, cancelarItensComSenha, mensagemCancelarComSenha, enfileirarCancelamento, fetchSalesHistory, fetchVendasPorConta, clearSalesHistory, moveTable, updateTablesPositions, type PosicaoMesa, setProductSoldOut, transferItems, updateStoreConfig, fetchStoreTeamMembers, createStoreTeamMember, createStoreUserInvite, linkDoConvite, updateStoreTeamMember, deleteStoreTeamMember, toggleTableServiceFee, updateCategoryOrder, updateCategorySchedule, updateProductOrder, openTableManually, fetchTableSessions, fetchStoreUserById, fetchOrderRatings, authenticateUniversalUser, entrarUniversalSemInternet, situacaoLoginSemInternet, temCopiaDeLogin, updateUniversalUserPassword, fetchUniversalUserById, fetchAllStores, fetchStoreById, syncProductOptionGroups, ProductOptionGroupInput, updateProductRecommendations, consolidateProductsIntoVariants, criarProdutoNoEstoque, setProductOmieCodigo, buscarProdutosNoEstoque, ProdutoEstoqueBusca, uploadStoreCertificate, saveStoreCertificateMetadata, saveStoreCertificateSecret, fetchStoreCertificateStatus, fetchStoreFiscalConfig, updateStoreFiscalConfig, UpdateStoreFiscalConfigParams, fetchFiscalNotas, fetchFiscalNotaPdfUrl, aguardarNotaFiscalDaVenda, descreverFalhaFiscalDaVenda, reemitirFiscalNota, cancelarFiscalNota, fetchNtbEstoqueIntegracaoStatus, saveNtbEstoqueIntegracaoConfig, NtbEstoqueIntegracaoStatus, type BaixasEstoqueResumo, fetchOmieDiretoStatus, saveOmieDiretoConfig, requestTableBill, cancelTableBillRequest, fetchOpenCashShift, fetchOpenCashShifts, openCashShift, registerCashMovement, fetchCashShiftSummary, closeCashShift, turnoIncerto, verifyCashSupervisor, verificarSenhaEquipe, verificarSenhaCaixa, registrarSenhaConferida, leituraFalhou, CashShiftSummary, CashShift, fetchCashShiftsHistory, CashShiftHistoryRow, fetchCashShiftAudit, CashShiftAuditEvent, fetchOpenCheckin, startCheckin, endCheckin, fetchCheckinsHistory, fetchOpenCheckinUserIds, subscribeToStoreOrderChanges, triggerPushForOrder, fetchReservationsByStore, updateReservationStatus, enqueueReceiptPrintJobs, enqueueFiscalCupomPrintJobs, printOfflineOrderTicket, fetchPrintSectors, printSectorsDoAparelho, fetchPrinterConfigs, fetchCategorySectors, createPrintSector, deletePrintSector, updateCategorySector, updateProductSector, hasActivePrinterForDestination, hasActivePrinterForDoc, fetchUsbPrinterForAutoprint, resolverUrlApi, registrarPagamentoBalcao, entregarPedidoBalcao, estornarPagamentoBalcao, iniciarMotorImpressaoDesktop, pararMotorImpressaoDesktop, createCategoryGroup, deleteCategoryGroup, updateCategoryGroupAssignment, toggleItemPriority } from '@/lib/api';
 import { buildTopLevelItems, TopLevelItem } from '@/lib/categoryGroups';
 import { atribuirUnidade, devolverUnidade, montarDivisao, type Atribuicao, type DivisaoDaConta, type ItemDaConta } from '@/lib/divisaoPorPessoa';
 import { OrderItem, OrderStatus, Table, TableStatus, StoreUser, StoreUserPermissions, Store, Category, CategoryGroup, PrintSector, Product, Order, TableSession, OrderRating, UniversalUser, ProductOptionGroup, ProductOption, SelectedOption, StoreFiscalCertificateStatus, FiscalNota, OperatorCheckin, TableReservation } from '@/types';
@@ -2421,10 +2421,18 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
     }, [term, orderedCategories, productsByCategory, products]);
 
     const renderProductRow = (product: Product, catLabel?: string, opcao?: ResultadoBusca['opcao']) => {
-        const abrir = () => {
+        // Menos etapas (10/11/2026, Sertão/AMJ): produto sem nenhuma opção entra direto (1 unidade) no carrinho com um
+        // toque; quantidade e observação se ajustam no carrinho ou pelo botão "Obs" da linha (abre a janela de detalhes).
+        const semOpcoes = !opcao && !(product.option_groups && product.option_groups.length > 0);
+        const abrirDetalhes = () => {
             if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; }
             setPreSelecao(opcao ? { [opcao.groupId]: [opcao.optionId] } : undefined);
             setSelectedProduct(product);
+        };
+        const abrir = () => {
+            if (product.sold_out) { toast.info(`${product.name} está esgotado.`); return; }
+            if (semOpcoes) { onAddItem(product, 1, '', []); return; }
+            abrirDetalhes();
         };
         const effectivePrice = getEffectivePrice(product);
         const hasActivePromo = effectivePrice < product.price;
@@ -2492,6 +2500,18 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
                 </div>
                 {product.sold_out && (
                     <span className="shrink-0 text-[12px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-[var(--err-fill)] text-white">Esgotado</span>
+                )}
+                {semOpcoes && !product.sold_out && (
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); abrirDetalhes(); }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="shrink-0 min-h-9 max-sm:min-h-11 px-3 rounded-full bg-[var(--surface-2)] text-[12px] font-semibold text-[var(--text)] hover:bg-[var(--border)] u-press"
+                        aria-label={`${product.name}: quantidade e observação`}
+                        title="Quantidade e observação"
+                    >
+                        Obs
+                    </button>
                 )}
                 {podeEsgotar && (
                     <button
@@ -2752,7 +2772,7 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 // pro próprio bloco de destinatário.
 const PaymentCaptureFields: React.FC<{
     total: number;
-    methods: { method: string; amount: number; brand?: string }[];
+    methods: { method: string; amount: number; brand?: string; desconto?: boolean }[];
     currentMethod: string;
     onMethodChange: (m: string) => void;
     currentBrand: string;
@@ -2874,7 +2894,7 @@ const PaymentCaptureFields: React.FC<{
                         <li key={idx} className="flex justify-between items-center text-[15px] px-4 py-2.5">
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-[var(--text)]">
-                                    {getPaymentMethodLabel(p.method)}
+                                    {p.desconto ? 'Desconto' : getPaymentMethodLabel(p.method)}
                                     {p.brand && <span className="font-normal text-[var(--text-muted)]"> · {getCardBrandLabel(p.brand)}</span>}
                                 </span>
                             </div>
@@ -3176,7 +3196,7 @@ const TablesView: React.FC<{
     // 08/10/2026 (pedido do dono): ao confirmar, só a SENHA — ela identifica a pessoa e o pedido sai no nome dela. Qualquer
     // pessoa da loja (garçom, caixa, gerente, dono) e a conta universal confirmam. Os nomes só aparecem sem internet,
     // quando a senha nunca foi usada neste computador (`mostrarNomes`), para o pedido não travar.
-    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean; userId: string; mostrarNomes?: boolean }>({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
+    const [senhaPedido, setSenhaPedido] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean; userId: string; mostrarNomes?: boolean; taxa?: Product }>({ aberto: false, senha: '', erro: '', verificando: false, userId: '' });
     // Quem lança escolhe o NOME e digita a senha (migration 166). Com login (não é o modo Aberto) o nome já é o da pessoa logada.
     const [equipePedido, setEquipePedido] = useState<PessoaEquipe[]>([]);
     const chaveUltimoLancador = `ntb-ultimo-lancador:${storeId}`;
@@ -3536,8 +3556,44 @@ const TablesView: React.FC<{
     // preenchido quando currentPaymentMethod é CREDIT/DEBIT (ver seletor de
     // bandeira abaixo). Aditivo: cada entrada continua valendo como estava
     // (método + valor) pra quem não usa cartão.
-    const [paymentMethods, setPaymentMethods] = useState<{ method: string, amount: number, brand?: string }[]>([]);
+    // `desconto` (10/11/2026, Sertão/AMJ): linha de cortesia que é DESCONTO na conta (botão "Desconto" ou pago a menos
+    // confirmado). Vai no payment_details.methods como COURTESY + desconto: true (servidor, nota e faturamento tratam como
+    // cortesia parcial; os relatórios podem chamar de "Desconto").
+    const [paymentMethods, setPaymentMethods] = useState<{ method: string, amount: number, brand?: string, desconto?: boolean }[]>([]);
     const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
+    // Receber no lançador com a senha de quem tem caixa (migration 195): quem autorizou vira o operador do pagamento
+    // (nome, turno de caixa). Some ao fechar a janela de pagamento (fecharPagamento) ou ao receber.
+    const [autorizadorCaixa, setAutorizadorCaixa] = useState<{ id: string; name: string; role: string } | null>(null);
+    const [senhaCaixaDlg, setSenhaCaixaDlg] = useState<{ aberto: boolean; senha: string; erro: string; verificando: boolean }>({ aberto: false, senha: '', erro: '', verificando: false });
+    const fecharPagamento = () => { setShowPaymentModal(false); setAutorizadorCaixa(null); };
+    const pedirSenhaDoCaixa = () => setSenhaCaixaDlg({ aberto: true, senha: '', erro: '', verificando: false });
+    const confirmarSenhaCaixa = async () => {
+        const senha = senhaCaixaDlg.senha;
+        if (!senha) { setSenhaCaixaDlg((x) => ({ ...x, erro: 'Digite a senha de quem é do caixa.' })); return; }
+        if (!selectedTable) return;
+        setSenhaCaixaDlg((x) => ({ ...x, verificando: true, erro: '' }));
+        const r = await verificarSenhaCaixa(storeId, senha);
+        if (r.success) {
+            setSenhaCaixaDlg({ aberto: false, senha: '', erro: '', verificando: false });
+            setAutorizadorCaixa({ id: r.user_id, name: r.name, role: r.role });
+            toast.success(`Recebendo como ${r.name}.`);
+            handleOpenPayment(undefined, { autorizado: true });
+            return;
+        }
+        const erro =
+            r.error === 'sem_permissao' ? `${r.name ?? 'Essa pessoa'} não tem permissão de caixa. Use a senha de quem é do caixa.` :
+            r.error === 'ambiguous' ? 'Essa senha é de mais de uma pessoa. Peça ao gerente para trocar a senha.' :
+            r.error === 'conta_aberta' ? 'Essa senha é da conta Mesas (do computador), não de uma pessoa do caixa.' :
+            r.error === 'locked' ? `Muitas tentativas erradas. Espere ${r.seconds ?? 60} segundos.` :
+            r.error === 'offline' ? 'Sem internet: receber com a senha do caixa precisa de internet.' :
+            r.error === 'sem_funcao' ? 'O servidor ainda não tem esta opção. Receba pelo caixa.' :
+            'Senha não encontrada.';
+        setSenhaCaixaDlg((x) => ({ ...x, verificando: false, erro, senha: '' }));
+    };
+    // Desconto simples (10/11/2026): R$ ou % sobre o que falta pagar, vira linha COURTESY marcada `desconto`.
+    const [descontoAberto, setDescontoAberto] = useState(false);
+    const [descontoInput, setDescontoInput] = useState('');
+    const [descontoModo, setDescontoModo] = useState<'valor' | 'pct'>('valor');
     const [removedServiceFees, setRemovedServiceFees] = useState<Set<string>>(new Set());
     const [currentPaymentMethod, setCurrentPaymentMethod] = useState('CREDIT');
     const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
@@ -3557,7 +3613,7 @@ const TablesView: React.FC<{
     // banco — hidratado de `service_fee_removed` a cada loadData (ver
     // abaixo) e escrito via RPC aqui, com revert se o servidor recusar.
     const handleToggleServiceFee = async (tableId: string, remove: boolean) => {
-        if (isAberto) { avisarSoComLogin(); return; }
+        if (isAberto && !autorizadorCaixa) { avisarSoComLogin(); return; } // recebendo com a senha do caixa: pode tirar a taxa
         setRemovedServiceFees(prev => {
             const next = new Set(prev);
             if (remove) next.add(tableId); else next.delete(tableId);
@@ -4037,6 +4093,21 @@ NOTIFY pgrst, 'reload schema';`;
     // de taxa de serviço duplicada em 7+ lugares antes de virar lib/calc.ts.
     const changeDue = calculateChangeForMethods(paymentMethods, paymentTotalDue);
 
+    // Desconto simples (10/11/2026, Sertão/AMJ): em R$ ou % da conta, limitado ao que falta pagar. Entra como linha de
+    // cortesia marcada `desconto` (o servidor aceita cortesia parcial; a nota fiscal trata igual à cortesia parcial de hoje).
+    const aplicarDesconto = () => {
+        const n = Number(descontoInput.trim().replace(',', '.'));
+        if (!descontoInput.trim() || !Number.isFinite(n) || n <= 0) { toast.error('Digite o valor do desconto.'); return; }
+        if (descontoModo === 'pct' && n > 100) { toast.error('O desconto vai de 0 a 100%.'); return; }
+        const valor = Math.round((descontoModo === 'pct' ? paymentTotalDue * n / 100 : n) * 100) / 100;
+        if (valor <= 0) { toast.error('Desconto muito pequeno.'); return; }
+        if (valor > remainingToPay + 0.001) { toast.error(`O desconto não pode passar do que falta pagar (R$ ${formatBRL(remainingToPay)}).`); return; }
+        setPaymentMethods(prev => [...prev, { method: 'COURTESY', amount: valor, desconto: true }]);
+        setCurrentPaymentAmount(Math.max(0, remainingToPay - valor).toFixed(2));
+        setDescontoAberto(false);
+        setDescontoInput('');
+    };
+
     // Fix round 3 (Group C1): antes esta função não fazia `await` nem
     // tratava o retorno de printBillReceipt() — printHtmlDocument
     // (lib/print.ts) devolve `new Promise((resolve) => {...})` com
@@ -4138,7 +4209,7 @@ NOTIFY pgrst, 'reload schema';`;
         }
     };
 
-    const handleOpenPayment = (tableOverride?: Table) => {
+    const handleOpenPayment = (tableOverride?: Table, opts?: { autorizado?: boolean }) => {
         // Task 3 (frente-de-caixa): `tableOverride` é novo — usado pelo
         // efeito de auto-abertura (autoOpenTableId, abaixo) pra abrir o
         // modal de pagamento de uma mesa que ainda não é `selectedTable`
@@ -4164,12 +4235,15 @@ NOTIFY pgrst, 'reload schema';`;
         // isto já não renderiza pra quem não pode finalizar (ver JSX
         // abaixo), mas travar aqui também garante que nenhum outro caminho
         // futuro abra o modal de pagamento pra quem só pode pedir a conta.
-        if (!canFinalize) return;
+        // `autorizado`: quem não finaliza (garçom, modo Aberto) já digitou a senha de quem tem caixa (autorizadorCaixa).
+        if (!canFinalize && !opts?.autorizado) return;
         const summary = getTableSummary(table.id);
         setSelectedTable(table);
         setPaymentMethods([]);
         setCurrentPaymentAmount(summary.total.toFixed(2));
-        setCurrentPaymentMethod('CREDIT');
+        // Mesa de funcionário (pedido Sertão/AMJ 10/11): já abre em Cortesia — o consumo sai do estoque e não vira venda.
+        setCurrentPaymentMethod(table.funcionario ? 'COURTESY' : 'CREDIT');
+        setDescontoAberto(false);
         setCurrentPaymentBrand('');
         setPaymentTab('payment');
         setPaymentPeople(1);
@@ -4198,13 +4272,17 @@ NOTIFY pgrst, 'reload schema';`;
     // serviço, rolha, troca etc. são produtos ligados ao código do Omie, e SÓ o
     // caixa lança, aqui no pagamento da mesa. Viram item da conta (nota fiscal e
     // Estoque/Omie pelo fluxo de sempre); a percentual substitui a taxa automática.
-    const canLaunchFee = podeLancarTaxa(loggedUser);
+    // Recebendo com a senha do caixa (migration 195): quem autorizou tem caixa, então lança/edita taxa no pagamento também.
+    const canLaunchFee = podeLancarTaxa(loggedUser) || !!autorizadorCaixa;
+    const operadorTaxa = autorizadorCaixa ?? { id: loggedUser.id, name: loggedUser.name };
     const [feeProducts, setFeeProducts] = useState<Product[]>([]);
     const [launchingFeeId, setLaunchingFeeId] = useState<string | null>(null);
+    // Carrega para todos (10/11/2026): as taxas de VALOR FIXO (rolha, troca, frete, couvert) o garçom lança na comanda,
+    // em "Adicionar pedido"; as percentuais seguem só no pagamento, com caixa.
     useEffect(() => {
-        if (!canLaunchFee) return;
         fetchFeeProducts(storeId).then(setFeeProducts).catch(() => setFeeProducts([]));
-    }, [storeId, canLaunchFee]);
+    }, [storeId]);
+    const taxasFixas = feeProducts.filter((fp) => fp.fee_type === 'fixed');
     // Taxa editável (migration 141, pedido do Ramon): o caixa digita o valor em R$ ou o percentual
     // (menor ou maior que 10) e o item grava exatamente isso. Editar de novo atualiza o MESMO item.
     const [editandoTaxaId, setEditandoTaxaId] = useState<string | null>(null);
@@ -4249,8 +4327,8 @@ NOTIFY pgrst, 'reload schema';`;
                 storeId,
                 tableId: selectedTable.id,
                 productId: product.id,
-                operatorUserId: loggedUser.id,
-                operatorName: loggedUser.name,
+                operatorUserId: operadorTaxa.id,
+                operatorName: operadorTaxa.name,
                 amount: edicao?.amount,
                 percent: edicao?.percent,
             });
@@ -4350,15 +4428,19 @@ NOTIFY pgrst, 'reload schema';`;
     // setPaymentMethods() e handleFinishPayment() em sequência no mesmo
     // clique leria o state ANTIGO (setState é assíncrono), por isso o
     // atalho nunca passa pela lista — monta o método/valor direto aqui.
-    const handleFinishPayment = async (methodsOverride?: { method: string; amount: number; brand?: string }[]) => {
-        if (isAberto) { avisarSoComLogin(); return; }
+    const handleFinishPayment = async (methodsOverride?: { method: string; amount: number; brand?: string; desconto?: boolean }[]) => {
+        // Recebendo com a senha do caixa (migration 195): o pagamento é de quem autorizou (nome, id e turno de caixa).
+        const autorizador = autorizadorCaixa;
+        if (isAberto && !autorizador) { avisarSoComLogin(); return; }
+        if (!canFinalize && !autorizador) return;
+        const operador = autorizador ?? { id: loggedUser.id, name: loggedUser.name, role: loggedUser.role };
         if (!selectedTable) return;
         if (isFinishingRef.current) return;
         isFinishingRef.current = true;
 
         try {
             const summary = getTableSummary(selectedTable.id);
-            const methods = methodsOverride ?? paymentMethods;
+            let methods = methodsOverride ?? paymentMethods;
 
             // Task 2 (2026-08-22): este gate existe pra impedir fechar a
             // mesa com item ainda "em preparo" no KDS — status só avança
@@ -4407,9 +4489,19 @@ NOTIFY pgrst, 'reload schema';`;
 
             const totalPaid = methods.reduce((acc, p) => acc + p.amount, 0);
 
+            // Pagou menos que a conta (10/11/2026, Sertão/AMJ): em vez de travar, oferece a diferença como DESCONTO
+            // (linha de cortesia marcada `desconto`, mesmo tratamento de servidor/nota/faturamento da cortesia parcial).
             if (totalPaid < summary.total - 0.01) { // Tolerance for float
-                toast.error('O valor pago é menor que o total da conta.');
-                return;
+                const falta = Math.round((summary.total - totalPaid) * 100) / 100;
+                const darDesconto = await confirm({
+                    title: 'Valor pago menor que a conta',
+                    message: `Faltam R$ ${formatBRL(falta)} para fechar a conta de R$ ${formatBRL(summary.total)}. Dar R$ ${formatBRL(falta)} de desconto e fechar a mesa?`,
+                    confirmLabel: `Dar R$ ${formatBRL(falta)} de desconto`,
+                    cancelLabel: 'Voltar',
+                });
+                if (!darDesconto) return;
+                methods = [...methods, { method: 'COURTESY', amount: falta, desconto: true }];
+                setPaymentMethods(methods);
             }
 
             // Task 2 (2026-08-23, plano frente-de-caixa) — "sem caixa
@@ -4423,9 +4515,11 @@ NOTIFY pgrst, 'reload schema';`;
             // estavam abertos ao mesmo tempo.
             let cashShiftId: string | undefined;
             if (resolveStoreModules(store).caixa) {
-                const openShift = await fetchOpenCashShift(store.id, loggedUser.role === 'universal' ? null : loggedUser.id);
+                const openShift = await fetchOpenCashShift(store.id, operador.role === 'universal' ? null : operador.id);
                 if (!openShift) {
-                    toast.error('Você não tem um turno de caixa aberto. Abra o seu caixa antes de receber pagamentos.');
+                    toast.error(autorizador
+                        ? `${autorizador.name} não tem caixa aberto. Abra o caixa de ${autorizador.name} antes de receber.`
+                        : 'Você não tem um turno de caixa aberto. Abra o seu caixa antes de receber pagamentos.');
                     return;
                 }
                 cashShiftId = openShift.id;
@@ -4455,11 +4549,11 @@ NOTIFY pgrst, 'reload schema';`;
             const paymentData = {
                 total: summary.total,
                 methods: getPaymentMethodsForRecord(methods, summary.total),
-                operador_nome: loggedUser.name,
+                operador_nome: operador.name,
                 // Id único do pagamento: o fechamento de caixa junta os pedidos de UMA conta por ele e não confunde
                 // duas contas diferentes com valor, forma e operador iguais.
                 payment_id: crypto.randomUUID(),
-                operador_id: loggedUser.id,
+                operador_id: operador.id,
                 ...(emissaoFiscalConfigurada ? { emitir_nota: emitirNotaFiscal && vendaTemCobranca({ total: summary.total }) } : {}),
                 ...(cashShiftId ? { cash_shift_id: cashShiftId } : {}),
                 // Consumo de funcionário (migration 174): separado no fechamento do turno e no histórico.
@@ -4479,6 +4573,18 @@ NOTIFY pgrst, 'reload schema';`;
                 // Só visual (Task 10 Step 8): dispara e segue — não segura
                 // impressão, nota nem o fechamento da janela.
                 flashSuccessCheck();
+                if (autorizador) {
+                    registrarAcao(storeId, 'mesa.recebida_com_senha', { entity: 'tables', entityId: selectedTable.id,
+                        summary: `Mesa ${selectedTable.number} recebida por ${autorizador.name} (senha do caixa) no aparelho de ${loggedUser.name}`,
+                        details: { mesa: selectedTable.number, autorizado_por: autorizador.name, autorizado_por_id: autorizador.id, lancador: loggedUser.name, total: summary.total } });
+                    setAutorizadorCaixa(null);
+                }
+                const descontoDado = methods.filter((m) => (m as { desconto?: boolean }).desconto).reduce((a, m) => a + m.amount, 0);
+                if (descontoDado > 0) {
+                    registrarAcao(storeId, 'mesa.desconto', { entity: 'tables', entityId: selectedTable.id,
+                        summary: `Mesa ${selectedTable.number}: desconto de R$ ${formatBRL(descontoDado)} (conta R$ ${formatBRL(summary.total)}) por ${operador.name}`,
+                        details: { mesa: selectedTable.number, desconto: descontoDado, total: summary.total, operador: operador.name } });
+                }
                 if (result.message && result.message.includes("Colunas ausentes")) {
                     setShowFixDbModal(true);
                 } else if (result.message) {
@@ -4497,7 +4603,9 @@ NOTIFY pgrst, 'reload schema';`;
                 // (redesign 2026-08-23: não existe mais um "alvo" separado —
                 // o único equipamento fixo é o do próprio caixa, ver
                 // lib/storeModules.ts).
-                const isCaixaOperator = loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
+                // Recebido com a senha do caixa no aparelho do garçom: o comprovante só sai na impressora física do caixa
+                // (a janela de imprimir do celular/PC do salão não serve).
+                const isCaixaOperator = !autorizador && loggedUser.role !== 'owner' && loggedUser.role !== 'universal' && loggedUser.permissions?.caixa === true;
                 // Loja com impressora ativa pro caixa (rede/USB) imprime o comprovante
                 // em toda venda fechada, seja quem for que finalizou (dono, universal,
                 // operador) e em qualquer computador — a impressora física é quem decide.
@@ -4730,7 +4838,8 @@ NOTIFY pgrst, 'reload schema';`;
         const conta = contasAguardando.find((t) => t.id === abrirPagamentoDeId);
         if (!conta || getTableSummary(conta.id).total <= 0) return;
         setAbrirPagamentoDeId(null);
-        handleOpenPayment(conta);
+        // Separou a parte recebendo com a senha do caixa: a conta separada abre com a mesma autorização.
+        handleOpenPayment(conta, { autorizado: !!autorizadorCaixa });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [abrirPagamentoDeId, contasAguardando, activeOrders]);
 
@@ -4847,6 +4956,13 @@ NOTIFY pgrst, 'reload schema';`;
                 else toast.warning('Sem internet: o pedido foi salvo, mas o papel do pedido não saiu na impressora. Ele sai quando a internet voltar.');
             }
 
+            // Mesa livre que recebeu o pedido: o servidor já a abriu (create_order_secure, 153); a tela acompanha na hora.
+            if (result.orderId && mesa.status === TableStatus.AVAILABLE) {
+                const aberta = { ...mesa, status: TableStatus.OCCUPIED, current_host_name: mesa.current_host_name || nomeAutor };
+                setTables(prev => prev.map(t => t.id === aberta.id ? aberta : t));
+                setSelectedTable(prev => (prev && prev.id === aberta.id ? aberta : prev));
+            }
+
             // Atualização otimista da comanda — sem isso, "Ver Comanda" e o
             // total do card da mesa continuam com o valor antigo até a próxima
             // sincronização real. `loadData`/Realtime substituem estes itens
@@ -4901,6 +5017,33 @@ NOTIFY pgrst, 'reload schema';`;
         } finally {
             isAddingItemRef.current = false;
             setEnviandoPedidoMesa(false);
+        }
+    };
+
+    // Taxas de valor fixo (rolha, troca, frete, couvert) lançadas pelo garçom na comanda (migration 195), antes do
+    // pagamento. Item vai direto 'delivered' (nunca imprime na cozinha); preço calculado no servidor. No modo Aberto, quem
+    // lança se identifica com a senha (a mesma janela do pedido).
+    const [lancandoTaxaMesa, setLancandoTaxaMesa] = useState<string | null>(null);
+    const lancarTaxaNaMesa = async (fp: Product, autor?: { id: string; name: string }) => {
+        if (!selectedTable || lancandoTaxaMesa) return;
+        if (isAberto && !autor) {
+            setSenhaPedido({ aberto: true, senha: '', erro: '', verificando: false, userId: '', mostrarNomes: false, taxa: fp });
+            return;
+        }
+        const mesa = selectedTable;
+        const valor = getEffectivePrice(fp);
+        if (!autor && !(await confirm({ title: `Lançar ${fp.name}?`, message: `R$ ${formatBRL(valor)} entra na conta da Mesa ${mesa.number}.`, confirmLabel: 'Lançar' }))) return;
+        setLancandoTaxaMesa(fp.id);
+        try {
+            const r = await addFeeItem({ storeId, tableId: mesa.id, productId: fp.id,
+                operatorUserId: autor?.id ?? loggedUser.id, operatorName: autor?.name ?? loggedUser.name });
+            if (!r.success) { toast.error(r.message || 'Não foi possível lançar a taxa.'); return; }
+            toast.success(`${fp.name} lançada na Mesa ${mesa.number}: R$ ${formatBRL(r.price ?? valor)}`);
+            await loadData();
+        } catch (e) {
+            toast.error(isNetworkError(e) ? 'Sem internet: a taxa só entra com internet.' : 'Não foi possível lançar a taxa: ' + ((e as Error)?.message || 'tente de novo.'));
+        } finally {
+            setLancandoTaxaMesa(null);
         }
     };
 
@@ -5535,6 +5678,8 @@ NOTIFY pgrst, 'reload schema';`;
                 {cancelItemDlg && (
                     <div className="space-y-4">
                         <p className="text-sm text-[var(--text)]">Cancelar <b>{cancelItemDlg.total}x {cancelItemDlg.nome}</b> da comanda?</p>
+                        {/* Consumo de funcionário (10/11/2026): cancelar tudo depois de impresso não dá baixa no estoque. */}
+                        {selectedTable?.funcionario && (<p className="rounded-[var(--r-md)] bg-[var(--warn)]/10 px-3 py-2 text-[13px] text-[var(--text)]" role="note">Mesa de funcionário: para não perder a baixa do estoque, receba em Cortesia em vez de cancelar. Item cancelado não sai do estoque.</p>)}
                         {cancelItemDlg.total > 1 && (
                             <div className="flex items-center justify-between gap-3 min-h-11 px-3 rounded-xl border border-[var(--border)]">
                                 <span className="text-[15px] text-[var(--text)]">Quantos cancelar</span>
@@ -5711,6 +5856,15 @@ NOTIFY pgrst, 'reload schema';`;
                                                 <Receipt size={18}/> Pedir conta
                                              </Button>
                                          )}
+                                         {!canFinalize && selectedTable && (
+                                <button
+                                    type="button"
+                                    onClick={pedirSenhaDoCaixa}
+                                    className="mt-2 w-full flex items-center justify-center gap-2 h-11 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[15px] font-medium text-[var(--text)] hover:bg-[var(--border)] u-motion"
+                                >
+                                    <Wallet size={17}/> Receber com senha do caixa
+                                </button>
+                            )}
                                          {canFinalize && selectedTable?.status === 'waiting_bill' && (
                                 <button
                                     type="button"
@@ -5761,6 +5915,14 @@ NOTIFY pgrst, 'reload schema';`;
                              )}
                              {selectedTable?.status === 'available' && (
                                 <>
+                                {/* Menos etapas (10/11/2026): mesa livre já recebe pedido — o servidor abre a mesa no primeiro pedido
+                                    da equipe (create_order_secure, migration 153). "Abrir Mesa Manualmente" continua para nome do
+                                    cliente e mesa de funcionário. */}
+                                {!mesaFuncionario && (
+                                    <Button size="lg" className="w-full !h-14 !rounded-[16px] text-[17px]" onClick={() => setShowMenuMode(true)}>
+                                        <Plus size={20} className="shrink-0" /> Adicionar Pedido
+                                    </Button>
+                                )}
                                 <label className="flex items-center gap-3 min-h-[48px] px-4 rounded-[var(--r-md)] bg-[var(--surface-2)] cursor-pointer">
                                     <input
                                         type="checkbox"
@@ -5780,7 +5942,7 @@ NOTIFY pgrst, 'reload schema';`;
                                     value={hostNameInput}
                                     onChange={e => setHostNameInput(e.target.value)}
                                 />
-                                <Button size="lg" className="w-full !h-14 !rounded-[16px] text-[17px]" onClick={async () => {
+                                <Button size="lg" variant={mesaFuncionario ? undefined : 'secondary'} className="w-full !h-14 !rounded-[16px] text-[17px]" onClick={async () => {
                                     if(selectedTable) {
                                         const hostName = hostNameInput.trim() || loggedUser.name;
                                         const funcionario = mesaFuncionario ? hostName : null;
@@ -6009,6 +6171,15 @@ NOTIFY pgrst, 'reload schema';`;
                                     <Receipt size={18}/> Pedir conta
                                 </Button>
                             )}
+                            {!canFinalize && selectedTable && (
+                                <button
+                                    type="button"
+                                    onClick={pedirSenhaDoCaixa}
+                                    className="mt-2 w-full flex items-center justify-center gap-2 h-11 rounded-[var(--r-md)] bg-[var(--surface-2)] text-[15px] font-medium text-[var(--text)] hover:bg-[var(--border)] u-motion"
+                                >
+                                    <Wallet size={17}/> Receber com senha do caixa
+                                </button>
+                            )}
                                          {canFinalize && selectedTable?.status === 'waiting_bill' && (
                                 <button
                                     type="button"
@@ -6045,6 +6216,24 @@ NOTIFY pgrst, 'reload schema';`;
                 return (
                         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
                             <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-5 pb-2">
+                                {/* Taxas de valor fixo lançadas na comanda (10/11/2026): um toque, confirma e entra na conta (sem cozinha). */}
+                                {taxasFixas.length > 0 && itens.some((i) => i.status !== OrderStatus.CANCELED) && (
+                                    <div className="flex-shrink-0 flex items-center gap-2 overflow-x-auto pt-1 pb-2 -mx-1 px-1" aria-label="Taxas">
+                                        <span className="text-[13px] font-semibold text-[var(--text-muted)] shrink-0">Taxas</span>
+                                        {taxasFixas.map((fp) => (
+                                            <button
+                                                key={fp.id}
+                                                type="button"
+                                                disabled={lancandoTaxaMesa !== null}
+                                                onClick={() => lancarTaxaNaMesa(fp)}
+                                                className="shrink-0 inline-flex items-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--brand-soft)] text-[13px] font-semibold text-[var(--brand)] hover:brightness-95 disabled:opacity-60 u-motion u-press-sm whitespace-nowrap"
+                                            >
+                                                {lancandoTaxaMesa === fp.id ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+                                                {fp.name} · R$ {formatBRL(getEffectivePrice(fp))}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <StoreTableMenu storeId={storeId} onAddItem={adicionarNaMesa} addLabel="Adicionar ao pedido" podeEsgotar={false} />
                             </div>
                             {/* "Já pedido" (pedido do dono, 2026-09-18): resumo do que a
@@ -6183,7 +6372,14 @@ NOTIFY pgrst, 'reload schema';`;
                         }
                         if (r.success) {
                             try { localStorage.setItem(chaveUltimoLancador, r.user_id); } catch { /* sem armazenamento */ }
+                            const taxaPendente = senhaPedido.taxa;
                             setSenhaPedido({ aberto: false, senha: '', erro: '', verificando: false, userId: '', mostrarNomes: false });
+                            if (taxaPendente) {
+                                // Taxa precisa de internet: sem conferir a senha não lança no nome de ninguém.
+                                if (r.semConferencia) { toast.error('Sem internet: a taxa só entra com internet.'); return; }
+                                await lancarTaxaNaMesa(taxaPendente, { id: r.user_id, name: r.name });
+                                return;
+                            }
                             if (r.semConferencia) {
                                 toast.success(`Sem internet: pedido no nome de ${r.name} (senha não conferida).`);
                                 registrarAcao(storeId, 'pedido.senha_nao_conferida', { entity: 'store_user', entityId: r.user_id, summary: `Pedido lançado sem internet no nome de ${r.name}, sem conferir a senha` });
@@ -6207,7 +6403,11 @@ NOTIFY pgrst, 'reload schema';`;
                         setSenhaPedido((x) => ({ ...x, verificando: false, erro, senha: '' }));
                     }}
                 >
-                    <p className="text-sm text-[var(--text-muted)]">Digite a <b>sua</b> senha. O pedido sai no seu nome.</p>
+                    <p className="text-sm text-[var(--text-muted)]">
+                        {senhaPedido.taxa
+                            ? <>Digite a <b>sua</b> senha para lançar <b>{senhaPedido.taxa.name}</b> (R$ {formatBRL(getEffectivePrice(senhaPedido.taxa))}) na conta.</>
+                            : <>Digite a <b>sua</b> senha. O pedido sai no seu nome.</>}
+                    </p>
                     {senhaPedido.mostrarNomes && (
                         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Quem está lançando">
                             {equipePedido.length === 0 && <p className="text-sm text-[var(--text-muted)]">Carregando os nomes…</p>}
@@ -6234,7 +6434,26 @@ NOTIFY pgrst, 'reload schema';`;
                         onChange={(e) => setSenhaPedido((x) => ({ ...x, senha: e.target.value, erro: '' }))}
                     />
                     {senhaPedido.erro && <p className="text-sm text-[var(--err)]" role="alert">{senhaPedido.erro}</p>}
-                    <Button type="submit" size="lg" className="w-full" isLoading={senhaPedido.verificando}>Confirmar pedido</Button>
+                    <Button type="submit" size="lg" className="w-full" isLoading={senhaPedido.verificando}>{senhaPedido.taxa ? 'Lançar taxa' : 'Confirmar pedido'}</Button>
+                </form>
+            </Modal>
+
+            {/* Receber no lançador com a senha de quem tem caixa (migration 195). */}
+            <Modal isOpen={senhaCaixaDlg.aberto} onClose={() => !senhaCaixaDlg.verificando && setSenhaCaixaDlg((x) => ({ ...x, aberto: false }))} title="Senha do caixa" size="sm">
+                <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void confirmarSenhaCaixa(); }}>
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Quem é do caixa digita a <b>própria</b> senha. O pagamento da Mesa {selectedTable?.number} fica no nome e no caixa dessa pessoa.
+                    </p>
+                    <Input
+                        label="Senha de quem é do caixa"
+                        type="password"
+                        autoFocus
+                        autoComplete="off"
+                        value={senhaCaixaDlg.senha}
+                        onChange={(e) => setSenhaCaixaDlg((x) => ({ ...x, senha: e.target.value, erro: '' }))}
+                    />
+                    {senhaCaixaDlg.erro && <p className="text-sm text-[var(--err)]" role="alert">{senhaCaixaDlg.erro}</p>}
+                    <Button type="submit" size="lg" className="w-full" isLoading={senhaCaixaDlg.verificando}>Receber pagamento</Button>
                 </form>
             </Modal>
 
@@ -6244,6 +6463,7 @@ NOTIFY pgrst, 'reload schema';`;
                     <p className="text-sm text-[var(--text-muted)]">
                         Todos os itens ainda não pagos desta mesa serão cancelados e a cozinha/bar recebe um pedido de cancelamento. Não dá para desfazer.
                     </p>
+                    {selectedTable?.funcionario && (<p className="rounded-[var(--r-md)] bg-[var(--warn)]/10 px-3 py-2 text-[13px] text-[var(--text)]" role="note">Mesa de funcionário: para não perder a baixa do estoque, receba em Cortesia em vez de cancelar. Item cancelado não sai do estoque.</p>)}
                     <Input label="Motivo (obrigatório)" placeholder="Ex.: cliente desistiu" value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)} maxLength={120} />
                     {pedidoNoTempoLivre ? (
                         <p className="text-[13px] text-[var(--text-muted)]">Lançado agora há pouco: cancela sem senha (tempo livre de {minutosLivres(store.config as any)} min).</p>
@@ -6304,8 +6524,13 @@ NOTIFY pgrst, 'reload schema';`;
             </Modal>
 
             {/* PAYMENT MODAL */}
-            <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Receber pagamento" size="lg">
+            <Modal isOpen={showPaymentModal} onClose={fecharPagamento} title="Receber pagamento" size="lg">
                 <div className="space-y-4">
+                    {autorizadorCaixa && (
+                        <p className="rounded-[var(--r-md)] bg-[var(--brand-soft)] px-3 py-2 text-[14px] text-[var(--text)]">
+                            Recebendo com a senha de <b>{autorizadorCaixa.name}</b>: o pagamento fica no nome e no caixa dessa pessoa.
+                        </p>
+                    )}
                     {/* ODARA 02/11 (Herica): o caixa chega aqui direto da fila do Caixa e não achava como cancelar/mover item.
                         Os botões abrem os MESMOS diálogos da comanda (senha de quem autoriza, motivo); a janela de pagamento
                         fecha antes para o diálogo ficar na frente, e o caixa volta com "Receber pagamento". */}
@@ -6318,19 +6543,26 @@ NOTIFY pgrst, 'reload schema';`;
                                 <summary className="cursor-pointer select-none px-3 py-2 text-[14px] font-medium text-[var(--text)]">
                                     Cancelar ou mover itens desta conta
                                 </summary>
+                                {selectedTable.funcionario && (
+                                    <div className="px-3 pb-2">
+                                    <p className="rounded-[var(--r-md)] bg-[var(--warn)]/10 px-3 py-2 text-[13px] text-[var(--text)]" role="note">
+                                        Mesa de funcionário: para não perder a baixa do estoque, receba em Cortesia em vez de cancelar. Item cancelado não sai do estoque.
+                                    </p>
+                                    </div>
+                                )}
                                 <div className="max-h-[220px] overflow-y-auto border-t border-[var(--border)]">
                                     {itensConta.map((item: any) => (
                                         <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] last:border-b-0 text-[14px]">
                                             <span className="text-[var(--text-muted)] num">{item.quantity}×</span>
                                             <span className="flex-1 min-w-0 truncate text-[var(--text)]">{getOrderItemDisplayName(item)}</span>
                                             {podeMover && (
-                                                <button type="button" onClick={() => { setShowPaymentModal(false); abrirMoverItem(item.id); }}
+                                                <button type="button" onClick={() => { fecharPagamento(); abrirMoverItem(item.id); }}
                                                     className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)] hover:text-[var(--brand)] hover:bg-[var(--surface-2)] u-motion u-press"
                                                     title="Mover para outra mesa" aria-label={`Mover ${getOrderItemDisplayName(item)} para outra mesa`}>
                                                     <ArrowRightLeft size={15} />
                                                 </button>
                                             )}
-                                            <button type="button" onClick={() => { setShowPaymentModal(false); handleDeleteItem(item.id); }}
+                                            <button type="button" onClick={() => { fecharPagamento(); handleDeleteItem(item.id); }}
                                                 className="relative hit-44 w-8 h-8 grid place-items-center rounded-full text-[var(--text-muted)] hover:text-[var(--err)] hover:bg-[var(--err)]/10 u-motion u-press"
                                                 title="Cancelar item" aria-label={`Cancelar ${getOrderItemDisplayName(item)}`}>
                                                 <Trash2 size={16} />
@@ -6372,7 +6604,8 @@ NOTIFY pgrst, 'reload schema';`;
                                 remainingToPay={remainingToPay}
                                 changeDue={changeDue}
                                 onFinish={handleFinishPayment}
-                                finishDisabled={remainingToPay > 0.01}
+                                // Pagou menos: o botão libera (com pelo menos uma forma lançada) e a diferença vira desconto, confirmado.
+                                finishDisabled={paymentMethods.length === 0 && remainingToPay > 0.01}
                                 finishLabel="Finalizar mesa"
                                 showEmitirNotaToggle={emissaoFiscalConfigurada}
                                 emitirNota={emitirNotaFiscal}
@@ -6389,6 +6622,44 @@ NOTIFY pgrst, 'reload schema';`;
                                                     ? <><Plus size={14} /> Cobrar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>
                                                     : <><Trash2 size={14} /> Tirar a taxa de {formatServiceFeeRate(serviceFeeRate)}</>}
                                             </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => { setDescontoAberto((v) => !v); setDescontoInput(''); }}
+                                            disabled={remainingToPay <= 0.01}
+                                            className="mt-2 ml-2 inline-flex items-center justify-center gap-1.5 h-8 max-sm:h-11 px-3.5 rounded-full bg-[var(--surface-2)] text-[13px] font-semibold text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--border)] disabled:opacity-50 u-motion u-press-sm"
+                                        >
+                                            <Tag size={14} /> Desconto
+                                        </button>
+                                        {descontoAberto && (
+                                            <div className="mt-3 mx-auto w-full max-w-sm bg-[var(--surface-2)] p-3 rounded-[14px] space-y-2 text-left">
+                                                <p className="text-[13px] font-semibold text-[var(--text-muted)]">
+                                                    Desconto na conta (falta pagar R$ {formatBRL(remainingToPay)})
+                                                </p>
+                                                <div className="flex gap-2">
+                                                    <SegmentedControl
+                                                        value={descontoModo}
+                                                        onChange={(v) => setDescontoModo(v as 'valor' | 'pct')}
+                                                        options={[{ value: 'valor', label: 'R$' }, { value: 'pct', label: '%' }]}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        autoComplete="off"
+                                                        autoFocus
+                                                        aria-label={descontoModo === 'pct' ? 'Desconto em percentual' : 'Desconto em reais'}
+                                                        placeholder={descontoModo === 'pct' ? 'Ex.: 10' : 'Ex.: 5,00'}
+                                                        value={descontoInput}
+                                                        onChange={(e) => setDescontoInput(e.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); aplicarDesconto(); } }}
+                                                        className="flex-1 min-w-0 h-11 px-3 rounded-[var(--r-md)] bg-[var(--surface)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 text-base sm:text-[15px] num"
+                                                    />
+                                                </div>
+                                                <div className="flex gap-2 justify-end">
+                                                    <button type="button" onClick={() => setDescontoAberto(false)} className="h-9 max-sm:h-11 px-3.5 rounded-full bg-[var(--surface)] text-[13px] font-semibold text-[var(--text-muted)] u-motion u-press-sm">Cancelar</button>
+                                                    <button type="button" onClick={aplicarDesconto} className="h-9 max-sm:h-11 px-3.5 rounded-full bg-[var(--brand)] text-[13px] font-semibold text-white u-motion u-press-sm">Dar desconto</button>
+                                                </div>
+                                            </div>
                                         )}
                                         {/* Taxas como produto (migration 138): só quem tem caixa vê e
                                             lança. Cada uma vira item da conta com o código do Omie

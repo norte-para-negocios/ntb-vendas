@@ -3,11 +3,11 @@
 import type { Analise, ContaResumo } from './analiseVendas';
 import { brl, cabecalho, esc, rodape, tabela, relativas, type RelatorioMeta } from './relatorioHtml';
 
-export type SecaoRelatorio = 'resumo' | 'dias' | 'horas' | 'produtos' | 'categorias' | 'formas' | 'equipe' | 'mesas' | 'contas';
-export const TODAS_AS_SECOES: SecaoRelatorio[] = ['resumo', 'dias', 'horas', 'categorias', 'produtos', 'formas', 'equipe', 'mesas', 'contas'];
+export type SecaoRelatorio = 'resumo' | 'dias' | 'horas' | 'produtos' | 'categorias' | 'formas' | 'cartoes' | 'equipe' | 'mesas' | 'contas';
+export const TODAS_AS_SECOES: SecaoRelatorio[] = ['resumo', 'dias', 'horas', 'categorias', 'produtos', 'formas', 'cartoes', 'equipe', 'mesas', 'contas'];
 export const TITULO_DA_SECAO: Record<SecaoRelatorio, string> = {
   resumo: 'Resumo', dias: 'Faturamento por dia', horas: 'Faturamento por hora', produtos: 'Produtos vendidos', categorias: 'Categorias',
-  formas: 'Formas de pagamento', equipe: 'Equipe (quem lançou)', mesas: 'Mesas e balcão', contas: 'Contas',
+  formas: 'Formas de pagamento', cartoes: 'Cartões por bandeira', equipe: 'Equipe (quem lançou)', mesas: 'Mesas e balcão', contas: 'Contas',
 };
 // Tabelas longas (todos os produtos, todas as contas) podem quebrar de página.
 export const ESTILO_COMPLETO = `table.longa { break-inside: auto; } table.longa tr { break-inside: avoid; } td.itens { color: #4A4E63; font-size: 9.5px; }`;
@@ -49,6 +49,14 @@ function secao(a: Analise, s: SecaoRelatorio): string {
       a.categorias.map((c, i) => ({ cels: [c.nome, String(c.qtd), brl(c.total), pct(c.pct)], barra: rel(a.categorias)[i] })));
     case 'formas': return a.formas.length === 0 ? `<h2>${t}</h2>${VAZIO}` : tabela(t, [{ rotulo: 'Forma' }, { rotulo: 'Total', direita: true }, { rotulo: 'Contas', direita: true }],
       a.formas.map((f, i) => ({ cels: [f.rotulo, brl(f.total), String(f.contas)], barra: rel(a.formas)[i] })));
+    case 'cartoes': {
+      // Mesmo bloco do relatório do dia (relatorioHtml.ts): crédito e débito lado a lado.
+      const { credito, debito } = a.cartoes;
+      if (credito.linhas.length === 0 && debito.linhas.length === 0) return `<h2>${t}</h2>${VAZIO}`;
+      const grupo = (titulo: string, rotuloTotal: string, g: typeof credito) => (g.linhas.length === 0 ? `<h2>${titulo}</h2>${VAZIO}` : tabela(titulo, [{ rotulo: 'Bandeira' }, { rotulo: 'Qtd', direita: true }, { rotulo: 'Total', direita: true }],
+        g.linhas.map((l, i) => ({ cels: [l.rotulo, String(l.qtd), brl(l.total)], barra: rel(g.linhas)[i] })), [rotuloTotal, String(g.qtd), brl(g.total)]));
+      return `<div class="duas"><div>${grupo('Cartões por bandeira · crédito', 'TOTAL CRÉDITO', credito)}</div><div>${grupo('Cartões por bandeira · débito', 'TOTAL DÉBITO', debito)}</div></div>`;
+    }
     case 'equipe': return a.equipe.length === 0 ? `<h2>${t}</h2>${VAZIO}` : tabela(t, [{ rotulo: 'Quem lançou' }, { rotulo: 'Itens', direita: true }, { rotulo: 'Contas', direita: true }, { rotulo: 'Total', direita: true }],
       a.equipe.map((e, i) => ({ cels: [e.nome, String(e.itens), String(e.contas), brl(e.total)], barra: rel(a.equipe)[i] })));
     case 'mesas': return a.mesas.length === 0 ? `<h2>${t}</h2>${VAZIO}` : longa(tabela(t, [{ rotulo: 'Local' }, { rotulo: 'Contas', direita: true }, { rotulo: 'Total', direita: true }, { rotulo: 'Ticket', direita: true }],

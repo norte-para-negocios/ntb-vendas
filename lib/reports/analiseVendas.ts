@@ -7,6 +7,7 @@ import type { Order } from '@/types';
 import { CORTESIA, chaveContaPaga, cortesiaDaVenda, decomporVenda, metodosDoPagamento, valorFaturado, type ConfigTaxa } from '../faturamento';
 import { getOrderItemDisplayName, getPaymentMethodLabel } from '../labels';
 import type { FiltroCategoria } from '../rankingProdutos';
+import { chaveDoCartao, resumoCartoes, somarCartao, type CartoesPorBandeira, type SomaCartoes } from './cartoes';
 
 export type FiltrosRelatorio = { categoria: FiltroCategoria; operador: string | null; forma: string | null; tipo: 'todos' | 'mesa' | 'balcao' };
 export const FILTROS_VAZIOS: FiltrosRelatorio = { categoria: { tipo: 'todas' }, operador: null, forma: null, tipo: 'todos' };
@@ -26,6 +27,8 @@ export type Analise = {
   produtos: LinhaProduto[];
   categorias: { id: string; nome: string; qtd: number; total: number; pct: number }[];
   formas: { chave: string; rotulo: string; total: number; contas: number }[];
+  /** Cartões por bandeira (crédito e débito separados), das mesmas contas de `formas`. */
+  cartoes: CartoesPorBandeira;
   equipe: { nome: string; itens: number; total: number; contas: number }[];
   mesas: { rotulo: string; contas: number; total: number; ticket: number }[];
   contas: ContaResumo[];
@@ -108,6 +111,7 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
   const semana = new Map<number, { total: number; contas: number }>();
   const prods = new Map<string, LinhaProduto & { _contas: Set<string> }>();
   const formas = new Map<string, { total: number; contas: number }>();
+  const cartoes: SomaCartoes = new Map();
   const equipe = new Map<string, { itens: number; total: number; _contas: Set<string> }>();
   const mesas = new Map<string, { contas: number; total: number }>();
   const soma = <K,>(m: Map<K, { total: number; contas: number }>, key: K, v: number) => { const c = m.get(key) ?? { total: 0, contas: 0 }; c.total += v; c.contas += 1; m.set(key, c); };
@@ -129,6 +133,7 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
     for (const m of metodosDoPagamento(o) ?? []) {
       if (!m.method || m.method === CORTESIA) continue;
       const c = formas.get(m.method) ?? { total: 0, contas: 0 }; c.total += Number(m.amount) || 0; formas.set(m.method, c);
+      somarCartao(cartoes, m);
     }
     for (const fm of new Set(formasDa(o))) { const c = formas.get(fm)!; c.contas += 1; }
     for (const i of l.itens) {
@@ -169,6 +174,7 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
     produtos,
     categorias: [...cats.values()].map((c) => ({ ...c, total: arred(c.total), pct: somaProd ? arred((c.total / somaProd) * 100) : 0 })).sort((a, b) => b.total - a.total),
     formas: [...formas.entries()].map(([chave, v]) => ({ chave, rotulo: getPaymentMethodLabel(chave), total: arred(v.total), contas: v.contas })).sort((a, b) => b.total - a.total),
+    cartoes: resumoCartoes(cartoes),
     equipe: [...equipe.entries()].map(([nome, v]) => ({ nome, itens: v.itens, total: arred(v.total), contas: v._contas.size })).sort((a, b) => b.total - a.total),
     mesas: [...mesas.entries()].map(([rotulo, v]) => ({ rotulo, contas: v.contas, total: arred(v.total), ticket: arred(v.total / v.contas) })).sort((a, b) => b.total - a.total),
     contas: contasVendidas.map((l) => resumoDaConta(l.o, l.itens, l.valor)).sort((a, b) => b.quando.localeCompare(a.quando)),
@@ -176,7 +182,7 @@ export function analisarVendas(vendas: Order[], categorias: CategoriaRel[], f: F
 }
 
 /** Contas para o clique numa linha do painel (mesmos filtros + o recorte clicado). */
-export type Recorte = { produto?: string; categoria?: string; forma?: string; pessoa?: string; local?: string; dia?: string; hora?: number; diaSemana?: number; /** Mesma pessoa com nomes diferentes (aba Equipe): decide pelo nome cru de quem lançou. */ pessoaOk?: (nomeCru: string) => boolean };
+export type Recorte = { produto?: string; categoria?: string; forma?: string; /** Chave "CREDIT|visa" (lib/reports/cartoes.ts). */ cartao?: string; pessoa?: string; local?: string; dia?: string; hora?: number; diaSemana?: number; /** Mesma pessoa com nomes diferentes (aba Equipe): decide pelo nome cru de quem lançou. */ pessoaOk?: (nomeCru: string) => boolean };
 export function contasDoRecorte(vendas: Order[], categorias: CategoriaRel[], f: FiltrosRelatorio, r: Recorte): ContaResumo[] {
   const { linhas, modoItens } = aplicar(vendas, categorias, f);
   const out: ContaResumo[] = [];
@@ -189,6 +195,7 @@ export function contasDoRecorte(vendas: Order[], categorias: CategoriaRel[], f: 
     if (r.diaSemana != null && t.dow !== r.diaSemana) continue;
     if (r.local && localDa(o) !== r.local) continue;
     if (r.forma && !formasDa(o).includes(r.forma)) continue;
+    if (r.cartao && !(metodosDoPagamento(o) ?? []).some((m) => chaveDoCartao(m) === r.cartao)) continue;
     let itens = l.itens;
     if (r.produto) itens = itens.filter((i) => chaveDoProduto(i) === r.produto);
     if (r.categoria) itens = itens.filter((i) => (i.product?.category_id || SEM_CATEGORIA) === r.categoria);

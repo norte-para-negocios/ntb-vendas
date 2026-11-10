@@ -2,10 +2,11 @@
 // mapa de calor e rankings. Tudo clicável abre as contas por trás do número.
 'use client';
 import React, { useMemo } from 'react';
-import { CalendarDays, Clock, Crown, Flame, Layers, Receipt, ShoppingBag, Store, TrendingUp, Users, Wallet } from 'lucide-react';
+import { CalendarDays, Clock, CreditCard, Crown, Flame, Layers, Receipt, ShoppingBag, Store, TrendingUp, Users, Wallet } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { diasDoPeriodo, periodoAnterior } from '@/lib/reports/periodo';
-import { AreaComparada, Barras, CabecalhoSecao, KpiHero, Linha, MapaCalor, Ranking, Rosca, brl, cardCls } from './graficos';
+import { AreaComparada, Barras, CabecalhoSecao, KpiHero, Linha, MapaCalor, Ranking, Rosca, SemDados, brl, cardCls } from './graficos';
+import type { GrupoCartao } from '@/lib/reports/cartoes';
 import type { PropsAba } from './tipos';
 
 const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
@@ -21,6 +22,26 @@ function Pico({ icone, rotulo, valor, sub, onClick }: { icone: React.ReactNode; 
       {sub && <p className="text-[13px] text-[var(--text-muted)] num truncate">{sub}</p>}
     </button>
   );
+}
+
+const pagamentos = (n: number) => `${n} ${n === 1 ? 'pagamento' : 'pagamentos'}`;
+
+// Cartões por bandeira (10/11/2026): crédito e débito separados, cada bandeira com quantidade e total.
+function CartoesPorBandeira({ credito, debito, abrir }: { credito: GrupoCartao; debito: GrupoCartao; abrir: (titulo: string, chave: string) => void }) {
+  if (credito.linhas.length === 0 && debito.linhas.length === 0) return <SemDados texto="Nenhum pagamento em cartão neste período" />;
+  const grupo = (titulo: string, tipo: string, g: GrupoCartao) => (
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-3 px-3 mb-1">
+        <span className="text-[12px] font-semibold uppercase tracking-[0.03em] text-[var(--text-muted)]">{titulo}</span>
+        <span className="text-[13px] text-[var(--text-muted)] num">{pagamentos(g.qtd)} · <b className="text-[var(--text)]">{brl(g.total)}</b></span>
+      </div>
+      {g.linhas.length === 0 ? <SemDados texto={`Nada no ${tipo}`} /> : (
+        <Ranking dados={g.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, valor: brl(l.total), extra: pagamentos(l.qtd), frac: l.total / Math.max(0.01, g.linhas[0]?.total ?? 1) }))}
+          onClick={(c) => abrir(`Contas pagas com ${g.linhas.find((l) => l.chave === c)?.rotulo ?? ''} (${tipo})`, c)} />
+      )}
+    </div>
+  );
+  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{grupo('Crédito', 'crédito', credito)}{grupo('Débito', 'débito', debito)}</div>;
 }
 
 export const AbaVisaoGeral: React.FC<PropsAba> = ({ analise, analiseAnt, periodo, umDia, abrirLista, pdf, irParaDia, irParaPessoa, filtrarCategoria }) => {
@@ -94,6 +115,10 @@ export const AbaVisaoGeral: React.FC<PropsAba> = ({ analise, analiseAnt, periodo
           <Rosca dados={analise.formas.map((f) => ({ chave: f.chave, rotulo: `${f.rotulo} · ${f.contas}`, valor: f.total }))} onClick={(c) => abrirLista(`Contas pagas em ${analise.formas.find((f) => f.chave === c)?.rotulo ?? c}`, { forma: c })} />
         </Card>
         <Card className={cardCls}>
+          <CabecalhoSecao icone={<CreditCard size={17} className="text-[var(--text-muted)]" />} titulo="Cartões por bandeira" sub="Crédito e débito separados · toque para ver as contas" onPdf={() => pdf(['cartoes'])} />
+          <CartoesPorBandeira credito={analise.cartoes.credito} debito={analise.cartoes.debito} abrir={(titulo, chave) => abrirLista(titulo, { cartao: chave })} />
+        </Card>
+        <Card className={cardCls}>
           <CabecalhoSecao icone={<Layers size={17} className="text-[var(--text-muted)]" />} titulo="Vendas por categoria" sub="Toque para filtrar o relatório por ela" onPdf={() => pdf(['categorias'])} />
           <Rosca dados={analise.categorias.map((c) => ({ chave: c.id, rotulo: c.nome, valor: c.total }))} onClick={(id) => (id === '_sem' ? abrirLista('Vendas sem categoria', { categoria: '_sem' }) : filtrarCategoria(id))} />
         </Card>
@@ -116,7 +141,7 @@ export const AbaVisaoGeral: React.FC<PropsAba> = ({ analise, analiseAnt, periodo
             <Barras dados={[1, 2, 3, 4, 5, 6, 0].map((d) => { const x = analise.porDiaSemana.find((y) => y.dia === d); return { rotulo: DIAS_SEMANA[d].slice(0, 3), valor: x?.total ?? 0, extra: `${x?.contas ?? 0} contas` }; })} altura={220} />
           </Card>
         )}
-        <Card className={cardCls}>
+        <Card className={`${cardCls} xl:col-span-2`}>
           <CabecalhoSecao icone={<TrendingUp size={17} className="text-[var(--text-muted)]" />} titulo={umDia ? 'Ticket médio por hora' : 'Ticket médio por dia'} sub={`Média do período: ${brl(k.ticket)}`} />
           <Linha dados={umDia ? analise.porHora.map((h) => ({ rotulo: hh(h.hora), valor: Math.round((h.total / h.contas) * 100) / 100 })) : analise.porDia.map((d) => ({ rotulo: diaCurto(d.dia), valor: d.ticket }))} />
         </Card>
