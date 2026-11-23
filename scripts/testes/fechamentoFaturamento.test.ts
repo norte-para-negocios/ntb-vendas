@@ -24,6 +24,7 @@ assert.equal(p.itens[0].valor, 28);
 assert.equal(p.valor, 50);
 assert.equal(p.pagamentos[0].metodo, 'CREDIT');
 assert.equal(p.pagamentos[0].bandeira, 'elo');
+assert.equal(p.pagamentos[0].maquininha, null); // sem acquirer = null
 assert.equal(p.operador, 'Ana');
 assert.equal(p.nota, null);
 
@@ -122,3 +123,9 @@ assert.equal(parcial.pagamentos.length, 1);
 assert.equal(Math.round((parcial.itens.reduce((s, l) => s + l.valor, 0)) * 100) / 100, 30);
 
 console.log('fechamentoFaturamento: ok');
+
+// Maquininha do cartão (acquirer) vai por pagamento ao ERP.
+const maq = montarFechamento(pedido({ payment_details: { methods: [{ method: 'CREDIT', amount: 50, brand: 'visa', acquirer: 'getnet' }, { method: 'PIX', amount: 10 }], operador_nome: 'Ana' } }), [item()], [], null);
+assert.equal(maq.pagamentos[0].maquininha, 'getnet');
+assert.equal(maq.pagamentos[1].maquininha, null);
+console.log('ok maquininha');

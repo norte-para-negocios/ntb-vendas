@@ -24,7 +24,7 @@ export interface PayloadFechamento {
   valor: number; desconto: number; taxa: number; /** Cortesia (já descontada dos itens e da taxa; 08/10/2026). */ cortesia?: number; operador: string | null;
   nota: { chave: string | null; numero: number | null; serie: number | null; status: string | null } | null;
   itens: { linha: number; codigo: string; nome: string; quantidade: number; valorUnitario: number; desconto: number; valor: number; ncm: string | null; componentes?: string[] }[];
-  pagamentos: { sequencia: number; metodo: string; valor: number; bandeira: string | null }[];
+  pagamentos: { sequencia: number; metodo: string; valor: number; bandeira: string | null; /** Maquininha do cartão (getnet, rede, ...); null quando não informada. */ maquininha: string | null }[];
 }
 
 const arred = (v: number) => Math.round(v * 100) / 100;
@@ -101,7 +101,7 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
     }
   }
 
-  const metodos = Array.isArray(detalhes.methods) ? (detalhes.methods as { method?: string; amount?: number; brand?: string | null }[]) : [];
+  const metodos = Array.isArray(detalhes.methods) ? (detalhes.methods as { method?: string; amount?: number; brand?: string | null; acquirer?: string | null }[]) : [];
   // Cortesia não é faturamento (08/10/2026): sai dos itens e da taxa na proporção do valor, como o cupom acima,
   // e não vai como pagamento. Venda 100% cortesia chega ao Estoque com valor 0 (a baixa de estoque continua pela OP).
   const cortesia = arred(metodos.filter((m) => m?.method === 'COURTESY').reduce((s2, m) => s2 + (Number(m.amount) || 0), 0));
@@ -120,7 +120,7 @@ export function montarFechamento(pedido: PedidoFechamento, itens: ItemFechamento
     taxa = arred(out.filter((_, idx) => linhas[idx]?.product?.fee_type || idx === idxTaxaAuto).reduce((s2, l) => s2 + l.valor, 0));
   }
   const pagamentos = metodos.filter((m) => m && Number(m.amount) > 0 && m.method !== 'COURTESY').map((m, i) => ({
-    sequencia: i + 1, metodo: String(m.method ?? 'OUTRO'), valor: arred(Number(m.amount)), bandeira: m.brand ?? null,
+    sequencia: i + 1, metodo: String(m.method ?? 'OUTRO'), valor: arred(Number(m.amount)), bandeira: m.brand ?? null, maquininha: m.acquirer ?? null,
   }));
 
   return {
