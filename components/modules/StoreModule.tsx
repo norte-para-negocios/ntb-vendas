@@ -82,7 +82,7 @@ import { podeVerCaixasDaEquipe } from '@/lib/caixasAoVivo';
 import { roleCan, roleCanOr } from '@/lib/rolePermissions';
 import { dentroDoTempoLivre, limitarQuantidade, minutosLivres } from '@/lib/cancelamentoLivre';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote, clienteNoTicket } from '@/lib/labels';
+import { getRoleLabel, getTableStatusLabel, getPaymentMethodLabel, getOrderItemDisplayName, PRODUCT_TAGS, getTagDisplay, CARD_BRAND_LABELS, getCardBrandLabel, MAQUININHA_LABELS, getMaquininhaLabel, getCardTotalLabel, TABLE_OUT_OF_JURISDICTION_LABEL, parseItemNote, clienteNoTicket } from '@/lib/labels';
 import logoNorteVendas from '@/components/assets/norte-vendas-logo-branco.png';
 import { setorDoItem } from '@/lib/setores';
 import { chavePreConta, preContaAutomaticaLigada } from '@/lib/preConta';
@@ -2752,11 +2752,16 @@ const StoreTableMenu: React.FC<{ storeId: string, onAddItem: (product: Product, 
 // pro próprio bloco de destinatário.
 const PaymentCaptureFields: React.FC<{
     total: number;
-    methods: { method: string; amount: number; brand?: string }[];
+    methods: { method: string; amount: number; brand?: string; acquirer?: string }[];
     currentMethod: string;
     onMethodChange: (m: string) => void;
     currentBrand: string;
     onBrandChange: (b: string) => void;
+    // Maquininha do cartão (stores.maquininhas, migration 195). Lista vazia = loja sem maquininha configurada: nada aparece, tudo como
+    // sempre foi. Com 1, ela já vem marcada; com 2 ou mais a escolha é obrigatória (handleAddPayment trava), como a bandeira.
+    maquininhas?: string[];
+    currentAcquirer?: string;
+    onAcquirerChange?: (a: string) => void;
     currentAmount: string;
     onAmountChange: (a: string) => void;
     onAddPayment: () => void;
@@ -2785,6 +2790,7 @@ const PaymentCaptureFields: React.FC<{
     children?: React.ReactNode;
 }> = ({
     total, methods, currentMethod, onMethodChange, currentBrand, onBrandChange,
+    maquininhas = [], currentAcquirer = '', onAcquirerChange,
     currentAmount, onAmountChange, onAddPayment, onRemovePayment, remainingToPay,
     changeDue, onFinish, finishDisabled, finishLabel,
     showEmitirNotaToggle, emitirNota, onEmitirNotaChange, serviceFeeToggle, children,
@@ -2846,6 +2852,31 @@ const PaymentCaptureFields: React.FC<{
             </div>
         )}
 
+        {/* Maquininha — só pra cartão e só se a loja configurou maquininhas (Administração > Regras do caixa). */}
+        {(currentMethod === 'CREDIT' || currentMethod === 'DEBIT') && maquininhas.length > 0 && (
+            <div className="animate-fade-in">
+                <p className="text-[13px] font-semibold text-[var(--text-muted)] mb-2">Maquininha</p>
+                <div className="flex flex-wrap gap-2">
+                    {maquininhas.map((id) => {
+                        const marcada = (currentAcquirer || (maquininhas.length === 1 ? maquininhas[0] : '')) === id;
+                        return (
+                            <button
+                                key={id}
+                                onClick={() => onAcquirerChange?.(maquininhas.length > 1 && currentAcquirer === id ? '' : id)}
+                                className={`h-9 max-sm:h-11 px-4 rounded-full text-[13px] font-semibold u-motion u-press-sm ${
+                                    marcada
+                                    ? 'bg-[var(--brand-fill)] text-white'
+                                    : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'
+                                }`}
+                            >
+                                {getMaquininhaLabel(id)}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
         {/* Amount Input */}
         <div className="flex gap-2">
             <div className="flex-1 relative">
@@ -2876,6 +2907,7 @@ const PaymentCaptureFields: React.FC<{
                                 <span className="font-semibold text-[var(--text)]">
                                     {getPaymentMethodLabel(p.method)}
                                     {p.brand && <span className="font-normal text-[var(--text-muted)]"> · {getCardBrandLabel(p.brand)}</span>}
+                                    {p.acquirer && <span className="font-normal text-[var(--text-muted)]"> · {getMaquininhaLabel(p.acquirer)}</span>}
                                 </span>
                             </div>
                             <div className="flex items-center gap-3">
@@ -3536,11 +3568,13 @@ const TablesView: React.FC<{
     // preenchido quando currentPaymentMethod é CREDIT/DEBIT (ver seletor de
     // bandeira abaixo). Aditivo: cada entrada continua valendo como estava
     // (método + valor) pra quem não usa cartão.
-    const [paymentMethods, setPaymentMethods] = useState<{ method: string, amount: number, brand?: string }[]>([]);
+    const [paymentMethods, setPaymentMethods] = useState<{ method: string, amount: number, brand?: string, acquirer?: string }[]>([]);
     const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
     const [removedServiceFees, setRemovedServiceFees] = useState<Set<string>>(new Set());
     const [currentPaymentMethod, setCurrentPaymentMethod] = useState('CREDIT');
     const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
+    // Maquininha do cartão em lançamento ('' = ainda não escolhida; com 1 maquininha na loja ela vale sozinha).
+    const [currentPaymentAcquirer, setCurrentPaymentAcquirer] = useState('');
 
     // Achado real (2026-09-11, ao atender o pedido da reunião de 10/09 de
     // "tirar os 10% mais fácil"): existiam DUAS fontes de verdade pra taxa
@@ -4171,6 +4205,7 @@ NOTIFY pgrst, 'reload schema';`;
         setCurrentPaymentAmount(summary.total.toFixed(2));
         setCurrentPaymentMethod('CREDIT');
         setCurrentPaymentBrand('');
+        setCurrentPaymentAcquirer('');
         setPaymentTab('payment');
         setPaymentPeople(1);
         setPaymentSelectedItems({});
@@ -4326,12 +4361,21 @@ NOTIFY pgrst, 'reload schema';`;
             toast.error('Escolha a bandeira do cartão antes de lançar o pagamento.');
             return;
         }
+        // Maquininha (migration 195): loja com 2+ maquininhas exige a escolha; com 1 vale ela; com 0 nada muda.
+        const maquininhasLoja = store.maquininhas ?? [];
+        const acquirerEscolhida = isCard ? (currentPaymentAcquirer || (maquininhasLoja.length === 1 ? maquininhasLoja[0] : '')) : '';
+        if (isCard && maquininhasLoja.length > 1 && !acquirerEscolhida) {
+            toast.error('Escolha a maquininha antes de lançar o pagamento.');
+            return;
+        }
         setPaymentMethods(prev => [...prev, {
             method: currentPaymentMethod,
             amount,
             ...(isCard ? { brand: currentPaymentBrand } : {}),
+            ...(acquirerEscolhida ? { acquirer: acquirerEscolhida } : {}),
         }]);
         setCurrentPaymentBrand('');
+        setCurrentPaymentAcquirer('');
 
         // Calculate remaining
         const summary = selectedTable ? getTableSummary(selectedTable.id) : { total: 0 };
@@ -4350,7 +4394,7 @@ NOTIFY pgrst, 'reload schema';`;
     // setPaymentMethods() e handleFinishPayment() em sequência no mesmo
     // clique leria o state ANTIGO (setState é assíncrono), por isso o
     // atalho nunca passa pela lista — monta o método/valor direto aqui.
-    const handleFinishPayment = async (methodsOverride?: { method: string; amount: number; brand?: string }[]) => {
+    const handleFinishPayment = async (methodsOverride?: { method: string; amount: number; brand?: string; acquirer?: string }[]) => {
         if (isAberto) { avisarSoComLogin(); return; }
         if (!selectedTable) return;
         if (isFinishingRef.current) return;
@@ -6365,6 +6409,9 @@ NOTIFY pgrst, 'reload schema';`;
                                 onMethodChange={setCurrentPaymentMethod}
                                 currentBrand={currentPaymentBrand}
                                 onBrandChange={setCurrentPaymentBrand}
+                                maquininhas={store.maquininhas ?? []}
+                                currentAcquirer={currentPaymentAcquirer}
+                                onAcquirerChange={setCurrentPaymentAcquirer}
                                 currentAmount={currentPaymentAmount}
                                 onAmountChange={setCurrentPaymentAmount}
                                 onAddPayment={handleAddPayment}
@@ -7085,10 +7132,12 @@ const CounterView: React.FC<{
     // (paymentMethods/currentPaymentAmount/currentPaymentMethod/
     // currentPaymentBrand), reaproveitado via PaymentCaptureFields.
     const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
-    const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: number; brand?: string }[]>([]);
+    const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: number; brand?: string; acquirer?: string }[]>([]);
     const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
     const [currentPaymentMethod, setCurrentPaymentMethod] = useState('CREDIT');
     const [currentPaymentBrand, setCurrentPaymentBrand] = useState('');
+    // Maquininha do cartão em lançamento ('' = ainda não escolhida; com 1 maquininha na loja ela vale sozinha).
+    const [currentPaymentAcquirer, setCurrentPaymentAcquirer] = useState('');
 
     // Venda de balcão registrada pela EQUIPE (2026-09-26, virada do Sertão pra
     // cardápio vitrine: sem pedido do cliente pelo QR, a aba Balcão ficava
@@ -7296,7 +7345,7 @@ const CounterView: React.FC<{
     // idêntico ao de sempre.
     const closeOrderNow = async (
         orderId: string,
-        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string }[]; emitir_nota?: boolean },
+        paymentData?: { total: number; methods: { method: string; amount: number; brand?: string; acquirer?: string }[]; emitir_nota?: boolean },
         destinatario?: { cpfCnpj: string; nome: string },
     ) => {
         try {
@@ -7344,6 +7393,7 @@ const CounterView: React.FC<{
         setCurrentPaymentAmount(getOrderTotal(order).toFixed(2));
         setCurrentPaymentMethod('CREDIT');
         setCurrentPaymentBrand('');
+        setCurrentPaymentAcquirer('');
         setDestCpfCnpj('');
         setDestNome('');
         // Task 4: sempre nasce ligado, mesmo motivo de TablesView.
@@ -7488,12 +7538,21 @@ const CounterView: React.FC<{
             toast.error('Escolha a bandeira do cartão antes de lançar o pagamento.');
             return;
         }
+        // Maquininha (migration 195): loja com 2+ maquininhas exige a escolha; com 1 vale ela; com 0 nada muda.
+        const maquininhasLoja = store.maquininhas ?? [];
+        const acquirerEscolhida = isCard ? (currentPaymentAcquirer || (maquininhasLoja.length === 1 ? maquininhasLoja[0] : '')) : '';
+        if (isCard && maquininhasLoja.length > 1 && !acquirerEscolhida) {
+            toast.error('Escolha a maquininha antes de lançar o pagamento.');
+            return;
+        }
         setPaymentMethods(prev => [...prev, {
             method: currentPaymentMethod,
             amount,
             ...(isCard ? { brand: currentPaymentBrand } : {}),
+            ...(acquirerEscolhida ? { acquirer: acquirerEscolhida } : {}),
         }]);
         setCurrentPaymentBrand('');
+        setCurrentPaymentAcquirer('');
 
         const currentTotalPaid = paymentMethods.reduce((acc, p) => acc + p.amount, 0) + amount;
         const remaining = Math.max(0, paymentTotalDue - currentTotalPaid);
@@ -7507,7 +7566,7 @@ const CounterView: React.FC<{
     // Fase 2, Task 5 (plano "Fora do Cardápio"): `methodsOverride` só existe
     // pro atalho de 1 toque — ver comentário equivalente em
     // TablesView.handleFinishPayment pro porquê (setState é assíncrono).
-    const handleFinishCounterPayment = async (methodsOverride?: { method: string; amount: number; brand?: string }[]) => {
+    const handleFinishCounterPayment = async (methodsOverride?: { method: string; amount: number; brand?: string; acquirer?: string }[]) => {
         if (!paymentOrder) return;
         if (isFinishingRef.current) return;
         isFinishingRef.current = true;
@@ -8102,6 +8161,9 @@ const CounterView: React.FC<{
                     onMethodChange={setCurrentPaymentMethod}
                     currentBrand={currentPaymentBrand}
                     onBrandChange={setCurrentPaymentBrand}
+                                maquininhas={store.maquininhas ?? []}
+                                currentAcquirer={currentPaymentAcquirer}
+                                onAcquirerChange={setCurrentPaymentAcquirer}
                     currentAmount={currentPaymentAmount}
                     onAmountChange={setCurrentPaymentAmount}
                     onAddPayment={handleAddPayment}

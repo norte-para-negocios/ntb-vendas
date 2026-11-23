@@ -1,6 +1,6 @@
 // lib/omie/nota-fiscal.ts
 import { omieRequest } from './client';
-import type { ItemNota, PagamentoNota } from '@/lib/fiscal/xml';
+import { pagamentosDoXml, type ItemNota, type PagamentoNota } from '@/lib/fiscal/xml';
 
 export interface IncluirNfcePayload {
   chNFe: string;
@@ -10,7 +10,8 @@ export interface IncluirNfcePayload {
   hEmi: string;
   tpAmb: 1 | 2;
   itens: { cProd: string; xProd: string; ncm: string; cfop: string; qCom: number; vUnCom: number }[];
-  pagamentos: { tPag: string; vPag: number }[];
+  /** Mesma ordem dos <detPag> do XML (a posição é a chave do título `nfce<nNF>-<n>` no Omie). method/brand/acquirer só em cartão. */
+  pagamentos: { tPag: string; vPag: number; method?: string; brand?: string; acquirer?: string }[];
   nfceXml: string;
   nfceMd5: string;
   nfceProt: string;
@@ -66,6 +67,8 @@ export function montarPayloadIncluirNfce(args: {
   valorTotal: number;
 }): IncluirNfcePayload {
   const { dEmi, hEmi } = formatarDataHoraBR(args.dataEmissao);
+  // Mesmo total de produtos do XML (soma dos itens arredondados item a item), para a lista de pagamentos sair idêntica aos <detPag>.
+  const vProdTotal = args.itens.reduce((acc, i) => acc + Number((i.qCom * i.vUnCom).toFixed(2)), 0);
 
   return {
     chNFe: args.chave,
@@ -82,7 +85,13 @@ export function montarPayloadIncluirNfce(args: {
       qCom: i.qCom,
       vUnCom: i.vUnCom,
     })),
-    pagamentos: args.pagamentos.map((p) => ({ tPag: tPagDoMetodo(p.method), vPag: p.amount })),
+    pagamentos: pagamentosDoXml(args.pagamentos, vProdTotal).lista.map((p) => ({
+      tPag: tPagDoMetodo(p.method),
+      vPag: p.amount,
+      ...(p.method === 'CREDIT' || p.method === 'DEBIT' ? { method: p.method } : {}),
+      ...(p.brand ? { brand: p.brand } : {}),
+      ...(p.acquirer ? { acquirer: p.acquirer } : {}),
+    })),
     nfceXml: args.nfeProcXml,
     nfceMd5: args.nfceMd5,
     nfceProt: args.protocolo,

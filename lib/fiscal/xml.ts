@@ -44,6 +44,29 @@ export interface PagamentoNota {
   method: string; // 'CASH' | 'CREDIT' | 'DEBIT' | 'PIX' | 'COURTESY' — ver lib/labels.ts
   amount: number;
   brand?: string; // 'visa'|'mastercard'|'elo'|'amex'|'hipercard'|'outro' — ver CARD_BRAND_LABELS em lib/labels.ts
+  /** Maquininha do cartão ('getnet'|'rede'|…, ver MAQUININHA_LABELS em lib/labels.ts). Não vai no XML; só no envio ao Omie. */
+  acquirer?: string;
+}
+
+/**
+ * Lista de pagamentos exatamente como sairão nos `<detPag>` do XML (mesma ordem, mesmos valores): sem cortesia nem valor 0, e o
+ * último absorve o resto de arredondamento. Fonte única do XML e do envio ao Omie (a posição do pagamento é a chave do título
+ * `nfce<nNF>-<n>` do Omie). `vOutro` é a taxa embutida (pago - produtos). Venda 100% cortesia devolve uma só linha COURTESY.
+ */
+export function pagamentosDoXml(pagamentos: PagamentoNota[], vProdTotal: number): { lista: PagamentoNota[]; vOutro: number } {
+  const pagosReais = pagamentos.filter((p) => p.method !== 'COURTESY' && p.amount > 0);
+  if (pagosReais.length === 0) return { lista: [{ method: 'COURTESY', amount: Number(vProdTotal.toFixed(2)) }], vOutro: 0 };
+  const totalReal = pagosReais.reduce((sum, p) => sum + p.amount, 0);
+  const vOutro = Math.max(0, Number((totalReal - vProdTotal).toFixed(2)));
+  let acumulado = 0;
+  const lista = pagosReais.map((p, idx) => {
+    const amount = idx === pagosReais.length - 1
+      ? Number((vProdTotal + vOutro - acumulado).toFixed(2))
+      : Number(p.amount.toFixed(2));
+    acumulado += amount;
+    return { ...p, amount };
+  });
+  return { lista, vOutro };
 }
 
 // cStat=391 "Rejeicao: Nao informados os dados do cartao de credito/debito"
@@ -346,26 +369,16 @@ export function montarXmlNota(params: MontarXmlParams): {
   let pagXml: string;
   let vOutro = 0;
   if (pagamentos && pagamentos.length > 0) {
-    const pagosReais = pagamentos.filter((p) => p.method !== 'COURTESY' && p.amount > 0);
-    if (pagosReais.length === 0) {
+    const { lista: pagosReais, vOutro: vOutroPag } = pagamentosDoXml(pagamentos, vProdTotal);
+    if (pagosReais.length === 1 && pagosReais[0].method === 'COURTESY') {
       // Venda inteira em cortesia — sem pagamento real algum, sem taxa.
       pagXml = `<pag><detPag><indPag>0</indPag><tPag>90</tPag><vPag>${vProdTotal.toFixed(2)}</vPag></detPag></pag>`;
     } else {
-      const totalReal = pagosReais.reduce((sum, p) => sum + p.amount, 0);
-      vOutro = Math.max(0, Number((totalReal - vProdTotal).toFixed(2)));
-      // vPag de cada método é o valor real pago por ele (já inclui a fatia
-      // da taxa de serviço proporcional a esse método) — soma exata de
-      // `pagamentos`, sem precisar reescalar nada, porque agora `vNF`
-      // (abaixo) também inclui a mesma taxa via `vOutro`.
-      let acumulado = 0;
+      vOutro = vOutroPag;
       const detPags = pagosReais
-        .map((p, idx) => {
-          // Último método absorve o resto (arredondamento) — garante que a
-          // soma bate exatamente com vNF, sem sobra/falta de centavos.
-          const vPagItem = idx === pagosReais.length - 1
-            ? Number((vProdTotal + vOutro - acumulado).toFixed(2))
-            : Number(p.amount.toFixed(2));
-          acumulado += vPagItem;
+        .map((p) => {
+          // O último método já absorve o resto de arredondamento em pagamentosDoXml.
+          const vPagItem = p.amount;
           const tPag = mapMetodoParaTPag(p.method);
           // Achado real (rejeição cStat=391, venda ao vivo 2026-08-27): a
           // Nota Técnica 2025.001 (vigente desde 01/09/2025) tornou o grupo

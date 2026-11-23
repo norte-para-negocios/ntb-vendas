@@ -1554,7 +1554,7 @@ export const closeCounterOrder = async (
   // StoreModule.tsx, handleFinishCounterPayment). Usado por
   // _cash_shift_expected_cash/fetch_cash_shift_summary_secure (migration
   // 051) pra somar o dinheiro entrado num turno.
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null; acquirer?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ) => {
   try {
@@ -1598,7 +1598,7 @@ export const closeCounterOrder = async (
 // SEM fechar o pedido — ele segue vivo até ser entregue.
 export const registrarPagamentoBalcao = async (
   orderId: string,
-  paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
+  paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null; acquirer?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
   // Só usado no caminho OFFLINE, pra achar o cache certo (ver abaixo).
   storeId?: string,
@@ -1638,7 +1638,7 @@ export const registrarPagamentoBalcao = async (
 const marcarPedidoBalcaoPagoNoCache = async (
   storeId: string,
   orderId: string,
-  paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null }[] },
+  paymentData: { total: number; methods: { method: string; amount: number; brand?: string | null; acquirer?: string | null }[] },
 ) => {
   const cached = await getCachedCounterOrders(storeId);
   if (!cached?.orders) return;
@@ -2110,7 +2110,7 @@ export const closeTableSession = async (
   // a bandeira do cartão silenciosamente, sem nenhum erro de tipo.
   // Task 4: idem closeCounterOrder acima — `emitir_nota` é novo e opcional.
   // Task 2 (frente-de-caixa): idem `cash_shift_id`, ver closeCounterOrder.
-  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
+  paymentData?: { total: number; methods: { method: string; amount: number; brand?: string | null; acquirer?: string | null }[]; emitir_nota?: boolean; cash_shift_id?: string },
   destinatario?: { cpfCnpj: string; nome: string },
 ): Promise<{ success: boolean; message?: string; queued?: boolean }> => {
   const paymentMethod = paymentData
@@ -4306,7 +4306,7 @@ type ItemParaNota = { quantity: number; price_at_time: number; product_id?: stri
 export const emitirNotaSemInternet = async (params: {
   storeId: string;
   itens: ItemParaNota[];
-  pagamentos?: { method: string; amount: number; brand?: string }[];
+  pagamentos?: { method: string; amount: number; brand?: string; acquirer?: string }[];
   destinatario?: { cpfCnpj: string; nome: string };
 }): Promise<{ ok: boolean; reason?: string; nota?: NotaSemInternet; deviceId?: string; impresso?: boolean }> => {
   if (typeof window === 'undefined' || !window.electronApp?.fiscal) return { ok: false, reason: 'Só no app do Windows.' };
@@ -4341,4 +4341,18 @@ export const emitirNotaSemInternet = async (params: {
     if (!p.ok) console.error('Nota sem internet: impressão falhou:', p.reason);
   }
   return { ok: true, nota: r.nota, deviceId: r.deviceId, impresso };
+};
+
+// Maquininhas de cartão da loja (stores.maquininhas, migration 195). Equipe da loja grava pela RPC; servidor sem a 195 devolve erro claro.
+export const updateStoreMaquininhas = async (storeId: string, maquininhas: string[]): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const { data, error } = await supabase.rpc('update_store_maquininhas_secure', { p_store_id: storeId, p_maquininhas: maquininhas, p_token: tokenDaLoja() });
+    if (error && semFuncaoNova(error)) return { success: false, message: 'Atualização do servidor pendente (migration 195). Avise o suporte.' };
+    if (error) throw error;
+    const r = data as RespostaRpc;
+    if (r && r.success === false) return { success: false, message: r.message };
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro desconhecido ao salvar as maquininhas.' };
+  }
 };

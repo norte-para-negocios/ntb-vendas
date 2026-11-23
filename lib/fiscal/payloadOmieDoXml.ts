@@ -41,3 +41,33 @@ export function payloadOmieDoNfeProc(nfeProc: string, opts: { codigoTaxa?: strin
     vNF: Number(nfeProc.match(/<ICMSTot>[\s\S]*?<vNF>([^<]+)<\/vNF>/)?.[1]),
   };
 }
+
+const TPAG_DO_METODO: Record<string, string> = { CREDIT: '03', DEBIT: '04', PIX: '17', COURTESY: '90', CASH: '01' };
+
+/**
+ * Completa method/brand/acquirer dos pagamentos de cartão do payload (montado do nfeProc, que só tem tPag/vPag) com o que a venda
+ * guardou (`orders.payment_details.methods`). Só completa se der para casar na mesma ordem dos <detPag>: mesma quantidade e mesmo
+ * tPag em cada posição (cortesia e valor 0 não entram no XML, então saem da lista antes). Se não casar, devolve o payload como veio.
+ */
+export function completarPagamentosComVenda(
+  payload: IncluirNfcePayload,
+  methods: { method?: string; amount?: number; brand?: string | null; acquirer?: string | null }[] | null | undefined,
+): IncluirNfcePayload {
+  if (!Array.isArray(methods)) return payload;
+  const reais = methods.filter((m) => m && m.method !== 'COURTESY' && Number(m.amount) > 0);
+  if (reais.length !== payload.pagamentos.length) return payload;
+  if (!reais.every((m, i) => TPAG_DO_METODO[m.method ?? ''] === payload.pagamentos[i].tPag)) return payload;
+  return {
+    ...payload,
+    pagamentos: payload.pagamentos.map((p, i) => {
+      const m = reais[i];
+      const cartao = m.method === 'CREDIT' || m.method === 'DEBIT';
+      return {
+        ...p,
+        ...(cartao ? { method: m.method } : {}),
+        ...(cartao && m.brand ? { brand: m.brand } : {}),
+        ...(cartao && m.acquirer ? { acquirer: m.acquirer } : {}),
+      };
+    }),
+  };
+}

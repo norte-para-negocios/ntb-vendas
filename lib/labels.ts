@@ -74,6 +74,21 @@ export const CARD_BRAND_LABELS: Record<string, string> = {
     outro: 'Outra',
 };
 
+// Maquininhas (adquirentes) que uma loja pode marcar em stores.maquininhas (migration 195). O caixa escolhe a maquininha em cada
+// pagamento de cartão e o Norte ERP usa isso para lançar o título na conta certa do Omie. Catálogo fechado, nunca texto livre.
+export const MAQUININHA_LABELS: Record<string, string> = {
+    getnet: 'GetNet',
+    rede: 'Rede',
+    cielo: 'Cielo',
+    stone: 'Stone',
+    pagseguro: 'PagSeguro',
+    mercadopago: 'Mercado Pago',
+    sumup: 'SumUp',
+};
+
+export const getMaquininhaLabel = (acquirer?: string | null): string =>
+    acquirer ? (MAQUININHA_LABELS[acquirer] || acquirer) : '';
+
 export const getCardBrandLabel = (brand?: string | null): string =>
     brand ? (CARD_BRAND_LABELS[brand] || brand) : '';
 

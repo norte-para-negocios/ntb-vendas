@@ -37,6 +37,8 @@ export interface Store {
   cnpj: string;
   is_active: boolean;
   is_test?: boolean;
+  /** Maquininhas de cartão da loja (migration 195), chaves de MAQUININHA_LABELS. Vazio/ausente = sem escolha de maquininha no caixa. */
+  maquininhas?: string[];
   /** Como a loja controla estoque (migration 168): 'omie' (padrão), 'proprio' (Norte Estoque sem Omie) ou 'nenhum'. */
   stock_mode?: 'omie' | 'proprio' | 'nenhum';
   contract_type: 'balcao' | 'balcao_mesas';

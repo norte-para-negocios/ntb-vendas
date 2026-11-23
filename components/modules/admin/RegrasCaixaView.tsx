@@ -3,6 +3,7 @@ import React from 'react';
 import type { Store } from '@/types';
 import { SettingsConfigProvider, useSetting } from '../settings/SettingsConfigContext';
 import { SettingRow, Switch, NumberField } from '../settings/SettingRow';
+import MaquininhasLoja from './MaquininhasLoja';
 
 const Regras: React.FC = () => {
     const [cega, setCega] = useSetting<boolean>('cash_shift_blind_count', false, 'Contagem cega', (b) => (b ?? false) as boolean);
@@ -25,7 +26,10 @@ const Regras: React.FC = () => {
 };
 
 const RegrasCaixaView: React.FC<{ store: Store; onStoreUpdate?: (s: Store) => void }> = ({ store, onStoreUpdate }) => (
-    <SettingsConfigProvider store={store} onStoreUpdate={onStoreUpdate}><Regras /></SettingsConfigProvider>
+    <div className="space-y-6">
+        <SettingsConfigProvider store={store} onStoreUpdate={onStoreUpdate}><Regras /></SettingsConfigProvider>
+        <MaquininhasLoja store={store} onStoreUpdate={onStoreUpdate} />
+    </div>
 );
 export default RegrasCaixaView;
 export { RegrasCaixaView };
